@@ -258,7 +258,7 @@ export default function Statistics() {
         const key = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
         monthlyRevenue[key] = 0;
         monthlyProfit[key] = 0;
-        monthlyHv[key] = 0;
+        monthlyHs[key] = 0;
         months.push(key);
       }
 
