@@ -27,6 +27,24 @@ const formatMonthYear = (dateStr) => {
    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+const calculateThoiluong = (inv) => {
+   if (!inv.ngayBatDau) return '';
+   const SL = parseInt(inv.soLuong) || 1;
+   const unit = (inv.loaiDong || '').toLowerCase();
+   const start = new Date(inv.ngayBatDau);
+
+   if (unit.includes('tháng') && SL > 1) {
+      const months = [];
+      for (let i = 0; i < SL; i++) {
+         const d = new Date(start);
+         d.setMonth(start.getMonth() + i);
+         months.push(`${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`);
+      }
+      return months.join(', ');
+   }
+   return `${String(start.getMonth() + 1).padStart(2, '0')}/${start.getFullYear()}`;
+};
+
 const getQRUrl = (hoaDon, walletsConfig) => {
    if (!walletsConfig || !hoaDon.hinhthuc) return null;
    const hinhThucTrim = String(hoaDon.hinhthuc).trim();
@@ -91,11 +109,16 @@ export default function InvoiceManager() {
    const [invoiceData, setInvoiceData] = useState({
       loaiDong: 'Tháng',
       soLuong: 1,
-      ngayBatDau: new Date().toISOString().split('T')[0],
+      ngayBatDau: (() => {
+         const now = new Date();
+         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+         return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      })(),
       ngayKetThuc: '',
       hocphi: 0,
       donGia: 0,
       giamHocphi: 0,
+      discountPercent: 0,
       daDong: 0,
       hinhThuc: (config && (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name)) ? (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name) : 'Tiền mặt',
       ghiChu: '',
@@ -254,205 +277,214 @@ export default function InvoiceManager() {
    };
 
 
-    const handleSelectStudent = async (st) => {
-       setSelectedStudent(st);
-       setShowMobileDetails(true);
-       setMessage({ type: '', text: '' });
-       calculateOldDebt(st.mahv);
- 
-       const firstMalop = st.malop_list && st.malop_list.length > 0 ? st.malop_list[0] : null;
-       await updateClassContext(firstMalop, st);
-    };
+   const handleSelectStudent = async (st) => {
+      setSelectedStudent(st);
+      setShowMobileDetails(true);
+      setMessage({ type: '', text: '' });
+      calculateOldDebt(st.mahv);
 
-    const updateClassContext = async (malop, student) => {
-       if (!malop || !student) return;
-       const stClass = classes.find(c => c.malop === malop);
-       
-       // Lấy lịch học theo cấu hình (Đã lược bỏ truy vấn bảng lịch học)
-       let effectiveSchedule = stClass?.thoigianbieu || '';
+      const firstMalop = st.malop_list && st.malop_list.length > 0 ? st.malop_list[0] : null;
+      await updateClassContext(firstMalop, st);
+   };
 
-       // Tạo bản clone hoặc update object activeClass để chứa lichhoc đúng
-       const enrichedClass = { ...stClass, thoigianbieu: effectiveSchedule };
-       setActiveClass(enrichedClass);
- 
-       let defaultFee = 0;
-       let tchr = null;
-       if (stClass) {
-          tchr = employees.find(e => e.manv === stClass.manv);
-          if (stClass.hocphi) {
-             const numbers = stClass.hocphi.replace(/,/g, '').match(/\d+/g);
-             if (numbers && numbers.length > 0) {
-                const maxNum = Math.max(...numbers.map(Number));
-                if (maxNum > 1000) defaultFee = maxNum;
-             }
-          }
-       }
-       setClassTeacher(tchr);
-        // Default values from class tuition template
-        let loaiDong = 'Tháng';
-        let soLuong = 1;
+   const updateClassContext = async (malop, student) => {
+      if (!malop || !student) return;
+      const stClass = classes.find(c => c.malop === malop);
 
-        if (stClass?.hocphi) {
-           const firstOpt = stClass.hocphi.split('\n').filter(Boolean)[0] || '';
-           const qtyMatch = firstOpt.match(/(?:^|[^0-9])(\d+)\s*(?:buổi|tháng|khóa|tuần)/i);
-           if (qtyMatch && qtyMatch[1]) soLuong = parseInt(qtyMatch[1], 10);
-           
-           const lowOpt = firstOpt.toLowerCase();
-           if (lowOpt.includes('buổi')) loaiDong = 'Buổi';
-           else if (lowOpt.includes('tháng')) loaiDong = 'Tháng';
-           else if (lowOpt.includes('khóa')) loaiDong = 'Khóa';
-           else if (lowOpt.includes('tuần')) loaiDong = 'Tuần';
-        }
+      // Lấy lịch học theo cấu hình (Đã lược bỏ truy vấn bảng lịch học)
+      let effectiveSchedule = stClass?.thoigianbieu || '';
 
-        let hocphi = defaultFee;
-        let giamHocphi = 0;
-        let hinhThuc = walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt';
-        let ghiChu = '';
-        let phuthu = [];
-  
-        setStudySummary(null);
-        setRecentSourceText('');
- 
-       // Load recent HD or Thong bao for student + specific class
-       let startStr = new Date().toISOString().split('T')[0];
-       let endMonthStr = '';
- 
-       try {
-          const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
-             supabase.from('tbl_hd').select('*').eq('mahv', student.mahv).eq('malop', malop),
-             supabase.from('tbl_thongbao').select('*').eq('mahv', student.mahv).eq('malop', malop)
-          ]);
- 
-          const validHDs = (allHDs || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa');
-          const validTBs = (allTBs || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa');
- 
-          let allDocs = [...validHDs, ...validTBs];
-          allDocs.sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0));
-          const recentDoc = allDocs.length > 0 ? allDocs[0] : null;
- 
-          validHDs.sort((a, b) => new Date(b.ngayketthuc || b.ngaylap || 0) - new Date(a.ngayketthuc || a.ngaylap || 0));
-          const recentHD = validHDs.length > 0 ? validHDs[0] : null;
- 
-          if (recentDoc) {
-             setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất lớp này (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất lớp này (${recentDoc.mahd})`);
-             const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
-             hocphi = parseCur(recentDoc.hocphi);
-             giamHocphi = parseCur(recentDoc.giamhocphi);
-             hinhThuc = recentDoc.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
-             if (walletsConfig.length > 0 && !walletsConfig.some(w => w.name === hinhThuc)) {
-                hinhThuc = walletsConfig[0].name;
-             }
-             ghiChu = recentDoc.ghichu || '';
-             if (recentDoc.ngaybatdau) startStr = recentDoc.ngaybatdau;
-             if (recentDoc.ngayketthuc) endMonthStr = recentDoc.ngayketthuc;
-             if (recentDoc.phuthu) {
-                try {
-                   phuthu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
-                   if (!Array.isArray(phuthu)) phuthu = [];
-                } catch (e) { console.error('Error parsing phuthu:', e); phuthu = []; }
-             }
-             if (recentDoc.sobuoihoc) {
-                const qtyMatch = recentDoc.sobuoihoc.match(/^(\d+)/);
-                if (qtyMatch) soLuong = parseInt(qtyMatch[1], 10);
-                const sbhLower = recentDoc.sobuoihoc.toLowerCase();
-                if (sbhLower.includes('buổi')) loaiDong = 'Buổi';
-                else if (sbhLower.includes('tháng')) loaiDong = 'Tháng';
-                else if (sbhLower.includes('khóa')) loaiDong = 'Khóa';
-                else if (sbhLower.includes('tuần')) loaiDong = 'Tuần';
-             }
-          }
- 
-          // Thống kê điểm danh
-          if (recentHD && recentHD.ngaybatdau && recentHD.ngayketthuc && effectiveSchedule) {
-             const activeDays = parseScheduleDays(effectiveSchedule);
-             let tongBuoi = 0;
-             let cDate = new Date(recentHD.ngaybatdau);
-             const eDate = new Date(recentHD.ngayketthuc);
-             let safeCount = 0;
-             while (cDate <= eDate && safeCount < 1000) {
-                if (activeDays.includes(cDate.getDay())) tongBuoi++;
-                cDate.setDate(cDate.getDate() + 1);
-                safeCount++;
-             }
- 
-             const { data: attendance } = await supabase.from('tbl_diemdanh').select('*')
-                .eq('mahv', student.mahv).eq('malop', malop)
-                .gte('ngay', recentHD.ngaybatdau).lte('ngay', recentHD.ngayketthuc);
- 
-             const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-             let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
-             (attendance || []).forEach(att => {
-                const s = normalizeStatus(att.trangthai);
-                if (s === 'có mặt') daHoc++;
-                else if (s === 'nghỉ phép') nghiPhep++;
-                else if (s === 'nghỉ không phép') nghiKhongPhep++;
-             });
-             setStudySummary({ daHoc, nghiPhep, nghiKhongPhep, tongBuoi, sourceHd: recentHD.mahd });
-          }
-       } catch (err) { console.error(err); }
- 
-       if (!endMonthStr) {
-          const unit = (loaiDong || '').toLowerCase().trim();
-          if (unit.includes('tháng') || unit.includes('khóa')) {
-             const tempDate = new Date(startStr);
-             if (!isNaN(tempDate.getTime())) {
-                tempDate.setMonth(tempDate.getMonth() + (parseInt(soLuong) || 1));
-                endMonthStr = tempDate.toISOString().split('T')[0];
-             }
-          } else if (unit.includes('buổi') && effectiveSchedule) {
-             const activeDays = parseScheduleDays(effectiveSchedule);
-             if (activeDays.length > 0) {
-                endMonthStr = calculateEndDateBySessions(startStr, (parseInt(soLuong) || 1), activeDays);
-             }
-          } else if (unit.includes('tuần')) {
-             const startD = new Date(startStr);
-             if (!isNaN(startD.getTime())) {
-                startD.setDate(startD.getDate() + (parseInt(soLuong) || 1) * 7);
-                endMonthStr = startD.toISOString().split('T')[0];
-             }
-          }
-          if (!endMonthStr) {
-             const nextM = new Date(startStr);
-             if (!isNaN(nextM.getTime())) {
-                nextM.setMonth(nextM.getMonth() + 1);
-                endMonthStr = nextM.toISOString().split('T')[0];
-             }
-          }
-       }
- 
-        setInvoiceData({
-           loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
-           hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu, daDong: 0
-        });
-    };
+      // Tạo bản clone hoặc update object activeClass để chứa lichhoc đúng
+      const enrichedClass = { ...stClass, thoigianbieu: effectiveSchedule };
+      setActiveClass(enrichedClass);
+
+      let defaultFee = 0;
+      let tchr = null;
+      if (stClass) {
+         tchr = employees.find(e => e.manv === stClass.manv);
+         if (stClass.hocphi) {
+            const numbers = stClass.hocphi.replace(/,/g, '').match(/\d+/g);
+            if (numbers && numbers.length > 0) {
+               const maxNum = Math.max(...numbers.map(Number));
+               if (maxNum > 1000) defaultFee = maxNum;
+            }
+         }
+      }
+      setClassTeacher(tchr);
+      // Default values from class tuition template
+      let loaiDong = 'Tháng';
+      let soLuong = 1;
+
+      if (stClass?.hocphi) {
+         const firstOpt = stClass.hocphi.split('\n').filter(Boolean)[0] || '';
+         const qtyMatch = firstOpt.match(/(?:^|[^0-9])(\d+)\s*(?:buổi|tháng|khóa|tuần)/i);
+         if (qtyMatch && qtyMatch[1]) soLuong = parseInt(qtyMatch[1], 10);
+
+         const lowOpt = firstOpt.toLowerCase();
+         if (lowOpt.includes('buổi')) loaiDong = 'Buổi';
+         else if (lowOpt.includes('tháng')) loaiDong = 'Tháng';
+         else if (lowOpt.includes('khóa')) loaiDong = 'Khóa';
+         else if (lowOpt.includes('tuần')) loaiDong = 'Tuần';
+      }
+
+      let hocphi = defaultFee;
+      let giamHocphi = 0;
+      let hinhThuc = walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt';
+      let ghiChu = '';
+      let phuthu = [];
+
+      setStudySummary(null);
+      setRecentSourceText('');
+
+      // Load recent HD or Thong bao for student + specific class
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      let startStr = new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      let endMonthStr = '';
+
+      try {
+         const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
+            supabase.from('tbl_hd').select('*').eq('mahv', student.mahv).eq('malop', malop),
+            supabase.from('tbl_thongbao').select('*').eq('mahv', student.mahv).eq('malop', malop)
+         ]);
+
+         const validHDs = (allHDs || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa');
+         const validTBs = (allTBs || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa');
+
+         let allDocs = [...validHDs, ...validTBs];
+         allDocs.sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0));
+         const recentDoc = allDocs.length > 0 ? allDocs[0] : null;
+
+         validHDs.sort((a, b) => new Date(b.ngayketthuc || b.ngaylap || 0) - new Date(a.ngayketthuc || a.ngaylap || 0));
+         const recentHD = validHDs.length > 0 ? validHDs[0] : null;
+
+         if (recentDoc) {
+            setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất lớp này (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất lớp này (${recentDoc.mahd})`);
+            const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
+            hocphi = parseCur(recentDoc.hocphi);
+            giamHocphi = parseCur(recentDoc.giamhocphi);
+            hinhThuc = recentDoc.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
+            if (walletsConfig.length > 0 && !walletsConfig.some(w => w.name === hinhThuc)) {
+               hinhThuc = walletsConfig[0].name;
+            }
+            ghiChu = recentDoc.ghichu || '';
+            if (recentDoc.ngaybatdau) {
+               startStr = recentDoc.ngaybatdau;
+               endMonthStr = ''; // Recalculate based on start and loaded quantity
+            }
+            if (recentDoc.phuthu) {
+               try {
+                  phuthu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
+                  if (!Array.isArray(phuthu)) phuthu = [];
+               } catch (e) {
+                  console.error('Error parsing phuthu:', e);
+                  phuthu = [];
+               }
+            }
+            if (recentDoc.sobuoihoc) {
+               const qtyMatch = recentDoc.sobuoihoc.match(/^(\d+)/);
+               if (qtyMatch) soLuong = parseInt(qtyMatch[1], 10);
+               const sbhLower = recentDoc.sobuoihoc.toLowerCase();
+               if (sbhLower.includes('buổi')) loaiDong = 'Buổi';
+               else if (sbhLower.includes('tháng')) loaiDong = 'Tháng';
+               else if (sbhLower.includes('khóa')) loaiDong = 'Khóa';
+               else if (sbhLower.includes('tuần')) loaiDong = 'Tuần';
+            }
+         }
+
+         // Thống kê điểm danh
+         if (recentHD && recentHD.ngaybatdau && recentHD.ngayketthuc && enrichedClass.thoigianbieu) {
+            const activeDays = parseScheduleDays(enrichedClass.thoigianbieu);
+            let tongBuoi = 0;
+            let cDate = new Date(recentHD.ngaybatdau);
+            const eDate = new Date(recentHD.ngayketthuc);
+            let safeCount = 0;
+            while (cDate <= eDate && safeCount < 1000) {
+               if (activeDays.includes(cDate.getDay())) tongBuoi++;
+               cDate.setDate(cDate.getDate() + 1);
+               safeCount++;
+            }
+
+            const { data: attendance } = await supabase.from('tbl_diemdanh').select('*')
+               .eq('mahv', student.mahv).eq('malop', malop)
+               .gte('ngay', recentHD.ngaybatdau).lte('ngay', recentHD.ngayketthuc);
+
+            const normalizeStatus = (s) => (s || '').trim().toLowerCase();
+            let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
+            (attendance || []).forEach(att => {
+               const s = normalizeStatus(att.trangthai);
+               if (s === 'có mặt') daHoc++;
+               else if (s === 'nghỉ phép') nghiPhep++;
+               else if (s === 'nghỉ không phép') nghiKhongPhep++;
+            });
+            setStudySummary({ daHoc, nghiPhep, nghiKhongPhep, tongBuoi, sourceHd: recentHD.mahd });
+         }
+      } catch (err) {
+         console.error(err);
+      }
+
+      if (!endMonthStr) {
+         const unit = (loaiDong || '').toLowerCase().trim();
+         if (unit.includes('tháng') || unit.includes('khóa')) {
+            const tempDate = new Date(startStr);
+            if (!isNaN(tempDate.getTime())) {
+               tempDate.setMonth(tempDate.getMonth() + (parseInt(soLuong) || 1));
+               endMonthStr = tempDate.toISOString().split('T')[0];
+            }
+         } else if (unit.includes('buổi') && enrichedClass?.thoigianbieu) {
+            const activeDays = parseScheduleDays(enrichedClass.thoigianbieu);
+            if (activeDays.length > 0) {
+               endMonthStr = calculateEndDateBySessions(startStr, (parseInt(soLuong) || 1), activeDays);
+            }
+         } else if (unit.includes('tuần')) {
+            const startD = new Date(startStr);
+            if (!isNaN(startD.getTime())) {
+               startD.setDate(startD.getDate() + (parseInt(soLuong) || 1) * 7);
+               endMonthStr = startD.toISOString().split('T')[0];
+            }
+         }
+         if (!endMonthStr) {
+            const nextM = new Date(startStr);
+            if (!isNaN(nextM.getTime())) {
+               nextM.setMonth(nextM.getMonth() + 1);
+               endMonthStr = nextM.toISOString().split('T')[0];
+            }
+         }
+      }
+
+      setInvoiceData({
+         loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
+         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu, daDong: 0
+      });
+   };
 
    const showMessage = (type, text) => {
       setMessage({ type, text });
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
    };
 
-    const removeSurcharge = (index) => {
-       const newPT = [...invoiceData.phuthu];
-       newPT.splice(index, 1);
-       setInvoiceData(prev => ({ ...prev, phuthu: newPT }));
-    };
+   const removeSurcharge = (index) => {
+      const newPT = [...invoiceData.phuthu];
+      newPT.splice(index, 1);
+      setInvoiceData(prev => ({ ...prev, phuthu: newPT }));
+   };
 
-    const addSurcharge = () => {
-       setInvoiceData(prev => ({ 
-          ...prev, 
-          phuthu: [...(prev.phuthu || []), { name: '', amount: 0 }] 
-       }));
-    };
+   const addSurcharge = () => {
+      setInvoiceData(prev => ({
+         ...prev,
+         phuthu: [...(prev.phuthu || []), { name: '', amount: 0 }]
+      }));
+   };
 
-    const updateSurcharge = (index, field, value) => {
-       const newPT = [...invoiceData.phuthu];
-       if (field === 'amount') {
-          newPT[index][field] = parseInt(String(value).replace(/,/g, ''), 10) || 0;
-       } else {
-          newPT[index][field] = value;
-       }
-       setInvoiceData(prev => ({ ...prev, phuthu: newPT }));
-    };
+   const updateSurcharge = (index, field, value) => {
+      const newPT = [...invoiceData.phuthu];
+      if (field === 'amount') {
+         newPT[index][field] = parseInt(String(value).replace(/,/g, ''), 10) || 0;
+      } else {
+         newPT[index][field] = value;
+      }
+      setInvoiceData(prev => ({ ...prev, phuthu: newPT }));
+   };
 
    const formatCurrency = (val) => {
       if (!val && val !== 0) return '';
@@ -464,10 +496,31 @@ export default function InvoiceManager() {
       const num = parseInt(rawValue, 10) || 0;
       setInvoiceData(prev => {
          let next = { ...prev, [field]: num };
-         if (field === 'hocphi' && prev.soLuong) {
-            next.donGia = num / prev.soLuong;
+         if (field === 'hocphi') {
+            if (prev.soLuong) next.donGia = num / prev.soLuong;
+            // Nếu thay đổi học phí thì tính lại số tiền giảm nếu có phần trăm
+            if (prev.discountPercent > 0) {
+               next.giamHocphi = Math.round((num * prev.discountPercent) / 100);
+            }
+         }
+         // Nếu tự nhập tay số tiền giảm thì xóa phần trăm (tránh xung đột)
+         if (field === 'giamHocphi') {
+            next.discountPercent = 0;
          }
          return next;
+      });
+   };
+
+   const handlePercentDiscount = (e) => {
+      const raw = e.target.value.replace(/[^\d.]/g, '');
+      const pct = parseFloat(raw) || 0;
+      setInvoiceData(prev => {
+         const discountAmt = Math.round((prev.hocphi * pct) / 100);
+         return {
+            ...prev,
+            discountPercent: pct,
+            giamHocphi: discountAmt
+         };
       });
    };
 
@@ -561,105 +614,113 @@ export default function InvoiceManager() {
       handleFormChange('ngayBatDau', d.toISOString().split('T')[0]);
    };
 
-    const handleExportNotice = async () => {
-       const currentTimePeriod = formatMonthYear(invoiceData.ngayBatDau);
-       if (currentTimePeriod) {
-          const { data: dupData } = await supabase.from('tbl_hd')
-             .select('mahd, daxoa')
-             .eq('mahv', selectedStudent.mahv)
-             .eq('malop', activeClass?.malop || '')
-             .eq('thoiluong', currentTimePeriod);
-          
-          const validDups = (dupData || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
-          if (validDups.length > 0) {
-             setWarningModal({
-                isOpen: true,
-                title: 'Cảnh Báo Đóng Trùng Học Phí',
-                message: `Học viên này đã nộp học phí cho thời lượng ${currentTimePeriod} rồi. Vui lòng kiểm tra lại Hóa Đơn cũ!`
-             });
-             return;
-          }
-       }
+   const handleExportNotice = async () => {
+      const currentTimePeriod = calculateThoiluong(invoiceData);
+      if (currentTimePeriod) {
+         const { data: allDocs } = await supabase.from('tbl_hd')
+            .select('mahd, daxoa, thoiluong')
+            .eq('mahv', selectedStudent.mahv)
+            .eq('malop', activeClass?.malop || '');
 
-       // Generate TB code
-       const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
-       let nextNum = 1;
-       if (recentTB && recentTB.length > 0 && recentTB[0].mahd) {
-          const numPart = recentTB[0].mahd.replace(/\D/g, '');
-          if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
-       }
-       const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
-       const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+         const validHDs = (allDocs || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
+         const currentMonths = currentTimePeriod.split(',').map(m => m.trim());
+         const existingMonths = validHDs.flatMap(d => (d.thoiluong || '').split(',').map(m => m.trim()));
 
-       const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
-       const insertData = {
-          mahd: newMaTB,
-          ngaylap: localNow,
-          mahv: selectedStudent.mahv,
-          tenlop: activeClass?.tenlop || '',
-          ngaybatdau: invoiceData.ngayBatDau || null,
-          ngayketthuc: invoiceData.ngayKetThuc || null,
-          manv: auth.user?.manv || auth.user?.username || '',
-          hocphi: formatCurrency(invoiceData.hocphi),
-          giamhocphi: formatCurrency(invoiceData.giamHocphi),
-          tongcong: formatCurrency(tongCong),
-          dadong: '0',
-          conno: formatCurrency(tongCong),
-          hinhthuc: invoiceData.hinhThuc,
-          ghichu: `${invoiceData.ghiChu}${billNote}`,
-          phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
-          daxoa: null,
-          malop: activeClass?.malop || '',
-          thoiluong: currentTimePeriod
-       };
+         const overlappingMonth = currentMonths.find(m => existingMonths.includes(m));
+         if (overlappingMonth) {
+            setWarningModal({
+               isOpen: true,
+               title: 'Cảnh Báo Đóng Trùng Học Phí',
+               message: `Học viên này đã nộp học phí cho tháng ${overlappingMonth} rồi. Vui lòng kiểm tra lại các Hóa Đơn cũ của học viên!`
+            });
+            return;
+         }
+      }
 
-       try {
-          const { error } = await supabase.from('tbl_thongbao').insert([insertData]);
-          if (error) throw error;
+      // Generate TB code
+      const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
+      let nextNum = 1;
+      if (recentTB && recentTB.length > 0 && recentTB[0].mahd) {
+         const numPart = recentTB[0].mahd.replace(/\D/g, '');
+         if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
+      }
+      const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
+      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
-          setDownloadingNotice({
-             mahd: newMaTB,
-             ngaylap: localNow,
-             tenhv: selectedStudent.tenhv,
-             mahv: selectedStudent.mahv,
-             sdt: selectedStudent.sdt,
-             tenlop: activeClass?.tenlop || '',
-             ngaybatdau: invoiceData.ngayBatDau || null,
-             ngayketthuc: invoiceData.ngayKetThuc || null,
-             hocphi: formatCurrency(invoiceData.hocphi) + ' đ',
-             giamhocphi: formatCurrency(invoiceData.giamHocphi) + ' đ',
-             tongcong: formatCurrency(tongCong),
-             hinhthuc: invoiceData.hinhThuc,
-             ghichu: `${invoiceData.ghiChu}${billNote}`,
-             thoiluong: currentTimePeriod,
-             phuthu: invoiceData.phuthu
-          });
-       } catch (err) {
-          console.error(err);
-          showMessage('error', 'Lỗi lưu thông báo: ' + err.message);
-       }
-    };
+      const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
+      const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
+      const insertData = {
+         mahd: newMaTB,
+         ngaylap: localNow,
+         mahv: selectedStudent.mahv,
+         tenlop: activeClass?.tenlop || '',
+         ngaybatdau: invoiceData.ngayBatDau || null,
+         ngayketthuc: invoiceData.ngayKetThuc || null,
+         manv: auth.user?.manv || auth.user?.username || '',
+         hocphi: formatCurrency(invoiceData.hocphi),
+         giamhocphi: formatCurrency(invoiceData.giamHocphi),
+         tongcong: formatCurrency(tongCong),
+         dadong: '0',
+         conno: formatCurrency(tongCong),
+         hinhthuc: invoiceData.hinhThuc,
+         ghichu: `${invoiceData.ghiChu}${billNote}`,
+         phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
+         daxoa: null,
+         malop: activeClass?.malop || '',
+         thoiluong: currentTimePeriod,
+         sobuoihoc: sobuoihocFinal
+      };
+
+      try {
+         const { error } = await supabase.from('tbl_thongbao').insert([insertData]);
+         if (error) throw error;
+
+         setDownloadingNotice({
+            mahd: newMaTB,
+            ngaylap: localNow,
+            tenhv: selectedStudent.tenhv,
+            mahv: selectedStudent.mahv,
+            sdt: selectedStudent.sdt,
+            tenlop: activeClass?.tenlop || '',
+            ngaybatdau: invoiceData.ngayBatDau || null,
+            ngayketthuc: invoiceData.ngayKetThuc || null,
+            hocphi: formatCurrency(invoiceData.hocphi) + ' đ',
+            giamhocphi: formatCurrency(invoiceData.giamHocphi) + ' đ',
+            tongcong: formatCurrency(tongCong),
+            hinhthuc: invoiceData.hinhThuc,
+            ghichu: `${invoiceData.ghiChu}${billNote}`,
+            thoiluong: currentTimePeriod,
+            sobuoihoc: sobuoihocFinal,
+            phuthu: invoiceData.phuthu
+         });
+      } catch (err) {
+         console.error(err);
+         showMessage('error', 'Lỗi lưu thông báo: ' + err.message);
+      }
+   };
 
    const handleSaveInvoice = async () => {
       setIsSaving(true);
       try {
-         const currentTimePeriod = formatMonthYear(invoiceData.ngayBatDau);
+         const currentTimePeriod = calculateThoiluong(invoiceData);
 
          if (currentTimePeriod) {
-            const { data: dupData, error: dupErr } = await supabase.from('tbl_hd')
+            const { data: allDocs, error: dupErr } = await supabase.from('tbl_hd')
                .select('mahd, daxoa, thoiluong')
                .eq('mahv', selectedStudent.mahv)
-               .eq('malop', activeClass?.malop || '')
-               .eq('thoiluong', currentTimePeriod);
+               .eq('malop', activeClass?.malop || '');
 
-            // Filter out logical duplicates ignoring logically "deleted" records
-            const validDups = (dupData || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
+            const validHDs = (allDocs || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
+            const currentMonths = currentTimePeriod.split(',').map(m => m.trim());
+            const existingMonths = validHDs.flatMap(d => (d.thoiluong || '').split(',').map(m => m.trim()));
 
-            if (!dupErr && validDups.length > 0) {
+            const overlappingMonth = currentMonths.find(m => existingMonths.includes(m));
+
+            if (!dupErr && overlappingMonth) {
                setWarningModal({
                   isOpen: true,
                   title: 'Cảnh Báo Đóng Trùng Học Phí',
-                  message: `Học viên này đã nộp học phí cho thời lượng ${currentTimePeriod} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại Hóa Đơn cũ!`
+                  message: `Học viên này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
                });
                setIsSaving(false);
                return;
@@ -679,6 +740,7 @@ export default function InvoiceManager() {
 
          const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
          const combinedNote = `${invoiceData.ghiChu}${billNote}${tienTruNghi > 0 ? ` (Trừ ${studySummary.nghiPhep} buổi nghỉ phép: ${formatCurrency(tienTruNghi)}đ)` : ''}`;
+         const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
          const insertData = {
             mahd: newMaHD,
             ngaylap: localNow,
@@ -697,7 +759,8 @@ export default function InvoiceManager() {
             phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
             daxoa: null,
             malop: activeClass?.malop || '',
-            thoiluong: currentTimePeriod
+            thoiluong: currentTimePeriod,
+            sobuoihoc: sobuoihocFinal
          };
 
          const res = await supabase.from('tbl_hd').insert([insertData]);
@@ -719,11 +782,11 @@ export default function InvoiceManager() {
 
          // Gộp nợ bill hàng hóa
          if (unpaidBillsTotal > 0) {
-             try {
-                await supabase.from('tbl_billhanghoa')
-                   .update({ conno: '0', daxacnhan: true })
-                   .eq('mahv', selectedStudent.mahv);
-             } catch (err) {
+            try {
+               await supabase.from('tbl_billhanghoa')
+                  .update({ conno: '0', daxacnhan: true })
+                  .eq('mahv', selectedStudent.mahv);
+            } catch (err) {
                console.error('Lỗi cập nhật xóa nợ bill hàng hóa:', err);
             }
          }
@@ -745,6 +808,7 @@ export default function InvoiceManager() {
             ngayketthuc: invoiceData.ngayKetThuc || null,
             hocphi: formatCurrency(invoiceData.hocphi),
             giamhocphi: formatCurrency(invoiceData.giamHocphi),
+            sobuoihoc: sobuoihocFinal,
             nocu: formatCurrency(noCu),
             tongcong: formatCurrency(tongCong),
             dadong: formatCurrency(invoiceData.daDong),
@@ -779,10 +843,10 @@ export default function InvoiceManager() {
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
    const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum - invoiceData.giamHocphi - tienTruNghi;
 
-    // Auto fill daDong in InvoiceManager: Default to full payment
-    useEffect(() => {
-       setInvoiceData(prev => ({ ...prev, daDong: tongCong }));
-    }, [tongCong, selectedStudent?.mahv, activeClass?.malop]);
+   // Auto fill daDong in InvoiceManager: Default to full payment
+   useEffect(() => {
+      setInvoiceData(prev => ({ ...prev, daDong: tongCong }));
+   }, [tongCong, selectedStudent?.mahv, activeClass?.malop]);
 
    const conLai = tongCong - invoiceData.daDong;
 
@@ -809,7 +873,7 @@ export default function InvoiceManager() {
                            {st.tenhv}
                         </div>
                         <div className="im-card-sub">SDT: {st.sdt || 'SĐT: Trống'}</div>
-                        <div className="im-card-sub">Lớp: {st.malop_list && st.malop_list.length > 0 
+                        <div className="im-card-sub">Lớp: {st.malop_list && st.malop_list.length > 0
                            ? st.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ')
                            : 'Chưa xếp lớp'}</div>
                      </div>
@@ -930,66 +994,66 @@ export default function InvoiceManager() {
                         </div>
                      )}
 
-                      <div className="im-section">
-                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h3 className="im-section-title" style={{ marginBottom: 0 }}><Receipt size={18} /> Phụ thu (Nếu có)</h3>
-                            <button className="btn-add-surcharge" onClick={addSurcharge} style={{ padding: '6px 12px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
-                               <Plus size={14} /> Thêm khoản phụ thu
-                            </button>
-                         </div>
-                         {(invoiceData.phuthu && invoiceData.phuthu.length > 0) ? (
-                            <div className="surcharge-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                               {invoiceData.phuthu.map((pt, idx) => (
-                                  <div key={idx} className="surcharge-item" style={{ display: 'grid', gridTemplateColumns: '1fr 150px 40px', gap: '10px', alignItems: 'center' }}>
-                                     <input 
-                                        className="im-input-text"
-                                        type="text" 
-                                        placeholder="Tên khoản phụ thu..." 
-                                        value={pt.name} 
-                                        onChange={(e) => updateSurcharge(idx, 'name', e.target.value)}
-                                        style={{ background: '#f1f5f9', border: 'none' }}
-                                     />
-                                     <div className="fi-input-wrapper" style={{ maxWidth: 'unset', height: '38px' }}>
-                                        <input 
-                                           type="text" 
-                                           value={formatCurrency(pt.amount)} 
-                                           onChange={(e) => updateSurcharge(idx, 'amount', e.target.value)} 
-                                           style={{ padding: '4px 8px', fontSize: '0.9rem' }}
-                                        />
-                                        <span className="unit">₫</span>
-                                     </div>
-                                     <button onClick={() => removeSurcharge(idx)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', borderRadius: '6px', height: '38px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <X size={16} />
-                                     </button>
-                                  </div>
-                               ))}
-                            </div>
-                         ) : (
-                            <div style={{ textAlign: 'center', padding: '15px', border: '1px dashed #e2e8f0', borderRadius: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
-                               Chưa có khoản phụ thu nào được thêm.
-                            </div>
-                         )}
-                      </div>
+                     <div className="im-section">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                           <h3 className="im-section-title" style={{ marginBottom: 0 }}><Receipt size={18} /> Phụ thu (Nếu có)</h3>
+                           <button className="btn-add-surcharge" onClick={addSurcharge} style={{ padding: '6px 12px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                              <Plus size={14} /> Thêm khoản phụ thu
+                           </button>
+                        </div>
+                        {(invoiceData.phuthu && invoiceData.phuthu.length > 0) ? (
+                           <div className="surcharge-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {invoiceData.phuthu.map((pt, idx) => (
+                                 <div key={idx} className="surcharge-item" style={{ display: 'grid', gridTemplateColumns: '1fr 150px 40px', gap: '10px', alignItems: 'center' }}>
+                                    <input
+                                       className="im-input-text"
+                                       type="text"
+                                       placeholder="Tên khoản phụ thu..."
+                                       value={pt.name}
+                                       onChange={(e) => updateSurcharge(idx, 'name', e.target.value)}
+                                       style={{ background: '#f1f5f9', border: 'none' }}
+                                    />
+                                    <div className="fi-input-wrapper" style={{ maxWidth: 'unset', height: '38px' }}>
+                                       <input
+                                          type="text"
+                                          value={formatCurrency(pt.amount)}
+                                          onChange={(e) => updateSurcharge(idx, 'amount', e.target.value)}
+                                          style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                                       />
+                                       <span className="unit"></span>
+                                    </div>
+                                    <button onClick={() => removeSurcharge(idx)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', borderRadius: '6px', height: '38px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                       <X size={16} />
+                                    </button>
+                                 </div>
+                              ))}
+                           </div>
+                        ) : (
+                           <div style={{ textAlign: 'center', padding: '15px', border: '1px dashed #e2e8f0', borderRadius: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
+                              Chưa có khoản phụ thu nào được thêm.
+                           </div>
+                        )}
+                     </div>
 
-                      {unpaidBills.length > 0 && (
-                         <div className="im-section" style={{ background: '#fff7ed', border: '1px solid #ffedd5' }}>
-                            <h3 className="im-section-title" style={{ color: '#c2410c' }}><CreditCard size={18} /> Gộp bill hàng hóa mới & Nợ POS</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                               {unpaidBills.map((b, idx) => (
-                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: '#fff', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.9rem' }}>
-                                     <div>
-                                        <b style={{ color: '#ea580c' }}>{b.mabill}</b>
-                                        <span style={{ marginLeft: '8px', color: '#94a3b8' }}>({new Date(b.ngaylap).toLocaleDateString('vi-VN')})</span>
-                                     </div>
-                                     <b style={{ color: '#ea580c' }}>{formatCurrency(b.conno)} ₫</b>
-                                  </div>
-                               ))}
-                               <div style={{ textAlign: 'right', marginTop: '5px', padding: '5px 10px', fontSize: '1rem', fontWeight: 800, color: '#c2410c', borderTop: '2px dashed #fed7aa' }}>
-                                  Tổng nợ POS gộp thêm: {formatCurrency(unpaidBillsTotal)} ₫
-                               </div>
-                            </div>
-                         </div>
-                      )}
+                     {unpaidBills.length > 0 && (
+                        <div className="im-section" style={{ background: '#fff7ed', border: '1px solid #ffedd5' }}>
+                           <h3 className="im-section-title" style={{ color: '#c2410c' }}><CreditCard size={18} /> Gộp bill hàng hóa mới & Nợ POS</h3>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {unpaidBills.map((b, idx) => (
+                                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: '#fff', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.9rem' }}>
+                                    <div>
+                                       <b style={{ color: '#ea580c' }}>{b.mabill}</b>
+                                       <span style={{ marginLeft: '8px', color: '#94a3b8' }}>({new Date(b.ngaylap).toLocaleDateString('vi-VN')})</span>
+                                    </div>
+                                    <b style={{ color: '#ea580c' }}>{formatCurrency(b.conno)} ₫</b>
+                                 </div>
+                              ))}
+                              <div style={{ textAlign: 'right', marginTop: '5px', padding: '5px 10px', fontSize: '1rem', fontWeight: 800, color: '#c2410c', borderTop: '2px dashed #fed7aa' }}>
+                                 Tổng nợ POS gộp thêm: {formatCurrency(unpaidBillsTotal)} ₫
+                              </div>
+                           </div>
+                        </div>
+                     )}
 
                      <div className="im-section">
                         <h3 className="im-section-title"><Wallet size={18} /> Quyết Toán Tổng (VNĐ)</h3>
@@ -1032,9 +1096,15 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item">
                               <label>Giảm HP</label>
-                              <div className="fi-input-wrapper" style={{ maxWidth: 'unset' }}>
-                                 <input type="text" value={formatCurrency(invoiceData.giamHocphi)} onChange={e => handleFinanceInput('giamHocphi', e)} />
-                                 <span className="unit">₫</span>
+                              <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '5px' }}>
+                                 <div className="fi-input-wrapper">
+                                    <input type="text" placeholder="%" value={invoiceData.discountPercent > 0 ? invoiceData.discountPercent : ''} onChange={handlePercentDiscount} />
+                                    <span className="unit">%</span>
+                                 </div>
+                                 <div className="fi-input-wrapper">
+                                    <input type="text" value={formatCurrency(invoiceData.giamHocphi)} onChange={e => handleFinanceInput('giamHocphi', e)} />
+                                    <span className="unit">₫</span>
+                                 </div>
                               </div>
                            </div>
                            {config?.trutiennghi && tienTruNghi > 0 && (
@@ -1082,12 +1152,12 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item-col">
                               <label>💳 Hình thức thanh toán</label>
-                             <select className="im-select" value={invoiceData.hinhThuc} onChange={e => handleFormChange('hinhThuc', e.target.value)}>
-                                {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                                {walletsConfig.map(w => (
-                                   <option key={w.id} value={w.name}>{w.name}</option>
-                                ))}
-                             </select>
+                              <select className="im-select" value={invoiceData.hinhThuc} onChange={e => handleFormChange('hinhThuc', e.target.value)}>
+                                 {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                 {walletsConfig.map(w => (
+                                    <option key={w.id} value={w.name}>{w.name}</option>
+                                 ))}
+                              </select>
                            </div>
                         </div>
 
@@ -1208,9 +1278,6 @@ export default function InvoiceManager() {
                         <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
                      <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
-                     {downloadingInvoice?.sobuoihoc && (
-                        <div>Số buổi/Thời lượng: <b>{downloadingInvoice.sobuoihoc}</b></div>
-                     )}
                      <div>
                         Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
                      </div>
@@ -1317,12 +1384,6 @@ export default function InvoiceManager() {
                         <b style={{ color: '#dc2626', fontSize: '1.5rem', fontWeight: 950 }}>{downloadingNotice?.tongcong} VNĐ</b>
                      </div>
                   </div>
-
-                  {downloadingNotice?.sobuoihoc && (
-                     <div>
-                        Số buổi/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice.sobuoihoc}</b>
-                     </div>
-                  )}
 
                   <div>
                      Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b>

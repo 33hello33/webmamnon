@@ -223,7 +223,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   }, [isNoidungModalOpen, noidungFilter, fetchNoidungDay]);
 
   const classStudents = React.useMemo(() => {
-    return students.filter(s => s.malop_list?.includes(selectedClassId) && (s.trangthai === 'Đang Học' || s.trangthai === 'Bảo Lưu'));
+    return students.filter(s => (s.malop === selectedClassId || s.malop_list?.includes(selectedClassId)) && (s.trangthai === 'Đang Học' || s.trangthai === 'Bảo Lưu'));
   }, [students, selectedClassId]);
 
   useEffect(() => {
@@ -810,7 +810,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           )}
                         </div>
                         <div className="class-info-details">
-                          <span>Sĩ số: {students.filter(s => s.malop_list?.includes(c.malop) && (s.trangthai === 'Đang Học' || s.trangthai === 'Bảo Lưu')).length} HV</span>
+                          <span>Sĩ số: {students.filter(s => (s.malop === c.malop || s.malop_list?.includes(c.malop)) && (s.trangthai === 'Đang Học' || s.trangthai === 'Bảo Lưu')).length} HV</span>
                           <span>GV: {teacherName}</span>
                           <span>Lịch: {c.thoigianbieu || '-'}</span>
                         </div>
@@ -1138,7 +1138,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   }}
                 >
                   <option value="">-- Chọn lớp học --</option>
-                  {classes.filter(c => !transferringStudent.malop_list?.includes(c.malop)).map(c => (
+                  {classes.filter(c => transferringStudent.malop !== c.malop && !transferringStudent.malop_list?.includes(c.malop)).map(c => (
                     <option key={c.malop} value={c.malop}>{c.tenlop} ({c.malop})</option>
                   ))}
                 </select>
