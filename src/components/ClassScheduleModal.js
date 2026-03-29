@@ -6,7 +6,7 @@ import { X, Trash2, Plus, Clock } from 'lucide-react';
 export default function ClassScheduleModal({ classItem, onClose }) {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   // Custom schedule state
   const [selectedDays, setSelectedDays] = useState([]);
   const [timeStr, setTimeStr] = useState('');
@@ -49,11 +49,11 @@ export default function ClassScheduleModal({ classItem, onClose }) {
   const handleAdd = async () => {
     if (selectedDays.length === 0) return alert('Vui lòng chọn ngày học');
     if (!timeStr) return alert('Vui lòng nhập giờ học (VD: 18:00 - 20:00)');
-    
+
     // Sort days chronologically
     const mapOrder = { 't2': 2, 't3': 3, 't4': 4, 't5': 5, 't6': 6, 't7': 7, 'cn': 8 };
     const sortedDays = [...selectedDays].sort((a, b) => mapOrder[a] - mapOrder[b]);
-    
+
     try {
       const { error } = await supabase.from('tbl_lichhoc_lop').insert([{
         malop: classItem.malop,
@@ -61,7 +61,7 @@ export default function ClassScheduleModal({ classItem, onClose }) {
         giohoc: timeStr
       }]);
       if (error) throw error;
-      
+
       setSelectedDays([]);
       setTimeStr('');
       fetchSchedules();
@@ -72,7 +72,7 @@ export default function ClassScheduleModal({ classItem, onClose }) {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Bạn có chắc muốn xoá lịch học này? Lịch học của học viên đang học khung lịch này có thể sẽ bị trống mã tham chiếu.')) return;
+    if (!window.confirm('Bạn có chắc muốn xoá lịch học này? Lịch học của học sinh đang học khung lịch này có thể sẽ bị trống mã tham chiếu.')) return;
     try {
       const { error } = await supabase.from('tbl_lichhoc_lop').delete().eq('id', id);
       if (error) throw error;
@@ -92,10 +92,10 @@ export default function ClassScheduleModal({ classItem, onClose }) {
         </div>
         <div className="modal-body">
           <p>Lớp học: <strong className="text-primary">{classItem.tenlop}</strong> - {classItem.malop}</p>
-          
+
           <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', marginTop: '15px' }}>
             <h4 style={{ marginBottom: '10px', fontSize: '15px' }}>Thêm Lịch Mới</h4>
-            
+
             <div className="form-group" style={{ marginBottom: '10px' }}>
               <label>Ngày học trong tuần:</label>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -106,12 +106,12 @@ export default function ClassScheduleModal({ classItem, onClose }) {
                 ))}
               </div>
             </div>
-            
+
             <div className="form-group">
               <label>Giờ học (VD: 18:00 - 20:00):</label>
               <input type="text" value={timeStr} onChange={e => setTimeStr(e.target.value)} placeholder="18:00 - 20:00" />
             </div>
-              
+
             <button className="btn btn-primary" style={{ marginTop: '10px' }} onClick={handleAdd}>
               <Plus size={16} /> Thêm Khung Lịch
             </button>

@@ -71,7 +71,7 @@ function Login() {
    const loadParentDashboard = async (e) => {
       e.preventDefault();
       if (!parentMahv) {
-         setMessage({ type: 'error', text: 'Vui lòng nhập Mã học viên để tra cứu.' });
+         setMessage({ type: 'error', text: 'Vui lòng nhập Mã học sinh để tra cứu.' });
          return;
       }
 
@@ -86,7 +86,7 @@ function Login() {
             .single();
 
          if (stErr || !stData) {
-            setMessage({ type: 'error', text: 'Không tìm thấy học viên với mã thẻ này.' });
+            setMessage({ type: 'error', text: 'Không tìm thấy học sinh với mã thẻ này.' });
             setLoading(false);
             return;
          }
@@ -346,7 +346,7 @@ function Login() {
                         />
                      </div>
                      <h2>{config?.tenweb || 'Hệ thống Quản lý'}</h2>
-                     <p>{loginMode === 'login' ? (config?.motaweb || 'Truy cập hệ thống quản lý cơ sở') : loginMode === 'attendance' ? 'Đăng nhập ghi danh học viên' : 'Nhập mã học viên xem học phí & điểm danh'}</p>
+                     <p>{loginMode === 'login' ? (config?.motaweb || 'Truy cập hệ thống quản lý cơ sở') : loginMode === 'attendance' ? 'Đăng nhập ghi danh học sinh' : 'Nhập mã học sinh xem học phí & điểm danh'}</p>
                   </div>
 
                   {message.text && (
@@ -385,7 +385,7 @@ function Login() {
                            </div>
                            <input
                               type="text"
-                              placeholder="Nhập mã học viên (VD: HV001, HV002)"
+                              placeholder="Nhập mã học sinh (VD: HS001, HS002)"
                               value={parentMahv}
                               onChange={(e) => setParentMahv(e.target.value)}
                            />
@@ -535,7 +535,7 @@ function Login() {
                                  <div key={st.mahv} className="attendance-portal-card">
                                     {/* Student Info Section */}
                                     <div>
-                                       <span className="portal-att-label">Học Viên</span>
+                                       <span className="portal-att-label">Học Sinh</span>
                                        <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{st.tenhv}</strong>
                                        <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>{st.mahv}</div>
                                     </div>
@@ -571,8 +571,8 @@ function Login() {
                               );
                            }) : (
                               <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                                 <p style={{ fontWeight: 600, fontSize: '1rem' }}>Lớp không có học viên đang kích hoạt.</p>
-                                 <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>Vui lòng kiểm tra trạng thái học viên trong phần quản lý.</p>
+                                 <p style={{ fontWeight: 600, fontSize: '1rem' }}>Lớp không có học sinh đang kích hoạt.</p>
+                                 <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>Vui lòng kiểm tra trạng thái học sinh trong phần quản lý.</p>
                               </div>
                            )}
                         </div>

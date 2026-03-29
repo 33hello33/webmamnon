@@ -70,7 +70,7 @@ export default function Statistics() {
   const [tangTruongLoiNhuanData, setTangTruongLoiNhuanData] = useState(null);
   const [cocaDoanhThuLopData, setCocaDoanhThuLopData] = useState(null);
   const [thongKeNoLopData, setThongKeNoLopData] = useState(null);
-  const [tangTruongHocVienData, setTangTruongHocVienData] = useState(null);
+  const [tangTruongHocSinhData, setTangTruongHocSinhData] = useState(null);
   const [siSoTungLopData, setSiSoTungLopData] = useState(null);
   const [staffRevenue, setStaffRevenue] = useState([]);
 
@@ -250,7 +250,7 @@ export default function Statistics() {
 
       const monthlyRevenue = {};
       const monthlyProfit = {};
-      const monthlyHv = {};
+      const monthlyHs = {};
       const months = [];
 
       for (let i = 11; i >= 0; i--) {
@@ -325,7 +325,7 @@ export default function Statistics() {
       // Process Students
       (resHv.data || []).forEach(item => {
         const key = extractYearMonth(item.ngaynhaphoc);
-        if (key && monthlyHv.hasOwnProperty(key)) monthlyHv[key]++;
+        if (key && monthlyHs.hasOwnProperty(key)) monthlyHs[key]++;
       });
 
       const monthLabels = months.map(m => `${m.split('-')[1]}/${m.split('-')[0]}`);
@@ -354,11 +354,11 @@ export default function Statistics() {
         }]
       });
 
-      setTangTruongHocVienData({
+      setTangTruongHocSinhData({
         labels: monthLabels,
         datasets: [{
-          label: 'Học viên mới',
-          data: months.map(m => monthlyHv[m]),
+          label: 'Học sinh mới',
+          data: months.map(m => monthlyHs[m]),
           borderColor: '#F59E0B',
           backgroundColor: 'rgba(245, 158, 11, 0.1)',
           tension: 0.4,
@@ -618,10 +618,10 @@ export default function Statistics() {
         <div className="chart-item">
           <div className="chart-title">
             <Users size={20} style={{ color: '#F59E0B' }} />
-            <h3>Tăng trưởng học viên mới</h3>
+            <h3>Tăng trưởng học sinh mới</h3>
           </div>
           <div className="chart-canvas-container">
-            {tangTruongHocVienData && <Line data={tangTruongHocVienData} options={commonOptions} />}
+            {tangTruongHocSinhData && <Line data={tangTruongHocSinhData} options={commonOptions} />}
           </div>
         </div>
 

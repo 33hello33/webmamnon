@@ -62,10 +62,10 @@ const ALL_TABS = [
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
   {
     id: 'students',
-    label: 'Quản lý học viên',
+    label: 'Quản lý học sinh',
     icon: GraduationCap,
     subTabs: [
-      { id: 'students', label: 'Học viên' },
+      { id: 'students', label: 'Học sinh' },
       { id: 'classes', label: 'Lớp' },
       { id: 'attendance_today', label: 'Danh sách đi học' },
       { id: 'attendance', label: 'Điểm danh' },
@@ -287,31 +287,31 @@ function Dashboard() {
 
               {/* User Dropdown */}
               <div className="user-dropdown-container" style={{ position: 'relative' }}>
-                <div 
+                <div
                   className="user-avatar-trigger"
                   onMouseEnter={(e) => {
                     const tooltip = e.currentTarget.querySelector('.user-tooltip');
-                    if(tooltip) tooltip.style.opacity = '1';
+                    if (tooltip) tooltip.style.opacity = '1';
                   }}
                   onMouseLeave={(e) => {
                     const tooltip = e.currentTarget.querySelector('.user-tooltip');
-                    if(tooltip) tooltip.style.opacity = '0';
+                    if (tooltip) tooltip.style.opacity = '0';
                   }}
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '10px' }}
                 >
-                  <div style={{ 
-                    width: '38px', height: '38px', borderRadius: '12px', background: '#3b82f6', color: 'white', 
+                  <div style={{
+                    width: '38px', height: '38px', borderRadius: '12px', background: '#3b82f6', color: 'white',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1rem',
                     boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)', border: '2px solid white'
                   }}>
                     {user?.tennv?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase()}
                   </div>
-                  
+
                   {/* Tooltip on hover */}
-                  <div className="user-tooltip" style={{ 
-                    position: 'absolute', top: '110%', right: '0', background: '#1e293b', color: 'white', 
-                    padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', whiteSpace: 'nowrap', 
+                  <div className="user-tooltip" style={{
+                    position: 'absolute', top: '110%', right: '0', background: '#1e293b', color: 'white',
+                    padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', whiteSpace: 'nowrap',
                     pointerEvents: 'none', opacity: '0', transition: '0.2s', zIndex: 1100, fontWeight: 600,
                     boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
                   }}>
@@ -324,9 +324,9 @@ function Dashboard() {
                 {isUserMenuOpen && (
                   <>
                     <div style={{ position: 'fixed', inset: 0, zIndex: 1050 }} onClick={() => setIsUserMenuOpen(false)}></div>
-                    <div style={{ 
-                      position: 'absolute', top: '120%', right: 0, background: 'white', width: '200px', 
-                      borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', 
+                    <div style={{
+                      position: 'absolute', top: '120%', right: 0, background: 'white', width: '200px',
+                      borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0',
                       overflow: 'hidden', zIndex: 1100, animation: 'contentFadeIn 0.2s ease'
                     }}>
                       <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
@@ -334,11 +334,11 @@ function Dashboard() {
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{user?.role}</div>
                       </div>
                       <div style={{ padding: '6px' }}>
-                        <button 
+                        <button
                           onClick={() => { setIsChangePassOpen(true); setIsUserMenuOpen(false); }}
-                          style={{ 
-                            width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', 
-                            border: 'none', background: 'none', borderRadius: '10px', color: '#475569', 
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+                            border: 'none', background: 'none', borderRadius: '10px', color: '#475569',
                             cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontWeight: 600, fontSize: '0.85rem'
                           }}
                           onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
@@ -346,11 +346,11 @@ function Dashboard() {
                         >
                           <Key size={16} color="#6366f1" /> Đổi mật khẩu
                         </button>
-                        <button 
+                        <button
                           onClick={handleLogout}
-                          style={{ 
-                            width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', 
-                            border: 'none', background: 'none', borderRadius: '10px', color: '#ef4444', 
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+                            border: 'none', background: 'none', borderRadius: '10px', color: '#ef4444',
                             cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontWeight: 600, fontSize: '0.85rem'
                           }}
                           onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
@@ -594,7 +594,7 @@ function Dashboard() {
           <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)}>
             <Menu size={24} />
           </button>
-          
+
           <div className="mobile-top-title">
             {ALL_TABS.find(t => t.id === activeTab)?.label}
           </div>

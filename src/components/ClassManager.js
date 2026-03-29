@@ -11,7 +11,7 @@ import { useConfig } from '../ConfigContext';
 import './ClassManager.css';
 
 const INITIAL_FORM = {
-  malop: '', tenlop: '', hocphi: '', manv: '', daxoa: 'Đang Học', trutiennghi: 0
+  malop: '', tenlop: '', hocphi: '', manv: '', daxoa: 'Đang Học'
 }
 const formatMonthYear = (dateStr) => {
   if (!dateStr) return '';
@@ -145,7 +145,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [noidungFilter, setNoidungFilter] = useState('this_month');
   const [noidungList, setNoidungList] = useState([]);
   const [noidungLoading, setNoidungLoading] = useState(false);
-  
+
   // Delete Confirmation
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -154,9 +154,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setLoading(true);
     try {
       const { data: lopData, error } = await supabase.from('tbl_lop')
-         .select('*')
-         .neq('daxoa', 'Đã Xóa')
-         .order('tenlop');
+        .select('*')
+        .neq('daxoa', 'Đã Xóa')
+        .order('tenlop');
       if (error) {
         console.warn('Lỗi tải danh sách lớp, có thể bảng chưa được tạo.', error);
       } else {
@@ -286,7 +286,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   // --- BATCH NOTICE HANDLERS ---
   const handleOpenBatchNotice = async () => {
     const activeStudents = classStudents.filter(s => s.trangthai === 'Đang Học');
-    if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học viên nào Đang Học để gửi thông báo');
+    if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào Đang Học để gửi thông báo');
 
     try {
       setIsBatchNoticeOpen(true);
@@ -295,76 +295,76 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       let initLoaiDong = 'Tháng';
       let initHocPhi = 0;
 
-    if (selectedClass?.hocphi) {
-      const opts = String(selectedClass.hocphi).split('\n').filter(Boolean);
-      if (opts.length > 0) {
-        initHocPhiOpt = opts[0];
-        const qtyMatch = String(initHocPhiOpt).match(/(?:^|[^0-9])(\d+)\s*(?:buổi|tháng|khóa|tuần)/i);
-        if (qtyMatch && qtyMatch[1]) {
-          initSoLuong = parseInt(qtyMatch[1], 10);
-        }
-        const optLower = String(initHocPhiOpt).toLowerCase();
-        if (optLower.includes('buổi')) initLoaiDong = 'Buổi';
-        else if (optLower.includes('tháng')) initLoaiDong = 'Tháng';
-        else if (optLower.includes('khóa')) initLoaiDong = 'Khóa';
-        else if (optLower.includes('tuần')) initLoaiDong = 'Tuần';
+      if (selectedClass?.hocphi) {
+        const opts = String(selectedClass.hocphi).split('\n').filter(Boolean);
+        if (opts.length > 0) {
+          initHocPhiOpt = opts[0];
+          const qtyMatch = String(initHocPhiOpt).match(/(?:^|[^0-9])(\d+)\s*(?:buổi|tháng|khóa|tuần)/i);
+          if (qtyMatch && qtyMatch[1]) {
+            initSoLuong = parseInt(qtyMatch[1], 10);
+          }
+          const optLower = String(initHocPhiOpt).toLowerCase();
+          if (optLower.includes('buổi')) initLoaiDong = 'Buổi';
+          else if (optLower.includes('tháng')) initLoaiDong = 'Tháng';
+          else if (optLower.includes('khóa')) initLoaiDong = 'Khóa';
+          else if (optLower.includes('tuần')) initLoaiDong = 'Tuần';
 
-        const hpNumbers = String(initHocPhiOpt).replace(/,/g, '').match(/\d{4,}/g);
-        if (hpNumbers) {
-          initHocPhi = Math.max(...hpNumbers.map(Number));
+          const hpNumbers = String(initHocPhiOpt).replace(/,/g, '').match(/\d{4,}/g);
+          if (hpNumbers) {
+            initHocPhi = Math.max(...hpNumbers.map(Number));
+          }
         }
       }
-    }
 
-    const startStr = (() => {
-      const now = new Date();
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-    })();
+      const startStr = (() => {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      })();
 
-    setBatchNoticeData({
-      loaiDong: initLoaiDong,
-      soLuong: initSoLuong,
-      hocPhiOpt: initHocPhiOpt,
-      hinhThuc: walletsConfig[0]?.name || 'Tiền mặt',
-      ngayBatDau: startStr,
-      ngayKetThuc: '', 
-      giamHocphi: 0,
-      ghiChu: ''
-    });
+      setBatchNoticeData({
+        loaiDong: initLoaiDong,
+        soLuong: initSoLuong,
+        hocPhiOpt: initHocPhiOpt,
+        hinhThuc: walletsConfig[0]?.name || 'Tiền mặt',
+        ngayBatDau: startStr,
+        ngayKetThuc: '',
+        giamHocphi: 0,
+        ghiChu: ''
+      });
 
-    // Initialize batchStudentsData with per-student end dates
-    const initData = activeStudents.map(s => {
-      let finalKetThuc = '';
-      const stSchedRaw = selectedClass?.thoigianbieu || '';
-      const activeDays = parseScheduleDays(stSchedRaw);
+      // Initialize batchStudentsData with per-student end dates
+      const initData = activeStudents.map(s => {
+        let finalKetThuc = '';
+        const stSchedRaw = selectedClass?.thoigianbieu || '';
+        const activeDays = parseScheduleDays(stSchedRaw);
 
-      if (initLoaiDong === 'Tháng' || initLoaiDong === 'Khóa') {
-        const d = new Date(startStr);
-        d.setMonth(d.getMonth() + initSoLuong);
-        finalKetThuc = d.toISOString().split('T')[0];
-      } else if (initLoaiDong === 'Tuần') {
-        const d = new Date(startStr);
-        d.setDate(d.getDate() + initSoLuong * 7);
-        finalKetThuc = d.toISOString().split('T')[0];
-      } else if (initLoaiDong === 'Buổi' && activeDays.length > 0) {
-        finalKetThuc = calculateEndDateBySessions(startStr, initSoLuong, activeDays);
-      }
+        if (initLoaiDong === 'Tháng' || initLoaiDong === 'Khóa') {
+          const d = new Date(startStr);
+          d.setMonth(d.getMonth() + initSoLuong);
+          finalKetThuc = d.toISOString().split('T')[0];
+        } else if (initLoaiDong === 'Tuần') {
+          const d = new Date(startStr);
+          d.setDate(d.getDate() + initSoLuong * 7);
+          finalKetThuc = d.toISOString().split('T')[0];
+        } else if (initLoaiDong === 'Buổi' && activeDays.length > 0) {
+          finalKetThuc = calculateEndDateBySessions(startStr, initSoLuong, activeDays);
+        }
 
-      return {
-        mahv: s.mahv,
-        tenhv: s.tenhv,
-        sobuoihoc: `${initSoLuong} ${initLoaiDong.toLowerCase()}`,
-        hocphi: initHocPhi,
-        giamhocphi: 0,
-        tongcong: initHocPhi,
-        ngaybatdau: startStr,
-        ngayketthuc: finalKetThuc,
-        hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
-        ghichu: '',
-        thoigianbieu: stSchedRaw
-      };
-    });
+        return {
+          mahv: s.mahv,
+          tenhv: s.tenhv,
+          sobuoihoc: `${initSoLuong} ${initLoaiDong.toLowerCase()}`,
+          hocphi: initHocPhi,
+          giamhocphi: 0,
+          tongcong: initHocPhi,
+          ngaybatdau: startStr,
+          ngayketthuc: finalKetThuc,
+          hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
+          ghichu: '',
+          thoigianbieu: stSchedRaw
+        };
+      });
       setBatchStudentsData(initData);
     } catch (err) {
       console.error('Lỗi mở thông báo hàng loạt:', err);
@@ -677,8 +677,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     try {
       const payload = {
-        ...formData,
-        trutiennghi: parseInt(String(formData.trutiennghi || '0').replace(/,/g, ''), 10) || 0
+        ...formData
       };
 
       if (isEditMode) {
@@ -706,7 +705,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (!selectedClass) return;
     if (classStudents && classStudents.length > 0) {
       console.log("Class has students, showing error...");
-      return showMessage('error', 'Không thể xóa lớp đang có học viên. Vui lòng chuyển lớp cho học viên trước.');
+      return showMessage('error', 'Không thể xóa lớp đang có học sinh. Vui lòng chuyển lớp cho học sinh trước.');
     }
     setDeletePassword('');
     setIsDeleteOpen(true);
@@ -725,7 +724,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       const { error } = await supabase.from('tbl_lop').update({ daxoa: 'Đã Xóa' }).eq('malop', selectedClass.malop);
       if (error) throw error;
-      
+
       showMessage('success', `Đã xóa lớp ${selectedClass.tenlop} thành công`);
       setIsDeleteOpen(false);
       setSelectedClassId(null);
@@ -752,11 +751,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (!transferringStudent) return;
 
     try {
-      // Chuyển học viên sang lớp mới bằng cách update cột malop trong tbl_hv
+      // Chuyển học sinh sang lớp mới bằng cách update cột malop trong tbl_hv
       const { error } = await supabase.from('tbl_hv')
         .update({ malop: transferTargetClassId })
         .eq('mahv', transferringStudent.mahv);
-      
+
       if (error) throw error;
 
       showMessage('success', `Đã chuyển ${transferringStudent.tenhv} sang lớp mới thành công!`);
@@ -771,7 +770,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   // Export Excel
   const handleExportStudents = () => {
-    if (classStudents.length === 0) return showMessage('error', 'Lớp này hiện không có học viên');
+    if (classStudents.length === 0) return showMessage('error', 'Lớp này hiện không có học sinh');
     const cleanStudents = classStudents.map(s => {
 
       const latestHd = contracts
@@ -789,8 +788,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     });
     const ws = XLSX.utils.json_to_sheet(cleanStudents);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Học Viên - ${selectedClass?.tenlop || 'Lớp'}`);
-    XLSX.writeFile(wb, `DS_HocVien_${selectedClass?.malop || 'Lop'}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, `Học Sinh - ${selectedClass?.tenlop || 'Lớp'}`);
+    XLSX.writeFile(wb, `DS_HocSinh_${selectedClass?.malop || 'Lop'}.xlsx`);
   };
 
   return (
@@ -920,7 +919,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
               <div className="class-students-section">
                 <div className="section-head">
-                  <h3>Danh sách học viên ({classStudents.length})</h3>
+                  <h3>Danh sách học sinh ({classStudents.length})</h3>
                   <div className="student-actions">
                     {config?.xuatthongbaohangloat !== false && (
                       <button className="btn btn-outline" onClick={handleOpenBatchNotice}>
@@ -939,8 +938,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       <tr>
                         <th>STT</th>
                         <th style={{ textAlign: 'center' }}>Hành động</th>
-                        <th>Mã HV</th>
-                        <th>Tên Học Viên</th>
+                        <th>Mã HS</th>
+                        <th>Tên Học Sinh</th>
                         <th>Trạng Thái</th>
                         <th>Ngày Bắt Đầu</th>
                         <th>Ngày Kết Thúc</th>
@@ -955,7 +954,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               <td>{idx + 1}</td>
                               <td className="text-center">
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                                  <button className="tm-btn-icon text-primary" title="Xem chi tiết học viên" onClick={() => handleOpenViewStudent(s)}>
+                                  <button className="tm-btn-icon text-primary" title="Xem chi tiết học sinh" onClick={() => handleOpenViewStudent(s)}>
                                     <Eye size={18} />
                                   </button>
                                   <button className="tm-btn-icon" style={{ color: '#8b5cf6' }} title="Chuyển lớp" onClick={() => handleOpenTransfer(s)}>
@@ -979,7 +978,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         })
                       ) : (
                         <tr>
-                          <td colSpan="7" className="empty-state">Lớp chưa có học viên nào</td>
+                          <td colSpan="7" className="empty-state">Lớp chưa có học sinh nào</td>
                         </tr>
                       )}
                     </tbody>
@@ -1049,7 +1048,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       );
                     })
                   ) : (
-                    <div className="empty-state">Lớp chưa có học viên nào</div>
+                    <div className="empty-state">Lớp chưa có học sinh nào</div>
                   )}
                 </div>
 
@@ -1070,17 +1069,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           <div className="modal-content form-modal">
             <div className="modal-header">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <User size={20} /> Chi tiết thông tin Học Viên
+                <User size={20} /> Chi tiết thông tin Học Sinh
               </h3>
               <button className="close-btn" onClick={() => setIsViewStudentOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body form-grid column-2">
               <div className="form-group">
-                <label>Mã HV</label>
+                <label>Mã HS</label>
                 <input type="text" value={viewStudentData.mahv} disabled />
               </div>
               <div className="form-group">
-                <label>Tên Học Viên</label>
+                <label>Tên Học Sinh</label>
                 <input type="text" value={viewStudentData.tenhv} disabled />
               </div>
               <div className="form-group">
@@ -1142,13 +1141,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           <div className="modal-content sm-modal">
             <div className="modal-header">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8b5cf6' }}>
-                <ArrowRightLeft size={20} /> Chuyển lớp cho học viên
+                <ArrowRightLeft size={20} /> Chuyển lớp cho học sinh
               </h3>
               <button className="close-btn" onClick={() => setIsTransferModalOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <p style={{ marginBottom: '1rem', color: '#475569' }}>
-                Học viên: <strong style={{ color: '#10b981' }}>{transferringStudent.tenhv}</strong> (Mã: {transferringStudent.mahv})
+                Học sinh: <strong style={{ color: '#10b981' }}>{transferringStudent.tenhv}</strong> (Mã: {transferringStudent.mahv})
               </p>
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                 <label style={{ color: '#64748b', fontWeight: 600, fontSize: '0.85rem' }}>Chọn lớp học mới chuyển đến:</label>
@@ -1235,23 +1234,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <textarea name="hocphi" placeholder="VD: 8 buổi - 1,000,000&#10;4 tháng - 4,400,000" value={formData.hocphi} onChange={handleChange} rows="5"></textarea>
               </div>
 
-              {config?.trutiennghi && (
-                <div className="form-group full-width" style={{ gridColumn: 'span 2', background: '#fff1f2', padding: '10px', borderRadius: '8px', border: '1px solid #fecdd3' }}>
-                  <label style={{ color: '#be123c', fontWeight: 700 }}>Tiền trừ mỗi buổi nghỉ (Nghỉ có phép)</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      name="trutiennghi"
-                      value={formatTuition(formData.trutiennghi || 0)}
-                      onChange={handleChange}
-                      placeholder="VD: 50,000"
-                      style={{ paddingRight: '35px', fontWeight: 700, color: '#be123c' }}
-                    />
-                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#be123c', fontWeight: 700 }}>₫</span>
-                  </div>
-                  <p style={{ fontSize: '0.75rem', color: '#e11d48', marginTop: '4px' }}>* Chỉ tự động trừ khi xuất hóa đơn nếu học viên có nghỉ phép trong chu kỳ.</p>
-                </div>
-              )}
+
               <div className="form-actions full-width" style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
                 <button type="button" className="btn btn-outline" onClick={() => setIsFormOpen(false)}>Hủy</button>
                 <button type="submit" className="btn btn-primary">{isEditMode ? 'Lưu Thay Đổi' : 'Thêm Lớp'}</button>
@@ -1269,7 +1252,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
-                    Thêm Thông Báo Hàng Loạt - <span className="text-primary">{selectedClass?.tenlop}</span>
+                  Thêm Thông Báo Hàng Loạt - <span className="text-primary">{selectedClass?.tenlop}</span>
                 </h3>
                 <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', textAlign: 'left' }}>
                   <span style={{ fontWeight: 600 }}>Giảng viên:</span> {teachers.find(t => t.manv === selectedClass?.manv)?.tennv || selectedClass?.manv || 'Chưa phân công'}
@@ -1378,8 +1361,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <tr style={{ fontSize: '0.8rem' }}>
                       <th style={{ width: '40px' }}></th>
                       <th>STT</th>
-                      <th>Mã HV</th>
-                      <th style={{ minWidth: '150px' }}>Tên HV</th>
+                      <th>Mã HS</th>
+                      <th style={{ minWidth: '150px' }}>Tên Học Sinh</th>
                       <th style={{ minWidth: '85px' }}>Số buổi</th>
                       <th style={{ minWidth: '135px' }}>Học phí</th>
                       <th style={{ minWidth: '125px' }}>Giảm HP</th>

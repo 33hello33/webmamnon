@@ -122,7 +122,7 @@ export default function SalesPOS() {
    const conLai = tongCongBill - pCur(daDong);
 
    const handleSaveBill = async () => {
-      if (!selectedStudent) return window.alert('Vui lòng chọn học viên để lưu Bill!');
+      if (!selectedStudent) return window.alert('Vui lòng chọn học sinh để lưu Bill!');
       if (cart.length === 0) return window.alert('Giỏ hàng trống!');
       setIsSaving(true);
 
@@ -281,29 +281,29 @@ export default function SalesPOS() {
 
          {/* MOBILE TAB NAVIGATION */}
          <div className="sp-mobile-tabs">
-            <button className={currentStep === 1 ? 'active' : ''} onClick={() => setCurrentStep(1)}>1. Học Viên</button>
+            <button className={currentStep === 1 ? 'active' : ''} onClick={() => setCurrentStep(1)}>1. Học Sinh</button>
             <button className={currentStep === 2 ? 'active' : ''} onClick={() => setCurrentStep(2)}>2. Hàng Hóa</button>
             <button className={currentStep === 3 ? 'active' : ''} onClick={() => setCurrentStep(3)}>3. Thanh Toán ({cart.length})</button>
          </div>
 
-         {/* CỘT 1: DANH SÁCH HỌC VIÊN */}
+         {/* CỘT 1: DANH SÁCH HỌC SINH */}
          <div className={`sp-col-1 ${currentStep === 1 ? 'mobile-active' : 'mobile-hide'}`}>
-            <div className="sp-col-header">DANH SÁCH HỌC VIÊN</div>
+            <div className="sp-col-header">DANH SÁCH HỌC SINH</div>
             <div className="sp-search">
                <Search size={16} className="text-muted" />
-               <input type="text" placeholder="Tìm theo tên học viên" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+               <input type="text" placeholder="Tìm theo tên học sinh" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
             </div>
             <div className="sp-items-container">
                {students.filter(s => (s.tenhv && s.tenhv.toLowerCase().includes(studentSearch.toLowerCase())) || (s.sdt && s.sdt.includes(studentSearch))).map(st => (
                   <div key={st.mahv} className={`sp-item-card ${selectedStudent?.mahv === st.mahv ? 'active' : ''}`} onClick={() => handleSelectStudent(st)}>
                      <div className="sp-ic-title">{st.tenhv}</div>
                      <div className="sp-ic-sub">SDT: {st.sdt || '_'}</div>
-                     <div className="sp-ic-sub">Lớp: {st.malop_list && st.malop_list.length > 0 
+                     <div className="sp-ic-sub">Lớp: {st.malop_list && st.malop_list.length > 0
                         ? st.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ')
                         : 'Học sinh bảo lưu'}</div>
                   </div>
                ))}
-               {students.length === 0 && <div className="text-center p-4 text-muted">Đang tải HV...</div>}
+               {students.length === 0 && <div className="text-center p-4 text-muted">Đang tải HS...</div>}
             </div>
          </div>
 
@@ -450,12 +450,12 @@ export default function SalesPOS() {
                <div className="sp-co-config mt-2">
                   <div className="cfg-item">
                      <label>Hình thức thanh toán</label>
-                      <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)}>
-                          {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                          {walletsConfig.map(w => (
-                             <option key={w.id} value={w.name}>{w.name}</option>
-                          ))}
-                      </select>
+                     <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)}>
+                        {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                        {walletsConfig.map(w => (
+                           <option key={w.id} value={w.name}>{w.name}</option>
+                        ))}
+                     </select>
                   </div>
                   <div className="cfg-item flex-2">
                      <label>GHI CHÚ BIÊN LAI</label>

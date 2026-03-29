@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { 
-  Save, 
-  Upload, 
-  Globe, 
-  Building2, 
-  Wallet, 
-  ListChecks, 
+import {
+  Save,
+  Upload,
+  Globe,
+  Building2,
+  Wallet,
+  ListChecks,
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
@@ -15,6 +15,11 @@ import {
   DollarSign
 } from 'lucide-react';
 import './ConfigManager.css';
+
+const formatCurrency = (val) => {
+  if (!val && val !== 0) return '';
+  return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
 
 const ROLES = ['Quản lý', 'Nhân viên VP', 'Giáo viên'];
 const TAB_OPTIONS = [
@@ -26,7 +31,7 @@ const TAB_OPTIONS = [
   { id: 'employees', label: 'Nhân viên' },
   { id: 'tasks', label: 'Công việc' },
   { id: 'debts', label: 'Quản lý nợ' },
-  { id: 'students', label: 'Quản lý học viên' },
+  { id: 'students', label: 'Quản lý học sinh' },
   { id: 'export_excel', label: 'Xuất Excel (Quyền)' }
 ];
 
@@ -104,7 +109,7 @@ const ConfigManager = () => {
       // 1. Upload to assets bucket (might need policy)
       const fileName = `logo_${Date.now()}.png`;
       const { error } = await supabase.storage.from('assets').upload(fileName, file);
-      
+
       if (error) {
         // Alt: base64 if no bucket
         const reader = new FileReader();
@@ -129,7 +134,7 @@ const ConfigManager = () => {
   const togglePermission = (role, tabId) => {
     const pq = { ...formData.phanquyenrole };
     if (!pq[role]) pq[role] = { full: false, tabs: [] };
-    
+
     if (pq[role].tabs.includes(tabId)) {
       pq[role].tabs = pq[role].tabs.filter(id => id !== tabId);
     } else {
@@ -148,7 +153,7 @@ const ConfigManager = () => {
   const handleToggleTinhHocPhi = (val) => {
     const thp = { ...formData.tinhhocphi };
     if (!thp.selected) thp.selected = [];
-    
+
     if (thp.selected.includes(val)) {
       thp.selected = thp.selected.filter(i => i !== val);
     } else {
@@ -160,7 +165,7 @@ const ConfigManager = () => {
   const handleToggleCotDiemDanh = (val) => {
     const cdd = { ...formData.cotdiemdanh };
     if (!cdd.selected) cdd.selected = [];
-    
+
     if (cdd.selected.includes(val)) {
       cdd.selected = cdd.selected.filter(i => i !== val);
     } else {
@@ -214,11 +219,11 @@ const ConfigManager = () => {
             <div className="form-fields">
               <div className="form-group">
                 <label>Tên Website</label>
-                <input type="text" value={formData.tenweb} onChange={e => setFormData({...formData, tenweb: e.target.value})} placeholder="VD: EASY4SCHOOL" />
+                <input type="text" value={formData.tenweb} onChange={e => setFormData({ ...formData, tenweb: e.target.value })} placeholder="VD: EASY4SCHOOL" />
               </div>
               <div className="form-group">
                 <label>Mô tả Website (Meta Desc)</label>
-                <input type="text" value={formData.motaweb} onChange={e => setFormData({...formData, motaweb: e.target.value})} placeholder="VD: Hệ thống quản lý trung tâm ngoại ngữ..." />
+                <input type="text" value={formData.motaweb} onChange={e => setFormData({ ...formData, motaweb: e.target.value })} placeholder="VD: Hệ thống quản lý trung tâm ngoại ngữ..." />
               </div>
             </div>
           </div>
@@ -233,23 +238,23 @@ const ConfigManager = () => {
           <div className="company-grid">
             <div className="form-group">
               <label>Tên Công ty (In trên phiếu)</label>
-              <input type="text" value={formData.tencongty} onChange={e => setFormData({...formData, tencongty: e.target.value})} placeholder="VD: CÔNG TY TNHH ABC" />
+              <input type="text" value={formData.tencongty} onChange={e => setFormData({ ...formData, tencongty: e.target.value })} placeholder="VD: CÔNG TY TNHH ABC" />
             </div>
             <div className="form-group">
               <label>Địa chỉ</label>
-              <input type="text" value={formData.diachicongty} onChange={e => setFormData({...formData, diachicongty: e.target.value})} placeholder="Số nhà, đường, quận..." />
+              <input type="text" value={formData.diachicongty} onChange={e => setFormData({ ...formData, diachicongty: e.target.value })} placeholder="Số nhà, đường, quận..." />
             </div>
             <div className="form-group">
               <label>Số điện thoại</label>
-              <input type="text" value={formData.sdtcongty} onChange={e => setFormData({...formData, sdtcongty: e.target.value})} placeholder="0xxx.xxx.xxx" />
+              <input type="text" value={formData.sdtcongty} onChange={e => setFormData({ ...formData, sdtcongty: e.target.value })} placeholder="0xxx.xxx.xxx" />
             </div>
             <div className="form-group">
               <label>Số trợ giảng tối đa (1-3)</label>
-              <input type="number" min="1" max="3" value={formData.sonhanvientrogiang} onChange={e => setFormData({...formData, sonhanvientrogiang: e.target.value})} />
+              <input type="number" min="1" max="3" value={formData.sonhanvientrogiang} onChange={e => setFormData({ ...formData, sonhanvientrogiang: e.target.value })} />
             </div>
             <div className="form-group">
               <label>Gia hạn thêm (Số ngày quá hạn)</label>
-              <input type="number" min="0" value={formData.ngayquahan || 0} onChange={e => setFormData({...formData, ngayquahan: e.target.value})} />
+              <input type="number" min="0" value={formData.ngayquahan || 0} onChange={e => setFormData({ ...formData, ngayquahan: e.target.value })} />
             </div>
           </div>
         </section>
@@ -262,17 +267,17 @@ const ConfigManager = () => {
               <h3>Cấu hình Thanh toán (QR VietQR)</h3>
             </div>
             <div className="wallets-grid">
-              {[1,2,3,4].map(num => {
+              {[1, 2, 3, 4].map(num => {
                 const viKey = `vi${num}`;
                 const vi = formData[viKey] || {};
                 return (
                   <div key={viKey} className="wallet-card">
                     <div className="w-header">Ví / Ngân hàng {num}</div>
                     <div className="w-body">
-                      <input type="text" placeholder="Tên hiển thị" value={vi.name || ''} onChange={e => setFormData({...formData, [viKey]: {...vi, name: e.target.value}})} />
-                      <input type="text" placeholder="Bank ID (Bin)" value={vi.bankId || ''} onChange={e => setFormData({...formData, [viKey]: {...vi, bankId: e.target.value}})} />
-                      <input type="text" placeholder="Số tài khoản" value={vi.accNo || ''} onChange={e => setFormData({...formData, [viKey]: {...vi, accNo: e.target.value}})} />
-                      <input type="text" placeholder="Tên chủ tài khoản" value={vi.accName || ''} onChange={e => setFormData({...formData, [viKey]: {...vi, accName: e.target.value}})} />
+                      <input type="text" placeholder="Tên hiển thị" value={vi.name || ''} onChange={e => setFormData({ ...formData, [viKey]: { ...vi, name: e.target.value } })} />
+                      <input type="text" placeholder="Bank ID (Bin)" value={vi.bankId || ''} onChange={e => setFormData({ ...formData, [viKey]: { ...vi, bankId: e.target.value } })} />
+                      <input type="text" placeholder="Số tài khoản" value={vi.accNo || ''} onChange={e => setFormData({ ...formData, [viKey]: { ...vi, accNo: e.target.value } })} />
+                      <input type="text" placeholder="Tên chủ tài khoản" value={vi.accName || ''} onChange={e => setFormData({ ...formData, [viKey]: { ...vi, accName: e.target.value } })} />
                     </div>
                   </div>
                 );
@@ -288,14 +293,14 @@ const ConfigManager = () => {
               <ListChecks size={20} />
               <h3>Hạng mục Thu</h3>
             </div>
-            <textarea rows="6" value={formData.hangmucthu} onChange={e => setFormData({...formData, hangmucthu: e.target.value})} placeholder="Nhập mỗi dòng một hạng mục..." />
+            <textarea rows="6" value={formData.hangmucthu} onChange={e => setFormData({ ...formData, hangmucthu: e.target.value })} placeholder="Nhập mỗi dòng một hạng mục..." />
           </div>
           <div className="cat-col" style={{ flex: 1.5 }}>
             <div className="section-title">
               <ListChecks size={20} />
               <h3>Hạng mục Chi</h3>
             </div>
-            <textarea rows="6" value={formData.hangmucchi} onChange={e => setFormData({...formData, hangmucchi: e.target.value})} placeholder="Nhập mỗi dòng một hạng mục..." />
+            <textarea rows="6" value={formData.hangmucchi} onChange={e => setFormData({ ...formData, hangmucchi: e.target.value })} placeholder="Nhập mỗi dòng một hạng mục..." />
           </div>
           <div className="cat-col" style={{ flex: 1, minWidth: '200px' }}>
             <div className="section-title">
@@ -304,37 +309,51 @@ const ConfigManager = () => {
             </div>
             <div className="tuition-config-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.tinhhocphi?.selected?.includes('khoa')} 
+                <input
+                  type="checkbox"
+                  checked={formData.tinhhocphi?.selected?.includes('khoa')}
                   onChange={() => handleToggleTinhHocPhi('khoa')}
                 />
                 <span>Học phí theo Khóa</span>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.tinhhocphi?.selected?.includes('thang')} 
+                <input
+                  type="checkbox"
+                  checked={formData.tinhhocphi?.selected?.includes('thang')}
                   onChange={() => handleToggleTinhHocPhi('thang')}
                 />
                 <span>Học phí theo Tháng</span>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.tinhhocphi?.selected?.includes('buoi')} 
+                <input
+                  type="checkbox"
+                  checked={formData.tinhhocphi?.selected?.includes('buoi')}
                   onChange={() => handleToggleTinhHocPhi('buoi')}
                 />
                 <span>Học phí theo Buổi</span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: '#db2777', fontWeight: 700 }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.trutiennghi} 
-                  onChange={(e) => setFormData({...formData, trutiennghi: e.target.checked})}
-                />
-                <span>Trừ tiền khi nghỉ phép</span>
-              </label>
+              <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
+                <div className="form-group">
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền ăn trừ/ngày nghỉ</label>
+                  <input
+                    type="text"
+                    value={formatCurrency(formData.trutienan || '')}
+                    onChange={(e) => setFormData({ ...formData, trutienan: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
+                    placeholder="VD: 30,000"
+                    style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền học trừ/ngày nghỉ</label>
+                  <input
+                    type="text"
+                    value={formatCurrency(formData.trutiennghi || '')}
+                    onChange={(e) => setFormData({ ...formData, trutiennghi: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
+                    placeholder="VD: 20,000"
+                    style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -345,25 +364,25 @@ const ConfigManager = () => {
             </div>
             <div className="tuition-config-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.cotdiemdanh?.selected?.includes('comat')} 
+                <input
+                  type="checkbox"
+                  checked={formData.cotdiemdanh?.selected?.includes('comat')}
                   onChange={() => handleToggleCotDiemDanh('comat')}
                 />
                 <span>Có mặt</span>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.cotdiemdanh?.selected?.includes('vangP')} 
+                <input
+                  type="checkbox"
+                  checked={formData.cotdiemdanh?.selected?.includes('vangP')}
                   onChange={() => handleToggleCotDiemDanh('vangP')}
                 />
                 <span>Nghỉ phép</span>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={formData.cotdiemdanh?.selected?.includes('vangKP')} 
+                <input
+                  type="checkbox"
+                  checked={formData.cotdiemdanh?.selected?.includes('vangKP')}
                   onChange={() => handleToggleCotDiemDanh('vangKP')}
                 />
                 <span>Nghỉ không phép</span>
@@ -400,10 +419,10 @@ const ConfigManager = () => {
                     <td>{opt.label}</td>
                     {ROLES.map(r => (
                       <td key={r}>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           disabled={formData.phanquyenrole[r]?.full}
-                          checked={formData.phanquyenrole[r]?.full || formData.phanquyenrole[r]?.tabs?.includes(opt.id)} 
+                          checked={formData.phanquyenrole[r]?.full || formData.phanquyenrole[r]?.tabs?.includes(opt.id)}
                           onChange={() => togglePermission(r, opt.id)}
                         />
                       </td>

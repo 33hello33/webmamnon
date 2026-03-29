@@ -75,7 +75,7 @@ export default function LeaveManager({ students }) {
     sdt: getStudentPhone(r.mahv)
   }));
 
-  // Tính toán số học viên vắng liên tiếp bằng JavaScript thay vì dùng RPC supabase
+  // Tính toán số học sinh vắng liên tiếp bằng JavaScript thay vì dùng RPC supabase
   const consecutiveAbsencesList = React.useMemo(() => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -95,18 +95,18 @@ export default function LeaveManager({ students }) {
     const list = [];
     for (const [mahv, studentRecords] of Object.entries(recordsByStudent)) {
       if (studentRecords.length === 0) continue;
-      
+
       const latestRecord = studentRecords[0];
       const latestStatus = (latestRecord.trangthai || '').toLowerCase();
-      
+
       if (latestStatus === 'có mặt') {
         continue;
       }
-      
+
       let consecutiveCount = 0;
       let ngayBatDau = latestRecord.ngay;
       const ngayKetThuc = latestRecord.ngay;
-      
+
       for (const record of studentRecords) {
         const status = (record.trangthai || '').toLowerCase();
         if (status === 'có mặt') {
@@ -115,7 +115,7 @@ export default function LeaveManager({ students }) {
         consecutiveCount++;
         ngayBatDau = record.ngay;
       }
-      
+
       if (consecutiveCount >= 2) {
         list.push({
           mahv: mahv,
@@ -128,7 +128,7 @@ export default function LeaveManager({ students }) {
         });
       }
     }
-    
+
     return list.sort((a, b) => b.songayvang - a.songayvang);
   }, [attendanceRecords, classes, students]);
 
@@ -147,15 +147,15 @@ export default function LeaveManager({ students }) {
               <CalendarX size={20} className="text-danger" />
               <h3>Nghỉ học hôm nay ({todayIso.split('-').reverse().join('/')})</h3>
             </div>
-            <span className="leave-badge danger">{todayAbsences.length} Học viên</span>
+            <span className="leave-badge danger">{todayAbsences.length} Học sinh</span>
           </div>
           <div className="leave-body">
             <div className="table-scroll-wrapper">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Mã HV</th>
-                    <th>Tên Học Viên</th>
+                    <th>Mã HS</th>
+                    <th>Tên Học Sinh</th>
                     <th className="text-center">Lịch</th>
                     <th>Tên Lớp</th>
                     <th>Trạng Thái</th>
@@ -186,7 +186,7 @@ export default function LeaveManager({ students }) {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="empty-state">Tuyệt vời! Hôm nay chưa ghi nhận học viên nào nghỉ học.</td>
+                      <td colSpan="7" className="empty-state">Tuyệt vời! Hôm nay chưa ghi nhận học sinh nào nghỉ học.</td>
                     </tr>
                   )}
                 </tbody>
@@ -217,14 +217,14 @@ export default function LeaveManager({ students }) {
                       <span><strong>SĐT:</strong> {s.sdt}</span>
                     </div>
                     {s.ghichu && s.ghichu !== '-' && (
-                       <div className="card-row note">
-                         <span><strong>Ghi chú:</strong> {s.ghichu}</span>
-                       </div>
+                      <div className="card-row note">
+                        <span><strong>Ghi chú:</strong> {s.ghichu}</span>
+                      </div>
                     )}
                   </div>
                 ))
               ) : (
-                <div className="empty-state">Hôm nay không có học viên nghỉ học.</div>
+                <div className="empty-state">Hôm nay không có học sinh nghỉ học.</div>
               )}
             </div>
           </div>
@@ -237,15 +237,15 @@ export default function LeaveManager({ students }) {
               <AlertTriangle size={20} className="text-warning" />
               <h3>Vắng liên tiếp (Cảnh báo &ge; 2 buổi)</h3>
             </div>
-            <span className="leave-badge warning">{consecutiveAbsencesList.length} Học viên</span>
+            <span className="leave-badge warning">{consecutiveAbsencesList.length} Học sinh</span>
           </div>
           <div className="leave-body">
             <div className="table-scroll-wrapper">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Mã HV</th>
-                    <th>Tên Học Viên</th>
+                    <th>Mã HS</th>
+                    <th>Tên Học Sinh</th>
                     <th className="text-center">Lịch</th>
                     <th>Tên Lớp</th>
                     <th className="text-center">Số Ngày Vắng Liên Tiếp</th>
@@ -280,7 +280,7 @@ export default function LeaveManager({ students }) {
                     })
                   ) : (
                     <tr>
-                      <td colSpan="6" className="empty-state">Tuyệt vời! Không có học viên nào vắng liên tiếp kéo dài.</td>
+                      <td colSpan="6" className="empty-state">Tuyệt vời! Không có học sinh nào vắng liên tiếp kéo dài.</td>
                     </tr>
                   )}
                 </tbody>
@@ -314,7 +314,7 @@ export default function LeaveManager({ students }) {
                   </div>
                 ))
               ) : (
-                <div className="empty-state">Không có học viên vắng liên tiếp.</div>
+                <div className="empty-state">Không có học sinh vắng liên tiếp.</div>
               )}
             </div>
           </div>

@@ -5,7 +5,7 @@ import { supabase, generateId } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer
+   Printer, History, Clock
 } from 'lucide-react';
 
 import './FinanceManager.css';
@@ -114,14 +114,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [printLuong, setPrintLuong] = useState(null);
    const [printHoaDon, setPrintHoaDon] = useState(null);
    const [printBill, setPrintBill] = useState(null);
-    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
-    const [deletePassword, setDeletePassword] = useState('');
+   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
+   const [deletePassword, setDeletePassword] = useState('');
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
 
    // Batch Import
    const [productList, setProductList] = useState([]);
    const [isBatchImportOpen, setIsBatchImportOpen] = useState(false);
+   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+   const [historyData, setHistoryData] = useState([]);
    const [batchImportData, setBatchImportData] = useState({
       nhacungcap: '',
       hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
@@ -265,6 +267,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          else fetchData();
       } else if (confirmDialog.actionType === 'CONFIRM_CANDOI') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         if (deletePassword !== auth.user?.password) {
+            alert('Mật khẩu của bạn không đúng, vui lòng thử lại!');
+            return;
+         }
          const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
          const manv = auth.user?.manv || '';
          const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
@@ -425,6 +431,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       fetchBalances();
    };
 
+   const handleOpenHistory = async () => {
+      setLoading(true);
+      const { data, error } = await supabase.from('tbl_candoidongtien').select('*').order('id', { ascending: false });
+      if (error) {
+         alert('Lỗi khi tải lịch sử: ' + error.message);
+      } else {
+         setHistoryData(data || []);
+         setIsHistoryModalOpen(true);
+      }
+      setLoading(false);
+   };
+
    const handleOpenCanDoi = () => {
       setCanDoiData({
          vi1: initialBalances.vi1.toString(),
@@ -438,6 +456,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleSaveCanDoi = (e) => {
       e.preventDefault();
+      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận cân đối dòng tiền',
@@ -482,8 +501,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          const now = new Date();
          const isToday = y === now.getFullYear() &&
-                        date.getMonth() === now.getMonth() &&
-                        date.getDate() === now.getDate();
+            date.getMonth() === now.getMonth() &&
+            date.getDate() === now.getDate();
 
          if (isEnd && isToday) {
             const hh = String(now.getHours()).padStart(2, '0');
@@ -945,7 +964,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <tr>
                               <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã HĐ <SortIcon columnKey="mahd" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
-                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học viên <SortIcon columnKey="mahv" /></th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học sinh <SortIcon columnKey="mahv" /></th>
                               <th>Tên lớp</th>
                               <th>Người lập</th>
                               <th>Thời lượng</th>
@@ -992,7 +1011,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                            </div>
                            <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Học viên:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
                               <div className="fm-card-row"><span>Kết thúc:</span> <span>{r.ngayketthuc || '_'}</span></div>
                               <div className="fm-card-row">
                                  <span>Tổng cộng:</span>
@@ -1095,7 +1114,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <tr>
                               <th onClick={() => requestSort('mabill')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã Bill <SortIcon columnKey="mabill" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày Bán <SortIcon columnKey="ngaylap" /></th>
-                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên Học Viên <SortIcon columnKey="mahv" /></th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên Học Sinh <SortIcon columnKey="mahv" /></th>
                               <th>Danh Mục Sp</th>
                               <th>Chiết Khấu</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Thu <SortIcon columnKey="tongcong" /></th>
@@ -1140,9 +1159,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <div className="fm-card-body">
                               <div className="fm-card-row"><span>Khách hàng:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</strong></div>
                               <div className="fm-card-row">
-                                 <span>Hàng hóa:</span> 
+                                 <span>Hàng hóa:</span>
                                  <span className="text-slate-600">
-                                    {(function() {
+                                    {(function () {
                                        if (!r.hanghoa) return '0 loại SP';
                                        if (!r.hanghoa.includes('Tên Hàng')) return r.hanghoa;
                                        // Split by real newline and carriage return
@@ -1239,13 +1258,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <span className="text-muted" style={{ fontSize: '0.9rem', fontWeight: 500 }}>
                            Ngày mốc: <strong style={{ color: '#334155' }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
                         </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                           <button className="fm-btn-add-dauky" onClick={() => {
-                              setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
-                              setBalanceModal(true);
-                           }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
-                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
-                        </div>
+                         <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            {!initialBalances.id && (
+                               <button className="fm-btn-add-dauky" onClick={() => {
+                                  setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
+                                  setBalanceModal(true);
+                               }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
+                            )}
+                            <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
+                            <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
+                         </div>
                      </div>
                   </div>
 
@@ -1991,6 +2013,66 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
+         {isHistoryModalOpen && document.body && createPortal(
+            <div className="fm-modal-overlay" style={{ zIndex: 1200, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+               <div className="fm-modal animate-slide-up" style={{ maxWidth: '800px', width: '95%', maxHeight: '85vh', background: 'white', borderRadius: '20px', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px', color: '#64748b' }}><History size={24} /></div>
+                        <div>
+                           <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b', fontWeight: 800 }}>Lịch Sử Cân Đối Quỹ</h3>
+                           <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Theo dõi các đợt cập nhật số dư thực tế</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsHistoryModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', cursor: 'pointer', color: '#64748b', padding: '8px', borderRadius: '10px', transition: 'all 0.2s' }}><X size={20} /></button>
+                  </div>
+                  <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                     {historyData.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Chưa có bản ghi cân đối nào.</div>
+                     ) : (
+                        <div className="history-timeline" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                           {historyData.map((h, idx) => (
+                              <div key={h.id} style={{ position: 'relative', borderLeft: '2px solid #e2e8f0', paddingLeft: '1.5rem', paddingBottom: '0.5rem' }}>
+                                 <div style={{ position: 'absolute', left: '-9px', top: '0', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', border: '3px solid #8b5cf6' }}></div>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b', background: '#f8fafc', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>{formatDate(h.created_at || h.id)}</span>
+                                    <span style={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 600 }}>NV: {nvMap[h.manv] || h.manv}</span>
+                                 </div>
+                                 <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontWeight: 800, marginBottom: '0.75rem', color: '#475569', fontSize: '1rem' }}>📝 {h.noidung}</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+                                       {walletsConfig.map(w => {
+                                          const diff = h[w.id] || {};
+                                          const truoc = pCur(diff.truoc) || 0;
+                                          const sau = pCur(diff.sau) || 0;
+                                          const offset = sau - truoc;
+                                          return (
+                                             <div key={w.id} style={{ background: 'white', padding: '8px 12px', borderRadius: '10px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>{w.name}</div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                                   <span style={{ color: '#64748b' }}>{fCur(truoc)}</span>
+                                                   <span style={{ fontWeight: 850, color: '#1e293b' }}>→ {fCur(sau)}</span>
+                                                </div>
+                                                {offset !== 0 && (
+                                                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: offset > 0 ? '#10b981' : '#ef4444', textAlign: 'right', marginTop: '2px' }}>
+                                                      {offset > 0 ? '+' : ''}{fCur(offset)}
+                                                   </div>
+                                                )}
+                                             </div>
+                                          );
+                                       })}
+                                    </div>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
+                     )}
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
+
          {confirmDialog.isOpen && document.body && createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 2000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
                <div className="fm-modal-content animate-slide-up" style={{ backgroundColor: 'white', maxWidth: '400px', width: '90%', borderRadius: '16px', textAlign: 'center', padding: '2.5rem 1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -2012,7 +2094,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      {confirmDialog.message}
                   </p>
 
-                  {confirmDialog.actionType === 'DELETE' && (
+                  {(confirmDialog.actionType === 'DELETE' || confirmDialog.actionType === 'CONFIRM_CANDOI') && (
                      <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Xác nhận mật khẩu:</label>
                         <input

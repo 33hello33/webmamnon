@@ -67,7 +67,7 @@ export default function AttendanceManager({ students, showMessage }) {
       if (!markingMode || !selectedId || viewMode !== 'class') { setAttStudents([]); setAttRecords({}); return; }
       setLoading(true);
       try {
-        // Lấy tất cả học viên có mã lớp tương ứng (không lọc trạng thái ở đây)
+        // Lấy tất cả học sinh có mã lớp tương ứng (không lọc trạng thái ở đây)
         const cluster = students.filter(s =>
           s.malop === selectedId && s.trangthai !== 'Đã Nghỉ'
         );
@@ -160,7 +160,7 @@ export default function AttendanceManager({ students, showMessage }) {
           }
           query = query.in('mahv', stdIds);
         } else {
-          // Xem theo Học Viên: lấy tất cả các lớp mà học viên này tham gia
+          // Xem theo Học Sinh: lấy tất cả các lớp mà học sinh này tham gia
           query = query.eq('mahv', selectedId);
         }
 
@@ -300,8 +300,8 @@ export default function AttendanceManager({ students, showMessage }) {
     const ws = XLSX.utils.json_to_sheet(aggregatedData.map((d, index) => {
       const rowData = {
         "STT": index + 1,
-        "Mã HV": d.mahv,
-        "Tên HV": d.tenhv,
+        "Mã HS": d.mahv,
+        "Tên HS": d.tenhv,
         "Tổng Kết (CM/P/KP)": `${d.coMat}/${d.nghiPhep}/${d.khongPhep}`
       };
 
@@ -363,7 +363,7 @@ export default function AttendanceManager({ students, showMessage }) {
               className={`toggle-btn ${viewMode === 'student' ? 'active' : ''}`}
               onClick={() => setViewMode('student')}
             >
-              <User size={14} /> Theo Học Viên
+              <User size={14} /> Theo Học Sinh
             </button>
           </div>
 
@@ -371,7 +371,7 @@ export default function AttendanceManager({ students, showMessage }) {
             <Search size={16} className="search-icon" />
             <input
               type="text"
-              placeholder={`Tìm ${viewMode === 'class' ? 'lớp' : 'học viên'}...`}
+              placeholder={`Tìm ${viewMode === 'class' ? 'lớp' : 'học sinh'}...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -438,14 +438,14 @@ export default function AttendanceManager({ students, showMessage }) {
               {viewMode === 'student' && (
                 <div className="attendance-info-section">
                   <div className="im-section">
-                    <h3 className="im-section-title"><User size={18} /> Thông tin Học Viên</h3>
+                    <h3 className="im-section-title"><User size={18} /> Thông tin Học Sinh</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px 0' }}>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
-                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Học viên:</span>
+                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Học sinh:</span>
                         <span className="text-primary" style={{ fontWeight: 800 }}>{students.find(s => s.mahv === selectedId)?.tenhv || selectedId}</span>
                       </div>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
-                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Mã HV:</span>
+                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Mã HS:</span>
                         <span style={{ color: '#1e293b', fontWeight: 700 }}>{selectedId}</span>
                       </div>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
@@ -493,7 +493,7 @@ export default function AttendanceManager({ students, showMessage }) {
                       onClick={() => setMarkingMode(!markingMode)}
                     >
                       {markingMode ? <X size={16} /> : <CheckSquare size={16} />}
-                      {markingMode ? 'Đóng Ghi Điểm Danh' : 'Ghi Điểm Danh HV'}
+                      {markingMode ? 'Đóng Ghi Điểm Danh' : 'Ghi Điểm Danh HS'}
                     </button>
                   )}
                 </div>
@@ -520,7 +520,7 @@ export default function AttendanceManager({ students, showMessage }) {
                         return (
                           <div key={st.mahv} className="attendance-portal-card">
                             <div>
-                              <span className="portal-att-label">Học Viên</span>
+                              <span className="portal-att-label">Học Sinh</span>
                               <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>{st.tenhv}</strong>
                               <div style={{ fontSize: '0.8rem', color: '#64748b' }}>#{st.mahv}</div>
                             </div>
@@ -573,8 +573,8 @@ export default function AttendanceManager({ students, showMessage }) {
                         <thead>
                           <tr>
                             <th>STT</th>
-                            <th>Mã HV</th>
-                            <th style={{ minWidth: '150px' }}>Tên Học Viên</th>
+                            <th>Mã HS</th>
+                            <th style={{ minWidth: '150px' }}>Tên Học Sinh</th>
                             <th className="text-center">Lịch</th>
                             <th className="text-center" style={{ minWidth: '130px' }}>Tổng Kết<br /><small className="text-muted">(CM / P / K)</small></th>
                             {uniqueDates.map(date => {
@@ -674,7 +674,7 @@ export default function AttendanceManager({ students, showMessage }) {
           ) : (
             <div className="no-selection">
               <Calendar size={22} />
-              <p>Vui lòng chọn một {viewMode === 'class' ? 'Lớp' : 'Học viên'} bên trái để xem điểm danh</p>
+              <p>Vui lòng chọn một {viewMode === 'class' ? 'Lớp' : 'Học sinh'} bên trái để xem điểm danh</p>
             </div>
           )}
         </div>

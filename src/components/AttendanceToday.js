@@ -25,11 +25,11 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
         .select('*')
         .eq('ngay', todayIso)
         .eq('trangthai', 'Có mặt');
-      
+
       if (attErr) throw attErr;
       setTodayAttendance(attendanceData || []);
 
- 
+
       // 2. Fetch giohoc info from tbl_lop for found classes (Thay thế tbl_lichhoc_lop)
       if (attendanceData && attendanceData.length > 0) {
         const classIds = [...new Set(attendanceData.map(d => d.malop))];
@@ -37,7 +37,7 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
           .from('tbl_lop')
           .select('malop, giohoc')
           .in('malop', classIds);
-        
+
         const finalMap = {};
         (schedData || []).forEach(s => {
           finalMap[s.malop] = s.giohoc || '';
@@ -68,12 +68,12 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
         const studentDetail = students.find(s => s.mahv === att.mahv);
         return {
           ...att,
-          tenhv: studentDetail?.tenhv || `Học viên ${att.mahv}`,
+          tenhv: studentDetail?.tenhv || `Học sinh ${att.mahv}`,
           sdt: studentDetail?.sdt || ''
         };
-      }).filter(s => 
-        searchTerm === '' || 
-        s.tenhv.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      }).filter(s =>
+        searchTerm === '' ||
+        s.tenhv.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.mahv.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
@@ -105,7 +105,7 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
         <div>
           <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Calendar className="text-primary" size={24} />
-            Học viên đang học hôm nay
+            Học sinh đang học hôm nay
           </h2>
           <p style={{ margin: '4px 0 0 34px', color: '#64748b', fontWeight: 500 }}>{todayStr} (Dựa trên điểm danh có mặt)</p>
         </div>
@@ -116,7 +116,7 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Tìm tên học viên hoặc mã..."
+            placeholder="Tìm tên học sinh hoặc mã..."
             style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent' }}
           />
         </div>
@@ -125,8 +125,8 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
       {groupedData.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '4rem 2rem', background: '#f8fafc', borderRadius: '12px', border: '2px dashed #e2e8f0' }}>
           <Users size={48} style={{ color: '#cbd5e1', marginBottom: '1rem' }} />
-          <h3 style={{ color: '#64748b', margin: 0 }}>Hôm nay không có học viên nào điểm danh 'Có mặt'</h3>
-          <p style={{ color: '#94a3b8', marginTop: '0.5rem' }}>Các học viên được điểm danh là "Có mặt" trong ngày sẽ hiển thị ở đây.</p>
+          <h3 style={{ color: '#64748b', margin: 0 }}>Hôm nay không có học sinh nào điểm danh 'Có mặt'</h3>
+          <p style={{ color: '#94a3b8', marginTop: '0.5rem' }}>Các học sinh được điểm danh là "Có mặt" trong ngày sẽ hiển thị ở đây.</p>
         </div>
       ) : (
         <div className="today-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '1.5rem' }}>
@@ -142,13 +142,13 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
                   <span>Giờ học: {group.giohoc}</span>
                 </div>
               </div>
-              
+
               <div style={{ padding: '1.25rem', flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', color: '#475569', fontSize: '0.85rem', fontWeight: 600 }}>
                   <Users size={16} />
                   <span>Đang có mặt ({group.students.length}):</span>
                 </div>
-                
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {group.students.map((student, idx) => (
                     <div key={student.mahv} style={{ padding: '12px', borderRadius: '10px', border: '1px solid #f1f5f9', background: '#fcfcfd' }}>
@@ -162,7 +162,7 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
                         </div>
                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
                       </div>
-                      
+
                       {/* TEACHER REMARKS SECTION */}
                       <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', borderLeft: '3px solid #6366f1', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                         <MessageCircle size={14} style={{ color: '#6366f1', marginTop: '2px', flexShrink: 0 }} />

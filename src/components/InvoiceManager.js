@@ -342,6 +342,9 @@ export default function InvoiceManager() {
       let startStr = new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
       let endMonthStr = '';
 
+      let recentDoc = null;
+      let recentHD = null;
+
       try {
          const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
             supabase.from('tbl_hd').select('*').eq('mahv', student.mahv).eq('malop', malop),
@@ -353,10 +356,10 @@ export default function InvoiceManager() {
 
          let allDocs = [...validHDs, ...validTBs];
          allDocs.sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0));
-         const recentDoc = allDocs.length > 0 ? allDocs[0] : null;
+         recentDoc = allDocs.length > 0 ? allDocs[0] : null;
 
          validHDs.sort((a, b) => new Date(b.ngayketthuc || b.ngaylap || 0) - new Date(a.ngayketthuc || a.ngaylap || 0));
-         const recentHD = validHDs.length > 0 ? validHDs[0] : null;
+         recentHD = validHDs.length > 0 ? validHDs[0] : null;
 
          if (recentDoc) {
             setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất lớp này (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất lớp này (${recentDoc.mahd})`);
@@ -392,35 +395,8 @@ export default function InvoiceManager() {
             }
          }
 
-         // Thống kê điểm danh
-         if (recentHD && recentHD.ngaybatdau && recentHD.ngayketthuc && enrichedClass.thoigianbieu) {
-            const activeDays = parseScheduleDays(enrichedClass.thoigianbieu);
-            let tongBuoi = 0;
-            let cDate = new Date(recentHD.ngaybatdau);
-            const eDate = new Date(recentHD.ngayketthuc);
-            let safeCount = 0;
-            while (cDate <= eDate && safeCount < 1000) {
-               if (activeDays.includes(cDate.getDay())) tongBuoi++;
-               cDate.setDate(cDate.getDate() + 1);
-               safeCount++;
-            }
-
-            const { data: attendance } = await supabase.from('tbl_diemdanh').select('*')
-               .eq('mahv', student.mahv).eq('malop', malop)
-               .gte('ngay', recentHD.ngaybatdau).lte('ngay', recentHD.ngayketthuc);
-
-            const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-            let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
-            (attendance || []).forEach(att => {
-               const s = normalizeStatus(att.trangthai);
-               if (s === 'có mặt') daHoc++;
-               else if (s === 'nghỉ phép') nghiPhep++;
-               else if (s === 'nghỉ không phép') nghiKhongPhep++;
-            });
-            setStudySummary({ daHoc, nghiPhep, nghiKhongPhep, tongBuoi, sourceHd: recentHD.mahd });
-         }
       } catch (err) {
-         console.error(err);
+         console.error('Lỗi fetch dữ liệu ban đầu:', err);
       }
 
       if (!endMonthStr) {
@@ -456,6 +432,66 @@ export default function InvoiceManager() {
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
          hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu, daDong: 0
       });
+
+      try {
+         // Thống kê điểm danh - Chỉ lấy từ hóa đơn/thông báo trước đó
+         const targetForStats = recentHD || (recentDoc?.ngaybatdau ? recentDoc : null);
+
+         if (targetForStats) {
+            let statsStart = targetForStats.ngaybatdau;
+            let statsEnd = targetForStats.ngayketthuc;
+
+            // Fallback: Nếu không có ngày cụ thể nhưng có chuỗi thời lượng "MM/YYYY"
+            if ((!statsStart || !statsEnd) && targetForStats.thoiluong) {
+               const m = targetForStats.thoiluong.match(/(\d{2})\/(\d{4})/);
+               if (m) {
+                  const mm = parseInt(m[1]) - 1;
+                  const yyyy = parseInt(m[2]);
+                  statsStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
+                  statsEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
+               }
+            }
+
+            if (statsStart && statsEnd) {
+               let tongBuoi = 0;
+               if (enrichedClass.thoigianbieu) {
+                  const activeDays = parseScheduleDays(enrichedClass.thoigianbieu);
+                  let cDate = new Date(statsStart);
+                  const eDate = new Date(statsEnd);
+                  let safeCount = 0;
+                  while (cDate <= eDate && safeCount < 1000) {
+                     if (activeDays.includes(cDate.getDay())) tongBuoi++;
+                     cDate.setDate(cDate.getDate() + 1);
+                     safeCount++;
+                  }
+               }
+
+               const { data: attendance } = await supabase.from('tbl_diemdanh').select('*')
+                  .eq('mahv', student.mahv).eq('malop', malop)
+                  .gte('ngay', statsStart).lte('ngay', statsEnd);
+
+               const normalizeStatus = (s) => (s || '').trim().toLowerCase();
+               let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
+               (attendance || []).forEach(att => {
+                  const s = normalizeStatus(att.trangthai);
+                  if (s === 'có mặt') daHoc++;
+                  else if (s === 'nghỉ phép') nghiPhep++;
+                  else if (s === 'nghỉ không phép') nghiKhongPhep++;
+               });
+
+               setStudySummary({
+                  daHoc,
+                  nghiPhep,
+                  nghiKhongPhep,
+                  tongBuoi,
+                  sourceHd: targetForStats.mahd,
+                  period: targetForStats.thoiluong || `${statsStart} - ${statsEnd}`
+               });
+            }
+         }
+      } catch (err) {
+         console.error('Lỗi tính thống kê điểm danh:', err);
+      }
    };
 
    const showMessage = (type, text) => {
@@ -631,7 +667,7 @@ export default function InvoiceManager() {
             setWarningModal({
                isOpen: true,
                title: 'Cảnh Báo Đóng Trùng Học Phí',
-               message: `Học viên này đã nộp học phí cho tháng ${overlappingMonth} rồi. Vui lòng kiểm tra lại các Hóa Đơn cũ của học viên!`
+               message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Vui lòng kiểm tra lại các Hóa Đơn cũ của học sinh!`
             });
             return;
          }
@@ -691,7 +727,11 @@ export default function InvoiceManager() {
             ghichu: `${invoiceData.ghiChu}${billNote}`,
             thoiluong: currentTimePeriod,
             sobuoihoc: sobuoihocFinal,
-            phuthu: invoiceData.phuthu
+            phuthu: invoiceData.phuthu,
+            studySummary: studySummary,
+            deductionSum,
+            trutienan_val,
+            trutiennghi_val
          });
       } catch (err) {
          console.error(err);
@@ -720,7 +760,7 @@ export default function InvoiceManager() {
                setWarningModal({
                   isOpen: true,
                   title: 'Cảnh Báo Đóng Trùng Học Phí',
-                  message: `Học viên này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
+                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
                });
                setIsSaving(false);
                return;
@@ -739,7 +779,7 @@ export default function InvoiceManager() {
          const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
          const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
-         const combinedNote = `${invoiceData.ghiChu}${billNote}${tienTruNghi > 0 ? ` (Trừ ${studySummary.nghiPhep} buổi nghỉ phép: ${formatCurrency(tienTruNghi)}đ)` : ''}`;
+         const combinedNote = `${invoiceData.ghiChu}${billNote}`;
          const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
          const insertData = {
             mahd: newMaHD,
@@ -766,7 +806,7 @@ export default function InvoiceManager() {
          const res = await supabase.from('tbl_hd').insert([insertData]);
          if (res.error) throw res.error;
 
-         // Nếu hóa đơn có tính nợ cũ, sau khi lưu thành công phải cập nhật các hóa đơn/bill cũ của học viên về nợ = 0
+         // Nếu hóa đơn có tính nợ cũ, sau khi lưu thành công phải cập nhật các hóa đơn/bill cũ của học sinh về nợ = 0
          // vì nợ đó đã được gộp (rollup) vào hóa đơn mới này.
          if (noCu > 0) {
             try {
@@ -816,7 +856,11 @@ export default function InvoiceManager() {
             ghichu: combinedNote,
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
-            phuthu: invoiceData.phuthu
+            phuthu: invoiceData.phuthu,
+            studySummary: studySummary,
+            deductionSum,
+            trutienan_val,
+            trutiennghi_val
          });
 
          // Reload old debt dynamically mimicking real-time refresh
@@ -836,12 +880,16 @@ export default function InvoiceManager() {
       (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
    );
 
-   const tienTruNghi = (config?.trutiennghi && studySummary && activeClass?.trutiennghi)
-      ? (studySummary.nghiPhep * parseInt(String(activeClass.trutiennghi).replace(/,/g, ''), 10))
-      : 0;
+
 
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum - invoiceData.giamHocphi - tienTruNghi;
+   
+   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
+   const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+   const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+   const deductionSum = studySummary ? (trutienan_val + trutiennghi_val) * (studySummary.nghiPhep || 0) : 0;
+
+   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum - invoiceData.giamHocphi - deductionSum;
 
    // Auto fill daDong in InvoiceManager: Default to full payment
    useEffect(() => {
@@ -853,13 +901,13 @@ export default function InvoiceManager() {
    return (
       <div className={`invoice-manager animate-fade-in ${showMobileDetails ? 'mobile-show-details' : ''}`}>
 
-         {/* TRÁI: TÌM KIẾM LIST HỌC VIÊN */}
+         {/* TRÁI: TÌM KIẾM LIST HỌC SINH */}
          <div className="im-left-pane">
             <div className="im-search">
                <Search size={20} className="text-muted" />
                <input
                   type="text"
-                  placeholder="Tìm mã HV, tên, SĐT..."
+                  placeholder="Tìm mã HS, tên, SĐT..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                />
@@ -879,7 +927,7 @@ export default function InvoiceManager() {
                      </div>
                   );
                }) : (
-                  <div className="im-s-empty">Không tìm thấy học viên hiển thị.</div>
+                  <div className="im-s-empty">Không tìm thấy học sinh hiển thị.</div>
                )}
             </div>
          </div>
@@ -895,7 +943,7 @@ export default function InvoiceManager() {
             {!selectedStudent ? (
                <div className="im-empty animate-fade-in">
                   <Receipt size={64} className="text-muted" style={{ opacity: 0.3 }} />
-                  <h3>Chưa Chọn Học Viên</h3>
+                  <h3>Chưa Chọn Học Sinh</h3>
                   <p>Vui lòng nhấp vào một học sinh từ danh sách bên trái để tạo hóa đơn thanh toán.</p>
                </div>
             ) : (
@@ -907,7 +955,7 @@ export default function InvoiceManager() {
                   </div>
 
                   <div className="im-sections-wrapper">
-                     {/* 1. THÔNG TIN HỌC VIÊN */}
+                     {/* 1. THÔNG TIN HỌC SINH */}
                      {recentSourceText && (
                         <div style={{ background: '#e0f2fe', color: '#0369a1', padding: '10px 15px', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 600, fontSize: '0.95rem', border: '1px solid #bae6fd' }}>
                            💡 {recentSourceText}
@@ -917,11 +965,11 @@ export default function InvoiceManager() {
                         <h3 className="im-section-title"><User size={18} /> Thông tin học sinh</h3>
                         <div className="im-grid-3">
                            <div className="im-field-hz">
-                              <label>Mã HV:</label>
+                              <label>Mã HS:</label>
                               <div className="val-text">{selectedStudent.mahv}</div>
                            </div>
                            <div className="im-field-hz">
-                              <label>Tên HV:</label>
+                              <label>Tên HS:</label>
                               <div className="val-text text-primary">{selectedStudent.tenhv}</div>
                            </div>
                            <div className="im-field-hz">
@@ -969,30 +1017,53 @@ export default function InvoiceManager() {
 
                      </div>
 
-                     {/* 3. TÀI CHÍNH */}
-                     {studySummary && (
-                        <div className="study-summary-wrap">
-                           <div className="study-summary-label">Thống kê điểm danh — {studySummary.sourceHd || 'gần nhất'}</div>
-                           <div className="study-summary-grid">
-                              <div className="ss-badge ss-present">
-                                 <span className="ss-num">{studySummary.daHoc}</span>
-                                 <span className="ss-txt">Đã học</span>
-                              </div>
-                              <div className="ss-badge ss-excused">
-                                 <span className="ss-num">{studySummary.nghiPhep}</span>
-                                 <span className="ss-txt">Nghỉ phép</span>
-                              </div>
-                              <div className="ss-badge ss-absent">
-                                 <span className="ss-num">{studySummary.nghiKhongPhep || 0}</span>
-                                 <span className="ss-txt">Không phép</span>
-                              </div>
-                              <div className="ss-badge ss-total">
-                                 <span className="ss-num">{studySummary.tongBuoi}</span>
-                                 <span className="ss-txt">Tổng buổi</span>
-                              </div>
-                           </div>
+                     {/* 3. THỐNG KÊ ĐIỂM DANH */}
+                     <div className="study-summary-wrap">
+                        <div className="study-summary-label">
+                           Thống kê điểm danh — {studySummary?.period || studySummary?.sourceHd || 'kỳ được chọn'}
                         </div>
-                     )}
+                        {studySummary ? (
+                           <>
+                              <div className="study-summary-grid">
+                                 <div className="ss-badge ss-present">
+                                    <span className="ss-num">{studySummary.daHoc}</span>
+                                    <span className="ss-txt">Đã học</span>
+                                 </div>
+                                 <div className="ss-badge ss-excused">
+                                    <span className="ss-num">{studySummary.nghiPhep}</span>
+                                    <span className="ss-txt">Nghỉ phép</span>
+                                 </div>
+                                 <div className="ss-badge ss-absent">
+                                    <span className="ss-num">{studySummary.nghiKhongPhep || 0}</span>
+                                    <span className="ss-txt">Không phép</span>
+                                 </div>
+                                 <div className="ss-badge ss-total">
+                                    <span className="ss-num">{studySummary.tongBuoi}</span>
+                                    <span className="ss-txt">Tổng buổi</span>
+                                 </div>
+                              </div>
+                              {deductionSum > 0 && (
+                                 <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                       <span>Hoàn trả tiền ăn ({studySummary.nghiPhep} ngày x {formatCurrency(trutienan_val)}đ):</span>
+                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(trutienan_val * studySummary.nghiPhep)}đ</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                       <span>Hoàn trả tiền học ({studySummary.nghiPhep} ngày x {formatCurrency(trutiennghi_val)}đ):</span>
+                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(trutiennghi_val * studySummary.nghiPhep)}đ</span>
+                                    </div>
+                                    <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
+                                       Tổng hoàn trả từ lịch nghỉ: -{formatCurrency(deductionSum)}đ
+                                    </div>
+                                 </div>
+                              )}
+                           </>
+                        ) : (
+                           <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem' }}>
+                              Không tìm thấy dữ liệu điểm danh hoặc chưa cài lịch học lớp.
+                           </div>
+                        )}
+                     </div>
 
                      <div className="im-section">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1058,8 +1129,8 @@ export default function InvoiceManager() {
                      <div className="im-section">
                         <h3 className="im-section-title"><Wallet size={18} /> Quyết Toán Tổng (VNĐ)</h3>
 
-                        {/* HÀNG 1: NỢ CŨ, HỌC PHÍ, VOUCHER, TIỀN NGHỈ */}
-                        <div className={`im-finance-row ${config?.trutiennghi ? 'grid-4' : 'grid-3'}`}>
+                        {/* HÀNG 1: NỢ CŨ, HỌC PHÍ, VOUCHER */}
+                        <div className="im-finance-row grid-3">
                            <div className="im-fi-item">
                               <label>Nợ cũ</label>
                               <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>{formatCurrency(noCu)} ₫</div>
@@ -1107,14 +1178,6 @@ export default function InvoiceManager() {
                                  </div>
                               </div>
                            </div>
-                           {config?.trutiennghi && tienTruNghi > 0 && (
-                              <div className="im-fi-item">
-                                 <label style={{ color: '#be123c' }}>Tiền nghỉ ({studySummary?.nghiPhep || 0} p)</label>
-                                 <div className="fi-val-display text-bold highlight-deduction">
-                                    - {formatCurrency(tienTruNghi)} ₫
-                                 </div>
-                              </div>
-                           )}
                         </div>
 
                         {/* HÀNG 2: CẦN THU, ĐÃ ĐÓNG, CÒN LẠI */}
@@ -1281,6 +1344,14 @@ export default function InvoiceManager() {
                      <div>
                         Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
                      </div>
+                     {downloadingInvoice?.studySummary && (
+                        <div style={{ fontSize: '12pt', marginTop: '5px' }}>
+                           Điểm danh ({downloadingInvoice.studySummary.period || downloadingInvoice.studySummary.sourceHd || 'kỳ trước'}): &nbsp;
+                           Số buổi đi học: <b style={{ color: '#059669' }}>{downloadingInvoice.studySummary.daHoc}</b>, &nbsp;
+                           Nghỉ phép: <b style={{ color: '#0369a1' }}>{downloadingInvoice.studySummary.nghiPhep}</b>, &nbsp;
+                           Nghỉ không phép: <b style={{ color: '#dc2626' }}>{downloadingInvoice.studySummary.nghiKhongPhep || 0}</b>
+                        </div>
+                     )}
                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
@@ -1295,6 +1366,18 @@ export default function InvoiceManager() {
                                  <b>{formatCurrency(pt.amount)} đ</b>
                               </div>
                            ))}
+                        </div>
+                     )}
+                     {downloadingInvoice?.deductionSum > 0 && (
+                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>- Hoàn trả tiền ăn ({downloadingInvoice.studySummary.nghiPhep} ngày):</span>
+                              <b>-{formatCurrency(downloadingInvoice.trutienan_val * downloadingInvoice.studySummary.nghiPhep)} đ</b>
+                           </div>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                              <span>- Hoàn trả tiền học ({downloadingInvoice.studySummary.nghiPhep} ngày):</span>
+                              <b>-{formatCurrency(downloadingInvoice.trutiennghi_val * downloadingInvoice.studySummary.nghiPhep)} đ</b>
+                           </div>
                         </div>
                      )}
                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
@@ -1379,6 +1462,18 @@ export default function InvoiceManager() {
                            ))}
                         </div>
                      )}
+                     {downloadingNotice?.deductionSum > 0 && (
+                        <div style={{ borderTop: '1px solid #bae6fd', marginTop: '10px', paddingTop: '10px' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
+                              <span>- Hoàn trả tiền ăn ({downloadingNotice.studySummary.nghiPhep}n):</span>
+                              <b style={{ fontWeight: 900 }}>-{formatCurrency(downloadingNotice.trutienan_val * downloadingNotice.studySummary.nghiPhep)} đ</b>
+                           </div>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
+                              <span>- Hoàn trả tiền học ({downloadingNotice.studySummary.nghiPhep}n):</span>
+                              <b style={{ fontWeight: 900 }}>-{formatCurrency(downloadingNotice.trutiennghi_val * downloadingNotice.studySummary.nghiPhep)} đ</b>
+                           </div>
+                        </div>
+                     )}
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', marginTop: '10px', borderTop: '2px solid #0369a1', paddingTop: '10px' }}>
                         <span style={{ fontWeight: 950 }}>TỔNG CỘNG:</span>
                         <b style={{ color: '#dc2626', fontSize: '1.5rem', fontWeight: 950 }}>{downloadingNotice?.tongcong} VNĐ</b>
@@ -1388,6 +1483,14 @@ export default function InvoiceManager() {
                   <div>
                      Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b>
                   </div>
+                  {downloadingNotice?.studySummary && (
+                     <div style={{ fontSize: '13pt', marginTop: '5px', opacity: 0.9 }}>
+                        Điểm danh ({downloadingNotice.studySummary.period || downloadingNotice.studySummary.sourceHd || 'kỳ trước'}): &nbsp;
+                        Đi học: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice.studySummary.daHoc}</b>, &nbsp;
+                        Nghỉ phép: <b style={{ color: '#0369a1', fontWeight: 900 }}>{downloadingNotice.studySummary.nghiPhep}</b>, &nbsp;
+                        Nghi KP: <b style={{ color: '#dc2626', fontWeight: 900 }}>{downloadingNotice.studySummary.nghiKhongPhep || 0}</b>
+                     </div>
+                  )}
 
                   {/* FEES */}
                   <div style={{ display: "flex", justifyContent: "space-between", borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>

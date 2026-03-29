@@ -324,7 +324,7 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
         <div className="o-card blue" onClick={() => { setActiveTab('students'); setActiveSubTab('students'); }} style={{ cursor: 'pointer' }}>
           <div className="o-icon"><GraduationCap size={26} /></div>
           <div className="o-data">
-            <span>Tổng Học Viên</span>
+            <span>Tổng Học Sinh</span>
             <h3>{topMetrics.hv}</h3>
           </div>
         </div>

@@ -205,7 +205,7 @@ export default function DebtManager() {
 
         // BẢNG 2: Danh Sách Quá Hạn Đóng Tiền
         const overdueTemp = [];
-        // Lọc các học viên không phải 'Đã Nghỉ'
+        // Lọc các học sinh không phải 'Đã Nghỉ'
         const activeStudents = students.filter(s => (s.trangthai || '') !== 'Đã Nghỉ');
 
         const today = new Date();
@@ -226,7 +226,7 @@ export default function DebtManager() {
             return mhb.localeCompare(mha);
           });
 
-          const latestHd = stHds[0]; // Bản ghi mới nhất của học viên đó
+          const latestHd = stHds[0]; // Bản ghi mới nhất của học sinh đó
 
           // Logic: Nếu qua ngày kết thúc + ngayquahan thì mới load vào table Báo động
           const nqh = parseInt(config?.ngayquahan || 0, 10);
@@ -283,7 +283,7 @@ export default function DebtManager() {
           <div className="stat-info">
             <label>Tổng Tiền Nợ</label>
             <div className="value">
-              {debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0).toLocaleString()} 
+              {debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0).toLocaleString()}
               <span>₫</span>
             </div>
           </div>
@@ -294,7 +294,7 @@ export default function DebtManager() {
           </div>
           <div className="stat-info">
             <label>Quá Hạn Đóng Phí</label>
-            <div className="value">{overdueList.length} <span>Học viên</span></div>
+            <div className="value">{overdueList.length} <span>Học sinh</span></div>
           </div>
         </div>
       </div>
@@ -306,7 +306,7 @@ export default function DebtManager() {
           <div className="debt-header">
             <div className="debt-title">
               <BadgeDollarSign size={20} className="text-warning" />
-              <h3>Danh sách học viên còn nợ</h3>
+              <h3>Danh sách học sinh còn nợ</h3>
             </div>
             <span className="debt-badge warning">{debtList.length} Chứng từ</span>
           </div>
@@ -315,8 +315,8 @@ export default function DebtManager() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Mã HV</th>
-                    <th>Tên Học Viên</th>
+                    <th>Mã HS</th>
+                    <th>Tên Học Sinh</th>
                     <th>Phân Loại</th>
                     <th>Mã Phiếu</th>
                     <th>Tên Lớp</th>
@@ -352,7 +352,7 @@ export default function DebtManager() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="empty-state">Tuyệt vời! Tất cả học viên đã thanh toán đủ tiền kỳ này.</td>
+                      <td colSpan="7" className="empty-state">Tuyệt vời! Tất cả học sinh đã thanh toán đủ tiền kỳ này.</td>
                     </tr>
                   )}
                 </tbody>
@@ -386,7 +386,7 @@ export default function DebtManager() {
                   </div>
                 ))
               ) : (
-                <div className="empty-state">Không có học viên nào còn nợ tiền.</div>
+                <div className="empty-state">Không có học sinh nào còn nợ tiền.</div>
               )}
             </div>
           </div>
@@ -399,15 +399,15 @@ export default function DebtManager() {
               <Clock size={20} className="text-danger" />
               <h3>Báo động trễ hạn đóng học phí (Quá hạn khóa học)</h3>
             </div>
-            <span className="debt-badge danger">{overdueList.length} Học viên</span>
+            <span className="debt-badge danger">{overdueList.length} Học sinh</span>
           </div>
           <div className="debt-body">
             <div className="table-scroll-wrapper">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Mã HV</th>
-                    <th>Tên Học Viên</th>
+                    <th>Mã HS</th>
+                    <th>Tên Học Sinh</th>
                     <th>Tên Lớp</th>
                     <th>Ngày Lập HĐ</th>
                     <th className="text-danger">Ngày Kết Thúc (Deadline)</th>
@@ -430,7 +430,7 @@ export default function DebtManager() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan="5" className="empty-state">Rất tốt! Không có học viên nào đang học vượt khung thời gian đóng phí.</td>
+                      <td colSpan="5" className="empty-state">Rất tốt! Không có học sinh nào đang học vượt khung thời gian đóng phí.</td>
                     </tr>
                   )}
                 </tbody>
@@ -463,7 +463,7 @@ export default function DebtManager() {
                   </div>
                 ))
               ) : (
-                <div className="empty-state">Không có học viên nào quá hạn đóng phí.</div>
+                <div className="empty-state">Không có học sinh nào quá hạn đóng phí.</div>
               )}
             </div>
           </div>
@@ -477,7 +477,7 @@ export default function DebtManager() {
             <h3 style={{ marginTop: 0, marginBottom: '20px', fontSize: '1.25rem', color: '#1e293b' }}>Thanh Toán Nợ</h3>
 
             <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748b' }}>Học viên:</span>
+              <span style={{ color: '#64748b' }}>Học sinh:</span>
               <span style={{ fontWeight: 'bold' }}>{selectedDebt.tenhv}</span>
             </div>
             <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>

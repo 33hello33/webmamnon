@@ -143,11 +143,11 @@ export default function StudentScheduleModal({ student, classes, onClose }) {
     <div className="modal-overlay">
       <div className="modal-content sm-modal" style={{ maxWidth: '600px' }}>
         <div className="modal-header">
-          <h3><Calendar size={20} /> Lịch Học / Lớp Của Học Viên</h3>
+          <h3><Calendar size={20} /> Lịch Học / Lớp Của Học Sinh</h3>
           <button className="close-btn" onClick={onClose}><X size={20} /></button>
         </div>
         <div className="modal-body">
-          <p>Học viên: <strong className="text-primary">{student.tenhv}</strong> - {student.mahv}</p>
+          <p>Học sinh: <strong className="text-primary">{student.tenhv}</strong> - {student.mahv}</p>
 
           <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', marginTop: '15px' }}>
             <h4 style={{ marginBottom: '10px', fontSize: '15px' }}>Đăng Ký Mới</h4>

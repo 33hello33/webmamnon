@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft
+  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera
 } from 'lucide-react';
 import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
@@ -75,7 +75,7 @@ export default function StudentManager({ activeSubTab }) {
       setSelectedStudentId(null);
     } catch (err) {
       console.error(err);
-      showMessage('error', 'Lỗi tải dữ liệu học viên');
+      showMessage('error', 'Lỗi tải dữ liệu học sinh');
     } finally {
       setLoading(false);
     }
@@ -90,14 +90,14 @@ export default function StudentManager({ activeSubTab }) {
 
   // Form Handlers
   const handleOpenAdd = async () => {
-    const newMaHV = await generateId('tbl_hv', 'mahv', 'HV', 4);
+    const newMaHV = await generateId('tbl_hv', 'mahv', 'HS', 4);
     setFormData({ ...INITIAL_FORM, mahv: newMaHV });
     setIsEditMode(false);
     setIsFormOpen(true);
   };
 
   const handleOpenEdit = async () => {
-    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn một học viên để sửa');
+    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn một học sinh để sửa');
     const student = students.find(s => s.mahv === selectedStudentId);
     if (student) {
       setFormData({ ...INITIAL_FORM, ...student });
@@ -111,15 +111,46 @@ export default function StudentManager({ activeSubTab }) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) return showMessage('error', 'Chỉ tải lên file hình ảnh');
+
+    const mahv = formData.mahv;
+    if (!mahv) return showMessage('error', 'Lỗi: Không tìm thấy Mã HS');
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${mahv}.${fileExt}`;
+
+    try {
+      setLoading(true);
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      setFormData(prev => ({ ...prev, imgpath: publicUrl }));
+      showMessage('success', 'Đã tải lên ảnh đại diện');
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'Lỗi tải ảnh: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!formData.mahv || !formData.tenhv) {
-      return showMessage('error', 'Mã HV và Tên HV là bắt buộc');
+      return showMessage('error', 'Mã HS và Tên HS là bắt buộc');
     }
 
     try {
       const dataToSave = { ...formData };
-      
+
       // Đảm bảo các giá trị null thay vì chuỗi trống cho các trường date nếu cần
       if (!dataToSave.ngaysinh) dataToSave.ngaysinh = null;
       if (!dataToSave.ngaynhaphoc) dataToSave.ngaynhaphoc = null;
@@ -133,20 +164,20 @@ export default function StudentManager({ activeSubTab }) {
         const { error } = await supabase.from('tbl_hv').insert([dataToSave]);
         if (error) throw error;
       }
-      
-      showMessage('success', isEditMode ? 'Cập nhật thành công' : 'Thêm học viên thành công');
+
+      showMessage('success', isEditMode ? 'Cập nhật thành công' : 'Thêm học sinh thành công');
       setIsFormOpen(false);
       fetchStudents();
     } catch (err) {
       console.error(err);
-      if (err.code === '23505') return showMessage('error', 'Mã học viên đã tồn tại');
+      if (err.code === '23505') return showMessage('error', 'Mã học sinh đã tồn tại');
       showMessage('error', 'Lỗi lưu thông tin');
     }
   };
 
   // Delete Action
   const handleDeleteTrigger = () => {
-    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học viên để xóa');
+    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học sinh để xóa');
     setDeletePassword('');
     setDeleteReason('');
     setIsDeleteOpen(true);
@@ -154,8 +185,8 @@ export default function StudentManager({ activeSubTab }) {
 
   const confirmDelete = async () => {
     try {
-      if (!deleteReason) return showMessage('error', 'Vui lòng chọn lý do xóa học viên!');
-      
+      if (!deleteReason) return showMessage('error', 'Vui lòng chọn lý do xóa học sinh!');
+
       // Validate password against current session
       const sessionStr = localStorage.getItem('auth_session');
       if (!sessionStr) return showMessage('error', 'Phiên làm việc hết hạn');
@@ -170,78 +201,51 @@ export default function StudentManager({ activeSubTab }) {
       const newGhichu = currentGhichu ? `${currentGhichu} | Lý do nghỉ: ${deleteReason}` : `Lý do nghỉ: ${deleteReason}`;
 
       const today = new Date().toISOString().split('T')[0];
-      const { error } = await supabase.from('tbl_hv').update({ 
-        trangthai: 'Đã Nghỉ', 
+      const { error } = await supabase.from('tbl_hv').update({
+        trangthai: 'Đã Nghỉ',
         ngaynghihoc: today,
         ghichu: newGhichu
       }).eq('mahv', selectedStudentId);
       if (error) throw error;
 
-      showMessage('success', 'Đã chuyển trạng thái học viên thành Đã Nghỉ và cập nhật lý do');
+      showMessage('success', 'Đã chuyển trạng thái học sinh thành Đã Nghỉ và cập nhật lý do');
       setIsDeleteOpen(false);
       fetchStudents();
     } catch (err) {
       console.error(err);
-      showMessage('error', 'Lỗi khi xóa học viên');
+      showMessage('error', 'Lỗi khi xóa học sinh');
     }
   };
 
   // Restore Action (From Đã Nghỉ to Đang Học)
   const handleRestore = async () => {
-    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học viên để khôi phục');
+    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học sinh để khôi phục');
     const student = students.find(s => s.mahv === selectedStudentId);
     if (!student) return;
     if (student.trangthai !== 'Đã Nghỉ') {
-       return showMessage('error', 'Chỉ có thể khôi phục học viên có trạng thái Đã Nghỉ');
+      return showMessage('error', 'Chỉ có thể khôi phục học sinh có trạng thái Đã Nghỉ');
     }
 
-    if (!window.confirm(`Khôi phục học viên ${student.tenhv} về trạng thái Đang Học?`)) return;
+    if (!window.confirm(`Khôi phục học sinh ${student.tenhv} về trạng thái Đang Học?`)) return;
 
     try {
-      const { error } = await supabase.from('tbl_hv').update({ 
-        trangthai: 'Đang Học', 
-        ngaynghihoc: null 
+      const { error } = await supabase.from('tbl_hv').update({
+        trangthai: 'Đang Học',
+        ngaynghihoc: null
       }).eq('mahv', selectedStudentId);
       if (error) throw error;
 
-      showMessage('success', 'Đã khôi phục học viên thành công');
+      showMessage('success', 'Đã khôi phục học sinh thành công');
       fetchStudents();
     } catch (err) {
       console.error(err);
-      showMessage('error', 'Lỗi khi khôi phục học viên');
-    }
-  };
-
-  // Reserve/Unreserve (Bảo Lưu) Action
-  const handleReserve = async () => {
-    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học viên để thao tác');
-
-    const student = students.find(s => s.mahv === selectedStudentId);
-    if (!student) return;
-
-    const isHuyBaoLuu = student.trangthai === 'Bảo Lưu';
-    const newStatus = isHuyBaoLuu ? 'Đang Học' : 'Bảo Lưu';
-    const confirmMessage = isHuyBaoLuu
-      ? `Bạn có chắc chắn muốn HỦY bảo lưu và chuyển học viên ${student.tenhv} sang Đang Học?`
-      : `Bạn có chắc chắn muốn chuyển học viên ${student.tenhv} sang trạng thái BẢO LƯU?`;
-
-    if (!window.confirm(confirmMessage)) return;
-
-    try {
-      const { error } = await supabase.from('tbl_hv').update({ trangthai: newStatus }).eq('mahv', selectedStudentId);
-      if (error) throw error;
-
-      showMessage('success', isHuyBaoLuu ? 'Đã hủy bảo lưu, học viên hiển thị Đang Học' : 'Đã cập nhật trạng thái Bảo Lưu');
-      fetchStudents();
-    } catch (err) {
-      console.error(err);
-      showMessage('error', 'Lỗi cập nhật trạng thái');
+      showMessage('error', 'Lỗi khi khôi phục học sinh');
     }
   };
 
   // Transfer Class Action
   const handleTransferClassTrigger = () => {
-    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học viên cần chuyển lớp');
+    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn học sinh cần chuyển lớp');
     setTransferClassId('');
     setIsTransferClassOpen(true);
   };
@@ -266,12 +270,12 @@ export default function StudentManager({ activeSubTab }) {
   // Excel Actions
   const handleExportExcel = () => {
     if (students.length === 0) return showMessage('error', 'Không có dữ liệu để xuất');
-    
+
     // Chuẩn bị dữ liệu đẹp để xuất Excel
     const exportData = students.map(s => {
       return {
-        'Mã HV': s.mahv,
-        'Tên Học Viên': s.tenhv,
+        'Mã HS': s.mahv,
+        'Tên Học Sinh': s.tenhv,
         'Ngày Sinh': s.ngaysinh,
         'Giới Tính': s.gioitinh,
         'Mã Lớp': s.malop,
@@ -296,8 +300,8 @@ export default function StudentManager({ activeSubTab }) {
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Học Viên");
-    XLSX.writeFile(wb, "danh_sach_hoc_vien.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Học Sinh");
+    XLSX.writeFile(wb, "danh_sach_hoc_sinh.xlsx");
   };
 
   const handleImportExcel = (e) => {
@@ -316,8 +320,8 @@ export default function StudentManager({ activeSubTab }) {
 
         if (data.length > 0) {
           const mapping = {
-            'Mã HV': 'mahv',
-            'Tên Học Viên': 'tenhv',
+            'Mã HS': 'mahv',
+            'Tên Học Sinh': 'tenhv',
             'Ngày Sinh': 'ngaysinh',
             'Giới Tính': 'gioitinh',
             'Mã Lớp': 'malop',
@@ -345,58 +349,58 @@ export default function StudentManager({ activeSubTab }) {
             Object.keys(mapping).forEach(key => {
               const dbField = mapping[key];
               let val = item[key];
-              
+
               if (val !== undefined) {
-                 if (['ngaynhaphoc', 'ngaynghihoc', 'ngaysinh', 'ngaysinhba', 'ngaysinhme'].includes(dbField)) {
-                    // Safe Date Formatting
-                    if (val) {
-                       let d;
-                       if (typeof val === 'number') {
-                          // Excel serial date
-                          d = new Date((val - 25569) * 86400 * 1000);
-                       } else {
-                          d = new Date(val);
-                       }
-                       if (!isNaN(d.getTime())) {
-                          val = d.toISOString().split('T')[0];
-                       } else {
-                          val = null;
-                       }
+                if (['ngaynhaphoc', 'ngaynghihoc', 'ngaysinh', 'ngaysinhba', 'ngaysinhme'].includes(dbField)) {
+                  // Safe Date Formatting
+                  if (val) {
+                    let d;
+                    if (typeof val === 'number') {
+                      // Excel serial date
+                      d = new Date((val - 25569) * 86400 * 1000);
                     } else {
-                       val = null;
+                      d = new Date(val);
                     }
-                 }
-                 studentData[dbField] = val;
+                    if (!isNaN(d.getTime())) {
+                      val = d.toISOString().split('T')[0];
+                    } else {
+                      val = null;
+                    }
+                  } else {
+                    val = null;
+                  }
+                }
+                studentData[dbField] = val;
               }
             });
-            
+
             if (!studentData.mahv) studentData.mahv = await generateId('tbl_hv', 'mahv', 'HV', 4);
             if (!studentData.tenhv) continue;
 
             // Skip if mahv already exists
             if (students.some(s => s.mahv === studentData.mahv)) {
-               console.log(`Bỏ qua học viên trùng mã: ${studentData.mahv}`);
-               continue;
+              console.log(`Bỏ qua học sinh trùng mã: ${studentData.mahv}`);
+              continue;
             }
 
             // 2. Handle Class Mapping (Directly to tbl_hv)
             const maLopStr = item['Mã Lớp'] || '';
             const listMaLop = String(maLopStr).split(',').map(m => m.trim()).filter(Boolean);
             if (listMaLop.length > 0) {
-               studentData.malop = listMaLop[0];
+              studentData.malop = listMaLop[0];
             }
 
             const { error: stUpsertError } = await supabase.from('tbl_hv').upsert(studentData);
             if (stUpsertError) {
-               console.error("Lỗi lưu HV:", stUpsertError);
-               continue;
+              console.error("Lỗi lưu HS:", stUpsertError);
+              continue;
             }
 
 
             successCount++;
           }
 
-          showMessage('success', `Đã nhập Excel thành công ${successCount} học viên`);
+          showMessage('success', `Đã nhập Excel thành công ${successCount} học sinh`);
           fetchStudents();
         }
       } catch (err) {
@@ -413,7 +417,7 @@ export default function StudentManager({ activeSubTab }) {
 
   const renderStudentsTab = () => {
     const dangHoc = students.filter(s => s.trangthai === 'Đang Học').length;
-    const baoluu = students.filter(s => s.trangthai === 'Bảo Lưu').length;
+
     const daNghi = students.filter(s => s.trangthai === 'Đã Nghỉ').length;
 
     // Auto filter by search
@@ -442,7 +446,7 @@ export default function StudentManager({ activeSubTab }) {
           <div className="stat-card total">
             <div className="stat-icon"><Users size={24} /></div>
             <div className="stat-info">
-              <span className="stat-label">Tổng Học Viên</span>
+              <span className="stat-label">Tổng Học Sinh</span>
               <span className="stat-value">{students.length}</span>
             </div>
           </div>
@@ -453,13 +457,7 @@ export default function StudentManager({ activeSubTab }) {
               <span className="stat-value">{dangHoc}</span>
             </div>
           </div>
-          <div className="stat-card warning">
-            <div className="stat-icon"><RefreshCw size={24} color="#f59e0b" /></div>
-            <div className="stat-info">
-              <span className="stat-label">Bảo Lưu</span>
-              <span className="stat-value">{baoluu}</span>
-            </div>
-          </div>
+
           <div className="stat-card inactive">
             <div className="stat-icon"><Users size={24} color="#ef4444" /></div>
             <div className="stat-info">
@@ -500,11 +498,11 @@ export default function StudentManager({ activeSubTab }) {
               <button className="grid-btn info" onClick={handleOpenEdit}><Edit size={16} /><small>Sửa</small></button>
               <button className="grid-btn danger" onClick={handleDeleteTrigger}><Trash2 size={16} /><small>Xóa</small></button>
               <button className="grid-btn success" onClick={handleRestore} style={{ background: '#ecfdf5', color: '#059669', borderColor: '#d1fae5' }}><RefreshCw size={16} /><small>Khôi phục</small></button>
-              <button className="grid-btn warning" onClick={handleReserve}><RefreshCw size={16} /><small>Bảo lưu</small></button>
+
               <button className="grid-btn transfer" onClick={handleTransferClassTrigger}><ArrowRightLeft size={16} /><small>Chuyển</small></button>
               <button className="grid-btn success" onClick={() => fileInputRef.current?.click()}><FileSpreadsheet size={16} /><small>Nhập</small></button>
               <button className="grid-btn success" onClick={handleExportExcel}><Download size={16} /><small>Xuất</small></button>
-              
+
               <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} ref={fileInputRef} onChange={handleImportExcel} />
             </div>
           </div>
@@ -515,7 +513,7 @@ export default function StudentManager({ activeSubTab }) {
           {loading ? (
             <div className="loading-state">
               <RefreshCw className="spinner" size={24} />
-              <span>Đang tải dữ liệu học viên...</span>
+              <span>Đang tải dữ liệu học sinh...</span>
             </div>
           ) : (
             <>
@@ -523,9 +521,10 @@ export default function StudentManager({ activeSubTab }) {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Mã HV</th>
-                      <th>Tên Học Viên</th>
-                      <th>Sinh nhật HV</th>
+                      <th style={{ width: '40px' }}>Ảnh</th>
+                      <th>Mã HS</th>
+                      <th>Tên Học Sinh</th>
+                      <th>Sinh nhật HS</th>
                       <th>G.Tính</th>
                       <th>Lớp</th>
                       <th>Trạng Thái</th>
@@ -555,6 +554,13 @@ export default function StudentManager({ activeSubTab }) {
                           `}
                           onClick={() => setSelectedStudentId(s.mahv)}
                         >
+                          <td>
+                            <img
+                              src={s.imgpath || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.tenhv || 'HS')}&background=random&color=fff&size=128`}
+                              alt=""
+                              style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                            />
+                          </td>
                           <td className="font-medium">{s.mahv || '-'}</td>
                           <td className="font-semibold text-primary">{s.tenhv || '-'}</td>
                           <td>{s.ngaysinh ? new Date(s.ngaysinh).toLocaleDateString('vi-VN') : '-'}</td>
@@ -587,7 +593,7 @@ export default function StudentManager({ activeSubTab }) {
                         <td colSpan="21" className="empty-state">
                           <div className="empty-state-content">
                             <Users size={40} />
-                            <p>Không tìm thấy học viên nào.</p>
+                            <p>Không tìm thấy học sinh nào.</p>
                           </div>
                         </td>
                       </tr>
@@ -607,9 +613,16 @@ export default function StudentManager({ activeSubTab }) {
                     >
                       <div className="card-status-bar"></div>
                       <div className="student-card-header">
-                        <div>
-                          <div className="student-name">{s.tenhv}</div>
-                          <div className="student-id">#{s.mahv}</div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <img
+                            src={s.imgpath || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.tenhv || 'HS')}&background=random&color=fff&size=128`}
+                            alt=""
+                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                          />
+                          <div>
+                            <div className="student-name">{s.tenhv}</div>
+                            <div className="student-id">#{s.mahv}</div>
+                          </div>
                         </div>
                         <span className={`status-badge ${s.trangthai === 'Đang Học' ? 'active' :
                           (s.trangthai === 'Bảo Lưu' ? 'warning' : 'inactive')
@@ -623,7 +636,7 @@ export default function StudentManager({ activeSubTab }) {
                           <div className="info-pair">
                             <span className="label">Lớp:</span>
                             <span className="value">
-                               {classes.find(c => c.malop === s.malop)?.tenlop || s.malop || '-'}
+                              {classes.find(c => c.malop === s.malop)?.tenlop || s.malop || '-'}
                             </span>
                           </div>
                           <div className="info-pair">
@@ -647,7 +660,7 @@ export default function StudentManager({ activeSubTab }) {
                     </div>
                   ))
                 ) : (
-                  <div className="empty-state">Không tìm thấy học viên nào.</div>
+                  <div className="empty-state">Không tìm thấy học sinh nào.</div>
                 )}
               </div>
             </>
@@ -678,48 +691,93 @@ export default function StudentManager({ activeSubTab }) {
         <div className="modal-overlay">
           <div className="modal-content form-modal">
             <div className="modal-header">
-              <h3>{isEditMode ? 'Sửa thông tin Học Viên' : 'Thêm Học Viên Mới'}</h3>
+              <h3>{isEditMode ? 'Sửa thông tin Học Sinh' : 'Thêm Học Sinh Mới'}</h3>
               <button className="close-btn" onClick={() => setIsFormOpen(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleSave} className="modal-body sm-form-grid">
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label>Mã HV (Tự động)</label>
-                <input type="text" name="mahv" value={formData.mahv} onChange={handleChange} required disabled={true} />
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label>Tên học viên *</label>
-                <input type="text" name="tenhv" value={formData.tenhv} onChange={handleChange} required />
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label>Ngày sinh học viên</label>
-                <input type="date" name="ngaysinh" value={formData.ngaysinh} onChange={handleChange} />
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                 <label>Giới tính</label>
-                 <select name="gioitinh" value={formData.gioitinh} onChange={handleChange}>
-                   <option value="Nam">Nam</option>
-                   <option value="Nữ">Nữ</option>
-                 </select>
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label>Lớp Học</label>
-                 <select
-                   name="malop"
-                   value={formData.malop || ''}
-                   onChange={handleChange}
-                   className="form-control"
-                 >
-                   <option value="">-- Chọn lớp --</option>
-                   {classes.map(c => <option key={c.malop} value={c.malop}>{c.tenlop}</option>)}
-                 </select>
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label>Trạng Thái</label>
-                <select name="trangthai" value={formData.trangthai} onChange={handleChange}>
-                   <option value="Đang Học">Đang Học</option>
-                   <option value="Bảo Lưu">Bảo Lưu</option>
-                   <option value="Đã Nghỉ">Đã Nghỉ</option>
-                </select>
+              {/* Header row with Large Avatar and Basic Info */}
+              <div className="sm-form-header-row" style={{ 
+                gridColumn: '1 / -1', 
+                display: 'flex', 
+                gap: '2.5rem', 
+                alignItems: 'center', 
+                marginBottom: '1.5rem', 
+                background: '#f8fafc', 
+                padding: '2rem', 
+                borderRadius: '24px', 
+                border: '1px solid #e2e8f0',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+              }}>
+                <div className="avatar-upload-container" style={{ position: 'relative', width: '200px', height: '200px', flexShrink: 0 }}>
+                  <img
+                    src={formData.imgpath || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.tenhv || 'HS')}&background=random&color=fff&size=256`}
+                    alt="Avatar"
+                    style={{ width: '200px', height: '200px', borderRadius: '32px', objectFit: 'cover', border: '6px solid white', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
+                  />
+                  <label htmlFor="avatar-input" style={{ 
+                    position: 'absolute', 
+                    bottom: '-12px', 
+                    right: '-12px', 
+                    background: '#3b82f6', 
+                    color: 'white', 
+                    padding: '14px', 
+                    borderRadius: '20px', 
+                    cursor: 'pointer', 
+                    boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.5)', 
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    <Camera size={26} />
+                    <input id="avatar-input" type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
+                  </label>
+                </div>
+                
+                <div className="header-info-fields" style={{ 
+                  flex: 1, 
+                  display: 'grid', 
+                  gridTemplateColumns: '1fr 1fr', 
+                  gap: '1.25rem',
+                  alignContent: 'center'
+                }}>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mã Học Sinh</label>
+                    <input type="text" name="mahv" value={formData.mahv} disabled={true} style={{ background: '#f1f5f9', fontWeight: 900, fontSize: '1.1rem', color: '#334155', border: '1px solid #e2e8f0' }} />
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#3b82f6', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tên học sinh *</label>
+                    <input type="text" name="tenhv" value={formData.tenhv} onChange={handleChange} required style={{ fontSize: '1.2rem', fontWeight: 800, borderColor: '#3b82f6', boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)' }} />
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ngày sinh</label>
+                    <input type="date" name="ngaysinh" value={formData.ngaysinh} onChange={handleChange} style={{ fontWeight: 600 }} />
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giới tính</label>
+                    <select name="gioitinh" value={formData.gioitinh} onChange={handleChange} style={{ fontWeight: 600 }}>
+                      <option value="Nam">Nam</option>
+                      <option value="Nữ">Nữ</option>
+                    </select>
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lớp Học</label>
+                    <select name="malop" value={formData.malop || ''} onChange={handleChange} style={{ fontWeight: 600 }}>
+                      <option value="">-- Chọn lớp --</option>
+                      {classes.map(c => <option key={c.malop} value={c.malop}>{c.tenlop}</option>)}
+                    </select>
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trạng Thái</label>
+                    <select name="trangthai" value={formData.trangthai} onChange={handleChange} style={{ fontWeight: 600 }}>
+                      <option value="Đang Học">Đang Học</option>
+                      <option value="Đã Nghỉ">Đã Nghỉ</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#3b82f6' }}>THÔNG TIN GIA ĐÌNH</div>
@@ -797,11 +855,11 @@ export default function StudentManager({ activeSubTab }) {
         <div className="modal-overlay">
           <div className="modal-content sm-modal">
             <div className="modal-header">
-              <h3><ArrowRightLeft size={20} /> Chuyển Học Viên Sang Lớp Khác</h3>
+              <h3><ArrowRightLeft size={20} /> Chuyển Học Sinh Sang Lớp Khác</h3>
               <button className="close-btn" onClick={() => setIsTransferClassOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
-              <p>Học viên đang chọn: <strong>{students.find(s => s.mahv === selectedStudentId)?.tenhv || selectedStudentId}</strong></p>
+              <p>Học sinh đang chọn: <strong>{students.find(s => s.mahv === selectedStudentId)?.tenhv || selectedStudentId}</strong></p>
               <div className="form-group" style={{ marginTop: '1rem' }}>
                 <label>Chọn lớp mới:</label>
                 <select
@@ -830,12 +888,12 @@ export default function StudentManager({ activeSubTab }) {
         <div className="modal-overlay">
           <div className="modal-content sm-modal delete-student-modal">
             <div className="modal-header delete-header">
-              <h3><AlertCircle size={20} /> Xác nhận xóa học viên</h3>
+              <h3><AlertCircle size={20} /> Xác nhận xóa học sinh</h3>
               <button className="close-btn" onClick={() => setIsDeleteOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <p className="delete-warning-text" style={{ marginBottom: '1.25rem', fontSize: '1rem', color: '#1e293b' }}>
-                Bạn có chắc chắn muốn xóa học viên: <br />
+                Bạn có chắc chắn muốn xóa học sinh: <br />
                 <strong>{selectedStudentId} - {students.find(s => s.mahv === selectedStudentId)?.tenhv || ''}</strong>
               </p>
 
@@ -851,10 +909,10 @@ export default function StudentManager({ activeSubTab }) {
                     'Lý do trẻ không hợp tác'
                   ].map(reason => (
                     <label key={reason} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '6px 8px', borderRadius: '6px', transition: 'all 0.2s' }} className={deleteReason === reason ? 'reason-selected' : ''}>
-                      <input 
-                        type="radio" 
-                        name="deleteReason" 
-                        value={reason} 
+                      <input
+                        type="radio"
+                        name="deleteReason"
+                        value={reason}
                         checked={deleteReason === reason}
                         onChange={(e) => setDeleteReason(e.target.value)}
                         style={{ width: '16px', height: '16px' }}
@@ -879,9 +937,9 @@ export default function StudentManager({ activeSubTab }) {
 
               <div className="form-actions" style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
                 <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setIsDeleteOpen(false)}>Hủy bỏ</button>
-                <button 
-                  className="btn btn-danger" 
-                  style={{ flex: 1, fontWeight: 700 }} 
+                <button
+                  className="btn btn-danger"
+                  style={{ flex: 1, fontWeight: 700 }}
                   onClick={confirmDelete}
                   disabled={!deleteReason || !deletePassword}
                 >
@@ -894,14 +952,11 @@ export default function StudentManager({ activeSubTab }) {
         document.body
       )}
 
-      
+
       {/* Mobile Selection Action Bar */}
       {selectedStudentId && (
         <div className="mobile-action-bar animate-slide-up">
-          <button className="action-btn warning" onClick={handleReserve} title="Bảo lưu / Hủy">
-            <RefreshCw size={20} />
-            <span>Bảo lưu</span>
-          </button>
+
           <button className="action-btn primary-purple" onClick={handleTransferClassTrigger}>
             <ArrowRightLeft size={20} />
             <span>Chuyển lớp</span>
