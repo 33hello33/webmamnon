@@ -1,0 +1,589 @@
+.attendance-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.attendance-layout {
+  display: flex;
+  gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+  height: calc(100vh - 120px);
+}
+
+.attendance-card-list, .mobile-header-actions {
+  display: none;
+}
+
+@media (max-width: 991px) {
+  .attendance-manager {
+    height: auto;
+    min-height: calc(100vh - 110px);
+    overflow: visible;
+  }
+
+  .attendance-layout {
+    flex-direction: column;
+    height: 100%;
+    gap: 0;
+  }
+
+  .attendance-list-pane {
+    width: 100%;
+    flex: 1;
+    max-height: none;
+    border-radius: 0;
+    border: none;
+    height: 100%;
+  }
+
+  .mobile-active {
+    display: flex !important;
+  }
+
+  .mobile-show-details .attendance-list-pane {
+    display: none;
+  }
+
+  .attendance-details-pane {
+    display: none;
+    width: 100%;
+    background: white;
+    overflow-y: visible;
+  }
+
+  .mobile-show-details .attendance-details-pane {
+    display: block;
+    height: auto;
+  }
+
+  .mobile-header-actions {
+    display: block;
+    padding: 1rem;
+    background: white;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .btn-back {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1.25rem;
+    background: #f1f5f9; /* Match Invoice style */
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    color: #475569;
+    font-weight: 800;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: 0.2s;
+  }
+
+  .btn-back:hover {
+    background: #e2e8f0;
+  }
+
+  .attendance-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.25rem;
+    padding: 1.25rem;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .custom-date-range {
+    justify-content: stretch;
+    gap: 0.5rem;
+  }
+
+  .custom-date-range input {
+    flex: 1;
+  }
+
+  .actions-group {
+    width: 100%;
+  }
+
+  .actions-group .btn {
+    width: 100%;
+    padding: 0.85rem;
+    justify-content: center;
+  }
+
+  /* Force table hide and card list show on mobile */
+  .table-scroll-wrapper {
+    display: none !important;
+  }
+  
+  .attendance-card-list {
+    display: flex !important;
+    padding: 1rem;
+    padding-bottom: 4rem;
+  }
+}
+
+/* Section Styles (Matching Invoice) */
+.attendance-info-section {
+  background: white;
+}
+
+.im-section {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.im-section-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #0f172a;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 0.6rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.im-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .im-grid-3 {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .im-section {
+     padding: 1rem;
+  }
+  /* Fix nested scrolling in attendance cards */
+  .attendance-card-list {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding-bottom: 2rem !important;
+  }
+}
+
+.im-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.im-field label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.val-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.text-primary { color: #3b82f6 !important; }
+.text-bold { font-weight: 800 !important; }
+
+/* Left Pane */
+.attendance-list-pane {
+  max-height: 1000px;
+  flex: 0 0 320px;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 768px) {
+  .attendance-list-pane {
+    flex: unset;
+    width: 100%;
+    max-height: 60vh;
+  }
+}
+
+.view-toggles {
+  display: flex;
+  padding: 1rem 1rem 0.5rem;
+  gap: 0.5rem;
+}
+
+.toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  background: #f1f5f9;
+}
+
+.toggle-btn.active {
+  background: #4f46e5;
+  color: white;
+  border-color: #4f46e5;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+}
+
+.search-box-sm {
+  padding: 0.5rem 1rem;
+  position: relative;
+}
+
+.search-box-sm input {
+  width: 100%;
+  padding: 0.6rem 0.75rem 0.6rem 2.25rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  outline: none;
+  font-size: 0.9rem;
+  background: #f8fafc;
+}
+
+.search-box-sm input:focus {
+  border-color: #6366f1;
+  background: white;
+}
+
+.search-box-sm .search-icon {
+  position: absolute;
+  left: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+}
+
+.item-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.list-item:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.list-item.active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.list-item.active .item-icon {
+  background: #4f46e5;
+  color: white;
+}
+
+.item-icon {
+  width: 32px;
+  height: 32px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.item-info h4 {
+  margin: 0 0 0.15rem 0;
+  font-size: 0.9rem;
+  color: #1e293b;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-info span {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.empty-message-sm {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+/* Right Pane */
+.attendance-details-pane {
+  max-height: 1000px;
+  flex: 1;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 768px) {
+  .attendance-details-pane {
+    height: auto !important;
+    overflow-y: visible !important;
+  }
+  
+  .attendance-table-container {
+     padding: 1rem 0.5rem;
+     overflow: visible !important;
+  }
+}
+
+.attendance-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.date-select {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  outline: none;
+  font-size: 0.9rem;
+  background: white;
+  color: #334155;
+  cursor: pointer;
+}
+
+.custom-date-range {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.custom-date-range input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.attendance-table-container {
+  flex: 1;
+  overflow: auto;
+  padding: 1.5rem;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-success {
+  color: #16a34a;
+}
+
+.text-warning {
+  color: #d97706;
+}
+
+.text-danger {
+  color: #ef4444;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.table-scroll-wrapper {
+  overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+  .table-scroll-wrapper {
+    display: none;
+  }
+  
+  .attendance-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .custom-date-range {
+    justify-content: space-between;
+  }
+  
+  .custom-date-range input {
+    flex: 1;
+  }
+  
+  .attendance-table-container {
+    padding: 0.75rem;
+  }
+}
+
+/* Attendance Card List (Mobile) */
+.attendance-card-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .attendance-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+}
+
+.attendance-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.attendance-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.attendance-card-stats-compact {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.badge-stat {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-success-light { background-color: #f0fdf4; border: 1px solid #dcfce7; }
+.bg-warning-light { background-color: #fffbeb; border: 1px solid #fef3c7; }
+.bg-danger-light { background-color: #fef2f2; border: 1px solid #fee2e2; }
+
+.attendance-card .student-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.attendance-card .student-id {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.sessions-scroll {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.session-dot-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.session-date {
+  font-size: 0.65rem;
+  color: #94a3b8;
+}
+
+.session-status {
+  font-size: 0.85rem;
+}
+
+.no-selection {
+  flex: 1;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #94a3b8;
+  padding: 3rem;
+  background: #f8fafc;
+  height: 100%;
+}
+
+.no-selection p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+

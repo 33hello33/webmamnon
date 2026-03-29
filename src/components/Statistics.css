@@ -1,0 +1,146 @@
+
+.statistics-container {
+  padding: 2rem;
+  background: #f8fafc;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.stat-header {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.stat-header-left h2 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0;
+  color: #0f172a;
+}
+
+.stat-header-left p {
+  color: #64748b;
+  margin: 4px 0 0;
+}
+
+.stat-header-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.filter-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 2rem;
+}
+
+.chart-item {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);
+  min-height: 350px;
+}
+
+.chart-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+}
+
+.chart-title h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.chart-canvas-container {
+  height: 300px;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* MOBILE RESPONSIVE PRESETS */
+@media (max-width: 991px) {
+  .charts-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .statistics-container {
+    padding: 1rem;
+  }
+
+  .stat-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-header-right {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .filter-card {
+    justify-content: space-between;
+    width: 100%;
+    padding: 12px;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    width: 100%;
+    margin: 0;
+  }
+
+  .chart-item {
+    padding: 1rem;
+    min-height: 300px;
+  }
+
+  .chart-canvas-container {
+    height: 220px;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .stat-header-left h2 {
+    font-size: 1.4rem;
+  }
+
+  .custom-date-row {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+  
+  .custom-date-row input {
+     width: 100% !important;
+  }
+}

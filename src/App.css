@@ -1,0 +1,528 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+body {
+  background-color: #0f172a;
+  color: #f8fafc;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Background Blobs for Glassmorphism Effect */
+.blob {
+  position: absolute;
+  filter: blur(80px);
+  z-index: -1;
+  opacity: 0.6;
+  animation: float 10s infinite alternate;
+}
+
+.blob-1 {
+  width: 400px;
+  height: 400px;
+  background: linear-gradient(to right, #4f46e5, #ec4899);
+  top: -100px;
+  left: -100px;
+  border-radius: 50%;
+}
+
+.blob-2 {
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(to right, #06b6d4, #3b82f6);
+  bottom: -50px;
+  right: -50px;
+  border-radius: 50%;
+  animation-delay: 2s;
+}
+
+.blob-3 {
+  width: 250px;
+  height: 250px;
+  background: linear-gradient(to right, #10b981, #0ea5e9);
+  bottom: 20%;
+  left: 20%;
+  border-radius: 50%;
+  animation-delay: 4s;
+  opacity: 0.4;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, 50px) scale(1.1); }
+  100% { transform: translate(-30px, 20px) scale(0.9); }
+}
+
+/* Login Box Glassmorphism */
+.login-box {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3rem;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.logo-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.logo-icon {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border-radius: 16px;
+  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: skewX(-20deg);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}
+
+.login-header h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(to right, #fff, #cbd5e1);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-header p {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+/* Form Styles */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 1rem;
+  color: #94a3b8;
+  transition: color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 1rem 1rem 1rem 3rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.input-group input::placeholder {
+  color: #64748b;
+}
+
+.input-group input:focus {
+  border-color: #6366f1;
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.input-group input:focus + .input-icon, 
+.input-group input:not(:placeholder-shown) ~ .input-icon {
+  color: #6366f1;
+}
+
+/* Submit Button */
+.submit-btn {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 1rem;
+  background: linear-gradient(to right, #4f46e5, #6366f1);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  background: linear-gradient(to right, #4338ca, #4f46e5);
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Messages */
+.message-alert {
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-alert.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.message-alert.error svg {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.message-alert.success {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.message-alert.success svg {
+  color: #22c55e;
+  flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .login-box {
+    padding: 2rem;
+    margin: 1rem;
+    width: auto;
+  }
+  
+  /* Universal Wrap for Mobile: Các thanh công cụ auto xuống hàng khi không đủ diện tích */
+  .toolbar, .class-toolbar, .attendance-toolbar, .action-buttons, .student-actions, .filter-group, 
+  .actions-group, .btn-group, .header-actions, .fee-btn-group, .top-actions {
+    flex-wrap: wrap !important;
+  }
+
+/* Universal Table Scroll: Để bảng không bị cắt mất nếu dài */
+  .table-container {
+    max-width: 100vw;
+    overflow-x: auto;
+  }
+
+  /* Responsive Attendance Table to Cards */
+  .attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  @media (max-width: 650px) {
+    .attendance-table thead {
+      display: none;
+    }
+    .attendance-table, 
+    .attendance-table tbody, 
+    .attendance-table tr, 
+    .attendance-table td {
+      display: block;
+      width: 100%;
+    }
+    .attendance-table tr {
+      margin-bottom: 1.25rem;
+      padding: 1.25rem;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .attendance-table td {
+      padding: 0.75rem 0 !important;
+      border: none !important;
+      position: relative;
+    }
+    /* First cell (Student Name) is the "Header" of the card */
+    .attendance-table td:first-child {
+      border-bottom: 1px solid #f1f5f9 !important;
+      margin-bottom: 0.75rem;
+      padding-top: 0 !important;
+      padding-bottom: 1rem !important;
+    }
+    /* Add labels for other cells */
+    .attendance-table td:not(:first-child)::before {
+      content: attr(data-label);
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.5px;
+    }
+    
+    .attendance-options-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      background: #f8fafc;
+      padding: 0.75rem;
+      border-radius: 10px;
+    }
+    
+    .att-radio-label {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 0.25rem 0;
+    }
+    
+    .att-radio-label input[type="radio"] {
+      width: 1.2rem;
+      height: 1.2rem;
+    }
+  }
+
+  /* Desktop Styles for Attendance Radio Buttons */
+  @media (min-width: 651px) {
+    .attendance-options-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .att-radio-label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+  }
+}
+
+/* Attendance Portal Card Styles - Optimized for Teacher View */
+.attendance-portal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-bottom: 2rem;
+}
+
+.attendance-portal-card {
+  background: white;
+  padding: 1rem 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  align-items: flex-start;
+  transition: transform 0.2s ease;
+}
+
+.attendance-portal-card:hover {
+  transform: translateY(-2px);
+}
+
+.attendance-portal-card > div {
+  flex: 1 1 200px; /* Allow wrapping but compact */
+  min-width: 200px;
+}
+
+@media (max-width: 650px) {
+  .attendance-portal-card {
+    flex-direction: column;
+    padding: 1.25rem;
+    gap: 1rem; /* Compact vertical gap */
+  }
+  .attendance-portal-card > div {
+    width: 100% !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+.portal-att-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+/* Parent Dashboard UI Fixes */
+.parent-dashboard-container {
+  padding: 0 !important;
+  text-align: left;
+}
+
+.parent-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 1.5rem !important;
+  background: #f8fafc !important;
+  padding: 1rem !important;
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+  flex-wrap: wrap !important;
+  gap: 1rem !important;
+}
+
+.parent-header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+}
+
+.parent-nav-tabs {
+  display: flex !important;
+  gap: 1rem !important;
+  margin-bottom: 2rem !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+  padding: 0 0.5rem !important;
+  overflow-x: auto !important;
+  white-space: nowrap !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.parent-nav-tab {
+  padding: 0.75rem 0.25rem !important;
+  cursor: pointer !important;
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  color: #64748b !important;
+  border-bottom: 3px solid transparent !important;
+  margin-bottom: -2px !important;
+  flex-shrink: 0 !important;
+}
+
+.parent-nav-tab.active-blue {
+  color: #3b82f6 !important;
+  border-bottom-color: #3b82f6 !important;
+}
+
+.parent-nav-tab.active-green {
+  color: #10b981 !important;
+  border-bottom-color: #10b981 !important;
+}
+
+.parent-card-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) !important;
+  gap: 1.5rem !important;
+  align-items: stretch !important;
+}
+
+@media (max-width: 768px) {
+  .parent-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    text-align: center !important;
+  }
+  .parent-header-left {
+    flex-direction: column !important;
+  }
+  .parent-header h2 {
+    font-size: 1.1rem !important;
+  }
+  .parent-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+  .nav-tabs {
+     overflow-x: auto;
+  }
+}

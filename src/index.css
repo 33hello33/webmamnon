@@ -1,0 +1,90 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* THEME: DARK MODE */
+[data-theme="dark"] {
+  filter: invert(0.92) hue-rotate(180deg);
+  background: #0f172a;
+}
+/* Re-invert image-like elements and specific colorful icons so they stay normal */
+[data-theme="dark"] img, 
+[data-theme="dark"] .avatar, 
+[data-theme="dark"] .logo-mark,
+[data-theme="dark"] .status-badge,
+[data-theme="dark"] .tuition-chip {
+  filter: invert(1) hue-rotate(180deg);
+}
+[data-theme="dark"] select.theme-select {
+  filter: invert(1) hue-rotate(180deg); /* Re-invert theme dropdown so it doesn't look completely weird */
+  background: #1e293b !important;
+  color: white !important;
+  border-color: #334155 !important;
+}
+
+/* THEME: MẦM NON (KINDERGARTEN) */
+[data-theme="kindergarten"] .dashboard-layout {
+  background-color: #fefce8 !important; /* light yellow */
+}
+[data-theme="kindergarten"] .sidebar {
+  background-color: #fffff0 !important;
+  border-right: 3px dashed #fde047 !important;
+}
+[data-theme="kindergarten"] .nav-btn.active {
+  background-color: #fdf2f8 !important;
+  color: #db2777 !important;
+  border-radius: 16px !important;
+}
+[data-theme="kindergarten"] .nav-btn.active::before {
+  background-color: #db2777 !important;
+  width: 6px !important;
+  border-radius: 6px !important;
+}
+[data-theme="kindergarten"] .content-header h2 {
+  color: #d946ef !important;
+  font-weight: 900 !important;
+  font-family: 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', sans-serif !important;
+  letter-spacing: 1px;
+}
+[data-theme="kindergarten"] .user-profile {
+  background: #e0f2fe !important;
+  border: 2px dashed #7dd3fc !important;
+  border-radius: 50px !important;
+}
+[data-theme="kindergarten"] .logo-mark {
+  background: linear-gradient(135deg, #fbbf24, #f43f5e) !important;
+  border-radius: 16px !important;
+}
+[data-theme="kindergarten"] .avatar {
+  background: linear-gradient(135deg, #fb7185, #c084fc) !important;
+}
+[data-theme="kindergarten"] .user-name {
+  color: #9d174d !important;
+}
+[data-theme="kindergarten"] .user-role {
+  color: #be185d !important;
+}
+[data-theme="kindergarten"] .btn-primary, [data-theme="kindergarten"] .im-btn-submit, [data-theme="kindergarten"] .sp-btn-checkout {
+  background: linear-gradient(135deg, #f472b6, #db2777) !important;
+  border-radius: 12px !important;
+}
+[data-theme="kindergarten"] .placeholder-card {
+  border: 2px dashed #fbcfe8 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 4px 15px rgba(236,72,153,0.1) !important;
+}
+[data-theme="kindergarten"] .theme-select {
+  border: 2px dashed #fbcfe8 !important;
+  background: #fdf2f8 !important;
+  color: #db2777 !important;
+}
