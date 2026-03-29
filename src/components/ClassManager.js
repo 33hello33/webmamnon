@@ -76,6 +76,24 @@ const calculateEndDateBySessions = (startDateStr, numSessions, activeDays) => {
   return '';
 };
 
+const calculateThoiluong = (ngayBatDau, soLuong, loaiDong) => {
+  if (!ngayBatDau) return '';
+  const SL = parseInt(soLuong) || 1;
+  const unit = (loaiDong || '').toLowerCase();
+  const start = new Date(ngayBatDau);
+
+  if ((unit.includes('tháng') || unit.includes('khóa')) && SL > 1) {
+    const months = [];
+    for (let i = 0; i < SL; i++) {
+      const d = new Date(start);
+      d.setMonth(start.getUTCMonth() + i);
+      months.push(`${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`);
+    }
+    return months.join(', ');
+  }
+  return `${String(start.getUTCMonth() + 1).padStart(2, '0')}/${start.getUTCFullYear()}`;
+};
+
 export default function ClassManager({ students, showMessage, fetchStudents }) {
   const { config } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
@@ -298,7 +316,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       }
     }
 
-    const startStr = new Date().toISOString().split('T')[0];
+    const startStr = (() => {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    })();
 
     setBatchNoticeData({
       loaiDong: initLoaiDong,
@@ -480,6 +502,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const row = batchStudentsData[i];
         const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
 
+        const sbhParts = row.sobuoihoc.split(' ');
+        const qty = sbhParts[0];
+        const unit = sbhParts[1];
+        const tl = calculateThoiluong(row.ngaybatdau, qty, unit);
+
         const insertData = {
           mahd: newMaHD,
           ngaylap: localNow,
@@ -497,7 +524,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           hinhthuc: row.hinhthuc,
           ghichu: row.ghichu,
           daxoa: null,
-          malop: selectedClass?.malop || ''
+          malop: selectedClass?.malop || '',
+          thoiluong: tl,
+          sobuoihoc: `${row.sobuoihoc}${row.sobuoihoc.toLowerCase().includes('tháng') ? ` (${tl})` : ''}`
         };
         recordsToInsert.push(insertData);
 
@@ -1478,16 +1507,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   Khóa học: <b style={{ fontWeight: 900 }}>{printHoaDon.tenlop}</b>
                 </div>
 
-                {printHoaDon.sobuoihoc && (
-                  <div>
-                    Số buổi/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.sobuoihoc}</b>
-                  </div>
-                )}
-
                 <div>
-                  Thời lượng:{" "}
-                  từ <b style={{ fontWeight: 900 }}>{printHoaDon.ngaybatdau ? new Date(printHoaDon.ngaybatdau).toLocaleDateString("vi-VN") : "..."}</b>{" "}
-                  đến <b style={{ fontWeight: 900 }}>{printHoaDon.ngayketthuc ? new Date(printHoaDon.ngayketthuc).toLocaleDateString("vi-VN") : "..."}</b>
+                  Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b>
                 </div>
 
                 {/* FEES */}
