@@ -20,7 +20,8 @@ const INITIAL_FORM = {
   gioitinh: 'Nam', cccd: '', tinhtrangsk: '',
   nghenghiepba: '', nghenghiepme: '',
   ngaysinhba: new Date().toISOString().split('T')[0],
-  ngaysinhme: new Date().toISOString().split('T')[0]
+  ngaysinhme: new Date().toISOString().split('T')[0],
+  username: '', password: ''
 };
 
 export default function StudentManager({ activeSubTab }) {
@@ -567,9 +568,13 @@ export default function StudentManager({ activeSubTab }) {
                           <td>{s.gioitinh || '-'}</td>
                           <td>{classes.find(c => c.malop === s.malop)?.tenlop || s.malop || '-'}</td>
                           <td>
-                            <span className={`status-badge ${s.trangthai === 'Đang Học' ? 'active' :
-                              (s.trangthai === 'Bảo Lưu' ? 'warning' : 'inactive')
-                              }`}>
+                            <span className={`status-badge ${(() => {
+                              const st = (s.trangthai || '').trim().toLowerCase();
+                              if (st.includes('đang học')) return 'active';
+                              if (st.includes('bảo lưu')) return 'warning';
+                              if (st.includes('đã nghỉ')) return 'inactive';
+                              return 'default';
+                            })()}`}>
                               {s.trangthai || 'Chưa phân loại'}
                             </span>
                           </td>
@@ -624,9 +629,13 @@ export default function StudentManager({ activeSubTab }) {
                             <div className="student-id">#{s.mahv}</div>
                           </div>
                         </div>
-                        <span className={`status-badge ${s.trangthai === 'Đang Học' ? 'active' :
-                          (s.trangthai === 'Bảo Lưu' ? 'warning' : 'inactive')
-                          }`}>
+                        <span className={`status-badge ${(() => {
+                          const st = (s.trangthai || '').trim().toLowerCase();
+                          if (st.includes('đang học')) return 'active';
+                          if (st.includes('bảo lưu')) return 'warning';
+                          if (st.includes('đã nghỉ')) return 'inactive';
+                          return 'default';
+                        })()}`}>
                           {s.trangthai || 'Chưa cập nhật'}
                         </span>
                       </div>
@@ -838,6 +847,17 @@ export default function StudentManager({ activeSubTab }) {
               <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
                 <label>Tình trạng sức khỏe</label>
                 <input type="text" name="tinhtrangsk" value={formData.tinhtrangsk} onChange={handleChange} />
+              </div>
+
+              <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#10b981' }}>TÀI KHOẢN CHAT (Dành cho Phụ huynh)</div>
+              
+              <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
+                <label style={{ color: '#10b981' }}>Tên đăng nhập (Username)</label>
+                <input type="text" name="username" value={formData.username || ''} onChange={handleChange} placeholder="Nhập tên đăng nhập cho phụ huynh..." />
+              </div>
+              <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
+                <label style={{ color: '#10b981' }}>Mật khẩu (Password)</label>
+                <input type="text" name="password" value={formData.password || ''} onChange={handleChange} placeholder="Nhập mật khẩu..." />
               </div>
               <div className="form-actions full-width">
                 <button type="button" className="btn btn-outline" onClick={() => setIsFormOpen(false)}>Hủy</button>

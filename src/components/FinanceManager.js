@@ -279,10 +279,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
             noidung: canDoiData.noidung,
             manv: manv,
-            vi1: { truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
-            vi2: { truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
-            vi3: { truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
-            vi4: { truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
+            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
+            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
+            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
+            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
          }]);
 
          if (err1) {
@@ -1994,13 +1994,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div style={{ fontSize: '0.75rem', color: '#0ea5e9', display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                                     <span>Sổ sách:</span> <b>{fCur(currentBalances[w.id])}</b>
                                  </div>
-                                 <input type="text" required value={fCur(canDoiData[w.id])} onChange={e => setCanDoiData({ ...canDoiData, [w.id]: e.target.value.replace(/,/g, '') })} style={{ width: '100%', padding: '0.55rem', marginTop: '0.3rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '1.05rem', fontWeight: 700, color: '#8b5cf6', textAlign: 'right' }} placeholder="Thực tế..." />
+                                 <input type="text" required value={fCur(canDoiData[w.id])} onChange={e => setCanDoiData({ ...canDoiData, [w.id]: e.target.value.replace(/,/g, '') })} style={{ width: '100%', padding: '0.55rem', marginTop: '0.3rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '1.05rem', fontWeight: 700, color: '#8b5cf6', textAlign: 'right' }} placeholder="Đầu kỳ mới..." />
                               </div>
                            ))}
                         </div>
 
                         <div style={{ padding: '0.85rem', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fef3c7', fontSize: '0.85rem', color: '#92400e' }}>
-                           <p style={{ margin: 0, lineHeight: '1.4' }}>Cập nhật số tiền <b>Thực tế</b> làm mốc <b>Đầu kỳ</b> mới cho hệ thống thống kê.</p>
+                           <p style={{ margin: 0, lineHeight: '1.4' }}>Cập nhật số tiền <b>Đầu kỳ mới</b> để hệ thống bắt đầu thống kê lại theo mốc thực tế.</p>
                         </div>
 
                         <button type="submit" style={{ width: '100%', padding: '0.85rem', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '1.05rem', boxShadow: '0 4px 10px rgba(139, 92, 246, 0.2)', marginTop: '0.5rem' }}>
@@ -2047,17 +2047,31 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const sau = pCur(diff.sau) || 0;
                                           const offset = sau - truoc;
                                           return (
-                                             <div key={w.id} style={{ background: 'white', padding: '8px 12px', borderRadius: '10px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>{w.name}</div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                                   <span style={{ color: '#64748b' }}>{fCur(truoc)}</span>
-                                                   <span style={{ fontWeight: 850, color: '#1e293b' }}>→ {fCur(sau)}</span>
-                                                </div>
-                                                {offset !== 0 && (
-                                                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: offset > 0 ? '#10b981' : '#ef4444', textAlign: 'right', marginTop: '2px' }}>
-                                                      {offset > 0 ? '+' : ''}{fCur(offset)}
+                                             <div key={w.id} style={{ background: 'white', padding: '10px 14px', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: 850, color: '#475569', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px' }}>{w.name}</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem' }}>
+                                                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
+                                                      <span>Đầu kỳ cũ:</span>
+                                                      <span style={{ fontWeight: 600 }}>{fCur(diff.dauky || 0)}</span>
                                                    </div>
-                                                )}
+                                                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                                                      <span>Sổ sách:</span>
+                                                      <span style={{ fontWeight: 600 }}>{fCur(truoc)}</span>
+                                                   </div>
+                                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 850, color: '#1e293b', borderTop: '1px dashed #e2e8f0', paddingTop: '4px', marginTop: '2px' }}>
+                                                      <span>Đầu kỳ mới:</span>
+                                                      <span style={{ color: '#8b5cf6' }}>{fCur(sau)}</span>
+                                                   </div>
+                                                   {(() => {
+                                                      const chenhLech = (pCur(diff.dauky) || 0) - sau;
+                                                      if (chenhLech === 0) return null;
+                                                      return (
+                                                         <div style={{ fontSize: '0.75rem', fontWeight: 800, color: chenhLech > 0 ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '2px', background: chenhLech > 0 ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px', alignSelf: 'flex-end' }}>
+                                                            {chenhLech > 0 ? '↓ Chênh lệch: -' : '↑ Chênh lệch: +'}{fCur(Math.abs(chenhLech))}
+                                                         </div>
+                                                      );
+                                                   })()}
+                                                </div>
                                              </div>
                                           );
                                        })}

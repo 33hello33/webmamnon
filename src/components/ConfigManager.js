@@ -23,7 +23,8 @@ const formatCurrency = (val) => {
 
 const ROLES = ['Quản lý', 'Nhân viên VP', 'Giáo viên'];
 const TAB_OPTIONS = [
-  { id: 'overview', label: 'Tổng quan' },
+  { id: 'statistics', label: 'Thống kê' },
+  { id: 'chat', label: 'Kênh Chat' },
   { id: 'finances', label: 'Quản lý thu chi' },
   { id: 'invoices', label: 'Xuất hóa đơn' },
   { id: 'sales', label: 'Bán hàng' },

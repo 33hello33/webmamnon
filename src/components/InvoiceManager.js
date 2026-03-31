@@ -51,7 +51,7 @@ const getQRUrl = (hoaDon, walletsConfig) => {
    const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-      const info = encodeURIComponent(`${hoaDon.mahv} Dong HP Thang ${formatMonthYear(hoaDon.ngaybatdau)}`);
+      const info = encodeURIComponent(`${hoaDon.mahv}`);
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
@@ -883,7 +883,7 @@ export default function InvoiceManager() {
 
 
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-   
+
    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
    const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;

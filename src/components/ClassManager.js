@@ -25,7 +25,7 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
   if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
     const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-    const info = encodeURIComponent(`${hoaDon.mahv} Dong HP Thang ${formatMonthYear(hoaDon.ngaybatdau)}`);
+    const info = encodeURIComponent(`${hoaDon.mahv} `);
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
   return null;
@@ -241,7 +241,31 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   }, [isNoidungModalOpen, noidungFilter, fetchNoidungDay]);
 
   const classStudents = React.useMemo(() => {
-    return students.filter(s => (s.malop === selectedClassId || s.malop_list?.includes(selectedClassId)) && (s.trangthai === 'Đang Học' || s.trangthai === 'Bảo Lưu'));
+    if (!selectedClassId || !students) return [];
+    
+    return students.filter(s => {
+      // 1. Normalize malop comparison
+      const smalop = (s.malop || '').toString().trim().toLowerCase();
+      const selId = (selectedClassId || '').toString().trim().toLowerCase();
+      
+      // 2. Check in malop or malop_list (handling both array and string variants)
+      let matchesClass = (smalop === selId);
+      
+      if (!matchesClass && s.malop_list) {
+        if (Array.isArray(s.malop_list)) {
+          matchesClass = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+        } else if (typeof s.malop_list === 'string') {
+          matchesClass = s.malop_list.toLowerCase().includes(selId);
+        }
+      }
+      
+      if (!matchesClass) return false;
+      
+      // 3. Status check (normalize state)
+      const st = (s.trangthai || '').trim().toLowerCase();
+      // Only hide if 'đã nghỉ'
+      return st !== 'đã nghỉ';
+    });
   }, [students, selectedClassId]);
 
   useEffect(() => {
@@ -838,7 +862,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           )}
                         </div>
                         <div className="class-info-details">
-                          <span>Sĩ số: {students.filter(s => (s.malop === c.malop || s.malop_list?.includes(c.malop)) && (s.trangthai === 'Đang Học' || s.trangthai === 'Bảo Lưu')).length} HV</span>
+                          <span>Sĩ số: {students.filter(s => {
+                            const smalop = (s.malop || '').toString().trim().toLowerCase();
+                            const cmalop = (c.malop || '').toString().trim().toLowerCase();
+                            let matches = (smalop === cmalop);
+                            if (!matches && s.malop_list) {
+                              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === cmalop);
+                              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(cmalop);
+                            }
+                            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+                          }).length} HV</span>
                           <span>GV: {teacherName}</span>
                           <span>Lịch: {c.thoigianbieu || '-'}</span>
                         </div>
@@ -965,9 +998,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               <td className="font-medium">{s.mahv}</td>
                               <td className="font-semibold text-primary">{s.tenhv}</td>
                               <td>
-                                <span className={`status-badge ${s.trangthai === 'Đang Học' ? 'active' :
-                                  (s.trangthai === 'Bảo Lưu' ? 'warning' : 'inactive')
-                                  }`}>
+                                <span className={`status-badge ${(() => {
+                                  const st = (s.trangthai || '').trim().toLowerCase();
+                                  if (st.includes('đang học')) return 'active';
+                                  if (st.includes('bảo lưu')) return 'warning';
+                                  if (st.includes('đã nghỉ')) return 'inactive';
+                                  return 'default';
+                                })()}`}>
                                   {s.trangthai || 'Chưa cập nhật'}
                                 </span>
                               </td>
@@ -999,12 +1036,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               <div className="student-id">#{s.mahv}</div>
                             </div>
 
-                            <span className={`status-badge ${s.trangthai === 'Đang Học'
-                              ? 'active'
-                              : s.trangthai === 'Bảo Lưu'
-                                ? 'warning'
-                                : 'inactive'
-                              }`}>
+                            <span className={`status-badge ${(() => {
+                              const st = (s.trangthai || '').trim().toLowerCase();
+                              if (st.includes('đang học')) return 'active';
+                              if (st.includes('bảo lưu')) return 'warning';
+                              if (st.includes('đã nghỉ')) return 'inactive';
+                              return 'default';
+                            })()}`}>
                               {s.trangthai || 'Chưa cập nhật'}
                             </span>
                           </div>

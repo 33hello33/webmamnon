@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './App.css';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
-import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut } from 'lucide-react';
+import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download } from 'lucide-react';
 
 function Login() {
    const [username, setUsername] = useState('');
@@ -14,10 +14,14 @@ function Login() {
    const navigate = useNavigate();
 
    // ----- Parent Module States -----
-   const [loginMode, setLoginMode] = useState('login'); // 'login' | 'parent'
+   const [loginMode, setLoginMode] = useState('login'); // 'login' | 'parent' | 'attendance'
    const [parentMahv, setParentMahv] = useState('');
    const [parentData, setParentData] = useState(null);
-   const [parentTab, setParentTab] = useState('fee-tab');
+   const [parentTab, setParentTab] = useState('fee-tab'); // 'fee-tab' | 'attendance-tab' | 'chat-tab'
+   const [chatMessages, setChatMessages] = useState([]);
+   const [chatLoading, setChatLoading] = useState(false);
+   const [chatInput, setChatInput] = useState('');
+   const [chatDocuments, setChatDocuments] = useState([]);
 
    // ----- Attendance Features -----
    const [attendanceUser, setAttendanceUser] = useState(null);
@@ -58,7 +62,7 @@ function Login() {
 
       return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png
 ?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}
-&addInfo=${encodeURIComponent(parentMahv + " Thang " + formatMonthYear(fee.ngaybatdau))}
+&addInfo=${encodeURIComponent(parentMahv)}
 &accountName=${encodeURIComponent(matched.accName)}`;
 
    };
@@ -68,10 +72,10 @@ function Login() {
       return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
    };
 
-   const loadParentDashboard = async (e) => {
+   const handleParentLogin = async (e) => {
       e.preventDefault();
-      if (!parentMahv) {
-         setMessage({ type: 'error', text: 'Vui lòng nhập Mã học sinh để tra cứu.' });
+      if (!username || !password) {
+         setMessage({ type: 'error', text: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.' });
          return;
       }
 
@@ -81,45 +85,71 @@ function Login() {
       try {
          const { data: stData, error: stErr } = await supabase
             .from('tbl_hv')
-            .select('mahv, tenhv')
-            .eq('mahv', parentMahv)
-            .single();
+            .select('*')
+            .eq('username', username)
+            .eq('password', password)
+            .maybeSingle();
 
          if (stErr || !stData) {
-            setMessage({ type: 'error', text: 'Không tìm thấy học sinh với mã thẻ này.' });
+            setMessage({ type: 'error', text: 'Tên đăng nhập hoặc mật khẩu phụ huynh không đúng.' });
             setLoading(false);
             return;
          }
 
+         const mahv = stData.mahv;
+         setParentMahv(mahv);
+
          const { data: feeData } = await supabase
             .from('tbl_thongbao')
-            .select('hocphi, giamhocphi, tongcong, ngaybatdau, ngayketthuc, sobuoihoc, ngaylap, ghichu, sobuoihoc, phuphi, hinhthuc')
-            .eq('mahv', parentMahv)
+            .select('*')
+            .eq('mahv', mahv)
             .order('ngaylap', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
          const { data: invoices } = await supabase
             .from('tbl_hd')
-            .select('ngaylap, tenlop, ngaybatdau, ngayketthuc, tongcong, dadong, hinhthuc, ghichu, hinhthuc')
-            .eq('mahv', parentMahv)
+            .select('*')
+            .eq('mahv', mahv)
             .neq('daxoa', 'Đã xóa')
             .order('ngaylap', { ascending: false })
             .limit(10);
 
          const { data: attendances } = await supabase
             .from('tbl_diemdanh')
-            .select('ngay, trangthai, ghichu')
-            .eq('mahv', parentMahv)
+            .select('*')
+            .eq('mahv', mahv)
             .order('ngay', { ascending: false })
             .limit(30);
+
+         // Lấy thông tin giáo viên phụ trách lớp
+         let teacherManv = null;
+         const { data: classData } = await supabase
+            .from('tbl_lop')
+            .select('manv')
+            .eq('malop', stData.malop)
+            .maybeSingle();
+         
+         if (classData?.manv) {
+            teacherManv = classData.manv;
+         } else {
+            // Nếu lớp chưa có GV hoặc học sinh chưa vào lớp, lấy đại 1 NV bất kỳ làm mặc định
+            const { data: firstNv } = await supabase
+               .from('tbl_nv')
+               .select('manv')
+               .limit(1)
+               .maybeSingle();
+            teacherManv = firstNv?.manv || null;
+         }
 
          setParentData({
             student: stData,
             latestFee: feeData || null,
             invoices: invoices || [],
-            attendances: attendances || []
+            attendances: attendances || [],
+            teacherManv: teacherManv
          });
+         setParentTab('fee-tab');
 
       } catch (err) {
          console.error(err);
@@ -302,7 +332,72 @@ function Login() {
       }
    }, [navigate]);
 
-   // Removed old handleLogin logic as it is now merged above.
+   useEffect(() => {
+      if (!parentData || parentTab !== 'chat-tab') return;
+
+      const fetchChatMessages = async () => {
+         setChatLoading(true);
+         const { data } = await supabase
+            .from('hv_messages')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .order('created_at', { ascending: true });
+         if (data) setChatMessages(data);
+         setChatLoading(false);
+      };
+
+      const fetchChatDocs = async () => {
+         const { data } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .order('created_at', { ascending: false });
+         if (data) setChatDocuments(data || []);
+      };
+
+      fetchChatMessages();
+      fetchChatDocs();
+
+      const channel = supabase
+         .channel(`parent_chat_${parentData.student.mahv}`)
+         .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'hv_messages',
+            filter: `mahv=eq.${parentData.student.mahv}`
+         }, (payload) => {
+            setChatMessages(prev => {
+               const exists = prev.some(m => m.id === payload.new.id);
+               if (exists) return prev;
+               return [...prev, payload.new];
+            });
+         })
+         .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
+   }, [parentData, parentTab]);
+
+   const handleSendChat = async (e) => {
+      e.preventDefault();
+      if (!chatInput.trim() || !parentData) return;
+
+      const newMessage = {
+         mahv: parentData.student.mahv,
+         manv: parentData.teacherManv, // Sử dụng mã nhân viên đã tìm được khi login
+         content: chatInput,
+         description: 'PH'
+      };
+
+      const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
+      if (error) {
+         console.error('Lỗi khi gửi tin nhắn:', error);
+         return;
+      }
+      if (data) {
+         setChatInput('');
+         setChatMessages(prev => [...prev, data[0]]);
+      }
+   };
 
    return (
       <div className="app-container">
@@ -356,57 +451,26 @@ function Login() {
                      </div>
                   )}
 
-                  {loginMode === 'login' || loginMode === 'attendance' ? (
-                     <form onSubmit={handleLogin} className="login-form">
-                        <div className="input-group">
-                           <div className="input-icon"><User size={18} /></div>
-                           <input type="text" placeholder="Tên đăng nhập" value={username} onChange={(e) => setUsername(e.target.value)} />
-                        </div>
+                  <form onSubmit={loginMode === 'login' ? handleLogin : handleParentLogin} className="login-form">
+                     <div className="input-group">
+                        <div className="input-icon"><User size={18} /></div>
+                        <input type="text" placeholder={loginMode === 'login' ? "Tên đăng nhập nhân viên" : "Tên đăng nhập phụ huynh"} value={username} onChange={(e) => setUsername(e.target.value)} />
+                     </div>
 
-                        <div className="input-group">
-                           <div className="input-icon"><Lock size={18} /></div>
-                           <input type="password" placeholder="Mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} />
-                        </div>
+                     <div className="input-group">
+                        <div className="input-icon"><Lock size={18} /></div>
+                        <input type="password" placeholder="Mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} />
+                     </div>
 
-                        <button type="submit" className={`submit-btn ${loading ? 'loading' : ''}`} disabled={loading} style={attendanceUser ? { background: '#ec4899' } : {}}>
-                           {loading ? <Loader2 className="spinner" size={20} /> : (
-                              <>
-                                 <span>{attendanceUser ? 'Vào Điểm Danh' : 'Đăng Nhập '}</span>
-                                 <LogIn size={18} />
-                              </>
-                           )}
-                        </button>
-                     </form>
-                  ) : (
-                     <form onSubmit={loadParentDashboard} className="login-form">
-                        <div className="input-group">
-                           <div className="input-icon">
-                              <User size={18} />
-                           </div>
-                           <input
-                              type="text"
-                              placeholder="Nhập mã học sinh (VD: HS001, HS002)"
-                              value={parentMahv}
-                              onChange={(e) => setParentMahv(e.target.value)}
-                           />
-                        </div>
-                        <button
-                           type="submit"
-                           className={`submit-btn ${loading ? 'loading' : ''}`}
-                           disabled={loading}
-                           style={{ background: '#10b981' }}
-                        >
-                           {loading ? (
-                              <Loader2 className="spinner" size={20} />
-                           ) : (
-                              <>
-                                 <span>Xem Thông Tin Học Của Con</span>
-                                 <Search size={18} />
-                              </>
-                           )}
-                        </button>
-                     </form>
-                  )}
+                     <button type="submit" className={`submit-btn ${loading ? 'loading' : ''}`} disabled={loading} style={loginMode === 'parent' ? { background: '#10b981' } : (attendanceUser ? { background: '#ec4899' } : {})}>
+                        {loading ? <Loader2 className="spinner" size={20} /> : (
+                           <>
+                              <span>{loginMode === 'parent' ? 'Vào Tra Cứu' : (attendanceUser ? 'Vào Điểm Danh' : 'Đăng Nhập ')}</span>
+                              {loginMode === 'parent' ? <Search size={18} /> : <LogIn size={18} />}
+                           </>
+                        )}
+                     </button>
+                  </form>
                </>
             ) : loginMode === 'attendance' && attendanceUser ? (
                <div className="attendance-portal" style={{ textAlign: 'left', animation: 'fadeIn 0.3s ease' }}>
@@ -601,6 +665,9 @@ function Login() {
                      <div onClick={() => setParentTab('attendance-tab')} className={`parent-nav-tab ${parentTab === 'attendance-tab' ? 'active-green' : ''}`}>
                         Bảng Điểm Danh
                      </div>
+                     <div onClick={() => setParentTab('chat-tab')} className={`parent-nav-tab ${parentTab === 'chat-tab' ? 'active-purple' : ''}`}>
+                        Trao Đổi Với Staff
+                     </div>
                   </div>
 
                   {parentTab === 'fee-tab' && (
@@ -724,6 +791,140 @@ function Login() {
                                  )}
                               </tbody>
                            </table>
+                        </div>
+                     </div>
+                  )}
+
+                  {parentTab === 'chat-tab' && (
+                     <div id="chat-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
+                        <div className="parent-chat-layout" style={{ 
+                           display: 'grid', 
+                           gridTemplateColumns: 'minmax(0, 1fr) 280px', 
+                           gap: '1.5rem',
+                           background: '#f1f5f9',
+                           borderRadius: '16px',
+                           padding: '1rem',
+                           minHeight: '500px',
+                           maxHeight: '600px'
+                        }}>
+                           {/* Chat Window */}
+                           <div style={{ display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                              <div style={{ padding: '0.85rem 1rem', background: 'white', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>SV</div>
+                                 <div>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{parentData.student.tenhv} - {parentData.student.mahv}</h4>
+                                    <span style={{ fontSize: '0.75rem', color: '#10b981' }}>● Kênh đang kết nối</span>
+                                 </div>
+                              </div>
+
+                              <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', background: '#f8fafc' }}>
+                                 {chatLoading ? (
+                                    <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><Loader2 className="spinner" size={24} /></div>
+                                 ) : (
+                                    <>
+                                       {chatMessages.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '2rem' }}>Bắt đầu nhắn tin với giáo viên tại đây...</div>}
+                                       {chatMessages.reduce((acc, m, idx) => {
+                                          const date = new Date(m.created_at).toLocaleDateString('vi-VN');
+                                          const prevDate = idx > 0 ? new Date(chatMessages[idx-1].created_at).toLocaleDateString('vi-VN') : null;
+                                          if (date !== prevDate) {
+                                             acc.push(<div key={`date-${idx}`} style={{ textAlign: 'center', margin: '15px 0', position: 'relative' }}>
+                                                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#e2e8f0' }}></div>
+                                                <span style={{ position: 'relative', background: '#f8fafc', padding: '0 10px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>{date}</span>
+                                             </div>);
+                                          }
+
+                                          const isMine = m.description === 'PH';
+                                          acc.push(
+                                             <div key={m.id || idx} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
+                                                <div style={{ 
+                                                   padding: '0.6rem 0.9rem', 
+                                                   borderRadius: isMine ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                                                   background: isMine ? '#8b5cf6' : 'white',
+                                                   color: isMine ? 'white' : '#1e293b',
+                                                   boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                                   fontSize: '0.9rem',
+                                                   border: isMine ? 'none' : '1px solid #e2e8f0'
+                                                }}>
+                                                   {m.content && <div>{m.content}</div>}
+                                                   {m.image_url && <img src={m.image_url} alt="img" style={{ maxWidth: '100%', borderRadius: '4px', marginTop: '5px' }} />}
+                                                   {m.file_url && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => window.open(m.file_url, '_blank')}>
+                                                      <LogIn size={14} /> <span style={{ color: 'inherit', textDecoration: 'none' }}>{m.file_name || 'Tài liệu'}</span>
+                                                   </div>}
+                                                </div>
+                                                <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '3px', alignSelf: isMine ? 'flex-end' : 'flex-start' }}>{new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                             </div>
+                                          );
+                                          return acc;
+                                       }, [])}
+                                    </>
+                                 )}
+                              </div>
+
+                              <form onSubmit={handleSendChat} style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px' }}>
+                                 <input 
+                                    type="text" 
+                                    placeholder="Nhập nội dung trao đổi..." 
+                                    value={chatInput}
+                                    onChange={e => setChatInput(e.target.value)}
+                                    style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', background: '#f8fafc', fontSize: '0.9rem' }}
+                                 />
+                                 <button type="submit" disabled={!chatInput.trim()} style={{ background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                    <LogIn size={20} style={{ transform: 'rotate(-90deg)' }} />
+                                 </button>
+                              </form>
+                           </div>
+
+                           {/* Info Sidebar */}
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+                              <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+                                    <AlertCircle size={14} /> Thông tin liên hệ
+                                 </div>
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Họ tên:</span> <strong>{parentData.student.tenhv}</strong></div>
+                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>ID Thẻ:</span> {parentData.student.mahv}</div>
+                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Địa chỉ:</span> {parentData.student.diachi || 'Chưa cập nhật'}</div>
+                                 </div>
+                              </div>
+
+                              <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+                                    <Users size={14} /> Thành viên (2)
+                                 </div>
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#dc2626', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>QT</div>
+                                       <div>
+                                          <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>Quản trị viên</div>
+                                          <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Điều hành</div>
+                                       </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>PH</div>
+                                       <div>
+                                          <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>Phụ huynh</div>
+                                          <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Thành viên</div>
+                                       </div>
+                                    </div>
+                                 </div>
+                              </div>
+
+                              <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flex: 1 }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+                                    <Search size={14} /> Kho tài liệu ({chatDocuments.length})
+                                 </div>
+                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    {chatDocuments.length > 0 ? chatDocuments.slice(0, 4).map(doc => (
+                                       <div key={doc.id} style={{ background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', textAlign: 'center' }} onClick={() => window.open(doc.file_url, '_blank')}>
+                                          <div style={{ height: '45px', background: '#f1f5f9', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+                                             <AlertCircle size={18} style={{ color: '#94a3b8' }} />
+                                          </div>
+                                          <div style={{ fontSize: '0.6rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
+                                       </div>
+                                    )) : <div style={{ gridColumn: 'span 2', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', padding: '1rem' }}>Chưa có tài liệu</div>}
+                                 </div>
+                              </div>
+                           </div>
                         </div>
                      </div>
                   )}

@@ -341,7 +341,6 @@
 .placeholder-card {
   background: white;
   border-radius: 20px;
-  padding: 2.5rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   border: 1px solid #f1f5f9;
   min-height: 400px;

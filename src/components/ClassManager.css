@@ -529,6 +529,22 @@
   font-size: 0.7rem;
   padding: 2px 8px;
   border-radius: 999px;
+  font-weight: 500;
+}
+
+.status-badge.active {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.status-badge.warning {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.status-badge.inactive {
+  background: #fee2e2;
+  color: #ef4444;
 }
 
 .text-center {

@@ -68,9 +68,16 @@ export default function AttendanceManager({ students, showMessage }) {
       setLoading(true);
       try {
         // Lấy tất cả học sinh có mã lớp tương ứng (không lọc trạng thái ở đây)
-        const cluster = students.filter(s =>
-          s.malop === selectedId && s.trangthai !== 'Đã Nghỉ'
-        );
+        const cluster = students.filter(s => {
+          const smalop = (s.malop || '').toString().trim().toLowerCase();
+          const selId = (selectedId || '').toString().trim().toLowerCase();
+          let matches = (smalop === selId);
+          if (!matches && s.malop_list) {
+            if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+            else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+          }
+          return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+        });
         setAttStudents(cluster);
 
         const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', selectedId).eq('ngay', attDate);
@@ -148,10 +155,16 @@ export default function AttendanceManager({ students, showMessage }) {
         let query = supabase.from('tbl_diemdanh').select('*');
         if (viewMode === 'class') {
           query = query.eq('malop', selectedId);
-          const stdIds = students.filter(s =>
-            s.malop === selectedId &&
-            s.trangthai !== 'Đã Nghỉ'
-          ).map(s => s.mahv);
+          const stdIds = students.filter(s => {
+            const smalop = (s.malop || '').toString().trim().toLowerCase();
+            const selId = (selectedId || '').toString().trim().toLowerCase();
+            let matches = (smalop === selId);
+            if (!matches && s.malop_list) {
+              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+            }
+            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+          }).map(s => s.mahv);
 
           if (stdIds.length === 0) {
             setAttendanceRecords([]);
@@ -212,10 +225,16 @@ export default function AttendanceManager({ students, showMessage }) {
       let baseStudents = [];
       if (viewMode === 'class') {
         if (viewMode === 'class') {
-          baseStudents = students.filter(s =>
-            s.malop === selectedId &&
-            s.trangthai !== 'Đã Nghỉ'
-          );
+          baseStudents = students.filter(s => {
+            const smalop = (s.malop || '').toString().trim().toLowerCase();
+            const selId = (selectedId || '').toString().trim().toLowerCase();
+            let matches = (smalop === selId);
+            if (!matches && s.malop_list) {
+              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+            }
+            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+          });
         }
       } else if (viewMode === 'student' && selectedId) {
         const s = students.find(s => s.mahv === selectedId);

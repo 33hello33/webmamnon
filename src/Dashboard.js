@@ -17,7 +17,8 @@ import {
   Menu,
   X,
   BarChart3,
-  Key
+  Key,
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
@@ -32,10 +33,12 @@ import TaskManager from './components/TaskManager';
 import FinanceManager from './components/FinanceManager';
 import ConfigManager from './components/ConfigManager';
 import Statistics from './components/Statistics';
+import ChatManager from './components/ChatManager';
 
 const ALL_TABS = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
+  { id: 'chat', label: 'Kênh Chat', icon: MessageSquare },
   {
     id: 'finances',
     label: 'Quản lý thu chi',
@@ -369,19 +372,14 @@ function Dashboard() {
         </div>
         <div className="card-container">
           <div className="placeholder-card" style={{
-            padding: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '2.5rem',
+            padding: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
             background: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
             boxShadow: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
             border: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
-            {!['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) && (
-              <>
-                <h3>{currentTab?.label}</h3>
-                <p>Dữ liệu và giao diện cho phần '{currentTab?.label}' sẽ được hiển thị ở đây.</p>
-              </>
-            )}
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'statistics' && <Statistics />}
+            {currentTab?.id === 'chat' && <ChatManager currentUser={user} />}
             {currentTab?.id === 'finances' && <FinanceManager activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'invoices' && <InvoiceManager />}
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}
