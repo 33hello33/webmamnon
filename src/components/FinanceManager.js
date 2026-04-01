@@ -771,7 +771,32 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       let filteredData = [...data];
       if (searchTerm) {
          const lowerQ = searchTerm.toLowerCase();
-         filteredData = filteredData.filter(item => JSON.stringify(item).toLowerCase().includes(lowerQ));
+         filteredData = filteredData.filter(item => {
+            // Check raw data
+            const rawMatch = JSON.stringify(item).toLowerCase().includes(lowerQ);
+            if (rawMatch) return true;
+
+            // Tab-specific name search
+            if (activeSubTab === 'hoadon') {
+               const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
+               if (studentName.includes(lowerQ)) return true;
+            } else if (activeSubTab === 'phieuluong') {
+               const teacherName = (item.tennv || nvMap[item.manv] || '').toLowerCase();
+               if (teacherName.includes(lowerQ)) return true;
+            } else if (activeSubTab === 'nhapkho') {
+               const productName = (hhMap[item.mahang] || '').toLowerCase();
+               if (productName.includes(lowerQ)) return true;
+            } else if (activeSubTab === 'phieuchi') {
+               const operatorName = (nvMap[item.manv] || '').toLowerCase();
+               if (operatorName.includes(lowerQ)) return true;
+            } else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') {
+               const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
+               const productName = (hhMap[item.mahang] || '').toLowerCase();
+               if (studentName.includes(lowerQ) || productName.includes(lowerQ)) return true;
+            }
+            
+            return false;
+         });
       }
       if (hinhThucFilter) {
          filteredData = filteredData.filter(item => {
@@ -1563,26 +1588,31 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   backgroundRepeat: 'repeat'
                }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
-                  <div className="p-header">
-                     <div className="p-header-left">
-                        <h3>{config?.tencongty || 'Tên Công Ty'}</h3>
-                        <p>ĐC: {config?.diachicongty}</p>
-                        <p>SĐT: {config?.sdtcongty}</p>
+                  <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     <div className="p-header-right">
-                        <div className="p-logo">
-                           <img src={config?.logo || '/logo.png'} alt="Logo" style={{ width: '80px', maxHeight: '80px', objectFit: 'contain' }} />
-                        </div>
+                     
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                           {config?.tencongty || 'Tên Công Ty'}
+                        </h3>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+                     </div>
+
+                     {/* RIGHT: Info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã phiếu: <b style={{ fontWeight: 950 }}>{printReceipt.maphieuchi}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printReceipt.ngaylap).toLocaleDateString("vi-VN")}</span></div>
                      </div>
                   </div>
 
-                  <div className="p-title-area">
-                     <h2>{printReceipt.loaiphieu === 'Thu' ? 'PHIẾU THU' : 'PHIẾU CHI'}</h2>
-                     <p>Ngày {new Date(printReceipt.ngaylap).getDate().toString().padStart(2, '0')} tháng {(new Date(printReceipt.ngaylap).getMonth() + 1).toString().padStart(2, '0')} năm {new Date(printReceipt.ngaylap).getFullYear()}</p>
-                  </div>
-
-                  <div className="p-code-area">
-                     Mã phiếu: {printReceipt.maphieuchi}
+                  {/* TITLE */}
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                     {printReceipt.loaiphieu === 'Thu' ? 'PHIẾU THU' : 'PHIẾU CHI'}
                   </div>
 
                   <div className="p-content">
@@ -1652,29 +1682,30 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
-                  <div className="p-header" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                     <div>
-                        <h3 style={{ margin: 0 }}>{config?.tencongty || 'Tên Công Ty'}</h3>
-                        <p>ĐC: {config?.diachicongty}</p>
-                        <p>SĐT: {config?.sdtcongty}</p>
+                  <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     </div>
+                     
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                           {config?.tencongty || 'Tên Công Ty'}
+                        </h3>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                      </div>
 
-                     <div style={{ textAlign: 'right' }}>
-                        <div>Giảng viên: <b>{printLuong.manv}</b></div>
-                        <div>
-                           Ngày in:{" "}
-                           {new Date().toLocaleDateString("vi-VN")}
-                        </div>
-                        <img
-                           src={config?.logo || "/logo.png"}
-                           alt="logo"
-                           style={{ width: 80, marginTop: 5 }}
-                        />
+                     {/* RIGHT: Info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>GV: <b style={{ fontWeight: 950 }}>{printLuong.manv}</b></div>
+                        <div>Ngày in: <span style={{ fontWeight: 600 }}>{new Date().toLocaleDateString("vi-VN")}</span></div>
                      </div>
                   </div>
 
                   {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "18pt", margin: "10px 0" }}>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                      PHIẾU LƯƠNG GIẢNG VIÊN
                   </div>
 
@@ -1762,86 +1793,124 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
          {printHoaDon && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
+            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
                {/* WATERMARK WAVY LINES */}
                <div style={{
                   position: 'absolute',
                   inset: 0,
                   zIndex: 0,
-                  opacity: 0.25,
+                  opacity: 0.2,
                   pointerEvents: 'none',
                   backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'repeat'
                }} />
+               <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%) rotate(-30deg)',
+                  fontSize: '60pt',
+                  fontWeight: 'bold',
+                  color: 'rgba(0, 102, 204, 0.05)',
+                  zIndex: 0,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  textAlign: 'center',
+                  width: '150%'
+               }}>
+                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
+               </div>
+
                <div style={{ position: 'relative', zIndex: 1 }}>
-                  {/* HEADER */}
-                  <div className="p-header" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                     <div>
-                        <h3 style={{ margin: 0 }}>{config?.tencongty || 'Tên Công Ty'}</h3>
-                        <p>ĐC: {config?.diachicongty}</p>
-                        <p>SĐT: {config?.sdtcongty}</p>
+                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     <div style={{ textAlign: 'right' }}>
-                        <div>Mã HD: <b>{printHoaDon.mahd}</b></div>
-                        <div>Ngày lập: {new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</div>
-                        <img src={config?.logo || "/logo.png"} alt="logo" crossOrigin="anonymous" style={{ width: 80, marginTop: 5 }} />
+
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                           {config?.tencongty || 'Tên Công Ty'}
+                        </h2>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     </div>
+
+                     {/* RIGHT: Invoice info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
                      </div>
                   </div>
 
-                  {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "18pt", margin: "10px 0" }}>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                      BIÊN LAI THU HỌC PHÍ
                   </div>
 
-                  {/* INFO */}
-                  <div style={{ fontSize: "13pt", lineHeight: "1.8" }}>
+                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                        <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
+                        <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
+                     </div>
+                     <div>Khóa học: <b>{printHoaDon.tenlop}</b></div>
+                     <div>
+                        Tháng đóng học phí/Thời lượng: <b>{printHoaDon.thoiluong || "..."}</b>
+                     </div>
+                     <div style={{ marginTop: '5px' }}>
+                        Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>
+                     </div>
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
 
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Họ và tên: <b>{printHoaDon.tenhv}</b></div>
-                        <div>SĐT: <b>{printHoaDon.sdt || ""}</b></div>
+                        <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
+                        <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
+                        <div>Nợ cũ: <b>{fCur(printHoaDon.nocu || 0)} đ</b></div>
                      </div>
 
-                     <div>
-                        Khóa học: <b>{printHoaDon.tenlop}</b>
+                     {printHoaDon.phuthu && (() => {
+                        try {
+                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                           if (Array.isArray(pts) && pts.length > 0) {
+                              return (
+                                 <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                                    {pts.map((pt, i) => (
+                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                          <span>+ {pt.name || 'Phụ thu'}:</span>
+                                          <b>{fCur(pt.amount)} đ</b>
+                                       </div>
+                                    ))}
+                                 </div>
+                              );
+                           }
+                        } catch (e) { }
+                        return null;
+                     })()}
+
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+                        <div>Tổng cộng: <b>{fCur(printHoaDon.tongcong)} đ</b></div>
+                        <div>Đã đóng: <b style={{ color: '#059669' }}>{fCur(printHoaDon.dadong)} đ</b></div>
+                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{fCur(printHoaDon.conno)} đ</b></div>
                      </div>
 
-                     <div>
-                        Thời lượng:{" "}
-                        từ {new Date(printHoaDon.ngaybatdau).toLocaleDateString("vi-VN")}{" "}
-                        đến {new Date(printHoaDon.ngayketthuc).toLocaleDateString("vi-VN")}
-                     </div>
-
-                     {/* TIỀN */}
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Học phí: {fCur(printHoaDon.hocphi)}</div>
-                        <div>Giảm HP: {fCur(printHoaDon.giamhocphi)}</div>
-                        <div>Nợ cũ: 0 VND</div>
-                     </div>
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
-                        <div>Tổng cộng: {fCur(printHoaDon.tongcong)}</div>
-                        <div>Đã đóng: {fCur(printHoaDon.dadong)}</div>
-                        <div>Còn lại: {fCur(printHoaDon.conno)}</div>
-                     </div>
-
-                     <div>
+                     <div style={{ marginTop: '10px' }}>
                         Ghi chú: {printHoaDon.ghichu || ""}
                      </div>
                   </div>
 
                   {/* FOOTER */}
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-
                      <div>
-                        {config?.tencongty || 'Tên Công Ty'} <br />
+                        Facebook: Trường Lá - E Skills School <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
-
                      <div style={{ textAlign: "center" }}>
                         Nhân viên thu tiền <br /><br /><br />
                         <b>{printHoaDon.nhanvien}</b>
                      </div>
+                  </div>
 
+                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
                   </div>
                </div>
             </div>,
@@ -1863,32 +1932,30 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
-                  <div className="p-header" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-
-                     <div>
-                        <h3 style={{ margin: 0 }}>
+                  <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     </div>
+                     
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
                            {config?.tencongty || 'Tên Công Ty'}
                         </h3>
-                        <p>ĐC: {config?.diachicongty}</p>
-                        <p>SĐT: {config?.sdtcongty}</p>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                      </div>
 
-                     <div style={{ textAlign: 'right' }}>
-                        <div>Mã Bill: <b>{printBill.mabill}</b></div>
-                        <div>
-                           Ngày lập:{" "}
-                           {new Date(printBill.ngaylap).toLocaleDateString("vi-VN")}
-                        </div>
-                        <img
-                           src={config?.logo || "/logo.png"}
-                           alt="logo"
-                           style={{ width: 80, marginTop: 5 }}
-                        />
+                     {/* RIGHT: Info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã Bill: <b style={{ fontWeight: 950 }}>{printBill.mabill}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printBill.ngaylap).toLocaleDateString("vi-VN")}</span></div>
                      </div>
                   </div>
 
                   {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "18pt", margin: "10px 0" }}>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                      BIÊN LAI BÁN HÀNG
                   </div>
 

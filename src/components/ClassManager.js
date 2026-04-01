@@ -25,7 +25,14 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
   if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
     const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-    const info = encodeURIComponent(`${hoaDon.mahv} `);
+    
+    let suffix = '';
+    if (hoaDon.tenhv) {
+       const parts = hoaDon.tenhv.trim().split(' ');
+       suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
+    }
+    
+    const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
   return null;
@@ -309,8 +316,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   // --- BATCH NOTICE HANDLERS ---
   const handleOpenBatchNotice = async () => {
-    const activeStudents = classStudents.filter(s => s.trangthai === 'Đang Học');
-    if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào Đang Học để gửi thông báo');
+    const activeStudents = classStudents.filter(s => (s.trangthai || '').trim().toLowerCase().includes('đang học'));
+    if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào "Đang Học" để gửi thông báo');
 
     try {
       setIsBatchNoticeOpen(true);
@@ -438,6 +445,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       }
     }
     setBatchNoticeData(newNotice);
+  };
+
+  const handleBatchMonthChange = (offset) => {
+    const current = new Date(batchNoticeData.ngayBatDau);
+    if (isNaN(current.getTime())) return;
+    current.setMonth(current.getMonth() + offset);
+    current.setDate(1);
+    const startStr = current.toISOString().split('T')[0];
+    handleBatchNoticeFieldChange('ngayBatDau', startStr);
   };
 
   const handleApplyBatchNotice = () => {
@@ -1287,54 +1303,55 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {isBatchNoticeOpen && createPortal(
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="modal-content" style={{ maxWidth: '1200px', width: '98%', height: '90vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 25px', borderBottom: '1px solid #e2e8f0', background: 'white' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
-                  Thêm Thông Báo Hàng Loạt - <span className="text-primary">{selectedClass?.tenlop}</span>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <MessageSquare size={22} className="text-primary" />
+                  Xuất Thông Báo Hàng Loạt - <span className="text-primary">{selectedClass?.tenlop}</span>
                 </h3>
-                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', textAlign: 'left' }}>
-                  <span style={{ fontWeight: 600 }}>Giảng viên:</span> {teachers.find(t => t.manv === selectedClass?.manv)?.tennv || selectedClass?.manv || 'Chưa phân công'}
+                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', textAlign: 'left', fontWeight: 500 }}>
+                  <span style={{ fontWeight: 700 }}>Giảng viên:</span> {teachers.find(t => t.manv === selectedClass?.manv)?.tennv || selectedClass?.manv || 'Chưa phân công'}
                 </div>
               </div>
-              <button className="close-btn" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '8px' }}><X size={24} /></button>
+              <button className="close-btn" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '8px', color: '#94a3b8' }}><X size={24} /></button>
             </div>
 
-            <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Top Form (Compact) */}
-              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* HÀNG 1: ĐÓNG THEO, SỐ LƯỢNG, NGÀY BẮT ĐẦU, NGÀY KẾT THÚC */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1.5fr 1.5fr', gap: '12px' }}>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>ĐÓNG THEO</label>
-                      <select value={batchNoticeData.loaiDong} onChange={e => handleBatchNoticeFieldChange('loaiDong', e.target.value)}>
-                        {(!config?.tinhhocphi || (Array.isArray(config.tinhhocphi.selected) && config.tinhhocphi.selected.includes('thang'))) && <option value="Tháng">Tháng</option>}
-                        {(!config?.tinhhocphi || (Array.isArray(config.tinhhocphi.selected) && config.tinhhocphi.selected.includes('khoa'))) && <option value="Khóa">Khóa</option>}
-                        {(!config?.tinhhocphi || (Array.isArray(config.tinhhocphi.selected) && config.tinhhocphi.selected.includes('buoi'))) && <option value="Buổi">Buổi</option>}
-                        {(!config?.tinhhocphi || (Array.isArray(config.tinhhocphi.selected) && config.tinhhocphi.selected.includes('tuần'))) && <option value="Tuần">Tuần</option>}
-                      </select>
+            <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fcfdfe' }}>
+              
+              {/* PHẦN 1: CÀI ĐẶT CHUNG - REARRANGED PER DRAWING */}
+              <div style={{ background: '#ffffff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                
+                {/* Dòng 1: Tiêu đề & Chọn tháng */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', paddingBottom: '10px', borderBottom: '1px dashed #e2e8f0' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                    <CalendarDays size={14} /> Cấu hình chung
+                  </h4>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid #e2e8f0', paddingLeft: '15px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', whiteSpace: 'nowrap' }}>THÁNG THÔNG BÁO:</span>
+                    <button 
+                      onClick={() => handleBatchMonthChange(-1)}
+                      style={{ width: '28px', height: '28px', border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', fontWeight: 900 }}
+                    > &lt; </button>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#059669', minWidth: '90px', textAlign: 'center' }}>
+                      {(() => {
+                        const d = new Date(batchNoticeData.ngayBatDau);
+                        return isNaN(d.getTime()) ? "??/????" : `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                      })()}
                     </div>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>SỐ LƯỢNG</label>
-                      <input type="number" min="1" value={batchNoticeData.soLuong} onChange={e => handleBatchNoticeFieldChange('soLuong', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>NGÀY BẮT ĐẦU</label>
-                      <input type="date" value={batchNoticeData.ngayBatDau} onChange={e => handleBatchNoticeFieldChange('ngayBatDau', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>NGÀY KẾT THÚC</label>
-                      <input type="date" value={batchNoticeData.ngayKetThuc} onChange={e => handleBatchNoticeFieldChange('ngayKetThuc', e.target.value)} />
-                    </div>
+                    <button 
+                      onClick={() => handleBatchMonthChange(1)}
+                      style={{ width: '28px', height: '28px', border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', fontWeight: 900 }}
+                    > &gt; </button>
                   </div>
+                </div>
 
-                  {/* HÀNG 2: HỌC PHÍ MẪU, GIẢM HỌC PHÍ, HÌNH THỨC */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 1fr', gap: '12px' }}>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>HỌC PHÍ MẪU</label>
-                      <select value={batchNoticeData.hocPhiOpt} onChange={e => handleBatchNoticeFieldChange('hocPhiOpt', e.target.value)}>
-                        <option value="">-- Chọn gói học phí --</option>
-                        {selectedClass?.hocphi && String(selectedClass.hocphi).split('\n').filter(Boolean).map((opt, i) => {
+                {/* Dòng 2: Gói HP | Giảm HP | Hình thức (3 CỘT) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 2fr) 1.2fr 1.2fr', gap: '15px', alignItems: 'end' }}>
+                   <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GÓI HỌC PHÍ MẪU</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        {selectedClass?.hocphi ? String(selectedClass.hocphi).split('\n').filter(Boolean).map((opt, i) => {
                           const optLower = String(opt).toLowerCase();
                           const isBuoi = optLower.includes('buổi');
                           const isThang = optLower.includes('tháng');
@@ -1345,145 +1362,167 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             (isThang && sel.includes('thang')) ||
                             (isKhoa && sel.includes('khoa')) ||
                             (isTuan && sel.includes('tuần')) ||
-                            (!isBuoi && !isThang && !isKhoa && !isTuan); // fallback for untyped packages
+                            (!isBuoi && !isThang && !isKhoa && !isTuan);
                           if (!isAllowed) return null;
-                          return <option key={i} value={opt}>{opt}</option>;
-                        })}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>GIẢM HP (₫)</label>
-                      <input
-                        type="text"
-                        value={formatTuition(batchNoticeData.giamHocphi)}
-                        onChange={e => handleBatchNoticeFieldChange('giamHocphi', e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'ArrowUp') {
-                            handleBatchNoticeFieldChange('giamHocphi', (batchNoticeData.giamHocphi || 0) + 50000);
-                            e.preventDefault();
-                          } else if (e.key === 'ArrowDown') {
-                            handleBatchNoticeFieldChange('giamHocphi', Math.max(0, (batchNoticeData.giamHocphi || 0) - 50000));
-                            e.preventDefault();
-                          }
-                        }}
+                          
+                          const isActive = batchNoticeData.hocPhiOpt === opt;
+                          return (
+                            <span 
+                              key={i} 
+                              onClick={() => handleBatchNoticeFieldChange('hocPhiOpt', opt)}
+                              style={{ 
+                                padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: '0.15s',
+                                background: isActive ? '#3b82f6' : '#ffffff',
+                                color: isActive ? '#ffffff' : '#475569',
+                                border: `1px solid ${isActive ? '#2563eb' : '#cbd5e1'}`,
+                              }}
+                            >
+                              {opt.trim()}
+                            </span>
+                          );
+                        }) : <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>N/A</span>}
+                      </div>
+                   </div>
+
+                   <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GIẢM HỌC PHÍ (₫)</label>
+                      <input 
+                        style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700, color: '#dc2626', textAlign: 'right', fontSize: '0.9rem' }}
+                        type="text" 
+                        value={formatTuition(batchNoticeData.giamHocphi)} 
+                        onChange={e => handleBatchNoticeFieldChange('giamHocphi', e.target.value)} 
                       />
-                    </div>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>HÌNH THỨC</label>
-                      <select value={batchNoticeData.hinhThuc} onChange={e => handleBatchNoticeFieldChange('hinhThuc', e.target.value)}>
+                   </div>
+
+                   <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>HÌNH THỨC THANH TOÁN</label>
+                      <select 
+                        style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 600, fontSize: '0.9rem', appearance: 'auto' }}
+                        value={batchNoticeData.hinhThuc} 
+                        onChange={e => handleBatchNoticeFieldChange('hinhThuc', e.target.value)}
+                      >
                         {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
                         {walletsConfig.map(w => (
                           <option key={w.id} value={w.name}>{w.name}</option>
                         ))}
                       </select>
-                    </div>
-                  </div>
-
-                  {/* HÀNG 3: GHI CHÚ, ÁP DỤNG HÀNG LOẠT */}
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700 }}>GHI CHÚ HÀNG LOẠT</label>
-                      <input type="text" value={batchNoticeData.ghiChu} onChange={e => handleBatchNoticeFieldChange('ghiChu', e.target.value)} placeholder="Ghi chú thống nhất (Vd: Thu học phí T8)..." style={{ height: '36px' }} />
-                    </div>
-                    <button className="btn btn-primary" onClick={handleApplyBatchNotice} style={{ padding: '0 25px', height: '36px', minWidth: '180px', fontWeight: 700, borderRadius: '8px' }}>
-                      Áp dụng hàng loạt
-                    </button>
-                  </div>
+                   </div>
                 </div>
               </div>
 
-              {/* Table */}
-              <div className="inline-table" style={{ flex: 1, minHeight: '300px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                <table className="data-table">
-                  <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 10 }}>
-                    <tr style={{ fontSize: '0.8rem' }}>
-                      <th style={{ width: '40px' }}></th>
-                      <th>STT</th>
-                      <th>Mã HS</th>
-                      <th style={{ minWidth: '150px' }}>Tên Học Sinh</th>
-                      <th style={{ minWidth: '85px' }}>Số buổi</th>
-                      <th style={{ minWidth: '135px' }}>Học phí</th>
-                      <th style={{ minWidth: '125px' }}>Giảm HP</th>
-                      <th style={{ minWidth: '125px' }}>Tổng thu</th>
-                      <th style={{ minWidth: '115px' }}>Bắt đầu</th>
-                      <th style={{ minWidth: '115px' }}>Kết thúc</th>
-                      <th style={{ minWidth: '140px' }}>Hình thức</th>
-                      <th style={{ minWidth: '140px' }}>Ghi chú</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(batchStudentsData || []).map((row, idx) => (
-                      <tr key={row.mahv} style={{ fontSize: '0.85rem' }}>
-                        <td>
-                          <button className="btn" title="Xóa" onClick={() => handleRemoveBatchStudent(row.mahv)} style={{ color: '#ef4444', padding: '4px', background: 'transparent' }}>
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                        <td>{idx + 1}</td>
-                        <td>{row.mahv}</td>
-                        <td style={{ fontWeight: 600, color: '#1e293b', textAlign: 'left' }}>{row.tenhv}</td>
-                        <td>
-                          <input type="text" value={row.sobuoihoc} onChange={e => handleBatchStudentChange(row.mahv, 'sobuoihoc', e.target.value)} className="td-input" style={{ padding: '4px' }} />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={formatTuition(row.hocphi)}
-                            onChange={e => handleBatchStudentChange(row.mahv, 'hocphi', e.target.value)}
-                            className="td-input"
-                            style={{ padding: '4px' }}
-                            onKeyDown={e => {
-                              if (e.key === 'ArrowUp') {
-                                handleBatchStudentChange(row.mahv, 'hocphi', (row.hocphi || 0) + 50000);
-                                e.preventDefault();
-                              } else if (e.key === 'ArrowDown') {
-                                handleBatchStudentChange(row.mahv, 'hocphi', Math.max(0, (row.hocphi || 0) - 50000));
-                                e.preventDefault();
-                              }
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={formatTuition(row.giamhocphi)}
-                            onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
-                            className="td-input"
-                            style={{ padding: '4px' }}
-                            onKeyDown={e => {
-                              if (e.key === 'ArrowUp') {
-                                handleBatchStudentChange(row.mahv, 'giamhocphi', (row.giamhocphi || 0) + 50000);
-                                e.preventDefault();
-                              } else if (e.key === 'ArrowDown') {
-                                handleBatchStudentChange(row.mahv, 'giamhocphi', Math.max(0, (row.giamhocphi || 0) - 50000));
-                                e.preventDefault();
-                              }
-                            }}
-                          />
-                        </td>
-                        <td className="font-bold text-success" style={{ whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
-                        <td><input type="date" value={row.ngaybatdau} onChange={e => handleBatchStudentChange(row.mahv, 'ngaybatdau', e.target.value)} className="td-input" style={{ padding: '4px' }} /></td>
-                        <td><input type="date" value={row.ngayketthuc} onChange={e => handleBatchStudentChange(row.mahv, 'ngayketthuc', e.target.value)} className="td-input" style={{ padding: '4px' }} /></td>
-                        <td>
-                          <select value={row.hinhthuc} onChange={e => handleBatchStudentChange(row.mahv, 'hinhthuc', e.target.value)} className="td-input" style={{ padding: '4px' }}>
-                            {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                            {walletsConfig.map(w => (
-                              <option key={w.id} value={w.name}>{w.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td><input type="text" value={row.ghichu} onChange={e => handleBatchStudentChange(row.mahv, 'ghichu', e.target.value)} className="td-input" style={{ padding: '4px' }} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* PHẦN 2: GHI CHÚ VÀ ÁP DỤNG */}
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: '#ecfdf5', padding: '15px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                 <div className="form-group" style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065f46', marginBottom: '6px', display: 'block' }}>📝 GHI CHÚ THÔNG BÁO CHUNG</label>
+                    <input 
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #86efac', fontWeight: 500 }}
+                      type="text" value={batchNoticeData.ghiChu} 
+                      onChange={e => handleBatchNoticeFieldChange('ghiChu', e.target.value)} 
+                      placeholder="VD: Thu học phí tháng mới..." 
+                    />
+                 </div>
+                 <button 
+                  className="btn btn-primary" 
+                  onClick={handleApplyBatchNotice} 
+                  style={{ 
+                    padding: '0 30px', height: '42px', minWidth: '220px', fontWeight: 800, borderRadius: '10px',
+                    background: '#10b981', borderColor: '#10b981', fontSize: '0.95rem', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)'
+                  }}
+                 >
+                   Áp dụng cho cả lớp
+                 </button>
+              </div>
+
+              {/* PHẦN 3: DANH SÁCH CHI TIẾT */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase' }}>
+                  <Users size={16} /> Danh sách học sinh ({batchStudentsData.length})
+                </h4>
+
+                <div style={{ flex: 1, minHeight: '350px', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                  <div className="inline-table" style={{ height: '100%', overflow: 'auto' }}>
+                    <table className="data-table" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                      <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        <tr style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          <th style={{ width: '40px', padding: '12px' }}></th>
+                          <th style={{ width: '40px' }}>STT</th>
+                          <th style={{ width: '80px' }}>Mã HS</th>
+                          <th style={{ minWidth: '160px' }}>Học Sinh</th>
+                          <th style={{ width: '100px' }}>Số buổi</th>
+                          <th style={{ width: '120px' }}>Học phí</th>
+                          <th style={{ width: '110px' }}>Giảm HP</th>
+                          <th style={{ width: '120px' }}>TỔNG THU</th>
+                          <th style={{ width: '115px' }}>Bắt đầu</th>
+                          <th style={{ width: '115px' }}>Kết thúc</th>
+                          <th style={{ width: '130px' }}>Hình thức</th>
+                          <th style={{ minWidth: '150px' }}>Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(batchStudentsData || []).map((row, idx) => (
+                          <tr key={row.mahv} style={{ fontSize: '0.85rem' }}>
+                            <td style={{ padding: '8px' }}>
+                              <button onClick={() => handleRemoveBatchStudent(row.mahv)} style={{ color: '#ef4444', background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer' }}>
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                            <td style={{ color: '#64748b' }}>{idx + 1}</td>
+                            <td style={{ fontWeight: 600, color: '#64748b' }}>#{row.mahv}</td>
+                            <td style={{ fontWeight: 700, color: '#1e293b', textAlign: 'left' }}>{row.tenhv}</td>
+                            <td>
+                              <input type="text" value={row.sobuoihoc} onChange={e => handleBatchStudentChange(row.mahv, 'sobuoihoc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600 }} />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={formatTuition(row.hocphi)}
+                                onChange={e => handleBatchStudentChange(row.mahv, 'hocphi', e.target.value)}
+                                className="td-input"
+                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={formatTuition(row.giamhocphi)}
+                                onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
+                                className="td-input"
+                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
+                              />
+                            </td>
+                            <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
+                            <td><input type="date" value={row.ngaybatdau} onChange={e => handleBatchStudentChange(row.mahv, 'ngaybatdau', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }} /></td>
+                            <td><input type="date" value={row.ngayketthuc} onChange={e => handleBatchStudentChange(row.mahv, 'ngayketthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f8fafc', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }} /></td>
+                            <td>
+                              <select value={row.hinhthuc} onChange={e => handleBatchStudentChange(row.mahv, 'hinhthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px' }}>
+                                {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                {walletsConfig.map(w => (
+                                  <option key={w.id} value={w.name}>{w.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td><input type="text" value={row.ghichu} onChange={e => handleBatchStudentChange(row.mahv, 'ghichu', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px' }} placeholder="..." /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#f8fafc' }}>
-              <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)}>Hủy bỏ</button>
-              <button className="btn btn-success" onClick={handleConfirmBatchExport} disabled={isGenerating} style={{ padding: '0 25px' }}>
-                {isGenerating ? 'Đang xuất và tạo hình ảnh...' : 'Xác Nhận Xuất Hàng Loạt'}
+            <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '15px 25px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
+              <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
+              <button 
+                className="btn btn-success" 
+                onClick={handleConfirmBatchExport} 
+                disabled={isGenerating} 
+                style={{ 
+                  padding: '0 30px', height: '40px', fontWeight: 800, background: '#2563eb', borderColor: '#2563eb',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+                }}
+              >
+                {isGenerating ? 'Đang xử lý...' : 'Xác Nhận Xuất Tất Cả'}
               </button>
             </div>
           </div>
@@ -1497,18 +1536,25 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           {noticesToPrint.map((printHoaDon, idx) => (
             <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
               {/* HEADER */}
-              <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
-                <div style={{ textAlign: 'left' }}>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900 }}>
+              <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* LEFT: Logo */}
+                <div style={{ width: '180px', textAlign: 'left' }}>
+                  <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                </div>
+                
+                {/* CENTER: Info */}
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
                     {config?.tencongty || 'E-Skills Academy'}
                   </h3>
-                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 800 }}>{config?.diachicongty}</p>
-                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 800 }}>SĐT/Zalo: {config?.sdtcongty}</p>
+                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                 </div>
-                <div style={{ textAlign: 'right', fontSize: '14px', fontWeight: 800 }}>
+
+                {/* RIGHT: Invoice info */}
+                <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
                   <div>Mã HD: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
-                  <div>Ngày lập: <b style={{ fontWeight: 900 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</b></div>
-                  <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ width: 100, marginTop: 5 }} onError={(e) => { e.target.src = "/logo.png" }} />
+                  <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
                 </div>
               </div>
 

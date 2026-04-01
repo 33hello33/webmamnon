@@ -51,8 +51,15 @@ export default function LeaveManager({ students }) {
 
   const getStudentMalopNames = (mahv) => {
     const student = students.find(s => s.mahv === mahv);
-    if (!student?.malop_list || student.malop_list.length === 0) return '';
-    return student.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+    if (!student) return '';
+    
+    // Support either malop_list array or the standard malop string
+    const malopArray = student.malop_list && student.malop_list.length > 0 
+      ? student.malop_list 
+      : (student.malop ? [student.malop] : []);
+      
+    if (malopArray.length === 0) return 'Chưa xếp lớp';
+    return malopArray.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
   };
 
   // Compute Today's Absences

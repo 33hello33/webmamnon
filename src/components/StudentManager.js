@@ -83,9 +83,7 @@ export default function StudentManager({ activeSubTab }) {
   };
 
   useEffect(() => {
-    if (activeSubTab === 'students' || activeSubTab === 'classes' || activeSubTab === 'attendance_today') {
-      if (students.length === 0) fetchStudents(); // Only fetch if not already loaded
-    }
+    if (students.length === 0) fetchStudents(); // Only fetch if not already loaded
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSubTab]);
 

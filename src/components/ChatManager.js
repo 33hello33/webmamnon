@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
+import { useConfig } from '../ConfigContext';
+import { uploadToGDrive } from '../utils/googleDrive';
 import {
   MessageSquare,
   Send,
@@ -26,6 +28,7 @@ import {
 import './ChatManager.css';
 
 const ChatManager = ({ currentUser }) => {
+  const { config } = useConfig();
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState(null);
   const [students, setStudents] = useState([]);
@@ -168,25 +171,43 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
-      const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
-      const folder = type === 'image' ? 'chat-images' : 'chat-files';
-      
-      const { data, error } = await supabase.storage
-        .from('assets') // Adjust if you have another bucket
-        .upload(`${folder}/${fileName}`, file);
+      let finalUrl = '';
+      let finalFileName = file.name;
 
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+      if (config.gdrive_enabled && (config.gdrive_client_id || config.gdrive_service_json)) {
+        const gResult = await uploadToGDrive(
+          file, 
+          config.gdrive_folder_id, 
+          config.gdrive_client_id, 
+          config.gdrive_api_key,
+          config.gdrive_auth_type,
+          config.gdrive_service_json
+        );
+        
+        if (type === 'image') {
+          // Direct view link trick for Google Drive images
+          finalUrl = `https://drive.google.com/uc?export=view&id=${gResult.id}`;
+        } else {
+          finalUrl = gResult.webViewLink || gResult.webContentLink;
+        }
+      } else {
+        // --- Default: Upload to Supabase Storage ---
+        const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
+        const folder = type === 'image' ? 'chat-images' : 'chat-files';
+        const { data, error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+        if (error) throw error;
+        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+        finalUrl = publicUrl;
+      }
 
       // Insert message with file
       const msgPayload = {
         mahv: selectedStudent.mahv,
         manv: currentUser.manv || currentUser.username,
         content: '',
-        image_url: type === 'image' ? publicUrl : null,
-        file_url: type !== 'image' ? publicUrl : null,
-        file_name: file.name,
+        image_url: type === 'image' ? finalUrl : null,
+        file_url: type !== 'image' ? finalUrl : null,
+        file_name: finalFileName,
         file_mime_type: file.type
       };
 
@@ -195,9 +216,9 @@ const ChatManager = ({ currentUser }) => {
       // Also add to documents table for persistence
       await supabase.from('documents').insert([{
         mahv: selectedStudent.mahv,
-        name: file.name,
+        name: finalFileName,
         category: type === 'image' ? 'Ảnh' : 'Tài liệu',
-        file_url: publicUrl,
+        file_url: finalUrl,
         mime_type: file.type
       }]);
 
@@ -211,7 +232,7 @@ const ChatManager = ({ currentUser }) => {
 
     } catch (err) {
       console.error(err);
-      alert('Lỗi tải tệp lên');
+      alert('Lỗi tải tệp lên: ' + (err.message || 'Hủy bỏ'));
     } finally {
       setUploading(false);
     }

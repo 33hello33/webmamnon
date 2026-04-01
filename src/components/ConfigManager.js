@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
+import { getOAuthToken } from '../utils/googleDrive';
 import {
   Save,
   Upload,
@@ -12,7 +13,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  DollarSign
+  DollarSign,
+  Cloud,
+  ExternalLink,
+  Key,
+  FileJson,
+  RefreshCw
 } from 'lucide-react';
 import './ConfigManager.css';
 
@@ -40,6 +46,7 @@ const ConfigManager = () => {
   const { config, refreshConfig } = useConfig();
   const [formData, setFormData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [testingGDrive, setTestingGDrive] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
 
   useEffect(() => {
@@ -258,6 +265,191 @@ const ConfigManager = () => {
               <input type="number" min="0" value={formData.ngayquahan || 0} onChange={e => setFormData({ ...formData, ngayquahan: e.target.value })} />
             </div>
           </div>
+        </section>
+        
+        {/* Row 2.5: Google Drive Config */}
+        <section className="config-section">
+          <div className="section-title">
+            <Cloud size={20} />
+            <h3>Cloud Storage (Google Drive)</h3>
+            <div className="status-badge" style={{ marginLeft: 'auto', background: formData.gdrive_enabled ? '#dcfce7' : '#f3f4f6', color: formData.gdrive_enabled ? '#166534' : '#6b7280', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+               {formData.gdrive_enabled ? 'Đã kích hoạt' : 'Chưa kích hoạt'}
+            </div>
+          </div>
+          <div className="gdrive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '10px 15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ padding: '8px', background: formData.gdrive_enabled ? '#dcfce7' : '#f1f5f9', borderRadius: '6px', color: formData.gdrive_enabled ? '#16a34a' : '#64748b' }}>
+                       <Cloud size={20} />
+                    </div>
+                    <div>
+                       <span style={{ fontWeight: 600, display: 'block' }}>Kích hoạt lưu trữ Google Drive</span>
+                       <span style={{ fontSize: '11px', color: '#64748b' }}>Tải hình ảnh, tệp tin trực tiếp lên Drive thay vì Supabase</span>
+                    </div>
+                 </div>
+                 <input 
+                   type="checkbox" 
+                   checked={formData.gdrive_enabled} 
+                   onChange={e => setFormData({ ...formData, gdrive_enabled: e.target.checked })} 
+                   style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                 />
+               </label>
+            </div>
+
+            {formData.gdrive_enabled && (
+               <>
+                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Phương thức xác thực</label>
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                       <button 
+                          type="button"
+                          className={`btn-auth-type ${formData.gdrive_auth_type === 'oauth' ? 'active' : ''}`}
+                          onClick={() => setFormData({ ...formData, gdrive_auth_type: 'oauth' })}
+                          style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: formData.gdrive_auth_type === 'oauth' ? '#2563eb' : '#e2e8f0', background: formData.gdrive_auth_type === 'oauth' ? '#eff6ff' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
+                       >
+                          <Key size={16} /> User OAuth (Đăng nhập cá nhân)
+                       </button>
+                       <button 
+                          type="button"
+                          className={`btn-auth-type ${formData.gdrive_auth_type === 'service' ? 'active' : ''}`}
+                          onClick={() => setFormData({ ...formData, gdrive_auth_type: 'service' })}
+                          style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: formData.gdrive_auth_type === 'service' ? '#2563eb' : '#e2e8f0', background: formData.gdrive_auth_type === 'service' ? '#eff6ff' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
+                       >
+                          <FileJson size={16} /> Service Account (Tự động)
+                       </button>
+                    </div>
+                 </div>
+
+                 {formData.gdrive_auth_type === 'oauth' ? (
+                    <>
+                      <div className="form-group">
+                        <label>Client ID (OAuth 2.0)</label>
+                        <input 
+                           type="text" 
+                           value={formData.gdrive_client_id || ''} 
+                           onChange={e => setFormData({ ...formData, gdrive_client_id: e.target.value })} 
+                           placeholder="VD: 12345-abc.apps.googleusercontent.com" 
+                        />
+                      </div>
+                      <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                         <button 
+                            type="button"
+                            className="btn-test-gdrive"
+                            disabled={testingGDrive || !formData.gdrive_client_id}
+                            onClick={async () => {
+                               setTestingGDrive(true);
+                               try {
+                                  await getOAuthToken(formData.gdrive_client_id);
+                                  setMsg({ type: 'success', text: 'Kết nối Google Drive thành công! Bạn hiện có thể tải tệp lên.' });
+                               } catch (err) {
+                                  setMsg({ type: 'error', text: 'Lỗi kết nối: ' + err.message });
+                               } finally {
+                                  setTestingGDrive(false);
+                               }
+                            }}
+                            style={{ padding: '10px 20px', borderRadius: '8px', background: '#2563eb', color: 'white', border: 'none', cursor: (testingGDrive || !formData.gdrive_client_id) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: (testingGDrive || !formData.gdrive_client_id) ? 0.6 : 1 }}
+                         >
+                            {testingGDrive ? <Loader2 size={16} className="spinner" /> : <RefreshCw size={16} />}
+                            {sessionStorage.getItem('gdrive_token') ? 'Đã kết nối (Nhấn để kết nối lại)' : 'Đăng nhập & Kết nối Google'}
+                         </button>
+                         {!formData.gdrive_client_id && <p style={{ fontSize: '11px', color: '#b91c1c', marginTop: '5px' }}>* Vui lòng điền Client ID trước khi kết nối</p>}
+                      </div>
+                      <div className="form-group">
+                        <label>Folder ID Thống nhất</label>
+                        <input 
+                           type="text" 
+                           value={formData.gdrive_folder_id || ''} 
+                           onChange={e => setFormData({ ...formData, gdrive_folder_id: e.target.value })} 
+                           placeholder="ID từ URL thư mục..." 
+                        />
+                      </div>
+                    </>
+                 ) : (
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                       <label>Tệp Key JSON của Service Account</label>
+                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                          <label style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px dashed #cbd5e1', padding: '20px', borderRadius: '12px', cursor: 'pointer', background: '#f8fafc' }}>
+                             <FileJson size={32} style={{ color: '#64748b', marginBottom: '8px' }} />
+                             <span style={{ fontWeight: 600 }}>Tải lên file JSON</span>
+                             <span style={{ fontSize: '11px', color: '#94a3b8' }}>Kéo thả hoặc click để chọn tệp .json</span>
+                             <input 
+                                type="file" 
+                                accept=".json" 
+                                style={{ display: 'none' }} 
+                                onChange={async (e) => {
+                                   const file = e.target.files[0];
+                                   if (!file) return;
+                                   try {
+                                      const text = await file.text();
+                                      const json = JSON.parse(text);
+                                      if (json.type !== 'service_account') throw new Error('Không phải file Service Account JSON hợp lệ');
+                                      setFormData({ 
+                                         ...formData, 
+                                         gdrive_service_json: json,
+                                         gdrive_client_id: json.client_id, // For tracking
+                                      });
+                                      setMsg({ type: 'success', text: 'Đã nhận file Service Account JSON: ' + json.client_email });
+                                   } catch (err) {
+                                      setMsg({ type: 'error', text: 'Lỗi đọc file JSON: ' + err.message });
+                                   }
+                                }} 
+                             />
+                          </label>
+                          {formData.gdrive_service_json && (
+                             <div style={{ flex: 1.5, background: '#f0fdf4', padding: '15px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontWeight: 600, marginBottom: '5px' }}>
+                                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></div>
+                                   Đã kết nối Key JSON
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#166534', wordBreak: 'break-all' }}>
+                                   <strong>Email:</strong> {formData.gdrive_service_json.client_email}<br/>
+                                   <strong>Project ID:</strong> {formData.gdrive_service_json.project_id}<br/>
+                                   <button 
+                                      type="button"
+                                      onClick={() => setFormData({ ...formData, gdrive_service_json: null })}
+                                      style={{ marginTop: '10px', fontSize: '11px', color: '#b91c1c', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                                   >
+                                      Gỡ bỏ key
+                                   </button>
+                                </div>
+                             </div>
+                          )}
+                       </div>
+                       <div className="form-group" style={{ marginTop: '1rem' }}>
+                          <label>Folder ID Thống nhất (Giao diện chung)</label>
+                          <input 
+                             type="text" 
+                             value={formData.gdrive_folder_id || ''} 
+                             onChange={e => setFormData({ ...formData, gdrive_folder_id: e.target.value })} 
+                             placeholder="ID từ URL thư mục đã được chia sẻ quyền xem/ghi..." 
+                          />
+                          <p className="hint" style={{ marginTop: '5px' }}>
+                             ⚠️ <strong>Lưu ý quan trọng:</strong> Bạn phải <strong>Chia sẻ (Share)</strong> thư mục Google Drive đó cho email Service Account ở trên với quyền <strong>Editor</strong>.
+                          </p>
+                       </div>
+                    </div>
+                 )}
+               </>
+            )}
+          </div>
+          {formData.gdrive_enabled && formData.gdrive_auth_type === 'oauth' && (
+             <div className="gdrive-instructions" style={{ marginTop: '1.5rem', padding: '15px', background: '#eff6ff', borderRadius: '12px', fontSize: '12px', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                <p style={{ fontWeight: 600, marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                   <Key size={14} /> Hướng dẫn thiết lập OAuth 2.0:
+                </p>
+                <ol style={{ paddingLeft: '20px', lineHeight: '1.6' }}>
+                   <li>Bật <strong>Google Drive API</strong> trong Google Cloud Console.</li>
+                   <li>Tạo <strong>OAuth 2.0 Client ID</strong> (Web Application).</li>
+                   <li>Thêm <code>{window.location.origin}</code> vào <strong>Authorized JavaScript origins</strong>.</li>
+                </ol>
+                <div style={{ marginTop: '10px' }}>
+                   <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontWeight: 600 }}>
+                     Mở Google Cloud Console <ExternalLink size={12} />
+                   </a>
+                </div>
+             </div>
+          )}
         </section>
 
         {/* Row 3: Wallets */}

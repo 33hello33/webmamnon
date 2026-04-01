@@ -60,9 +60,15 @@ function Login() {
 
       if (!matched) return '';
 
+      let nameSuffix = '';
+      if (parentData?.student?.tenhv) {
+         const parts = parentData.student.tenhv.trim().split(' ');
+         nameSuffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + parentData.student.tenhv;
+      }
+
       return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png
 ?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}
-&addInfo=${encodeURIComponent(parentMahv)}
+&addInfo=${encodeURIComponent(parentMahv + nameSuffix)}
 &accountName=${encodeURIComponent(matched.accName)}`;
 
    };
@@ -129,7 +135,7 @@ function Login() {
             .select('manv')
             .eq('malop', stData.malop)
             .maybeSingle();
-         
+
          if (classData?.manv) {
             teacherManv = classData.manv;
          } else {
@@ -797,9 +803,9 @@ function Login() {
 
                   {parentTab === 'chat-tab' && (
                      <div id="chat-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        <div className="parent-chat-layout" style={{ 
-                           display: 'grid', 
-                           gridTemplateColumns: 'minmax(0, 1fr) 280px', 
+                        <div className="parent-chat-layout" style={{
+                           display: 'grid',
+                           gridTemplateColumns: 'minmax(0, 1fr) 280px',
                            gap: '1.5rem',
                            background: '#f1f5f9',
                            borderRadius: '16px',
@@ -825,7 +831,7 @@ function Login() {
                                        {chatMessages.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '2rem' }}>Bắt đầu nhắn tin với giáo viên tại đây...</div>}
                                        {chatMessages.reduce((acc, m, idx) => {
                                           const date = new Date(m.created_at).toLocaleDateString('vi-VN');
-                                          const prevDate = idx > 0 ? new Date(chatMessages[idx-1].created_at).toLocaleDateString('vi-VN') : null;
+                                          const prevDate = idx > 0 ? new Date(chatMessages[idx - 1].created_at).toLocaleDateString('vi-VN') : null;
                                           if (date !== prevDate) {
                                              acc.push(<div key={`date-${idx}`} style={{ textAlign: 'center', margin: '15px 0', position: 'relative' }}>
                                                 <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#e2e8f0' }}></div>
@@ -836,8 +842,8 @@ function Login() {
                                           const isMine = m.description === 'PH';
                                           acc.push(
                                              <div key={m.id || idx} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ 
-                                                   padding: '0.6rem 0.9rem', 
+                                                <div style={{
+                                                   padding: '0.6rem 0.9rem',
                                                    borderRadius: isMine ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                                                    background: isMine ? '#8b5cf6' : 'white',
                                                    color: isMine ? 'white' : '#1e293b',
@@ -861,9 +867,9 @@ function Login() {
                               </div>
 
                               <form onSubmit={handleSendChat} style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px' }}>
-                                 <input 
-                                    type="text" 
-                                    placeholder="Nhập nội dung trao đổi..." 
+                                 <input
+                                    type="text"
+                                    placeholder="Nhập nội dung trao đổi..."
                                     value={chatInput}
                                     onChange={e => setChatInput(e.target.value)}
                                     style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', background: '#f8fafc', fontSize: '0.9rem' }}

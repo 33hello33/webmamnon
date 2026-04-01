@@ -51,7 +51,14 @@ const getQRUrl = (hoaDon, walletsConfig) => {
    const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-      const info = encodeURIComponent(`${hoaDon.mahv}`);
+
+      let suffix = '';
+      if (hoaDon.tenhv) {
+         const parts = hoaDon.tenhv.trim().split(' ');
+         suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
+      }
+
+      const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
@@ -288,7 +295,7 @@ export default function InvoiceManager() {
    };
 
    const updateClassContext = async (malop, student) => {
-      if (!malop || !student) return;
+      if (!student) return;
       const stClass = classes.find(c => c.malop === malop);
 
       // Lấy lịch học theo cấu hình (Đã lược bỏ truy vấn bảng lịch học)
@@ -347,22 +354,39 @@ export default function InvoiceManager() {
 
       try {
          const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
-            supabase.from('tbl_hd').select('*').eq('mahv', student.mahv).eq('malop', malop),
-            supabase.from('tbl_thongbao').select('*').eq('mahv', student.mahv).eq('malop', malop)
+            supabase.from('tbl_hd').select('*').eq('mahv', student.mahv),
+            supabase.from('tbl_thongbao').select('*').eq('mahv', student.mahv)
          ]);
 
-         const validHDs = (allHDs || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa');
-         const validTBs = (allTBs || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa');
+         const validHDs = (allHDs || []).filter(x => x.mahd && (x.daxoa || '').toLowerCase() !== 'đã xóa');
+         const validTBs = (allTBs || []).filter(x => x.mahd && (x.daxoa || '').toLowerCase() !== 'đã xóa');
+
+         const safeTime = (d) => {
+            if (!d) return 0;
+            const t = new Date(d).getTime();
+            if (!isNaN(t)) return t;
+            const parts = String(d).split(/[\/\- :T]/);
+            if (parts.length >= 3) {
+               const p0 = parseInt(parts[0], 10);
+               const p1 = parseInt(parts[1], 10) - 1;
+               const p2 = parseInt(parts[2], 10);
+               if (p2 > 2000) {
+                  const td = new Date(p2, p1, p0).getTime();
+                  if (!isNaN(td)) return td;
+               }
+            }
+            return 0;
+         };
 
          let allDocs = [...validHDs, ...validTBs];
-         allDocs.sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0));
+         allDocs.sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
          recentDoc = allDocs.length > 0 ? allDocs[0] : null;
 
-         validHDs.sort((a, b) => new Date(b.ngayketthuc || b.ngaylap || 0) - new Date(a.ngayketthuc || a.ngaylap || 0));
+         validHDs.sort((a, b) => safeTime(b.ngayketthuc || b.ngaylap) - safeTime(a.ngayketthuc || a.ngaylap));
          recentHD = validHDs.length > 0 ? validHDs[0] : null;
 
          if (recentDoc) {
-            setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất lớp này (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất lớp này (${recentDoc.mahd})`);
+            setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
             const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
             hocphi = parseCur(recentDoc.hocphi);
             giamHocphi = parseCur(recentDoc.giamhocphi);
@@ -385,13 +409,22 @@ export default function InvoiceManager() {
                }
             }
             if (recentDoc.sobuoihoc) {
-               const qtyMatch = recentDoc.sobuoihoc.match(/^(\d+)/);
-               if (qtyMatch) soLuong = parseInt(qtyMatch[1], 10);
-               const sbhLower = recentDoc.sobuoihoc.toLowerCase();
-               if (sbhLower.includes('buổi')) loaiDong = 'Buổi';
-               else if (sbhLower.includes('tháng')) loaiDong = 'Tháng';
-               else if (sbhLower.includes('khóa')) loaiDong = 'Khóa';
-               else if (sbhLower.includes('tuần')) loaiDong = 'Tuần';
+               const text = recentDoc.sobuoihoc;
+
+               // ❌ Bỏ qua nếu là dạng tháng/năm
+               if (/^\d{1,2}\/\d{4}$/.test(text.trim())) {
+                  soLuong = 1;
+                  loaiDong = '';
+               } else {
+                  const qm = text.match(/(?:^|\s)(\d+)\s*(buổi|tháng|khóa|tuần)/i);
+
+                  if (qm && parseInt(qm[1], 10) < 100) {
+                     soLuong = parseInt(qm[1], 10);
+                     loaiDong = qm[2].charAt(0).toUpperCase() + qm[2].slice(1);
+                  } else {
+                     soLuong = 1;
+                  }
+               }
             }
          }
 
@@ -438,8 +471,25 @@ export default function InvoiceManager() {
          const targetForStats = recentHD || (recentDoc?.ngaybatdau ? recentDoc : null);
 
          if (targetForStats) {
-            let statsStart = targetForStats.ngaybatdau;
-            let statsEnd = targetForStats.ngayketthuc;
+            const ensureIsoDate = (dStr) => {
+               if (!dStr) return null;
+               const s = String(dStr);
+               if (s.includes('T')) return s.split('T')[0];
+               if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
+               const parts = s.split(/[\/\- :]/);
+               if (parts.length >= 3) {
+                  const d = parseInt(parts[0], 10);
+                  const m = parseInt(parts[1], 10);
+                  const y = parseInt(parts[2], 10);
+                  if (y > 2000) {
+                     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                  }
+               }
+               return s;
+            };
+
+            let statsStart = ensureIsoDate(targetForStats.ngaybatdau);
+            let statsEnd = ensureIsoDate(targetForStats.ngayketthuc);
 
             // Fallback: Nếu không có ngày cụ thể nhưng có chuỗi thời lượng "MM/YYYY"
             if ((!statsStart || !statsEnd) && targetForStats.thoiluong) {
@@ -453,11 +503,22 @@ export default function InvoiceManager() {
             }
 
             if (statsStart && statsEnd) {
+               let filterLop = malop;
+               let scheduleToUse = enrichedClass?.thoigianbieu;
+
+               if (targetForStats.malop) {
+                  filterLop = targetForStats.malop;
+                  if (filterLop !== malop) {
+                     const oldClass = classes.find(c => c.malop === filterLop);
+                     if (oldClass?.thoigianbieu) scheduleToUse = oldClass.thoigianbieu;
+                  }
+               }
+
                let tongBuoi = 0;
-               if (enrichedClass.thoigianbieu) {
-                  const activeDays = parseScheduleDays(enrichedClass.thoigianbieu);
-                  let cDate = new Date(statsStart);
-                  const eDate = new Date(statsEnd);
+               if (scheduleToUse) {
+                  const activeDays = parseScheduleDays(scheduleToUse);
+                  let cDate = new Date(`${statsStart}T00:00:00`);
+                  const eDate = new Date(`${statsEnd}T23:59:59`);
                   let safeCount = 0;
                   while (cDate <= eDate && safeCount < 1000) {
                      if (activeDays.includes(cDate.getDay())) tongBuoi++;
@@ -466,9 +527,11 @@ export default function InvoiceManager() {
                   }
                }
 
-               const { data: attendance } = await supabase.from('tbl_diemdanh').select('*')
-                  .eq('mahv', student.mahv).eq('malop', malop)
+               let attendanceQuery = supabase.from('tbl_diemdanh').select('*')
+                  .eq('mahv', student.mahv)
                   .gte('ngay', statsStart).lte('ngay', statsEnd);
+
+               const { data: attendance } = await attendanceQuery;
 
                const normalizeStatus = (s) => (s || '').trim().toLowerCase();
                let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
@@ -578,12 +641,13 @@ export default function InvoiceManager() {
       else if (isKhoa) newInv.loaiDong = 'Khóa';
       else if (isTuan) newInv.loaiDong = 'Tuần';
 
-      const qtyMatch = optText.match(/(?:^|[^0-9])(\d+)\s*(?:buổi|tháng|tuần)/i);
-      if (qtyMatch && qtyMatch[1]) {
-         newInv.soLuong = parseInt(qtyMatch[1], 10);
+      const qm = optText.match(/(?:^|[^0-9])(\d+)\s*(?:buổi|tháng|khóa|tuần)/i);
+      if (qm && parseInt(qm[1], 10) < 100) {
+         newInv.soLuong = parseInt(qm[1], 10);
          newInv.donGia = newInv.hocphi / (newInv.soLuong || 1);
       } else {
-         newInv.donGia = newInv.hocphi / (parseInt(newInv.soLuong) || 1);
+         newInv.soLuong = 1;
+         newInv.donGia = newInv.hocphi;
       }
 
       const unit = (newInv.loaiDong || '').toLowerCase().trim();
@@ -853,6 +917,7 @@ export default function InvoiceManager() {
             tongcong: formatCurrency(tongCong),
             dadong: formatCurrency(invoiceData.daDong),
             conno: formatCurrency(conLai),
+            hinhthuc: invoiceData.hinhThuc,
             ghichu: combinedNote,
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
@@ -1320,19 +1385,27 @@ export default function InvoiceManager() {
                   {config?.tencongty || 'ĐÃ THANH TOÁN'}
                </div>
                <div style={{ position: 'relative', zIndex: 1 }}>
-                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                     <div>
-                        <h3 style={{ margin: 0 }}>{config?.tencongty || 'Tên Công Ty'}</h3>
-                        <p style={{ margin: '4px 0' }}>ĐC: {config?.diachicongty}</p>
-                        <p style={{ margin: '4px 0' }}>SĐT: {config?.sdtcongty}</p>
+                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     <div style={{ textAlign: 'right' }}>
-                        <div>Mã HĐ: <b>{downloadingInvoice?.mahd}</b></div>
-                        <div>Ngày lập: {downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString('vi-VN') : ''}</div>
-                        <img src={config?.logo || "/logo.png"} alt="logo" crossOrigin="anonymous" style={{ width: 80, marginTop: 5 }} />
+
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                           {config?.tencongty || 'Tên Công Ty'}
+                        </h2>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     </div>
+
+                     {/* RIGHT: Invoice info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
                      </div>
                   </div>
-                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "20pt", margin: "15px 0" }}>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                      BIÊN LAI THU HỌC PHÍ
                   </div>
                   <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
@@ -1344,18 +1417,13 @@ export default function InvoiceManager() {
                      <div>
                         Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
                      </div>
-                     {downloadingInvoice?.studySummary && (
-                        <div style={{ fontSize: '12pt', marginTop: '5px' }}>
-                           Điểm danh ({downloadingInvoice.studySummary.period || downloadingInvoice.studySummary.sourceHd || 'kỳ trước'}): &nbsp;
-                           Số buổi đi học: <b style={{ color: '#059669' }}>{downloadingInvoice.studySummary.daHoc}</b>, &nbsp;
-                           Nghỉ phép: <b style={{ color: '#0369a1' }}>{downloadingInvoice.studySummary.nghiPhep}</b>, &nbsp;
-                           Nghỉ không phép: <b style={{ color: '#dc2626' }}>{downloadingInvoice.studySummary.nghiKhongPhep || 0}</b>
-                        </div>
-                     )}
+                     <div style={{ marginTop: '5px' }}>
+                        Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
+                     </div>
                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
-                        <div>Giảm HP (Voucher): <b>{downloadingInvoice?.giamhocphi} đ</b></div>
+                        <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
                         <div>Nợ cũ: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
                      {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
@@ -1391,7 +1459,7 @@ export default function InvoiceManager() {
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        {config?.tencongty || 'Tên Công Ty'} <br />
+                        Facebook: Trường Lá - E Skills School <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
@@ -1408,18 +1476,25 @@ export default function InvoiceManager() {
             {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
             <div id="download-notice-node" className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
                {/* HEADER */}
-               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
-                  <div style={{ textAlign: 'left' }}>
-                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900 }}>
+               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* LEFT: Logo */}
+                  <div style={{ width: '180px', textAlign: 'left' }}>
+                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                  </div>
+
+                  {/* CENTER: Info */}
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
                         {config?.tencongty || 'E-Skills Academy'}
                      </h3>
-                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 800 }}>{config?.diachicongty}</p>
-                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 800 }}>SĐT/Zalo: {config?.sdtcongty}</p>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                   </div>
-                  <div style={{ textAlign: 'right', fontSize: '14px', fontWeight: 800 }}>
+
+                  {/* RIGHT: Invoice info */}
+                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
                      <div>Mã TB: <b style={{ fontWeight: 950 }}>{downloadingNotice?.mahd}</b></div>
-                     <div>Ngày lập: <b style={{ fontWeight: 900 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</b></div>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ width: 100, marginTop: 5 }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
                   </div>
                </div>
 
@@ -1482,6 +1557,9 @@ export default function InvoiceManager() {
 
                   <div>
                      Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b>
+                  </div>
+                  <div>
+                     Hình thức đóng tiền: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hinhthuc || "..."}</b>
                   </div>
                   {downloadingNotice?.studySummary && (
                      <div style={{ fontSize: '13pt', marginTop: '5px', opacity: 0.9 }}>
