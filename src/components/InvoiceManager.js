@@ -833,6 +833,8 @@ export default function InvoiceManager() {
          dadong: '0',
          conno: formatCurrency(tongCong),
          hinhthuc: invoiceData.hinhThuc,
+         tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
+         trutienan: formatCurrency(Math.round(actualMealRefund)),
          ghichu: `${invoiceData.ghiChu}${billNote}`,
          phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
          daxoa: null,
@@ -850,7 +852,7 @@ export default function InvoiceManager() {
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
             mahv: selectedStudent.mahv,
-            sdt: selectedStudent.sdt,
+            sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -935,7 +937,11 @@ export default function InvoiceManager() {
             daxoa: null,
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
-            sobuoihoc: sobuoihocFinal
+            sobuoihoc: sobuoihocFinal,
+            tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
+            trutienan: formatCurrency(Math.round(actualMealRefund)),
+            sobuoinghiphep: studySummary?.nghiPhep || 0,
+            nhanvien: cashier
          };
 
          const res = await supabase.from('tbl_hd').insert([insertData]);
@@ -978,7 +984,7 @@ export default function InvoiceManager() {
             mahd: newMaHD,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
-            sdt: selectedStudent.sdt,
+            sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -1138,7 +1144,7 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-field-hz">
                               <label>SĐT:</label>
-                              <div className="val-text text-bold">{selectedStudent.sdt || 'Chưa cung cấp'}</div>
+                              <div className="val-text text-bold">{selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || 'Chưa cung cấp'}</div>
                            </div>
                         </div>
                      </div>

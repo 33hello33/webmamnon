@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ATvvEKWh1NJa6c4XgzIlbAubq8uJMuEpR3JRNeOeHE7qI59Gnf8Zm2zFLMW5Ikx
+\restrict nlUcR1h7OjneUzB1TV9YU1i6Afk5Tosa7hYj96hxgTJUBG4HoSxmLYee0yeFPBu
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1
@@ -3498,8 +3498,7 @@ CREATE TABLE public.tbl_billhanghoa (
     noidung text,
     daxoa text,
     loinhuan text,
-    hinhthuc text,
-    daxacnhan boolean DEFAULT false
+    hinhthuc text
 );
 
 
@@ -3570,11 +3569,27 @@ CREATE TABLE public.tbl_config (
     gdrive_enabled boolean DEFAULT false,
     gdrive_folder_id text DEFAULT ''::text,
     gdrive_auth_type text DEFAULT ''::text,
-    gdrive_service_json json
+    gdrive_service_json json,
+    nghi6ngay smallint DEFAULT '30'::smallint,
+    nghi12ngay smallint DEFAULT '50'::smallint
 );
 
 
 ALTER TABLE public.tbl_config OWNER TO postgres;
+
+--
+-- Name: COLUMN tbl_config.nghi6ngay; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.tbl_config.nghi6ngay IS 'nghỉ hơn 6 ngày liên tiếp - 30% hp';
+
+
+--
+-- Name: COLUMN tbl_config.nghi12ngay; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.tbl_config.nghi12ngay IS 'nghỉ hơn 12 ngày liên tiếp - 50% hp';
+
 
 --
 -- Name: tbl_config_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -3708,7 +3723,8 @@ CREATE TABLE public.tbl_hd (
     thoiluong text DEFAULT ''::text,
     phuthu json,
     manv text DEFAULT ''::text,
-    sobuoihoc text DEFAULT ''::text
+    sobuoihoc text DEFAULT ''::text,
+    malop text
 );
 
 
@@ -3742,7 +3758,8 @@ CREATE TABLE public.tbl_hv (
     tinhtrangsk text,
     noisinh text,
     username text DEFAULT ''::text,
-    password text DEFAULT ''::text
+    password text DEFAULT ''::text,
+    sdt text DEFAULT ''::text
 );
 
 
@@ -8099,5 +8116,5 @@ ALTER EVENT TRIGGER pgrst_drop_watch OWNER TO supabase_admin;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ATvvEKWh1NJa6c4XgzIlbAubq8uJMuEpR3JRNeOeHE7qI59Gnf8Zm2zFLMW5Ikx
+\unrestrict nlUcR1h7OjneUzB1TV9YU1i6Afk5Tosa7hYj96hxgTJUBG4HoSxmLYee0yeFPBu
 
