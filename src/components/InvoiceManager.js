@@ -58,7 +58,7 @@ const getQRUrl = (hoaDon, walletsConfig) => {
          suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
       }
 
-      const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
+      const info = encodeURIComponent(`${hoaDon.mahv}${hoaDon.tenhv}`);
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
@@ -332,9 +332,9 @@ export default function InvoiceManager() {
          const { data: bills } = await supabase.from('tbl_billhanghoa')
             .select('mabill, conno, dadong, tongcong, daxoa, ngaylap, noidung')
             .eq('mahv', mahv);
-         
-         const validBills = (bills || []).filter(x => 
-            (x.daxoa || '').toLowerCase() !== 'đã xóa' && 
+
+         const validBills = (bills || []).filter(x =>
+            (x.daxoa || '').toLowerCase() !== 'đã xóa' &&
             parseCur(x.dadong) === 0
          );
          validBills.forEach(x => totalBillDebt += parseCur(x.conno));
