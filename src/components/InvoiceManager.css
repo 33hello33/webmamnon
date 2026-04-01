@@ -1029,7 +1029,7 @@
 
 .study-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.75rem;
 }
 
@@ -1085,9 +1085,19 @@
   border: 1px solid #dbeafe;
 }
 
+.ss-warning-pulse {
+  animation: ssPulse 2s infinite;
+}
+
+@keyframes ssPulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(249, 115, 22, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+}
+
 @media (max-width: 768px) {
   .study-summary-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   
   .ss-num {

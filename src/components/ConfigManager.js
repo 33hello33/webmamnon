@@ -546,6 +546,30 @@ const ConfigManager = () => {
                     style={{ fontSize: '0.9rem', padding: '4px 8px' }}
                   />
                 </div>
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>% Giảm khi nghỉ 6 ngày liên tiếp</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={formData.nghi6ngay || ''}
+                    onChange={(e) => setFormData({ ...formData, nghi6ngay: e.target.value })}
+                    placeholder="VD: 50"
+                    style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>% Giảm khi nghỉ 12 ngày liên tiếp</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={formData.nghi12ngay || ''}
+                    onChange={(e) => setFormData({ ...formData, nghi12ngay: e.target.value })}
+                    placeholder="VD: 100"
+                    style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                  />
+                </div>
               </div>
             </div>
           </div>

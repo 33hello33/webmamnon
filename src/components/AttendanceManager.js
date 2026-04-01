@@ -37,6 +37,9 @@ export default function AttendanceManager({ students, showMessage }) {
   const [attRecords, setAttRecords] = useState({});
   const [lessonContent, setLessonContent] = useState('');
 
+  const [todayAttendance, setTodayAttendance] = useState([]);
+  const today = new Date().toISOString().split('T')[0];
+
   // Fetch classes on mount
   useEffect(() => {
     const fetchClasses = async () => {
@@ -51,6 +54,14 @@ export default function AttendanceManager({ students, showMessage }) {
         if (data) setEmployees(data);
       } catch (err) { console.error(err); }
     };
+    const fetchTodayAttendance = async () => {
+      try {
+        const { data } = await supabase.from('tbl_diemdanh')
+          .select('malop, mahv, trangthai')
+          .eq('ngay', today);
+        if (data) setTodayAttendance(data);
+      } catch (err) { console.error(err); }
+    };
 
     const sessionStr = localStorage.getItem('auth_session');
     if (sessionStr) {
@@ -59,6 +70,7 @@ export default function AttendanceManager({ students, showMessage }) {
     }
     fetchClasses();
     fetchEmployees();
+    fetchTodayAttendance();
   }, []);
 
   // Fetch student marking data if in marking mode

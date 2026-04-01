@@ -25,14 +25,15 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
   if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
     const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-    
+
+    /*
     let suffix = '';
     if (hoaDon.tenhv) {
        const parts = hoaDon.tenhv.trim().split(' ');
        suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
     }
-    
-    const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
+    */
+    const info = encodeURIComponent(`${hoaDon.mahv}${hoaDon.tenhv}`);
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
   return null;
@@ -249,15 +250,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   const classStudents = React.useMemo(() => {
     if (!selectedClassId || !students) return [];
-    
+
     return students.filter(s => {
       // 1. Normalize malop comparison
       const smalop = (s.malop || '').toString().trim().toLowerCase();
       const selId = (selectedClassId || '').toString().trim().toLowerCase();
-      
+
       // 2. Check in malop or malop_list (handling both array and string variants)
       let matchesClass = (smalop === selId);
-      
+
       if (!matchesClass && s.malop_list) {
         if (Array.isArray(s.malop_list)) {
           matchesClass = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
@@ -265,9 +266,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           matchesClass = s.malop_list.toLowerCase().includes(selId);
         }
       }
-      
+
       if (!matchesClass) return false;
-      
+
       // 3. Status check (normalize state)
       const st = (s.trangthai || '').trim().toLowerCase();
       // Only hide if 'đã nghỉ'
@@ -1317,19 +1318,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             </div>
 
             <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fcfdfe' }}>
-              
+
               {/* PHẦN 1: CÀI ĐẶT CHUNG - REARRANGED PER DRAWING */}
               <div style={{ background: '#ffffff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                
+
                 {/* Dòng 1: Tiêu đề & Chọn tháng */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', paddingBottom: '10px', borderBottom: '1px dashed #e2e8f0' }}>
                   <h4 style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                     <CalendarDays size={14} /> Cấu hình chung
                   </h4>
-                  
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid #e2e8f0', paddingLeft: '15px' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', whiteSpace: 'nowrap' }}>THÁNG THÔNG BÁO:</span>
-                    <button 
+                    <button
                       onClick={() => handleBatchMonthChange(-1)}
                       style={{ width: '28px', height: '28px', border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', fontWeight: 900 }}
                     > &lt; </button>
@@ -1339,7 +1340,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         return isNaN(d.getTime()) ? "??/????" : `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
                       })()}
                     </div>
-                    <button 
+                    <button
                       onClick={() => handleBatchMonthChange(1)}
                       style={{ width: '28px', height: '28px', border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', fontWeight: 900 }}
                     > &gt; </button>
@@ -1348,89 +1349,89 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                 {/* Dòng 2: Gói HP | Giảm HP | Hình thức (3 CỘT) */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 2fr) 1.2fr 1.2fr', gap: '15px', alignItems: 'end' }}>
-                   <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GÓI HỌC PHÍ MẪU</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        {selectedClass?.hocphi ? String(selectedClass.hocphi).split('\n').filter(Boolean).map((opt, i) => {
-                          const optLower = String(opt).toLowerCase();
-                          const isBuoi = optLower.includes('buổi');
-                          const isThang = optLower.includes('tháng');
-                          const isKhoa = optLower.includes('khóa');
-                          const isTuan = optLower.includes('tuần');
-                          const sel = Array.isArray(config?.tinhhocphi?.selected) ? config.tinhhocphi.selected : ['khoa', 'buoi', 'thang', 'tuần'];
-                          const isAllowed = (isBuoi && sel.includes('buoi')) ||
-                            (isThang && sel.includes('thang')) ||
-                            (isKhoa && sel.includes('khoa')) ||
-                            (isTuan && sel.includes('tuần')) ||
-                            (!isBuoi && !isThang && !isKhoa && !isTuan);
-                          if (!isAllowed) return null;
-                          
-                          const isActive = batchNoticeData.hocPhiOpt === opt;
-                          return (
-                            <span 
-                              key={i} 
-                              onClick={() => handleBatchNoticeFieldChange('hocPhiOpt', opt)}
-                              style={{ 
-                                padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: '0.15s',
-                                background: isActive ? '#3b82f6' : '#ffffff',
-                                color: isActive ? '#ffffff' : '#475569',
-                                border: `1px solid ${isActive ? '#2563eb' : '#cbd5e1'}`,
-                              }}
-                            >
-                              {opt.trim()}
-                            </span>
-                          );
-                        }) : <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>N/A</span>}
-                      </div>
-                   </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GÓI HỌC PHÍ MẪU</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      {selectedClass?.hocphi ? String(selectedClass.hocphi).split('\n').filter(Boolean).map((opt, i) => {
+                        const optLower = String(opt).toLowerCase();
+                        const isBuoi = optLower.includes('buổi');
+                        const isThang = optLower.includes('tháng');
+                        const isKhoa = optLower.includes('khóa');
+                        const isTuan = optLower.includes('tuần');
+                        const sel = Array.isArray(config?.tinhhocphi?.selected) ? config.tinhhocphi.selected : ['khoa', 'buoi', 'thang', 'tuần'];
+                        const isAllowed = (isBuoi && sel.includes('buoi')) ||
+                          (isThang && sel.includes('thang')) ||
+                          (isKhoa && sel.includes('khoa')) ||
+                          (isTuan && sel.includes('tuần')) ||
+                          (!isBuoi && !isThang && !isKhoa && !isTuan);
+                        if (!isAllowed) return null;
 
-                   <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GIẢM HỌC PHÍ (₫)</label>
-                      <input 
-                        style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700, color: '#dc2626', textAlign: 'right', fontSize: '0.9rem' }}
-                        type="text" 
-                        value={formatTuition(batchNoticeData.giamHocphi)} 
-                        onChange={e => handleBatchNoticeFieldChange('giamHocphi', e.target.value)} 
-                      />
-                   </div>
+                        const isActive = batchNoticeData.hocPhiOpt === opt;
+                        return (
+                          <span
+                            key={i}
+                            onClick={() => handleBatchNoticeFieldChange('hocPhiOpt', opt)}
+                            style={{
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: '0.15s',
+                              background: isActive ? '#3b82f6' : '#ffffff',
+                              color: isActive ? '#ffffff' : '#475569',
+                              border: `1px solid ${isActive ? '#2563eb' : '#cbd5e1'}`,
+                            }}
+                          >
+                            {opt.trim()}
+                          </span>
+                        );
+                      }) : <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>N/A</span>}
+                    </div>
+                  </div>
 
-                   <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>HÌNH THỨC THANH TOÁN</label>
-                      <select 
-                        style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 600, fontSize: '0.9rem', appearance: 'auto' }}
-                        value={batchNoticeData.hinhThuc} 
-                        onChange={e => handleBatchNoticeFieldChange('hinhThuc', e.target.value)}
-                      >
-                        {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                        {walletsConfig.map(w => (
-                          <option key={w.id} value={w.name}>{w.name}</option>
-                        ))}
-                      </select>
-                   </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GIẢM HỌC PHÍ (₫)</label>
+                    <input
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700, color: '#dc2626', textAlign: 'right', fontSize: '0.9rem' }}
+                      type="text"
+                      value={formatTuition(batchNoticeData.giamHocphi)}
+                      onChange={e => handleBatchNoticeFieldChange('giamHocphi', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>HÌNH THỨC THANH TOÁN</label>
+                    <select
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 600, fontSize: '0.9rem', appearance: 'auto' }}
+                      value={batchNoticeData.hinhThuc}
+                      onChange={e => handleBatchNoticeFieldChange('hinhThuc', e.target.value)}
+                    >
+                      {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                      {walletsConfig.map(w => (
+                        <option key={w.id} value={w.name}>{w.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               {/* PHẦN 2: GHI CHÚ VÀ ÁP DỤNG */}
               <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: '#ecfdf5', padding: '15px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-                 <div className="form-group" style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065f46', marginBottom: '6px', display: 'block' }}>📝 GHI CHÚ THÔNG BÁO CHUNG</label>
-                    <input 
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #86efac', fontWeight: 500 }}
-                      type="text" value={batchNoticeData.ghiChu} 
-                      onChange={e => handleBatchNoticeFieldChange('ghiChu', e.target.value)} 
-                      placeholder="VD: Thu học phí tháng mới..." 
-                    />
-                 </div>
-                 <button 
-                  className="btn btn-primary" 
-                  onClick={handleApplyBatchNotice} 
-                  style={{ 
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065f46', marginBottom: '6px', display: 'block' }}>📝 GHI CHÚ THÔNG BÁO CHUNG</label>
+                  <input
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #86efac', fontWeight: 500 }}
+                    type="text" value={batchNoticeData.ghiChu}
+                    onChange={e => handleBatchNoticeFieldChange('ghiChu', e.target.value)}
+                    placeholder="VD: Thu học phí tháng mới..."
+                  />
+                </div>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleApplyBatchNotice}
+                  style={{
                     padding: '0 30px', height: '42px', minWidth: '220px', fontWeight: 800, borderRadius: '10px',
                     background: '#10b981', borderColor: '#10b981', fontSize: '0.95rem', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)'
                   }}
-                 >
-                   Áp dụng cho cả lớp
-                 </button>
+                >
+                  Áp dụng cho cả lớp
+                </button>
               </div>
 
               {/* PHẦN 3: DANH SÁCH CHI TIẾT */}
@@ -1513,11 +1514,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
             <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '15px 25px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
               <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
-              <button 
-                className="btn btn-success" 
-                onClick={handleConfirmBatchExport} 
-                disabled={isGenerating} 
-                style={{ 
+              <button
+                className="btn btn-success"
+                onClick={handleConfirmBatchExport}
+                disabled={isGenerating}
+                style={{
                   padding: '0 30px', height: '40px', fontWeight: 800, background: '#2563eb', borderColor: '#2563eb',
                   boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
                 }}
@@ -1541,7 +1542,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <div style={{ width: '180px', textAlign: 'left' }}>
                   <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                 </div>
-                
+
                 {/* CENTER: Info */}
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
