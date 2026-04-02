@@ -102,6 +102,46 @@ const calculateThoiluong = (ngayBatDau, soLuong, loaiDong) => {
   return `${String(start.getUTCMonth() + 1).padStart(2, '0')}/${start.getUTCFullYear()}`;
 };
 
+const calculateConsecutiveLeave = (attendanceData) => {
+  const excusedLeaveDays = attendanceData
+    .filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ phép')
+    .map(a => new Date(a.ngay).getTime())
+    .sort((a, b) => a - b);
+
+  if (excusedLeaveDays.length === 0) return [];
+
+  const groups = [];
+  let currentGroup = [excusedLeaveDays[0]];
+
+  for (let i = 1; i < excusedLeaveDays.length; i++) {
+    const prev = new Date(excusedLeaveDays[i - 1]);
+    const curr = new Date(excusedLeaveDays[i]);
+    const diffInDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+
+    let isConsecutive = false;
+    if (diffInDays === 1) {
+      isConsecutive = true;
+    } else if (diffInDays === 2) {
+      const middleDay = new Date(prev);
+      middleDay.setDate(prev.getDate() + 1);
+      if (middleDay.getDay() === 0) isConsecutive = true;
+    }
+
+    if (isConsecutive) {
+      currentGroup.push(curr);
+    } else {
+      groups.push([...currentGroup]);
+      currentGroup = [curr];
+    }
+  }
+  groups.push(currentGroup);
+  return groups.map(g => ({
+    ngay_bat_dau_nghi: g[0],
+    ngay_ket_thuc_nghi: g[g.length - 1],
+    so_ngay_nghi_lien_tuc: g.length
+  }));
+};
+
 export default function ClassManager({ students, showMessage, fetchStudents }) {
   const { config } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
@@ -283,7 +323,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         try {
           const { data, error } = await supabase
             .from('tbl_hd')
-            .select('mahv, ngaybatdau, ngayketthuc, ngaylap')
+            .select('mahv, ngaybatdau, ngayketthuc, ngaylap, thoiluong')
             .in('mahv', stdIds)
             .order('ngaylap', { ascending: false });
           if (!error && data) {
@@ -320,8 +360,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     const activeStudents = classStudents.filter(s => (s.trangthai || '').trim().toLowerCase().includes('đang học'));
     if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào "Đang Học" để gửi thông báo');
 
+    setIsBatchNoticeOpen(true);
+    setLoading(true);
+
     try {
-      setIsBatchNoticeOpen(true);
       let initHocPhiOpt = '';
       let initSoLuong = 1;
       let initLoaiDong = 'Tháng';
@@ -348,11 +390,87 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         }
       }
 
-      const startStr = (() => {
-        const now = new Date();
-        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-        return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-      })();
+      const now = new Date();
+      const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startStr = new Date(firstDayThisMonth.getTime() - firstDayThisMonth.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
+      // Fetch latest docs for all active students to determine their previous billing cycle
+      const studentIds = activeStudents.map(s => s.mahv);
+      const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
+        supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, thoiluong, mahd').in('mahv', studentIds).neq('daxoa', 'Đã Xóa'),
+        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, thoiluong, mahd').in('mahv', studentIds).neq('daxoa', 'Đã Xóa')
+      ]);
+
+      const ensureIsoDate = (dStr) => {
+        if (!dStr) return null;
+        const s = String(dStr);
+        if (s.includes('T')) return s.split('T')[0];
+        if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
+        const parts = s.split(/[\/\- :]/);
+        if (parts.length >= 3) {
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          const y = parseInt(parts[2], 10);
+          if (y > 2000) return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+        return s;
+      };
+
+      const safeTime = (d) => {
+        if (!d) return 0;
+        const t = new Date(d).getTime();
+        return isNaN(t) ? 0 : t;
+      };
+
+      // Map each student to their latest doc's date range
+      const studentRanges = {};
+      activeStudents.forEach(s => {
+        const docs = [
+          ...(allHDs || []).filter(x => x.mahv === s.mahv),
+          ...(allTBs || []).filter(x => x.mahv === s.mahv)
+        ].sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
+
+        const recent = docs[0];
+        if (recent) {
+          let sStart = ensureIsoDate(recent.ngaybatdau);
+          let sEnd = ensureIsoDate(recent.ngayketthuc);
+
+          if ((!sStart || !sEnd) && recent.thoiluong) {
+            const m = recent.thoiluong.match(/(\d{2})\/(\d{4})/);
+            if (m) {
+              const mm = parseInt(m[1]) - 1;
+              const yyyy = parseInt(m[2]);
+              sStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
+              sEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
+            }
+          }
+          if (sStart && sEnd) {
+            studentRanges[s.mahv] = { start: sStart, end: sEnd };
+          }
+        }
+      });
+
+      // Fetch attendance for all identified ranges (broad fetch for simplicity but covered by MIN/MAX)
+      const allStarts = Object.values(studentRanges).map(r => r.start);
+      const allEnds = Object.values(studentRanges).map(r => r.end);
+
+      let attendance = [];
+      if (allStarts.length > 0) {
+        const minStart = allStarts.reduce((a, b) => a < b ? a : b);
+        const maxEnd = allEnds.reduce((a, b) => a > b ? a : b);
+        const { data: attData } = await supabase
+          .from('tbl_diemdanh')
+          .select('*')
+          .in('mahv', studentIds)
+          .gte('ngay', minStart)
+          .lte('ngay', maxEnd);
+        attendance = attData || [];
+      }
+
+      const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+      const p6 = parseFloat(config?.nghi6ngay) || 0;
+      const p12 = parseFloat(config?.nghi12ngay) || 0;
 
       setBatchNoticeData({
         loaiDong: initLoaiDong,
@@ -365,43 +483,70 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ghiChu: ''
       });
 
-      // Initialize batchStudentsData with per-student end dates
       const initData = activeStudents.map(s => {
-        let finalKetThuc = '';
-        const stSchedRaw = selectedClass?.thoigianbieu || '';
-        const activeDays = parseScheduleDays(stSchedRaw);
-
-        if (initLoaiDong === 'Tháng' || initLoaiDong === 'Khóa') {
-          const d = new Date(startStr);
-          d.setMonth(d.getMonth() + initSoLuong);
-          finalKetThuc = d.toISOString().split('T')[0];
-        } else if (initLoaiDong === 'Tuần') {
-          const d = new Date(startStr);
-          d.setDate(d.getDate() + initSoLuong * 7);
-          finalKetThuc = d.toISOString().split('T')[0];
-        } else if (initLoaiDong === 'Buổi' && activeDays.length > 0) {
-          finalKetThuc = calculateEndDateBySessions(startStr, initSoLuong, activeDays);
+        const range = studentRanges[s.mahv];
+        let studentAttendance = [];
+        if (range) {
+          studentAttendance = attendance.filter(a => a.mahv === s.mahv && a.ngay >= range.start && a.ngay <= range.end);
         }
+
+        const groups = calculateConsecutiveLeave(studentAttendance);
+
+        let mealRefund = 0;
+        let tuitionRefund = 0;
+        let maxLeave = 0;
+
+        groups.forEach(g => {
+          const count = g.so_ngay_nghi_lien_tuc;
+          if (count > maxLeave) maxLeave = count;
+
+          if (count >= 12) {
+            tuitionRefund += count * trutiennghi_val * (p12 / 100);
+          } else if (count >= 6) {
+            tuitionRefund += count * trutiennghi_val * (p6 / 100);
+          }
+
+          if (count >= 3) {
+            mealRefund += count * trutienan_val;
+          }
+        });
+
+        // Round to nearest 1000
+        mealRefund = Math.round(mealRefund / 1000) * 1000;
+        tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
+
+        const stHinhThuc = s.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
+        const totalRefund = mealRefund + tuitionRefund;
+
+        const diHoc = studentAttendance.filter(a => a.trangthai === 'Có mặt').length;
+        const nghiPhep = studentAttendance.filter(a => a.trangthai === 'Nghỉ có phép').length;
+        const nghiKP = studentAttendance.filter(a => a.trangthai === 'Nghỉ không phép').length;
+        const statsPeriod = range ? formatMonthYear(range.start) : '';
 
         return {
           mahv: s.mahv,
           tenhv: s.tenhv,
-          sobuoihoc: `${initSoLuong} ${initLoaiDong.toLowerCase()}`,
           hocphi: initHocPhi,
           giamhocphi: 0,
-          tongcong: initHocPhi,
+          truTienAn: mealRefund,
+          truHocPhi: tuitionRefund,
+          nghiLienTiep: maxLeave,
+          tongcong: Math.max(0, initHocPhi - totalRefund),
           ngaybatdau: startStr,
-          ngayketthuc: finalKetThuc,
-          hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
+          hinhthuc: stHinhThuc,
           ghichu: '',
-          thoigianbieu: stSchedRaw
+          thoigianbieu: selectedClass?.thoigianbieu || '',
+          diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod }
         };
       });
+
       setBatchStudentsData(initData);
     } catch (err) {
       console.error('Lỗi mở thông báo hàng loạt:', err);
       showMessage('error', 'Đã xảy ra lỗi khi chuẩn bị thông báo: ' + err.message);
       setIsBatchNoticeOpen(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -467,26 +612,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     }
 
     setBatchStudentsData(prev => (prev || []).map(item => {
-      let sobuoi = `${batchNoticeData.soLuong} ${batchNoticeData.loaiDong.toLowerCase()}`;
-      const tc = Math.max(0, hpNumber - (parseInt(batchNoticeData.giamHocphi) || 0));
-
-      let finalKetThuc = '';
-      const activeDays = parseScheduleDays(item.thoigianbieu);
-      const unit = (batchNoticeData.loaiDong || '').toLowerCase().trim();
-
-      if (unit.includes('tháng') || unit.includes('khóa')) {
-        const d = new Date(batchNoticeData.ngayBatDau);
-        d.setMonth(d.getMonth() + (parseInt(batchNoticeData.soLuong) || 1));
-        finalKetThuc = d.toISOString().split('T')[0];
-      } else if (unit.includes('tuần')) {
-        const d = new Date(batchNoticeData.ngayBatDau);
-        d.setDate(d.getDate() + (parseInt(batchNoticeData.soLuong) || 1) * 7);
-        finalKetThuc = d.toISOString().split('T')[0];
-      } else if (unit.includes('buổi') && activeDays.length > 0) {
-        finalKetThuc = calculateEndDateBySessions(batchNoticeData.ngayBatDau, (parseInt(batchNoticeData.soLuong) || 1), activeDays);
-      } else {
-        finalKetThuc = batchNoticeData.ngayKetThuc;
-      }
+      const tc = Math.max(0, hpNumber - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.truTienAn || 0) - (item.truHocPhi || 0));
 
       return {
         ...item,
@@ -494,10 +620,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         giamhocphi: batchNoticeData.giamHocphi || 0,
         hinhthuc: batchNoticeData.hinhThuc,
         ngaybatdau: batchNoticeData.ngayBatDau,
-        ngayketthuc: finalKetThuc,
         ghichu: batchNoticeData.ghiChu,
-        tongcong: tc,
-        sobuoihoc: sobuoi
+        tongcong: tc
       };
     }));
   };
@@ -506,14 +630,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (field === 'hocphi' || field === 'giamhocphi') {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         let newItem = { ...item, [field]: cleanVal };
-        if (field === 'hocphi' || field === 'giamhocphi') {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
-          newItem.tongcong = Math.max(0, hp - ghp);
+          const tta = parseInt(newItem.truTienAn || 0);
+          const thp = parseInt(newItem.truHocPhi || 0);
+          newItem.tongcong = Math.max(0, hp - ghp - tta - thp);
         }
         return newItem;
       }
@@ -543,10 +669,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const row = batchStudentsData[i];
         const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
 
-        const sbhParts = row.sobuoihoc.split(' ');
-        const qty = sbhParts[0];
-        const unit = sbhParts[1];
-        const tl = calculateThoiluong(row.ngaybatdau, qty, unit);
+        const tl = formatMonthYear(row.ngaybatdau);
 
         const insertData = {
           mahd: newMaHD,
@@ -554,10 +677,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           mahv: row.mahv,
           tenlop: selectedClass?.tenlop || '',
           ngaybatdau: row.ngaybatdau || null,
-          ngayketthuc: row.ngayketthuc || null,
+          ngayketthuc: null,
           manv: 'Hệ thống',
           hocphi: formatTuition(row.hocphi),
           giamhocphi: formatTuition(row.giamhocphi),
+          truTienAn: formatTuition(row.truTienAn),
+          truHocPhi: formatTuition(row.truHocPhi),
           phuthu: null,
           tongcong: formatTuition(row.tongcong),
           dadong: '0',
@@ -567,9 +692,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           daxoa: null,
           malop: selectedClass?.malop || '',
           thoiluong: tl,
-          sobuoihoc: `${row.sobuoihoc}${row.sobuoihoc.toLowerCase().includes('tháng') ? ` (${tl})` : ''}`
+          sobuoihoc: tl
         };
-        recordsToInsert.push(insertData);
+
+        // Final database insert object (sum up discounts into giamhocphi for DB standard)
+        const dbPush = {
+          ...insertData,
+          giamhocphi: formatTuition((row.giamhocphi || 0) + (row.truTienAn || 0) + (row.truHocPhi || 0))
+        };
+        delete dbPush.truTienAn;
+        delete dbPush.truHocPhi;
+
+        recordsToInsert.push(dbPush);
 
         currentNotices.push({
           ...row,
@@ -823,8 +957,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         tenhv: s.tenhv || '',
         sdt: s.sdt || '',
         trangthai: s.trangthai || '',
-        ngaybatdau: latestHd?.ngaybatdau || '',
-        ngayketthuc: latestHd?.ngayketthuc || ''
+        thoiluong: latestHd?.thoiluong || ''
       };
     });
     const ws = XLSX.utils.json_to_sheet(cleanStudents);
@@ -890,7 +1023,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
                           }).length} HV</span>
                           <span>GV: {teacherName}</span>
-                          <span>Lịch: {c.thoigianbieu || '-'}</span>
                         </div>
                       </div>
                     </div>
@@ -991,8 +1123,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         <th>Mã HS</th>
                         <th>Tên Học Sinh</th>
                         <th>Trạng Thái</th>
-                        <th>Ngày Bắt Đầu</th>
-                        <th>Ngày Kết Thúc</th>
+                        <th>Hình thức đóng</th>
+                        <th>Thời Lượng</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1025,8 +1157,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   {s.trangthai || 'Chưa cập nhật'}
                                 </span>
                               </td>
-                              <td>{latestHd?.ngaybatdau ? new Date(latestHd.ngaybatdau).toLocaleDateString('vi-VN') : '-'}</td>
-                              <td>{latestHd?.ngayketthuc ? new Date(latestHd.ngayketthuc).toLocaleDateString('vi-VN') : '-'}</td>
+                              <td>{s.hinhthucdong || '-'}</td>
+                              <td style={{ fontWeight: 600, color: '#0369a1' }}>{latestHd?.thoiluong || '-'}</td>
                             </tr>
                           );
                         })
@@ -1067,6 +1199,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <div className="student-info">
                             <span>STT: {idx + 1}</span>
                             <span>{selectedClass?.tenlop}</span>
+                            <span style={{ fontWeight: 600, color: '#db2777' }}>HT: {s.hinhthucdong || 'Tiền mặt'}</span>
                           </div>
 
                           <div className="student-dates">
@@ -1347,11 +1480,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   </div>
                 </div>
 
-                {/* Dòng 2: Gói HP | Giảm HP | Hình thức (3 CỘT) */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 2fr) 1.2fr 1.2fr', gap: '15px', alignItems: 'end' }}>
+                {/* Dòng 2: Gói HP | Giảm HP | Ghi chú | Nút Áp dụng */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) 140px 1fr 180px', gap: '15px', alignItems: 'end' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GÓI HỌC PHÍ MẪU</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', background: '#f8fafc', padding: '6px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '42px', alignItems: 'center' }}>
                       {selectedClass?.hocphi ? String(selectedClass.hocphi).split('\n').filter(Boolean).map((opt, i) => {
                         const optLower = String(opt).toLowerCase();
                         const isBuoi = optLower.includes('buổi');
@@ -1372,7 +1505,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             key={i}
                             onClick={() => handleBatchNoticeFieldChange('hocPhiOpt', opt)}
                             style={{
-                              padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: '0.15s',
+                              padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', transition: '0.15s',
                               background: isActive ? '#3b82f6' : '#ffffff',
                               color: isActive ? '#ffffff' : '#475569',
                               border: `1px solid ${isActive ? '#2563eb' : '#cbd5e1'}`,
@@ -1388,7 +1521,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GIẢM HỌC PHÍ (₫)</label>
                     <input
-                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700, color: '#dc2626', textAlign: 'right', fontSize: '0.9rem' }}
+                      style={{ width: '100%', height: '42px', padding: '0 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700, color: '#dc2626', textAlign: 'right', fontSize: '0.85rem' }}
                       type="text"
                       value={formatTuition(batchNoticeData.giamHocphi)}
                       onChange={e => handleBatchNoticeFieldChange('giamHocphi', e.target.value)}
@@ -1396,42 +1529,27 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   </div>
 
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>HÌNH THỨC THANH TOÁN</label>
-                    <select
-                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 600, fontSize: '0.9rem', appearance: 'auto' }}
-                      value={batchNoticeData.hinhThuc}
-                      onChange={e => handleBatchNoticeFieldChange('hinhThuc', e.target.value)}
-                    >
-                      {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                      {walletsConfig.map(w => (
-                        <option key={w.id} value={w.name}>{w.name}</option>
-                      ))}
-                    </select>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>📝 GHI CHÚ THÔNG BÁO CHUNG</label>
+                    <input
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                      type="text"
+                      value={batchNoticeData.ghiChu}
+                      onChange={e => handleBatchNoticeFieldChange('ghiChu', e.target.value)}
+                      placeholder="VD: Thu học phí tháng mới..."
+                    />
                   </div>
-                </div>
-              </div>
 
-              {/* PHẦN 2: GHI CHÚ VÀ ÁP DỤNG */}
-              <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: '#ecfdf5', padding: '15px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065f46', marginBottom: '6px', display: 'block' }}>📝 GHI CHÚ THÔNG BÁO CHUNG</label>
-                  <input
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #86efac', fontWeight: 500 }}
-                    type="text" value={batchNoticeData.ghiChu}
-                    onChange={e => handleBatchNoticeFieldChange('ghiChu', e.target.value)}
-                    placeholder="VD: Thu học phí tháng mới..."
-                  />
+                  <button
+                    onClick={handleApplyBatchNotice}
+                    style={{
+                      height: '42px', padding: '0 15px', borderRadius: '8px', background: '#10b981', color: '#fff',
+                      border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap',
+                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)'
+                    }}
+                  >
+                    Áp dụng cho cả lớp
+                  </button>
                 </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleApplyBatchNotice}
-                  style={{
-                    padding: '0 30px', height: '42px', minWidth: '220px', fontWeight: 800, borderRadius: '10px',
-                    background: '#10b981', borderColor: '#10b981', fontSize: '0.95rem', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)'
-                  }}
-                >
-                  Áp dụng cho cả lớp
-                </button>
               </div>
 
               {/* PHẦN 3: DANH SÁCH CHI TIẾT */}
@@ -1449,14 +1567,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '40px' }}>STT</th>
                           <th style={{ width: '80px' }}>Mã HS</th>
                           <th style={{ minWidth: '160px' }}>Học Sinh</th>
-                          <th style={{ width: '100px' }}>Số buổi</th>
-                          <th style={{ width: '120px' }}>Học phí</th>
-                          <th style={{ width: '110px' }}>Giảm HP</th>
-                          <th style={{ width: '120px' }}>TỔNG THU</th>
-                          <th style={{ width: '115px' }}>Bắt đầu</th>
-                          <th style={{ width: '115px' }}>Kết thúc</th>
+                          <th style={{ minWidth: '130px' }}>Học phí</th>
+                          <th style={{ minWidth: '130px' }}>Giảm HP</th>
+                          <th style={{ width: '80px' }}>Nghỉ LT</th>
+                          <th style={{ minWidth: '130px' }}>Trừ Tiền Ăn</th>
+                          <th style={{ minWidth: '130px' }}>Trừ Học Phí</th>
+                          <th style={{ minWidth: '130px' }}>TỔNG THU</th>
                           <th style={{ width: '130px' }}>Hình thức</th>
-                          <th style={{ minWidth: '150px' }}>Ghi chú</th>
+                          <th style={{ minWidth: '250px' }}>Ghi chú</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1471,15 +1589,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             <td style={{ fontWeight: 600, color: '#64748b' }}>#{row.mahv}</td>
                             <td style={{ fontWeight: 700, color: '#1e293b', textAlign: 'left' }}>{row.tenhv}</td>
                             <td>
-                              <input type="text" value={row.sobuoihoc} onChange={e => handleBatchStudentChange(row.mahv, 'sobuoihoc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600 }} />
-                            </td>
-                            <td>
                               <input
                                 type="text"
                                 value={formatTuition(row.hocphi)}
                                 onChange={e => handleBatchStudentChange(row.mahv, 'hocphi', e.target.value)}
                                 className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
+                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600 }}
                               />
                             </td>
                             <td>
@@ -1488,12 +1603,29 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 value={formatTuition(row.giamhocphi)}
                                 onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
                                 className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
+                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
+                              />
+                            </td>
+                            <td style={{ fontWeight: 700, color: '#f59e0b' }}>{row.nghiLienTiep || 0} n</td>
+                            <td>
+                              <input
+                                type="text"
+                                value={formatTuition(row.truTienAn)}
+                                onChange={e => handleBatchStudentChange(row.mahv, 'truTienAn', e.target.value)}
+                                className="td-input"
+                                style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={formatTuition(row.truHocPhi)}
+                                onChange={e => handleBatchStudentChange(row.mahv, 'truHocPhi', e.target.value)}
+                                className="td-input"
+                                style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
                               />
                             </td>
                             <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
-                            <td><input type="date" value={row.ngaybatdau} onChange={e => handleBatchStudentChange(row.mahv, 'ngaybatdau', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }} /></td>
-                            <td><input type="date" value={row.ngayketthuc} onChange={e => handleBatchStudentChange(row.mahv, 'ngayketthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f8fafc', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }} /></td>
                             <td>
                               <select value={row.hinhthuc} onChange={e => handleBatchStudentChange(row.mahv, 'hinhthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px' }}>
                                 {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
@@ -1567,31 +1699,68 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               {/* INFO */}
               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div>Họ và tên: <b style={{ fontWeight: 950 }}>{printHoaDon.tenhv}</b></div>
+                  <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.tenhv}</b></div>
                   <div>SĐT: <b style={{ fontWeight: 900 }}>{printHoaDon.sdt || ""}</b></div>
                 </div>
 
-                <div>
-                  Khóa học: <b style={{ fontWeight: 900 }}>{printHoaDon.tenlop}</b>
+                {/* FEES BOX */}
+                <div style={{ 
+                  background: '#f0f9ff', 
+                  border: '1px solid #bae6fd', 
+                  borderRadius: '16px', 
+                  padding: '24px', 
+                  marginTop: '15px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                    <div style={{ fontWeight: 600 }}>Học phí:</div>
+                    <div style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</div>
+                  </div>
+                  
+                  {parseInt(String(printHoaDon.giamhocphi).replace(/\D/g, '')) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                      <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                      <div style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi} đ</div>
+                    </div>
+                  )}
+
+                  {(parseInt(String(printHoaDon.truTienAn).replace(/\D/g, '')) > 0 || parseInt(String(printHoaDon.truHocPhi).replace(/\D/g, '')) > 0) && (
+                    <>
+                      <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                      {parseInt(String(printHoaDon.truTienAn).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                          <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn ({printHoaDon.nghiLienTiep}n):</div>
+                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truTienAn} đ</div>
+                        </div>
+                      )}
+                      {parseInt(String(printHoaDon.truHocPhi).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                          <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học ({printHoaDon.nghiLienTiep}n):</div>
+                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truHocPhi} đ</div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                    <div>TỔNG CỘNG:</div>
+                    <div>{printHoaDon.tongcong} VNĐ</div>
+                  </div>
                 </div>
 
-                <div>
-                  Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b>
-                </div>
-
-                {/* FEES */}
-                <div style={{ display: "flex", justifyContent: "space-between", borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                  <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi}</b></div>
-                  <div>Giảm HP: <b style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi}</b></div>
-                  <div>Nợ cũ: <b style={{ fontWeight: 800 }}>0 đ</b></div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '15px', fontSize: '16pt' }}>
-                  <div>Tổng cộng: <b style={{ fontWeight: 950 }}>{printHoaDon.tongcong}</b></div>
-                </div>
-
-                <div style={{ marginBottom: '15px' }}>
-                  Ghi chú: <b style={{ fontWeight: 800 }}>{printHoaDon.ghichu || ""}</b>
+                <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                  <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b></div>
+                  {printHoaDon.diemDanhInfo && (
+                    <div style={{ opacity: 0.9 }}>
+                      Điểm danh ({printHoaDon.diemDanhInfo.statsPeriod}): 
+                      <span> Đi học: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.diHoc}</b></span>, 
+                      <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiPhep}</b></span>, 
+                      <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiKP}</b></span>
+                    </div>
+                  )}
+                  {printHoaDon.ghichu && (
+                    <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{printHoaDon.ghichu}</b></div>
+                  )}
                 </div>
 
                 {/* QR SECTION */}

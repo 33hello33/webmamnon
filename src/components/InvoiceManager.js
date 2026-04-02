@@ -862,11 +862,15 @@ export default function InvoiceManager() {
             thoiluong: currentTimePeriod,
             sobuoihoc: sobuoihocFinal,
             phuthu: invoiceData.phuthu,
-            studySummary: studySummary,
-            actualMealRefund,
-            actualTuitionRefund,
-            trutienan_val,
-            trutiennghi_val
+            nghiLienTiep: studySummary?.maxConsecutive || 0,
+            actualMealRefund: formatCurrency(Math.round(actualMealRefund)),
+            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund)),
+            diemDanhInfo: studySummary ? {
+               diHoc: studySummary.daHoc,
+               nghiPhep: studySummary.nghiPhep,
+               nghiKP: studySummary.nghiKhongPhep,
+               statsPeriod: studySummary.period
+            } : null
          });
       } catch (err) {
          console.error(err);
@@ -1051,10 +1055,12 @@ export default function InvoiceManager() {
       });
    }
 
+   // Round to nearest 1000
+   const roundedMealRefund = Math.round(mealRefund / 1000) * 1000;
+   const roundedTuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
 
-
-   const actualMealRefund = refundOverrides.meal !== null ? refundOverrides.meal : mealRefund;
-   const actualTuitionRefund = refundOverrides.tuition !== null ? refundOverrides.tuition : tuitionRefund;
+   const actualMealRefund = refundOverrides.meal !== null ? refundOverrides.meal : roundedMealRefund;
+   const actualTuitionRefund = refundOverrides.tuition !== null ? refundOverrides.tuition : roundedTuitionRefund;
 
    const deductionSum = studySummary ? (actualMealRefund + actualTuitionRefund) : 0;
 
@@ -1643,83 +1649,70 @@ export default function InvoiceManager() {
                {/* INFO */}
                <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tenhv}</b></div>
+                     <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
                      <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
                   </div>
 
-                  <div>
-                     Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b>
-                  </div>
+                  {/* FEES BOX */}
+                  <div style={{ 
+                     background: '#f0f9ff', 
+                     border: '1px solid #bae6fd', 
+                     borderRadius: '16px', 
+                     padding: '24px', 
+                     marginTop: '15px',
+                     lineHeight: '1.6'
+                  }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 600 }}>Học phí:</div>
+                        <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
+                     </div>
+                     
+                     {parseInt(String(downloadingNotice?.giamhocphi).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                           <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                           <div style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</div>
+                        </div>
+                     )}
 
-                  {downloadingNotice?.thoiluong && (
-                     <div style={{ color: '#059669', fontWeight: 950 }}>
-                        Tháng đóng học phí/Thời lượng: <span style={{ textDecoration: 'underline' }}>{downloadingNotice.thoiluong}</span>
-                     </div>
-                  )}
-
-                  <div style={{ background: '#f0f9ff', padding: '15px', borderRadius: '12px', border: '2px solid #0369a1', margin: '15px 0' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Học phí:</span> <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</b>
-                     </div>
-                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Giảm trừ:</span> <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</b>
-                     </div>
-                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
-                        <div style={{ borderTop: '1px solid #bae6fd', marginTop: '10px', paddingTop: '10px' }}>
-                           {downloadingNotice.phuthu.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                 <span>+ {pt.name || 'Phụ thu'}:</span>
-                                 <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
+                     {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0) && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn ({downloadingNotice?.nghiLienTiep}n):</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualMealRefund} đ</div>
                               </div>
-                           ))}
-                        </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học ({downloadingNotice?.nghiLienTiep}n):</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund} đ</div>
+                              </div>
+                           )}
+                        </>
                      )}
-                     {downloadingNotice?.deductionSum > 0 && (
-                        <div style={{ borderTop: '1px solid #bae6fd', marginTop: '10px', paddingTop: '10px' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>- Hoàn trả tiền ăn ({downloadingNotice.studySummary.nghiPhep}n):</span>
-                              <b style={{ fontWeight: 900 }}>-{formatCurrency(downloadingNotice.trutienan_val * downloadingNotice.studySummary.nghiPhep)} đ</b>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>- Hoàn trả học phí (Tính theo số ngày nghỉ):</span>
-                              <b style={{ fontWeight: 900 }}>-{formatCurrency(Math.round(downloadingNotice.tuitionRefund))} đ</b>
-                           </div>
-                        </div>
-                     )}
-                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', marginTop: '10px', borderTop: '2px solid #0369a1', paddingTop: '10px' }}>
-                        <span style={{ fontWeight: 950 }}>TỔNG CỘNG:</span>
-                        <b style={{ color: '#dc2626', fontSize: '1.5rem', fontWeight: 950 }}>{downloadingNotice?.tongcong} VNĐ</b>
+
+                     <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                        <div>TỔNG CỘNG:</div>
+                        <div>{downloadingNotice?.tongcong} VNĐ</div>
                      </div>
                   </div>
 
-                  <div>
-                     Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b>
-                  </div>
-                  <div>
-                     Hình thức đóng tiền: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hinhthuc || "..."}</b>
-                  </div>
-                  {downloadingNotice?.studySummary && (
-                     <div style={{ fontSize: '13pt', marginTop: '5px', opacity: 0.9 }}>
-                        Điểm danh ({downloadingNotice.studySummary.period || downloadingNotice.studySummary.sourceHd || 'kỳ trước'}): &nbsp;
-                        Đi học: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice.studySummary.daHoc}</b>, &nbsp;
-                        Nghỉ phép: <b style={{ color: '#0369a1', fontWeight: 900 }}>{downloadingNotice.studySummary.nghiPhep}</b>, &nbsp;
-                        Nghi KP: <b style={{ color: '#dc2626', fontWeight: 900 }}>{downloadingNotice.studySummary.nghiKhongPhep || 0}</b>
-                     </div>
-                  )}
-
-                  {/* FEES */}
-                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                     <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</b></div>
-                     <div>Giảm HP: <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</b></div>
-                     <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatCurrency(noCu)} đ</b></div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '15px', fontSize: '16pt' }}>
-                     <div>Tổng cộng: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tongcong} đ</b></div>
-                  </div>
-
-                  <div style={{ marginBottom: '15px' }}>
-                     Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu || ""}</b>
+                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
+                     {downloadingNotice?.diemDanhInfo && (
+                        <div style={{ opacity: 0.9 }}>
+                           Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}): 
+                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>, 
+                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>, 
+                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
+                        </div>
+                     )}
+                     {downloadingNotice?.ghichu && (
+                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
+                     )}
                   </div>
 
                   {/* QR SECTION */}

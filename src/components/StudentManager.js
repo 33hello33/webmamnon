@@ -22,7 +22,8 @@ const INITIAL_FORM = {
   ngaysinhba: new Date().toISOString().split('T')[0],
   ngaysinhme: new Date().toISOString().split('T')[0],
   username: '', password: '',
-  hinhthucdong: 'Tiền mặt'
+  hinhthucdong: 'Tiền mặt',
+  noisinh: '', sdt: ''
 };
 
 export default function StudentManager({ activeSubTab }) {
@@ -90,7 +91,7 @@ export default function StudentManager({ activeSubTab }) {
 
   // Form Handlers
   const handleOpenAdd = async () => {
-    const newMaHV = await generateId('tbl_hv', 'mahv', 'HS', 4);
+    const newMaHV = await generateId('tbl_hv', 'mahv', 'HV', 4);
     setFormData({ ...INITIAL_FORM, mahv: newMaHV });
     setIsEditMode(false);
     setIsFormOpen(true);
@@ -291,10 +292,15 @@ export default function StudentManager({ activeSubTab }) {
         'Nghề Nghiệp Mẹ': s.nghenghiepme,
         'CCCD': s.cccd,
         'Tình Trạng SK': s.tinhtrangsk,
+        'Nơi Sinh': s.noisinh,
         'Ngày Nhập Học': s.ngaynhaphoc,
         'Ngày Nghỉ Học': s.ngaynghihoc,
         'Địa Chỉ': s.diachi,
-        'Ghi Chú': s.ghichu
+        'Ghi Chú': s.ghichu,
+        'Tên Đăng Nhập': s.username,
+        'Mật Khẩu': s.password,
+        'SĐT Chung': s.sdt,
+        'Hình Thức Đóng': s.hinhthucdong
       };
     });
 
@@ -336,10 +342,15 @@ export default function StudentManager({ activeSubTab }) {
             'Nghề Nghiệp Mẹ': 'nghenghiepme',
             'CCCD': 'cccd',
             'Tình Trạng SK': 'tinhtrangsk',
+            'Nơi Sinh': 'noisinh',
             'Ngày Nhập Học': 'ngaynhaphoc',
             'Ngày Nghỉ Học': 'ngaynghihoc',
             'Địa Chỉ': 'diachi',
-            'Ghi Chú': 'ghichu'
+            'Ghi Chú': 'ghichu',
+            'Tên Đăng Nhập': 'username',
+            'Mật Khẩu': 'password',
+            'SĐT Chung': 'sdt',
+            'Hình Thức Đóng': 'hinhthucdong'
           };
 
           let successCount = 0;
@@ -351,12 +362,11 @@ export default function StudentManager({ activeSubTab }) {
               let val = item[key];
 
               if (val !== undefined) {
-                if (['ngaynhaphoc', 'ngaynghihoc', 'ngaysinh', 'ngaysinhba', 'ngaysinhme'].includes(dbField)) {
-                  // Safe Date Formatting
+                if (['ngaynhaphoc', 'ngaysinh', 'ngaysinhba'].includes(dbField)) {
+                  // Safe Date Formatting for DATE columns
                   if (val) {
                     let d;
                     if (typeof val === 'number') {
-                      // Excel serial date
                       d = new Date((val - 25569) * 86400 * 1000);
                     } else {
                       d = new Date(val);
@@ -368,6 +378,12 @@ export default function StudentManager({ activeSubTab }) {
                     }
                   } else {
                     val = null;
+                  }
+                } else if (['ngaynghihoc', 'ngaysinhme'].includes(dbField)) {
+                  // Preserve as text for TEXT columns
+                  if (val && typeof val === 'number') {
+                    const d = new Date((val - 25569) * 86400 * 1000);
+                    if (!isNaN(d.getTime())) val = d.toLocaleDateString('vi-VN');
                   }
                 }
                 studentData[dbField] = val;
@@ -528,6 +544,7 @@ export default function StudentManager({ activeSubTab }) {
                       <th>G.Tính</th>
                       <th>Lớp</th>
                       <th>Trạng Thái</th>
+                      <th>Hình thức đóng</th>
                       <th>Họ tên Ba</th>
                       <th>SĐT Ba</th>
                       <th>Sinh nhật Ba</th>
@@ -577,6 +594,7 @@ export default function StudentManager({ activeSubTab }) {
                               {s.trangthai || 'Chưa phân loại'}
                             </span>
                           </td>
+                          <td>{s.hinhthucdong || '-'}</td>
                           <td>{s.hotenba || '-'}</td>
                           <td>{s.sdtba || '-'}</td>
                           <td>{s.ngaysinhba ? new Date(s.ngaysinhba).toLocaleDateString('vi-VN') : '-'}</td>
@@ -704,15 +722,15 @@ export default function StudentManager({ activeSubTab }) {
             </div>
             <form onSubmit={handleSave} className="modal-body sm-form-grid">
               {/* Header row with Large Avatar and Basic Info */}
-              <div className="sm-form-header-row" style={{ 
-                gridColumn: '1 / -1', 
-                display: 'flex', 
-                gap: '2.5rem', 
-                alignItems: 'center', 
-                marginBottom: '1.5rem', 
-                background: '#f8fafc', 
-                padding: '2rem', 
-                borderRadius: '24px', 
+              <div className="sm-form-header-row" style={{
+                gridColumn: '1 / -1',
+                display: 'flex',
+                gap: '2.5rem',
+                alignItems: 'center',
+                marginBottom: '1.5rem',
+                background: '#f8fafc',
+                padding: '2rem',
+                borderRadius: '24px',
                 border: '1px solid #e2e8f0',
                 boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
               }}>
@@ -722,33 +740,33 @@ export default function StudentManager({ activeSubTab }) {
                     alt="Avatar"
                     style={{ width: '200px', height: '200px', borderRadius: '32px', objectFit: 'cover', border: '6px solid white', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
                   />
-                  <label htmlFor="avatar-input" style={{ 
-                    position: 'absolute', 
-                    bottom: '-12px', 
-                    right: '-12px', 
-                    background: '#3b82f6', 
-                    color: 'white', 
-                    padding: '14px', 
-                    borderRadius: '20px', 
-                    cursor: 'pointer', 
-                    boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.5)', 
+                  <label htmlFor="avatar-input" style={{
+                    position: 'absolute',
+                    bottom: '-12px',
+                    right: '-12px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    padding: '14px',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.5)',
                     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}
-                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                   >
                     <Camera size={26} />
                     <input id="avatar-input" type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
                   </label>
                 </div>
-                
-                <div className="header-info-fields" style={{ 
-                  flex: 1, 
-                  display: 'grid', 
-                  gridTemplateColumns: '1fr 1fr', 
+
+                <div className="header-info-fields" style={{
+                  flex: 1,
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
                   gap: '1.25rem',
                   alignContent: 'center'
                 }}>
@@ -763,6 +781,10 @@ export default function StudentManager({ activeSubTab }) {
                   <div className="sm-form-group">
                     <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ngày sinh</label>
                     <input type="date" name="ngaysinh" value={formData.ngaysinh} onChange={handleChange} style={{ fontWeight: 600 }} />
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nơi sinh</label>
+                    <input type="text" name="noisinh" value={formData.noisinh || ''} onChange={handleChange} placeholder="Ví dụ: Hà Nội" />
                   </div>
                   <div className="sm-form-group">
                     <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giới tính</label>
@@ -811,6 +833,10 @@ export default function StudentManager({ activeSubTab }) {
               <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
                 <label>SĐT Ba</label>
                 <input type="text" name="sdtba" value={formData.sdtba} onChange={handleChange} />
+              </div>
+              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
+                <label>SĐT Chung (Liên hệ)</label>
+                <input type="text" name="sdt" value={formData.sdt || ''} onChange={handleChange} placeholder="Dùng gửi tin nhắn/Zalo..." />
               </div>
               <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
                 <label>Ngày sinh Ba</label>
@@ -863,7 +889,7 @@ export default function StudentManager({ activeSubTab }) {
               </div>
 
               <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#10b981' }}>TÀI KHOẢN CHAT (Dành cho Phụ huynh)</div>
-              
+
               <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
                 <label style={{ color: '#10b981' }}>Tên đăng nhập (Username)</label>
                 <input type="text" name="username" value={formData.username || ''} onChange={handleChange} placeholder="Nhập tên đăng nhập cho phụ huynh..." />
