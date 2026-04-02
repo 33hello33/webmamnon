@@ -21,13 +21,19 @@ const INITIAL_FORM = {
   nghenghiepba: '', nghenghiepme: '',
   ngaysinhba: new Date().toISOString().split('T')[0],
   ngaysinhme: new Date().toISOString().split('T')[0],
-  username: '', password: ''
+  username: '', password: '', hinhthucdong: ''
 };
 
 export default function StudentManager({ activeSubTab }) {
   const { config } = useConfig();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
+  const walletsConfig = (config ? [
+    { id: 'vi1', name: config.vi1?.name || '' },
+    { id: 'vi2', name: config.vi2?.name || '' },
+    { id: 'vi3', name: config.vi3?.name || '' },
+    { id: 'vi4', name: config.vi4?.name || '' }
+  ].filter(w => w.name.trim() !== '') : []);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -782,6 +788,14 @@ export default function StudentManager({ activeSubTab }) {
                     <select name="trangthai" value={formData.trangthai} onChange={handleChange} style={{ fontWeight: 600 }}>
                       <option value="Đang Học">Đang Học</option>
                       <option value="Đã Nghỉ">Đã Nghỉ</option>
+                    </select>
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#db2777', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hình thức đóng mặc định</label>
+                    <select name="hinhthucdong" value={formData.hinhthucdong || ''} onChange={handleChange} style={{ fontWeight: 600 }}>
+                      <option value="">-- Chọn hình thức --</option>
+                      <option value="Tiền mặt">Tiền mặt</option>
+                      {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
                   </div>
                 </div>

@@ -6,8 +6,6 @@ import {
   Users,
   DollarSign,
   TrendingUp,
-  Award,
-  Calendar,
   Filter,
   RefreshCw,
   PieChart as PieIcon,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Search, Trash2, Plus, Minus, CreditCard, CheckCircle, X, FileDown } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, CreditCard, CheckCircle, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './SalesPOS.css';
 import { useConfig } from '../ConfigContext';
@@ -120,6 +120,12 @@ export default function SalesPOS() {
    }, [tongCongBill]);
 
    const conLai = tongCongBill - pCur(daDong);
+
+   useEffect(() => {
+      if (selectedStudent) {
+         setHinhThuc(selectedStudent.hinhthucdong || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt'));
+      }
+   }, [selectedStudent, walletsConfig]);
 
    const handleSaveBill = async () => {
       if (!selectedStudent) return window.alert('Vui lòng chọn học sinh để lưu Bill!');
@@ -450,7 +456,7 @@ export default function SalesPOS() {
                <div className="sp-co-config mt-2">
                   <div className="cfg-item">
                      <label>Hình thức thanh toán</label>
-                     <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)}>
+                     <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)} disabled={!!selectedStudent}>
                         {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
                         {walletsConfig.map(w => (
                            <option key={w.id} value={w.name}>{w.name}</option>
@@ -517,34 +523,7 @@ export default function SalesPOS() {
          <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -1 }}>
             <div id="pos-print-temp" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
 
-               {/* WATERMARK WAVY LINES */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.2,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
 
-               {/* CENTRAL LOGO WATERMARK */}
-               <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%) rotate(-30deg)',
-                  fontSize: '60pt',
-                  fontWeight: 'bold',
-                  color: 'rgba(0, 102, 204, 0.05)',
-                  zIndex: 0,
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                  textAlign: 'center',
-                  width: '150%'
-               }}>
-                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
-               </div>
 
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>

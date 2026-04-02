@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard } from 'lucide-react';
+import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
@@ -714,6 +714,40 @@ export default function InvoiceManager() {
       handleFormChange('ngayBatDau', d.toISOString().split('T')[0]);
    };
 
+   const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+
+   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
+   const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+   const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+
+   // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
+   let tuitionRefund = 0;
+   let mealRefund = 0;
+   const p6 = parseFloat(config?.nghi6ngay) || 0;
+   const p12 = parseFloat(config?.nghi12ngay) || 0;
+
+   if (studySummary?.consecutiveLeave) {
+      studySummary.consecutiveLeave.forEach(group => {
+         const count = group.so_ngay_nghi_lien_tuc;
+         if (count >= 12) {
+            tuitionRefund += count * trutiennghi_val * (p12 / 100);
+         } else if (count >= 6) {
+            tuitionRefund += count * trutiennghi_val * (p6 / 100);
+         }
+         // Hoàn trả tiền ăn: >= 3 ngày liên tiếp
+         if (count >= 3) {
+            mealRefund += count * trutienan_val;
+         }
+      });
+   }
+
+   const actualMealRefund = mealRefund;
+   const actualTuitionRefund = tuitionRefund;
+   const deductionSum = studySummary ? (actualMealRefund + actualTuitionRefund) : 0;
+
+   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum - invoiceData.giamHocphi - deductionSum;
+   const conLai = tongCong - invoiceData.daDong;
+
    const handleExportNotice = async () => {
       const currentTimePeriod = calculateThoiluong(invoiceData);
       if (currentTimePeriod) {
@@ -793,6 +827,8 @@ export default function InvoiceManager() {
             sobuoihoc: sobuoihocFinal,
             phuthu: invoiceData.phuthu,
             studySummary: studySummary,
+            actualMealRefund,
+            actualTuitionRefund,
             deductionSum,
             trutienan_val,
             trutiennghi_val
@@ -923,6 +959,8 @@ export default function InvoiceManager() {
             thoiluong: currentTimePeriod,
             phuthu: invoiceData.phuthu,
             studySummary: studySummary,
+            actualMealRefund,
+            actualTuitionRefund,
             deductionSum,
             trutienan_val,
             trutiennghi_val
@@ -938,30 +976,16 @@ export default function InvoiceManager() {
          setIsSaving(false);
       }
    };
-
    const filteredStudents = students.filter(s =>
       (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (s.sdt && s.sdt.includes(searchTerm)) ||
       (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
    );
 
-
-
-   const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-
-   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
-   const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-   const deductionSum = studySummary ? (trutienan_val + trutiennghi_val) * (studySummary.nghiPhep || 0) : 0;
-
-   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum - invoiceData.giamHocphi - deductionSum;
-
    // Auto fill daDong in InvoiceManager: Default to full payment
    useEffect(() => {
       setInvoiceData(prev => ({ ...prev, daDong: tongCong }));
    }, [tongCong, selectedStudent?.mahv, activeClass?.malop]);
-
-   const conLai = tongCong - invoiceData.daDong;
 
    return (
       <div className={`invoice-manager animate-fade-in ${showMobileDetails ? 'mobile-show-details' : ''}`}>
@@ -1110,12 +1134,12 @@ export default function InvoiceManager() {
                               {deductionSum > 0 && (
                                  <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                       <span>Hoàn trả tiền ăn ({studySummary.nghiPhep} ngày x {formatCurrency(trutienan_val)}đ):</span>
-                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(trutienan_val * studySummary.nghiPhep)}đ</span>
+                                       <span>Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(actualMealRefund)}đ</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                                       <span>Hoàn trả tiền học ({studySummary.nghiPhep} ngày x {formatCurrency(trutiennghi_val)}đ):</span>
-                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(trutiennghi_val * studySummary.nghiPhep)}đ</span>
+                                       <span>Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(actualTuitionRefund)}đ</span>
                                     </div>
                                     <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
                                        Tổng hoàn trả từ lịch nghỉ: -{formatCurrency(deductionSum)}đ
@@ -1358,32 +1382,6 @@ export default function InvoiceManager() {
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
             <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-               {/* Invoice Template Content ... (remains same) */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.2,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
-               <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%) rotate(-30deg)',
-                  fontSize: '60pt',
-                  fontWeight: 'bold',
-                  color: 'rgba(0, 102, 204, 0.05)',
-                  zIndex: 0,
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                  textAlign: 'center',
-                  width: '150%'
-               }}>
-                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
-               </div>
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
@@ -1439,12 +1437,12 @@ export default function InvoiceManager() {
                      {downloadingInvoice?.deductionSum > 0 && (
                         <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Hoàn trả tiền ăn ({downloadingInvoice.studySummary.nghiPhep} ngày):</span>
-                              <b>-{formatCurrency(downloadingInvoice.trutienan_val * downloadingInvoice.studySummary.nghiPhep)} đ</b>
+                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                              <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn trả tiền học ({downloadingInvoice.studySummary.nghiPhep} ngày):</span>
-                              <b>-{formatCurrency(downloadingInvoice.trutiennghi_val * downloadingInvoice.studySummary.nghiPhep)} đ</b>
+                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                              <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
                            </div>
                         </div>
                      )}
@@ -1459,7 +1457,7 @@ export default function InvoiceManager() {
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        Facebook: Trường Lá - E Skills School <br />
+                        Facebook: {config?.tencongty} <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>

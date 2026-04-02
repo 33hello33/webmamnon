@@ -382,7 +382,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       };
       window.addEventListener('afterprint', handleAfterPrint);
       return () => window.removeEventListener('afterprint', handleAfterPrint);
-   }, [fetchBalances]);
+   }, []);
 
    // Relational mappings
    const [hvMap, setHvMap] = useState({});
@@ -794,7 +794,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                const productName = (hhMap[item.mahang] || '').toLowerCase();
                if (studentName.includes(lowerQ) || productName.includes(lowerQ)) return true;
             }
-            
+
             return false;
          });
       }
@@ -1283,16 +1283,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <span className="text-muted" style={{ fontSize: '0.9rem', fontWeight: 500 }}>
                            Ngày mốc: <strong style={{ color: '#334155' }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
                         </span>
-                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            {!initialBalances.id && (
-                               <button className="fm-btn-add-dauky" onClick={() => {
-                                  setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
-                                  setBalanceModal(true);
-                               }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
-                            )}
-                            <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
-                            <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
-                         </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                           {!initialBalances.id && (
+                              <button className="fm-btn-add-dauky" onClick={() => {
+                                 setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
+                                 setBalanceModal(true);
+                              }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
+                           )}
+                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
+                        </div>
                      </div>
                   </div>
 
@@ -1577,23 +1577,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU THU CHI */}
          {printReceipt && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
-               {/* WATERMARK WAVY LINES */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.25,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
                      <div style={{ width: '180px', textAlign: 'left' }}>
                         <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     
+
                      {/* CENTER: Info */}
                      <div style={{ flex: 1, textAlign: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
@@ -1670,16 +1660,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU LƯƠNG */}
          {printLuong && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
-               {/* WATERMARK WAVY LINES */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.25,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1687,7 +1667,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ width: '180px', textAlign: 'left' }}>
                         <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     
+
                      {/* CENTER: Info */}
                      <div style={{ flex: 1, textAlign: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
@@ -1794,33 +1774,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
          {printHoaDon && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-               {/* WATERMARK WAVY LINES */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.2,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
-               <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%) rotate(-30deg)',
-                  fontSize: '60pt',
-                  fontWeight: 'bold',
-                  color: 'rgba(0, 102, 204, 0.05)',
-                  zIndex: 0,
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                  textAlign: 'center',
-                  width: '150%'
-               }}>
-                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
-               </div>
-
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
@@ -1900,7 +1853,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   {/* FOOTER */}
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        Facebook: Trường Lá - E Skills School <br />
+                        Facebook: {config?.tencongty} <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
@@ -1920,16 +1873,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU BILL HÀNG POS */}
          {printBill && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
-               {/* WATERMARK WAVY LINES */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.25,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1937,7 +1880,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ width: '180px', textAlign: 'left' }}>
                         <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     
+
                      {/* CENTER: Info */}
                      <div style={{ flex: 1, textAlign: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>

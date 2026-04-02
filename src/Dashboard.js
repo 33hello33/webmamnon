@@ -6,7 +6,6 @@ import {
   Wallet,
   Receipt,
   ShoppingCart,
-  Clock,
   Users,
   Briefcase,
   AlertTriangle,
