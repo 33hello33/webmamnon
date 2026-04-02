@@ -73,6 +73,7 @@ export default function SalesPOS() {
    const handleSelectStudent = (st) => {
       setSelectedStudent(st);
       calculateOldDebt(st.mahv);
+      if (st.hinhthucdong) setHinhThuc(st.hinhthucdong);
       if (window.innerWidth <= 991) setCurrentStep(2);
    };
 
@@ -450,7 +451,7 @@ export default function SalesPOS() {
                <div className="sp-co-config mt-2">
                   <div className="cfg-item">
                      <label>Hình thức thanh toán</label>
-                     <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)}>
+                     <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)} disabled={true} style={{ opacity: 0.7, cursor: 'not-allowed', background: '#f1f5f9' }}>
                         {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
                         {walletsConfig.map(w => (
                            <option key={w.id} value={w.name}>{w.name}</option>
