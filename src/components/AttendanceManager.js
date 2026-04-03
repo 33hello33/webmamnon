@@ -42,7 +42,7 @@ export default function AttendanceManager({ students, showMessage }) {
   useEffect(() => {
     const fetchClasses = async () => {
       try {
-        const { data } = await supabase.from('tbl_lop').select('*').order('tenlop');
+        const { data } = await supabase.from('tbl_lop').select('*').neq('daxoa', 'Đã Xóa').order('tenlop');
         if (data) setClasses(data);
       } catch (err) { console.error(err); }
     };
