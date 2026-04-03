@@ -717,6 +717,27 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const { error } = await supabase.from('tbl_thongbao').insert(recordsToInsert);
       if (error) throw error;
 
+      // EXCEL EXPORT: Bổ sung theo yêu cầu người dùng
+      const excelData = filteredExport.map((row, idx) => ({
+        "STT": idx + 1,
+        "Mã học sinh": row.mahv,
+        "Họ và tên": row.tenhv,
+        "Lớp": selectedClass?.tenlop || '',
+        "Tháng": formatMonthYear(row.ngaybatdau),
+        "Học phí": row.hocphi || 0,
+        "Giảm trừ": row.giamhocphi || 0,
+        "Hoàn tiền ăn": row.truTienAn || 0,
+        "Hoàn tiền học": row.truHocPhi || 0,
+        "Tổng cộng": row.tongcong || 0,
+        "Hình thức": row.hinhthuc,
+        "Ghi chú": row.ghichu
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "DanhSachHocPhi");
+      XLSX.writeFile(wb, `DS_Thong_Bao_HP_${selectedClass?.tenlop}_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`);
+
       setNoticesToPrint(currentNotices);
     } catch (err) {
       console.error(err);
