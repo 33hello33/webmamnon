@@ -269,6 +269,32 @@
   overflow-y: auto;
 }
 
+.batch-notice-table {
+  max-height: none !important;
+  min-height: 0 !important;
+}
+
+/* Custom scrollbar for data tables */
+.inline-table::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.inline-table::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 5px;
+}
+
+.inline-table::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 5px;
+  border: 2px solid #f8fafc;
+}
+
+.inline-table::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 .td-input {
   width: 100%;
   padding: 6px;

@@ -398,7 +398,7 @@ export default function InvoiceManager() {
 
       let hocphi = defaultFee;
       let giamHocphi = 0;
-      let hinhThuc = student.hinhthucdong || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
+      let hinhThuc = (student.hinhthucdong || '').trim() || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
       let ghiChu = '';
       let phuthu = [];
 
@@ -452,10 +452,10 @@ export default function InvoiceManager() {
             const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
             hocphi = parseCur(recentDoc.hocphi);
             giamHocphi = parseCur(recentDoc.giamhocphi);
-            hinhThuc = student.hinhthucdong || recentDoc.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
-            if (walletsConfig.length > 0 && !walletsConfig.some(w => w.name === hinhThuc) && hinhThuc !== 'Tiền mặt') {
-               // Only fallback if student doesn't have a specific method and recent doc didn't provide one
-               if (!student.hinhthucdong) hinhThuc = walletsConfig[0].name;
+            const studentHinhThuc = (student.hinhthucdong || '').trim();
+            hinhThuc = studentHinhThuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
+            if (walletsConfig.length > 0 && hinhThuc !== 'Tiền mặt' && !walletsConfig.some(w => w.name === hinhThuc)) {
+               hinhThuc = walletsConfig[0].name;
             }
             ghiChu = recentDoc.ghichu || '';
             if (recentDoc.ngaybatdau) {

@@ -176,6 +176,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     ngayKetThuc: '',
     ghiChu: ''
   });
+  const [batchHinhThucFilter, setBatchHinhThucFilter] = useState('Tất cả');
   const [batchStudentsData, setBatchStudentsData] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [noticesToPrint, setNoticesToPrint] = useState([]);
@@ -361,6 +362,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào "Đang Học" để gửi thông báo');
 
     setIsBatchNoticeOpen(true);
+    setBatchHinhThucFilter('Tất cả');
     setLoading(true);
 
     try {
@@ -518,9 +520,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const stHinhThuc = s.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
         const totalRefund = mealRefund + tuitionRefund;
 
-        const diHoc = studentAttendance.filter(a => a.trangthai === 'Có mặt').length;
-        const nghiPhep = studentAttendance.filter(a => a.trangthai === 'Nghỉ có phép').length;
-        const nghiKP = studentAttendance.filter(a => a.trangthai === 'Nghỉ không phép').length;
+        const diHoc = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'có mặt').length;
+        const nghiPhep = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ phép').length;
+        const nghiKP = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ không phép').length;
         const statsPeriod = range ? formatMonthYear(range.start) : '';
 
         return {
@@ -618,7 +620,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ...item,
         hocphi: hpNumber,
         giamhocphi: batchNoticeData.giamHocphi || 0,
-        hinhthuc: batchNoticeData.hinhThuc,
         ngaybatdau: batchNoticeData.ngayBatDau,
         ghichu: batchNoticeData.ghiChu,
         tongcong: tc
@@ -665,8 +666,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
       }
 
-      for (let i = 0; i < batchStudentsData.length; i++) {
-        const row = batchStudentsData[i];
+      const filteredExport = (batchStudentsData || []).filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter);
+      for (let i = 0; i < filteredExport.length; i++) {
+        const row = filteredExport[i];
         const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
 
         const tl = formatMonthYear(row.ngaybatdau);
@@ -1450,7 +1452,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               <button className="close-btn" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '8px', color: '#94a3b8' }}><X size={24} /></button>
             </div>
 
-            <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fcfdfe' }}>
+            <div className="modal-body" style={{ flex: 1, minHeight: 0, overflowY: 'hidden', padding: '20px', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fcfdfe' }}>
 
               {/* PHẦN 1: CÀI ĐẶT CHUNG - REARRANGED PER DRAWING */}
               <div style={{ background: '#ffffff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -1477,6 +1479,25 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       onClick={() => handleBatchMonthChange(1)}
                       style={{ width: '28px', height: '28px', border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', fontWeight: 900 }}
                     > &gt; </button>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid #e2e8f0', paddingLeft: '15px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', whiteSpace: 'nowrap' }}>LỌC HÌNH THỨC:</span>
+                    <select
+                      value={batchHinhThucFilter}
+                      onChange={(e) => setBatchHinhThucFilter(e.target.value)}
+                      style={{
+                        height: '32px', padding: '0 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 700,
+                        color: '#0369a1', background: '#f0f9ff', fontSize: '0.8rem', outline: 'none', cursor: 'pointer'
+                      }}
+                    >
+                      <option value="Tất cả">Tất cả hình thức</option>
+                      {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                      {walletsConfig.map(w => (
+                        <option key={w.id} value={w.name}>{w.name}</option>
+                      ))}
+                      {!walletsConfig.some(w => w.name === 'Tiền mặt') && <option value="Tiền mặt">Tiền mặt</option>}
+                    </select>
                   </div>
                 </div>
 
@@ -1553,13 +1574,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
 
               {/* PHẦN 3: DANH SÁCH CHI TIẾT */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase' }}>
-                  <Users size={16} /> Danh sách học sinh ({batchStudentsData.length})
+                  <Users size={16} /> Danh sách học sinh ({(batchStudentsData || []).filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter).length})
                 </h4>
 
-                <div style={{ flex: 1, minHeight: '350px', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <div className="inline-table" style={{ height: '100%', overflow: 'auto' }}>
+                <div style={{ flex: 1, minHeight: 0, border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                  <div className="inline-table batch-notice-table" style={{ height: '100%', overflow: 'auto', scrollbarWidth: 'thin' }}>
                     <table className="data-table" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                       <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                         <tr style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1578,7 +1599,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {(batchStudentsData || []).map((row, idx) => (
+                        {(batchStudentsData || [])
+                          .filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter)
+                          .map((row, idx) => (
                           <tr key={row.mahv} style={{ fontSize: '0.85rem' }}>
                             <td style={{ padding: '8px' }}>
                               <button onClick={() => handleRemoveBatchStudent(row.mahv)} style={{ color: '#ef4444', background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer' }}>
@@ -1704,18 +1727,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 </div>
 
                 {/* FEES BOX */}
-                <div style={{ 
-                  background: '#f0f9ff', 
-                  border: '1px solid #bae6fd', 
-                  borderRadius: '16px', 
-                  padding: '24px', 
+                <div style={{
+                  background: '#f0f9ff',
+                  border: '1px solid #bae6fd',
+                  borderRadius: '16px',
+                  padding: '24px',
                   marginTop: '15px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                     <div style={{ fontWeight: 600 }}>Học phí:</div>
                     <div style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</div>
                   </div>
-                  
+
                   {parseInt(String(printHoaDon.giamhocphi).replace(/\D/g, '')) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                       <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
@@ -1752,9 +1775,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b></div>
                   {printHoaDon.diemDanhInfo && (
                     <div style={{ opacity: 0.9 }}>
-                      Điểm danh ({printHoaDon.diemDanhInfo.statsPeriod}): 
-                      <span> Đi học: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.diHoc}</b></span>, 
-                      <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiPhep}</b></span>, 
+                      Điểm danh ({printHoaDon.diemDanhInfo.statsPeriod}):
+                      <span> Đi học: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.diHoc}</b></span>,
+                      <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiPhep}</b></span>,
                       <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiKP}</b></span>
                     </div>
                   )}
