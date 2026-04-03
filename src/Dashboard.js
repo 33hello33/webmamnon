@@ -139,19 +139,13 @@ function Dashboard() {
         }
       });
 
-      // Fetch initial 30 logs using Postgres Join
+      // Fetch initial 30 logs
       supabase.from('tbl_log')
-        .select(`
-                 *,
-                 tbl_nv!manv ( tennv )
-             `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(30)
-        .then(({ data, error }) => {
-          if (error) {
-            // Fallback normal fetch
-            supabase.from('tbl_log').select('*').order('created_at', { ascending: false }).limit(30).then((res) => setLogs(res.data || []));
-          } else if (data) {
+        .then(({ data }) => {
+          if (data) {
             setLogs(data);
           }
         });
@@ -276,8 +270,39 @@ function Dashboard() {
                                 {new Date(l.created_at || Date.now()).toLocaleString('vi-VN')}
                               </span>
                             </div>
-                            <div style={{ color: '#334155', lineHeight: 1.5, background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px dashed #cbd5e1', fontSize: '0.85rem' }}>
-                              {l.mota || 'Không có mô tả chi tiết'}
+                            <div style={{ color: '#334155', lineHeight: 1.5, background: l.mota?.includes('Đã xóa') || l.mota?.includes('Xóa dòng') ? '#fff1f2' : (l.mota?.includes('[LỖI]') ? '#fff7ed' : '#f8fafc'), padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px dashed #cbd5e1', fontSize: '0.85rem' }}>
+                              {(() => {
+                                const m = l.mota || '';
+                                if (!m) return 'Không có mô tả chi tiết';
+                                if (m.startsWith('Đã') || m.startsWith('[LỖI]')) return m;
+
+                                // Translate old technical logs on the fly
+                                const tableNames = {
+                                  'tbl_hanghoa': 'Sản phẩm/Hàng hóa',
+                                  'tbl_billhanghoa': 'Hóa đơn bán hàng',
+                                  'tbl_hd': 'Hóa đơn học phí',
+                                  'tbl_nv': 'Nhân viên',
+                                  'tbl_hv': 'Học viên',
+                                  'tbl_lop': 'Lớp học',
+                                  'tbl_diemdanh': 'Điểm danh',
+                                  'tbl_thu': 'Phiếu thu',
+                                  'tbl_chi': 'Phiếu chi',
+                                  'tbl_thongbao': 'Thông báo học phí',
+                                  'tbl_task': 'Công việc',
+                                  'tbl_chamcong': 'Chấm công',
+                                  'tbl_luong': 'Phiếu lương'
+                                };
+                                const regex = /\[(.*?)\] Bảng: (.*)/;
+                                const match = m.match(regex);
+                                if (match) {
+                                  let actionType = match[1].toLowerCase();
+                                  let table = match[2].trim();
+                                  let actionLabel = actionType.includes('nhập mới') ? 'Đã thêm' : (actionType.includes('sửa') ? 'Đã cập nhật' : (actionType.includes('xóa') ? 'Đã xóa' : actionType));
+                                  let tableLabel = tableNames[table] || table;
+                                  return `${actionLabel} ${tableLabel.toLowerCase()}`;
+                                }
+                                return m;
+                              })()}
                             </div>
                           </div>
                         );
@@ -458,7 +483,7 @@ function Dashboard() {
           <div className="sidebar-logo">
             <div className="logo-mark" style={{ background: 'transparent' }}>
               <img
-                src={config?.logo || '/logo.png'}
+                src={config?.logo || ''}
                 alt="Logo"
                 style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
                 onError={(e) => { e.target.style.display = 'none'; }}

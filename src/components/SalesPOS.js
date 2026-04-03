@@ -535,7 +535,8 @@ export default function SalesPOS() {
                      <div style={{ textAlign: 'right' }}>
                         <div>Mã Bill: <b>{posPrintData?.mabill || '...'}</b></div>
                         <div>Ngày lập: {posPrintData ? new Date(posPrintData.ngaylap).toLocaleDateString('vi-VN') : '...'}</div>
-                        <img src={config?.logo || "/logo.png"} alt="logo" crossOrigin="anonymous" style={{ width: 80, marginTop: 5 }} />
+                        {config?.logo && <img src={config.logo} alt="logo" crossOrigin="anonymous" style={{ width: 80, marginTop: 5 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                        {!config?.logo && <div style={{ height: 20 }}></div>}
                      </div>
                   </div>
 

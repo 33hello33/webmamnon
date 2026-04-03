@@ -197,19 +197,18 @@ export default function Statistics() {
     const toTS = end || '2999-12-31T23:59:59+07:00';
 
     try {
-      const [resHd, resBill, resChi, resThu, resNhap] = await Promise.all([
+      const [resHd, resBill, resPhieu, resNhap] = await Promise.all([
         supabase.from('tbl_hd').select('dadong').neq('daxoa', 'Đã Xóa').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_billhanghoa').select('dadong').neq('daxoa', 'Đã Xóa').gte('ngaylap', fromTS).lte('ngaylap', toTS),
-        supabase.from('tbl_phieuchi').select('chiphi').or('daxoa.neq."Đã Xóa",daxoa.is.null').eq('loaiphieu', 'Chi').gte('ngaylap', fromTS).lte('ngaylap', toTS),
-        supabase.from('tbl_phieuchi').select('chiphi').or('daxoa.neq."Đã Xóa",daxoa.is.null').eq('loaiphieu', 'Thu').gte('ngaylap', fromTS).lte('ngaylap', toTS),
+        supabase.from('tbl_phieuchi').select('chiphi, loaiphieu').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_nhapkho').select('thanhtien').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaynhap', fromTS).lte('ngaynhap', toTS)
       ]);
 
       const details = {
         'Học phí': resHd.data?.reduce((sum, i) => sum + parseAmount(i.dadong), 0) || 0,
         'Bán hàng': resBill.data?.reduce((sum, i) => sum + parseAmount(i.dadong), 0) || 0,
-        'Thu khác': resThu.data?.reduce((sum, i) => sum + parseAmount(i.chiphi), 0) || 0,
-        'Phiếu chi': resChi.data?.reduce((sum, i) => sum + parseAmount(i.chiphi), 0) || 0,
+        'Thu khác': resPhieu.data?.filter(p => p.loaiphieu === 'Thu').reduce((sum, i) => sum + parseAmount(i.chiphi), 0) || 0,
+        'Phiếu chi': resPhieu.data?.filter(p => p.loaiphieu === 'Chi').reduce((sum, i) => sum + parseAmount(i.chiphi), 0) || 0,
         'Nhập kho': resNhap.data?.reduce((sum, i) => sum + parseAmount(i.thanhtien), 0) || 0
       };
 
@@ -237,11 +236,10 @@ export default function Statistics() {
     const startDateSmall = `${startDateObj.getFullYear()}-${String(startDateObj.getMonth() + 1).padStart(2, '0')}-01`;
 
     try {
-      const [resHd, resBill, resChi, resThu, resNhap, resHv] = await Promise.all([
+      const [resHd, resBill, resPhieu, resNhap, resHv] = await Promise.all([
         supabase.from('tbl_hd').select('ngaylap, dadong').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', startDateSmall).limit(10000),
         supabase.from('tbl_billhanghoa').select('ngaylap, dadong').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', startDateSmall).limit(10000),
-        supabase.from('tbl_phieuchi').select('ngaylap, chiphi').or('daxoa.neq."Đã Xóa",daxoa.is.null').eq('loaiphieu', 'Chi').gte('ngaylap', startDateSmall).limit(10000),
-        supabase.from('tbl_phieuchi').select('ngaylap, chiphi').or('daxoa.neq."Đã Xóa",daxoa.is.null').eq('loaiphieu', 'Thu').gte('ngaylap', startDateSmall).limit(10000),
+        supabase.from('tbl_phieuchi').select('ngaylap, chiphi, loaiphieu').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', startDateSmall).limit(10000),
         supabase.from('tbl_nhapkho').select('ngaynhap, thanhtien').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaynhap', startDateSmall).limit(10000),
         supabase.from('tbl_hv').select('ngaynhaphoc').neq('trangthai', 'Đã Nghỉ').gte('ngaynhaphoc', startDateSmall).limit(10000)
       ]);
@@ -303,13 +301,13 @@ export default function Statistics() {
       });
 
       // Process Income (Thu)
-      (resThu.data || []).forEach(item => {
+      (resPhieu.data || []).filter(p => p.loaiphieu === 'Thu').forEach(item => {
         const key = extractYearMonth(item.ngaylap);
         if (key && monthlyProfit.hasOwnProperty(key)) monthlyProfit[key] += parseAmount(item.chiphi);
       });
 
       // Process Expenses (Chi)
-      (resChi.data || []).forEach(item => {
+      (resPhieu.data || []).filter(p => p.loaiphieu === 'Chi').forEach(item => {
         const key = extractYearMonth(item.ngaylap);
         if (key && monthlyProfit.hasOwnProperty(key)) monthlyProfit[key] -= parseAmount(item.chiphi);
       });
@@ -376,9 +374,9 @@ export default function Statistics() {
     try {
       const [resHd, resBill, resLop, resLichHocActive] = await Promise.all([
         supabase.from('tbl_hd').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
-        supabase.from('tbl_billhanghoa').select('*, tbl_hv(tenhv)').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
+        supabase.from('tbl_billhanghoa').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_lop').select('malop, tenlop'),
-        supabase.from('tbl_hv').select('mahv, malop, tbl_lop(tenlop)').neq('trangthai', 'Đã Nghỉ')
+        supabase.from('tbl_hv').select('mahv, malop').neq('trangthai', 'Đã Nghỉ')
       ]);
  
       const dataByClass = {};
@@ -401,9 +399,12 @@ export default function Statistics() {
       const studentToClassMap = {};
       const sisoMap = {};
  
+      const classMap = {};
+      resLop.data?.forEach(l => classMap[l.malop] = l.tenlop);
+
       resLichHocActive.data?.forEach(hv => {
         if (!studentToClassMap[hv.mahv]) {
-          studentToClassMap[hv.mahv] = hv.tbl_lop?.tenlop;
+          studentToClassMap[hv.mahv] = classMap[hv.malop];
         }
         if (hv.malop) {
           sisoMap[hv.malop] = (sisoMap[hv.malop] || 0) + 1;
@@ -479,12 +480,10 @@ export default function Statistics() {
       setActiveDateRangeStr('');
     }
 
-    await Promise.all([
-      fetchOverview(start, end),
-      fetchCoCauThuChi(start, end),
-      fetchGrowthCharts(),
-      fetchClassStats(start, end)
-    ]);
+    await fetchOverview(start, end);
+    await fetchCoCauThuChi(start, end);
+    await fetchGrowthCharts();
+    await fetchClassStats(start, end);
     setLoading(false);
   };
 

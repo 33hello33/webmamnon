@@ -172,7 +172,6 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
       const phieuChi = await safeFetch('tbl_phieuchi', startD, endD);
       const hd = await safeFetch('tbl_hd', startD, endD);
       const nhapkho = await safeFetch('tbl_nhapkho', startD, endD);
-      const chamcong = await safeFetch('tbl_phieuchamcong', startD, endD);
 
       const validBill = bill.filter(isNotDeleted);
       const validPC = phieuChi.filter(isNotDeleted);
@@ -204,7 +203,6 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
       const phieuChi = await safeFetch('tbl_phieuchi', startD, endD);
       const hd = await safeFetch('tbl_hd', startD, endD);
       const nhapkho = await safeFetch('tbl_nhapkho', startD, endD);
-      const chamcong = await safeFetch('tbl_phieuchamcong', startD, endD);
 
       const validBill = bill.filter(isNotDeleted);
       const validPC = phieuChi.filter(isNotDeleted);

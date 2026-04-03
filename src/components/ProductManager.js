@@ -411,7 +411,7 @@ export default function ProductManager({ currentUser }) {
          {/* POPUP THÊM + SỬA */}
          {isFormOpen && document.body ? createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 9999 }}>
-               <div className="fm-modal animate-slide-up" style={{ maxWidth: '400px' }}>
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '400px' }}>
                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b' }}>{isEdit ? 'Sửa Hàng Hóa' : 'Thêm Hàng Hóa'}</h3>
                      <button className="close-btn" onClick={() => setIsFormOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
@@ -444,7 +444,7 @@ export default function ProductManager({ currentUser }) {
          {/* POPUP NHẬP KHO CHUẨN */}
          {isImportOpen && document.body ? createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 9999 }}>
-               <div className="fm-modal animate-slide-up" style={{ maxWidth: '500px' }}>
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px' }}>
                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b' }}>Nhập Kho - Cập Nhật Số Lượng</h3>
                      <button className="close-btn" onClick={() => setIsImportOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
@@ -496,7 +496,7 @@ export default function ProductManager({ currentUser }) {
          ) : null}
          {isBatchImportOpen && document.body ? createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 9999 }}>
-               <div className="fm-modal animate-slide-up" style={{ maxWidth: '850px', width: '95%' }}>
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '850px', width: '95%', background: '#ffffff', borderRadius: '12px' }}>
                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b' }}>Nhập Lô Hàng Hoá</h3>
                      <button type="button" onClick={() => setIsBatchImportOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
@@ -533,7 +533,7 @@ export default function ProductManager({ currentUser }) {
                                     const prod = products.find(p => p.mahang === e.target.value);
                                     handleRowChange(row.id, 'mahang', e.target.value);
                                     if (prod) handleRowChange(row.id, 'gianhap', fCur(prod.gianhap || 0));
-                                 }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                 }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minHeight: '40px' }}>
                                     <option value="">-- Chọn hàng hoá... --</option>
                                     {products.map(p => (
                                        <option key={p.mahang} value={p.mahang}>{p.tenhang} ({p.mahang})</option>
@@ -541,13 +541,13 @@ export default function ProductManager({ currentUser }) {
                                  </select>
                               </div>
                               <div style={{ flex: '1 1 100px' }}>
-                                 <input type="number" min="1" required placeholder="SL nhập" value={row.soluongThem} onChange={e => handleRowChange(row.id, 'soluongThem', e.target.value)} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                 <input type="number" min="1" required placeholder="SL nhập" value={row.soluongThem} onChange={e => handleRowChange(row.id, 'soluongThem', e.target.value)} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minHeight: '40px' }} />
                               </div>
                               <div style={{ flex: '1.5 1 150px' }}>
-                                 <input type="text" required placeholder="Giá nhập/SP" value={row.gianhap} onChange={e => handleRowChange(row.id, 'gianhap', fCur(e.target.value.replace(/\D/g, '')))} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                                 <input type="text" required placeholder="Giá nhập/SP" value={row.gianhap} onChange={e => handleRowChange(row.id, 'gianhap', fCur(e.target.value.replace(/\D/g, '')))} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', textAlign: 'right', boxSizing: 'border-box', minHeight: '40px' }} />
                               </div>
                               <div style={{ flex: '1.5 1 150px', display: 'flex', alignItems: 'center', height: '100%' }}>
-                                 <input type="text" disabled value={fCur((parseInt(row.soluongThem || 0) * parseInt((row.gianhap || '').toString().replace(/,/g, '') || 0)))} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, textAlign: 'right' }} />
+                                 <input type="text" disabled value={fCur((parseInt(row.soluongThem || 0) * parseInt((row.gianhap || '').toString().replace(/,/g, '') || 0)))} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600, textAlign: 'right', boxSizing: 'border-box', minHeight: '40px' }} />
                               </div>
                               {batchImportData.rows.length > 1 && (
                                  <button type="button" onClick={() => handleRemoveRow(row.id)} style={{ padding: '0.65rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer' }}><Trash2 size={18} /></button>

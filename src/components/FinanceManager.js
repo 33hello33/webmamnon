@@ -359,15 +359,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const executeConfirmAction = async () => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
-      if (confirmDialog.actionType === 'CONFIRM_LUONG') {
-         const id = confirmDialog.payload;
-         const { error } = await supabase.from('tbl_phieuchamcong').update({ daxacnhan: true }).eq('id', id);
-         if (error) alert("Lỗi khi xác nhận: " + error.message);
-         else {
-            fetchData();
-            fetchBalances();
-         }
-      } else if (confirmDialog.actionType === 'DELETE') {
+      if (confirmDialog.actionType === 'DELETE') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          if (deletePassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
@@ -434,15 +426,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }
    };
 
-   const handleConfirmLuong = (id) => {
-      setConfirmDialog({
-         isOpen: true,
-         title: 'Xác nhận duyệt lương',
-         message: 'Bạn có chắc chắn muốn xác nhận đã chuyển khoản / chi trả tiền lương tháng này cho bộ hồ sơ này không? Danh sách quỹ sẽ được ghi nhận.',
-         actionType: 'CONFIRM_LUONG',
-         payload: id
-      });
-   };
+
 
    const parseNoidung = (nd) => {
       if (!nd || typeof nd !== 'string') return { headers: [], rows: [] };
@@ -893,9 +877,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (activeSubTab === 'hoadon') {
                const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
                if (studentName.includes(lowerQ)) return true;
-            } else if (activeSubTab === 'phieuluong') {
-               const teacherName = (item.tennv || nvMap[item.manv] || '').toLowerCase();
-               if (teacherName.includes(lowerQ)) return true;
+
             } else if (activeSubTab === 'nhapkho') {
                const productName = (hhMap[item.mahang] || '').toLowerCase();
                if (productName.includes(lowerQ)) return true;
@@ -1023,76 +1005,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
                </>
             );
-         case 'phieuluong':
-            return (
-               <>
-                  <div className="table-scroll-wrapper">
-                     <table className="fm-table">
-                        <thead>
-                           <tr>
-                              <th>ID Phiếu</th>
-                              <th>Ngày Lập</th>
-                              <th>Hồ Sơ Nhận Lương</th>
 
-                              <th>Ghi Chú</th>
-                              <th>Hình Thức</th>
-                              <th>Đã Xác Nhận</th>
-                              <th className="text-right">Tổng Thanh Toán</th>
-                              <th className="text-center">Hành động</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {filteredData.map(r => (
-                              <tr key={r.id}>
-                                 <td className="fm-code">{r.id}</td>
-                                 <td>{formatDate(r.ngaylap)}</td>
-                                 <td className="font-semibold text-primary">{r.tennv || nvMap[r.manv] || r.manv}</td>
-
-                                 <td className="fm-desc">{r.ghichu}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td><span className={`fm-badge ${r.daxacnhan ? 'bg-success' : 'bg-pending'}`}>{r.daxacnhan ? 'Đã duyệt' : 'Chờ ký'}</span></td>
-                                 <td className="text-right font-bold text-success">{fCur(r.tongcong)}</td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!r.daxacnhan && <button title="Xác nhận chi lương" className="btn-blue" onClick={() => handleConfirmLuong(r.id)}><CheckCircle2 size={16} /></button>}
-                                    <button title="In phiếu" className="btn-blue" onClick={() => handlePrintLuong(r)}><Printer size={16} /></button>
-                                    <button title="Hủy phiếu lương" onClick={() => handleDelete('id', r.id, 'tbl_phieuchamcong')}><Trash2 size={16} /></button>
-                                 </td>
-                              </tr>
-                           ))}
-                        </tbody>
-                     </table>
-                  </div>
-
-                  {/* Card View for Mobile */}
-                  <div className="fm-card-list">
-                     {filteredData.map(r => (
-                        <div key={r.id} className="fm-card">
-                           <div className="fm-card-header">
-                              <span className="fm-card-code">#{r.id}</span>
-                              <span className={`fm-badge ${r.daxacnhan ? 'bg-success' : 'bg-pending'}`}>{r.daxacnhan ? 'Đã duyệt' : 'Chờ ký'}</span>
-                           </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-primary">{r.tennv || nvMap[r.manv] || r.manv}</strong></div>
-                              <div className="fm-card-row"><span>Ngày lập:</span> <span>{formatDate(r.ngaylap)}</span></div>
-                              <div className="fm-card-row price-row">
-                                 <span>Thanh toán:</span>
-                                 <strong className="text-success">{fCur(r.tongcong)} ₫</strong>
-                              </div>
-                              <div className="fm-card-actions">
-                                 {!r.daxacnhan && (
-                                    <button className="btn-success-sm" onClick={() => handleConfirmLuong(r.id)}>
-                                       <CheckCircle2 size={16} /> Duyệt
-                                    </button>
-                                 )}
-                                 <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintLuong(r)}><Printer size={16} /> In</button>
-                                 <button className="btn-danger-sm" onClick={() => handleDelete('id', r.id, 'tbl_phieuchamcong')}><Trash2 size={16} /> Xóa</button>
-                              </div>
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               </>
-            );
          case 'hoadon':
             return (
                <>

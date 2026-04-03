@@ -384,7 +384,34 @@ export default function StudentManager({ activeSubTab }) {
 
             // 2. Handle Class Mapping (Directly to tbl_hv)
             const maLopStr = item['Mã Lớp'] || '';
-            const listMaLop = String(maLopStr).split(',').map(m => m.trim()).filter(Boolean);
+            const tenLopStr = (item['Tên Lớp'] || item['Lớp'] || '').toString().trim();
+            let listMaLop = String(maLopStr).split(',').map(m => m.trim()).filter(Boolean);
+
+            if (listMaLop.length === 0 && tenLopStr) {
+              // Try to find class by name (case insensitive)
+              let foundCls = classes.find(c => c.tenlop && c.tenlop.toLowerCase() === tenLopStr.toLowerCase());
+              
+              if (!foundCls) {
+                // Auto-create class if it doesn't exist
+                const newMaLop = await generateId('tbl_lop', 'malop', 'Lop', 3);
+                const newCls = { malop: newMaLop, tenlop: tenLopStr };
+                
+                const { error: clsErr } = await supabase.from('tbl_lop').insert([newCls]);
+                if (!clsErr) {
+                  // Add to local state & loop helper
+                  setClasses(prev => [...prev, newCls]);
+                  classes.push(newCls); // Direct push to the array used by the loop to catch subsequent same-class-name students
+                  foundCls = newCls;
+                } else {
+                  console.error("Lỗi tạo lớp tự động:", clsErr);
+                }
+              }
+
+              if (foundCls) {
+                listMaLop = [foundCls.malop];
+              }
+            }
+
             if (listMaLop.length > 0) {
               studentData.malop = listMaLop[0];
             }

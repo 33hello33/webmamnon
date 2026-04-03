@@ -132,49 +132,17 @@ export default function TimesheetManager() {
             }
          });
 
-         // 4. Get recent salary definition for this teacher from the JSON content of the latest slip
-         const { data: recentSlips } = await supabase.from('tbl_phieuchamcong')
-            .select('*')
-            .eq('manv', teacher.manv)
-            .is('daxoa', null)
-            .order('ngaylap', { ascending: false })
-            .limit(1);
-
-         const lastSlip = recentSlips && recentSlips.length > 0 ? recentSlips[0] : null;
-         let lastParsedRows = [];
-         if (lastSlip && lastSlip.noidung) {
-            try { lastParsedRows = JSON.parse(lastSlip.noidung); } catch (e) { }
-         }
-
-         // Helper to find rate from last slip for a specific class
-         const findRateForClass = (tenlop, thoigian) => {
-            const entry = lastParsedRows.find(r =>
-               r["Hạng mục"] === `${tenlop} (${thoigian || '-'})` &&
-               (r["Phân loại"] === "Lớp chính" || r["Phân loại"] === "Dạy thay")
-            );
-            return entry ? parseInt(entry["Đơn giá"] || '0', 10) : null;
-         };
-
          const sMap = {};
          mergedClasses.forEach(c => {
-            const lastRate = findRateForClass(c.tenlop, c.thoigianbieu);
             sMap[c.malop] = {
                count: counts[c.malop] || 0,
-               rate: lastRate || parseInt(teacher.luongtheobuoi || '100000', 10)
+               rate: parseInt(teacher.luongtheobuoi || '100000', 10)
             };
          });
          setStatsMap(sMap);
 
-         // 5. Restore Extras from the last slip
-         const lastExtras = lastParsedRows
-            .filter(r => r["Phân loại"] === "Phụ cấp / Thưởng")
-            .map(r => ({ label: r["Hạng mục"], amount: parseInt(r["Đơn giá"] || '0', 10) }));
-
-         if (lastExtras.length > 0) setExtras(lastExtras);
-         else setExtras([{ label: 'Tiền Trợ Cấp (Cơm, Xe,...)', amount: 0 }]);
-
-         // Restore Note from the last slip if any
-         setNote(lastSlip?.ghichu || '');
+         setExtras([{ label: 'Tiền Trợ Cấp (Cơm, Xe,...)', amount: 0 }]);
+         setNote('');
 
       } catch (err) {
          console.error(err);
@@ -494,87 +462,13 @@ export default function TimesheetManager() {
          return;
       }
 
-      setLoading(true);
-      try {
-         const luongThangStr = `${String(globalDate.getMonth() + 1).padStart(2, '0')}/${globalDate.getFullYear()}`;
-
-         // Kiểm tra trùng lặp
-         const { data: existingRecords, error: checkError } = await supabase
-            .from('tbl_phieuchamcong')
-            .select('id')
-            .eq('manv', activeTeacher.manv)
-            .eq('luongthang', luongThangStr)
-            .is('daxoa', null);
-
-         if (checkError) throw checkError;
-
-         if (existingRecords && existingRecords.length > 0) {
-            setWarningModal({
-               isOpen: true,
-               title: 'Phát hiện Trùng Lặp',
-               message: `Giảng viên ${activeTeacher.tennv} đã được chốt và xuất Phiếu Lương cho Tháng ${luongThangStr} rồi!\nNếu bạn cố ý làm lại, xin hãy vào tab Tài chính > QL Phiếu Lương, xóa đi Phiếu lương bị sai để hệ thống cho phép tạo lại.`
-            });
-            setLoading(false);
-            return;
-         }
-
-         // Generate internal content as a unified list of items for the JSON record
-         const finalRows = [];
-         classesList.forEach(c => {
-            const stats = statsMap[c.malop];
-            if (stats && stats.count > 0) {
-               finalRows.push({
-                  "Hạng mục": `${c.tenlop} (${c.thoigianbieu || '-'})`,
-                  "Phân loại": c.isSub ? "Dạy thay" : "Lớp chính",
-                  "Số lượng": String(stats.count),
-                  "Đơn giá": String(stats.rate),
-                  "Thành tiền": String(stats.count * stats.rate)
-               });
-            }
-         });
-
-         // Append extras to the JSON rows
-         extras.filter(ex => ex.amount > 0).forEach(ex => {
-            finalRows.push({
-               "Hạng mục": ex.label,
-               "Phân loại": "Phụ cấp / Thưởng",
-               "Số lượng": "1",
-               "Đơn giá": String(ex.amount),
-               "Thành tiền": String(ex.amount)
-            });
-         });
-
-         const noidungJSON = JSON.stringify(finalRows);
-         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
-
-         const { error } = await supabase.from('tbl_phieuchamcong').insert({
-            manv: activeTeacher.manv,
-            tennv: activeTeacher.tennv || activeTeacher.manv,
-            ngaylap: localNow,
-            noidung: noidungJSON,
-            tongcong: String(numTotal),
-            ghichu: note || '',
-            hinhthuc: paymentMethod,
-            luongthang: luongThangStr,
-            daxacnhan: false
-         });
-
-         if (error) {
-            console.error(error);
-            setWarningModal({ isOpen: true, title: 'Lỗi', message: "Lỗi kết nối CSDL, thử lại sau: " + error.message });
-         } else {
-            setSuccessModal({
-               isOpen: true,
-               title: 'Xuất Phiếu Thành Công!',
-               message: 'Phiếu lương đã được ghi nhận. Di chuyển qua bộ phận Kế Toán (Tab Tài Chính) để xác nhận chuyển tiền!'
-            });
-         }
-      } catch (err) {
-         console.error(err);
-         setWarningModal({ isOpen: true, title: 'Lỗi Không Xác Định', message: 'Hệ thống gián đoạn, vui lòng tải lại trang và thử lại.' });
-      } finally {
          setLoading(false);
-      }
+         setSuccessModal({
+            isOpen: true,
+            title: 'Hệ thống đang bảo trì',
+            message: 'Chức năng xuất phiếu lương đang được nâng cấp do thay đổi cấu trúc bảng dữ liệu. Vui lòng quay lại sau.'
+         });
+         return;
    };
 
    return (

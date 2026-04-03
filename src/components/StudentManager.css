@@ -68,7 +68,7 @@
   .students-tab-content {
     gap: 0.75rem;
   }
-  
+
   .subtab-content {
     padding: 0.75rem !important;
     border-radius: 0;
@@ -87,21 +87,21 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 0.75rem;
   }
-  
+
   .stat-card {
     padding: 0.75rem;
     gap: 0.75rem;
   }
-  
+
   .stat-icon {
     width: 36px;
     height: 36px;
   }
-  
+
   .stat-value {
     font-size: 1.1rem;
   }
-  
+
   .stat-label {
     font-size: 0.75rem;
   }
@@ -185,7 +185,7 @@
   width: 250px;
 }
 
-.search-item input, 
+.search-item input,
 .mobile-select {
   width: 100%;
   padding: 0.65rem 1rem 0.65rem 3rem;
@@ -244,41 +244,87 @@
   font-weight: inherit;
 }
 
-.grid-btn.danger { background: #fffafb; color: #ef4444; border-color: #fee2e2; }
-.grid-btn.warning { background: #fffdf5; color: #d97706; border-color: #fef3c7; }
-.grid-btn.success { background: #fafffc; color: #16a34a; border-color: #dcfce7; }
-.grid-btn.transfer { background: #fafbff; color: #7c3aed; border-color: #ede9fe; }
-.grid-btn.primary { background: #f5f8ff; color: #2563eb; border-color: #dbeafe; }
-.grid-btn.info { background: #f0f9ff; color: #0284c7; border-color: #e0f2fe; }
+.grid-btn.danger {
+  background: #fffafb;
+  color: #ef4444;
+  border-color: #fee2e2;
+}
 
-.grid-btn.danger:hover { background: #fee2e2; }
-.grid-btn.warning:hover { background: #fef3c7; }
-.grid-btn.success:hover { background: #dcfce7; }
-.grid-btn.transfer:hover { background: #ede9fe; }
-.grid-btn.primary:hover { background: #dbeafe; }
-.grid-btn.info:hover { background: #e0f2fe; }
+.grid-btn.warning {
+  background: #fffdf5;
+  color: #d97706;
+  border-color: #fef3c7;
+}
+
+.grid-btn.success {
+  background: #fafffc;
+  color: #16a34a;
+  border-color: #dcfce7;
+}
+
+.grid-btn.transfer {
+  background: #fafbff;
+  color: #7c3aed;
+  border-color: #ede9fe;
+}
+
+.grid-btn.primary {
+  background: #f5f8ff;
+  color: #2563eb;
+  border-color: #dbeafe;
+}
+
+.grid-btn.info {
+  background: #f0f9ff;
+  color: #0284c7;
+  border-color: #e0f2fe;
+}
+
+.grid-btn.danger:hover {
+  background: #fee2e2;
+}
+
+.grid-btn.warning:hover {
+  background: #fef3c7;
+}
+
+.grid-btn.success:hover {
+  background: #dcfce7;
+}
+
+.grid-btn.transfer:hover {
+  background: #ede9fe;
+}
+
+.grid-btn.primary:hover {
+  background: #dbeafe;
+}
+
+.grid-btn.info:hover {
+  background: #e0f2fe;
+}
 
 @media (max-width: 1024px) {
   .toolbar-mobile {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .search-stack {
     flex-direction: column;
     gap: 0.5rem;
   }
-  
+
   .search-item {
     width: 100%;
   }
-  
+
   .action-grid-v2 {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 0.4rem;
   }
-  
+
   .grid-btn {
     flex-direction: column;
     height: 54px;
@@ -286,7 +332,7 @@
     gap: 0.2rem;
     justify-content: center;
   }
-  
+
   .grid-btn small {
     font-size: 0.65rem;
   }
@@ -636,10 +682,21 @@
   cursor: pointer;
 }
 
-.mobile-action-bar .action-btn.warning { color: #d97706; }
-.mobile-action-bar .action-btn.primary-purple { color: #8b5cf6; }
-.mobile-action-bar .action-btn.danger { color: #ef4444; }
-.mobile-action-bar .action-btn.secondary { color: #64748b; }
+.mobile-action-bar .action-btn.warning {
+  color: #d97706;
+}
+
+.mobile-action-bar .action-btn.primary-purple {
+  color: #8b5cf6;
+}
+
+.mobile-action-bar .action-btn.danger {
+  color: #ef4444;
+}
+
+.mobile-action-bar .action-btn.secondary {
+  color: #64748b;
+}
 
 .modal-body {
   padding: 1rem 1.25rem;
@@ -678,7 +735,7 @@
   border: 1px solid #cbd5e1;
   outline: none;
   font-size: 0.9rem;
-  height: 32px;
+  height: 40px;
   transition: all 0.2s;
   background: white;
   line-height: normal;
@@ -772,9 +829,18 @@
 }
 
 /* Status Stripes */
-.student-card.status-dang-hoc { border-left-color: #10b981; }
-.student-card.status-bao-luu { border-left-color: #f59e0b; }
-.student-card.status-da-nghi { border-left-color: #ef4444; opacity: 0.7; }
+.student-card.status-dang-hoc {
+  border-left-color: #10b981;
+}
+
+.student-card.status-bao-luu {
+  border-left-color: #f59e0b;
+}
+
+.student-card.status-da-nghi {
+  border-left-color: #ef4444;
+  opacity: 0.7;
+}
 
 .student-card:hover {
   transform: translateY(-2px);
@@ -844,8 +910,13 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
 }
 
 .animate-slide-up {
