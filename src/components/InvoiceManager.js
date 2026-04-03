@@ -166,6 +166,7 @@ export default function InvoiceManager() {
    const [previewImg, setPreviewImg] = useState(null);
    const [studySummary, setStudySummary] = useState(null);
    const [refundOverrides, setRefundOverrides] = useState({ meal: null, tuition: null });
+   const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
    const [invoiceData, setInvoiceData] = useState({
@@ -350,6 +351,7 @@ export default function InvoiceManager() {
       setShowMobileDetails(true);
       setMessage({ type: '', text: '' });
       setRefundOverrides({ meal: null, tuition: null });
+      setIsHinhThucLocked(true);
       calculateOldDebt(st.mahv);
 
       const firstMalop = st.malop_list && st.malop_list.length > 0 ? st.malop_list[0] : null;
@@ -1423,12 +1425,32 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item-col">
                               <label>💳 Hình thức thanh toán</label>
-                              <select className="im-select" value={invoiceData.hinhThuc} onChange={e => handleFormChange('hinhThuc', e.target.value)} disabled={true} style={{ opacity: 0.7, cursor: 'not-allowed', background: '#f1f5f9' }}>
-                                 {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                                 {walletsConfig.map(w => (
-                                    <option key={w.id} value={w.name}>{w.name}</option>
-                                 ))}
-                              </select>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                 <select 
+                                    className="im-select" 
+                                    value={invoiceData.hinhThuc} 
+                                    onChange={e => handleFormChange('hinhThuc', e.target.value)} 
+                                    disabled={isHinhThucLocked} 
+                                    style={{ 
+                                       flex: 1,
+                                       opacity: isHinhThucLocked ? 0.7 : 1, 
+                                       cursor: isHinhThucLocked ? 'not-allowed' : 'pointer', 
+                                       background: isHinhThucLocked ? '#f1f5f9' : 'white' 
+                                    }}
+                                 >
+                                    {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                    {walletsConfig.map(w => (
+                                       <option key={w.id} value={w.name}>{w.name}</option>
+                                    ))}
+                                 </select>
+                                 <button 
+                                    type="button"
+                                    className={`im-unlock-btn ${isHinhThucLocked ? 'locked' : 'unlocked'}`}
+                                    onClick={() => setIsHinhThucLocked(!isHinhThucLocked)}
+                                 >
+                                    {isHinhThucLocked ? 'Mở' : 'Khóa'}
+                                 </button>
+                              </div>
                            </div>
                         </div>
 

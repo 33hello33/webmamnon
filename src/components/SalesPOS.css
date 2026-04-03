@@ -424,6 +424,37 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
+.sp-unlock-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: all 0.2s;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-unlock-btn.locked {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.sp-unlock-btn.unlocked {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+.sp-unlock-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.95);
+}
+
 .sp-btn-checkout {
   background: linear-gradient(135deg, #10b981, #059669);
   color: white;

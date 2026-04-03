@@ -433,6 +433,37 @@
   background: white;
 }
 
+.im-unlock-btn {
+  padding: 8px 15px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: all 0.2s;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.im-unlock-btn.locked {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.im-unlock-btn.unlocked {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+.im-unlock-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.95);
+}
+
 .highlight-deduction {
   color: #be123c !important;
   background: #fff1f2;
