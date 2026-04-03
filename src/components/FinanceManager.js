@@ -5,7 +5,7 @@ import { supabase, generateId } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock
+   Printer, History, Clock, Edit2
 } from 'lucide-react';
 
 import './FinanceManager.css';
@@ -116,6 +116,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [printBill, setPrintBill] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
    const [deletePassword, setDeletePassword] = useState('');
+   const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
+   const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
 
@@ -242,6 +244,117 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }, 500);
    };
 
+
+   const handleOpenEditInvoice = (invoice) => {
+      setEditInvoiceModal({
+         isOpen: true,
+         data: {
+            ...invoice,
+            hocphi: pCur(invoice.hocphi),
+            giamhocphi: pCur(invoice.giamhocphi),
+            hinhthuc: invoice.hinhthuc || walletsConfig[0]?.name || 'Tiền mặt',
+            ghichu: invoice.ghichu || ''
+         },
+         password: ''
+      });
+   };
+
+   const handleSaveEditInvoice = async (e) => {
+      e.preventDefault();
+      const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+      if (editInvoiceModal.password !== auth.user?.password) {
+         alert('Mật khẩu không đúng, vui lòng thử lại!');
+         return;
+      }
+
+      const { mahd, hocphi, giamhocphi, hinhthuc, ghichu } = editInvoiceModal.data;
+      const tongcong = Math.max(0, hocphi - giamhocphi);
+      // If it was already paid (dadong > 0), we assume it's updated to full paid if it was fully paid before?
+      // Actually let's just update the totals.
+      const { error } = await supabase.from('tbl_hd').update({
+         hocphi: hocphi.toString(),
+         giamhocphi: giamhocphi.toString(),
+         hinhthuc,
+         ghichu,
+         tongcong: tongcong.toString(),
+         dadong: tongcong.toString(), // Usually these are paid docs in FinanceManager
+         conno: '0'
+      }).eq('mahd', mahd);
+
+      if (error) {
+         alert('Lỗi cập nhật hóa đơn: ' + error.message);
+      } else {
+         alert('Cập nhật hóa đơn thành công!');
+         setEditInvoiceModal({ isOpen: false, data: null, password: '' });
+         fetchData();
+         fetchBalances();
+      }
+   };
+
+   const handleOpenEditBill = (bill) => {
+      const parsed = parseNoidung(bill.hanghoa);
+      const items = parsed.rows.map(row => ({
+         mahang: row[0] || '',
+         tenhang: row[1] || '',
+         dvt: row[2] || '',
+         qty: parseInt(row[3], 10) || 0,
+         giaban: pCur(row[4]),
+         thanhtien: pCur(row[5])
+      }));
+
+      setEditBillModal({
+         isOpen: true,
+         data: {
+            ...bill,
+            items,
+            tongcong: pCur(bill.tongcong),
+            chietkhau: pCur(bill.chietkhau),
+            loinhuan: pCur(bill.loinhuan),
+            hinhthuc: bill.hinhthuc || walletsConfig[0]?.name || 'Tiền mặt'
+         },
+         password: ''
+      });
+   };
+
+   const handleSaveEditBill = async (e) => {
+      e.preventDefault();
+      const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+      if (editBillModal.password !== auth.user?.password) {
+         alert('Mật khẩu không đúng, vui lòng thử lại!');
+         return;
+      }
+
+      const { mabill, items, chietkhau, loinhuan, hinhthuc, tongcong } = editBillModal.data;
+      
+      // Serialize items back to CSV string (matching SalesPOS format)
+      let csvStr = "Mã Hàng,Tên Hàng,Đơn Vị Tính,Số Lượng,Đơn Giá,Thành Tiền\n";
+      csvStr += items.map(c => {
+         const mahang = `"${(c.mahang || '').replace(/"/g, '""')}"`;
+         const tenhang = `"${(c.tenhang || '').replace(/"/g, '""')}"`;
+         const dvt = `"${(c.dvt || '').replace(/"/g, '""')}"`;
+         const sl = c.qty;
+         const dg = `"${fCur(c.giaban)}"`;
+         const tt = `"${fCur(c.giaban * c.qty)}"`;
+         return `${mahang},${tenhang},${dvt},${sl},${dg},${tt}`;
+      }).join('\n');
+
+      const { error } = await supabase.from('tbl_billhanghoa').update({
+         tongcong: tongcong.toString(),
+         chietkhau: chietkhau.toString(),
+         loinhuan: loinhuan.toString(),
+         hinhthuc,
+         hanghoa: csvStr
+      }).eq('mabill', mabill);
+
+      if (error) {
+         alert('Lỗi cập nhật bill hàng: ' + error.message);
+      } else {
+         alert('Cập nhật bill hàng thành công!');
+         setEditBillModal({ isOpen: false, data: null, password: '' });
+         fetchData();
+         fetchBalances();
+      }
+   };
 
    const executeConfirmAction = async () => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -1019,6 +1132,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                     <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
+                                    <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
                                     <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
                                  </td>
                               </tr>
@@ -1057,6 +1171,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               )}
                               <div className="fm-card-actions">
                                  <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
+                                 <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
                                  <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
                               </div>
                            </div>
@@ -1165,6 +1280,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td>{r.nhanvien}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                     <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
+                                     <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
                                     <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
                                  </td>
                               </tr>
@@ -1201,6 +1317,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               </div>
                               <div className="fm-card-actions">
                                  <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
+                                  <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
                                  <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
                               </div>
                            </div>
@@ -2146,6 +2263,231 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         {confirmDialog.actionType === 'DELETE' ? 'Xoá ngay' : 'Đồng ý'}
                      </button>
                   </div>
+               </div>
+            </div>,
+            document.body
+         )}
+         {editInvoiceModal.isOpen && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content" style={{ maxWidth: '500px' }}>
+                  <div className="fm-modal-header">
+                     <h3>Sửa Hóa Đơn {editInvoiceModal.data?.mahd}</h3>
+                     <button className="tm-btn-icon" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })}><X size={20} /></button>
+                  </div>
+                  <form onSubmit={handleSaveEditInvoice}>
+                     <div className="fm-modal-body">
+                        <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
+                           <div className="form-group">
+                              <label>Học phí:</label>
+                              <input
+                                 type="text"
+                                 value={fCur(editInvoiceModal.data.hocphi)}
+                                 onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hocphi: pCur(e.target.value) } }))}
+                              />
+                           </div>
+                           <div className="form-group">
+                              <label>Giảm học phí:</label>
+                              <input
+                                 type="text"
+                                 value={fCur(editInvoiceModal.data.giamhocphi)}
+                                 onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, giamhocphi: pCur(e.target.value) } }))}
+                              />
+                           </div>
+                           <div className="form-group">
+                              <label>Hình thức thanh toán:</label>
+                              <select style={{ minHeight: '80%' }}
+                                 value={editInvoiceModal.data.hinhthuc}
+                                 onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))}
+                              >
+                                 {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                              </select>
+                           </div>
+                           <div className="form-group">
+                              <label>Ghi chú:</label>
+                              <textarea
+                                 value={editInvoiceModal.data.ghichu}
+                                 onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))}
+                                 style={{ minHeight: '80px', height: 'auto' }}
+                              />
+                           </div>
+                           <div className="form-group" style={{ borderTop: '2px solid #fee2e2', marginTop: '10px', paddingTop: '10px' }}>
+                              <label style={{ color: '#ef4444', fontWeight: 800 }}>MẬT KHẨU XÁC THỰC SỬA:</label>
+                              <input
+                                 type="password"
+                                 required
+                                 placeholder="Nhập mật khẩu để xác nhận..."
+                                 value={editInvoiceModal.password}
+                                 onChange={e => setEditInvoiceModal(p => ({ ...p, password: e.target.value }))}
+                                 style={{ border: '2px solid #ef4444', height: '44px', fontSize: '1.1rem' }}
+                              />
+                           </div>
+                        </div>
+                     </div>
+                     <div className="fm-modal-footer">
+                        <button type="button" className="btn-gray" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })}>Quay lại</button>
+                        <button type="submit" className="btn-primary" style={{ background: '#10b981', border: 'none' }}>Lưu thay đổi</button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {editBillModal.isOpen && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content" style={{ maxWidth: '850px' }}>
+                  <div className="fm-modal-header">
+                     <h3>Sửa Chi Tiết Bill {editBillModal.data?.mabill}</h3>
+                     <button className="tm-btn-icon" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })}><X size={20} /></button>
+                  </div>
+                  <form onSubmit={handleSaveEditBill}>
+                     <div className="fm-modal-body">
+                        <div style={{ marginBottom: '1.5rem' }}>
+                           <h4 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.75rem', fontWeight: 800, textTransform: 'uppercase' }}>Danh sách hàng hóa:</h4>
+                           <table className="fm-table" style={{ minWidth: '100%', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                              <thead style={{ background: '#f8fafc' }}>
+                                 <tr>
+                                    <th style={{ padding: '8px' }}>Tên Hàng</th>
+                                    <th style={{ padding: '8px', width: '100px', textAlign: 'center' }}>Số Lượng</th>
+                                    <th style={{ padding: '8px', width: '150px', textAlign: 'right' }}>Đơn Giá</th>
+                                    <th style={{ padding: '8px', width: '150px', textAlign: 'right' }}>Thành Tiền</th>
+                                    <th style={{ padding: '8px', width: '50px' }}></th>
+                                 </tr>
+                              </thead>
+                              <tbody>
+                                 {editBillModal.data.items.map((item, idx) => (
+                                    <tr key={idx}>
+                                       <td style={{ padding: '8px' }}>
+                                          <input 
+                                             type="text" 
+                                             style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                                             value={item.tenhang} 
+                                             onChange={e => {
+                                                const newItems = [...editBillModal.data.items];
+                                                newItems[idx].tenhang = e.target.value;
+                                                setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems } }));
+                                             }}
+                                          />
+                                       </td>
+                                       <td style={{ padding: '8px', textAlign: 'center' }}>
+                                          <input 
+                                             type="number" 
+                                             style={{ padding: '4px 8px', textAlign: 'center', fontSize: '0.9rem' }}
+                                             value={item.qty} 
+                                             onChange={e => {
+                                                const newItems = [...editBillModal.data.items];
+                                                newItems[idx].qty = parseInt(e.target.value, 10) || 0;
+                                                // Recalculate tongcong
+                                                const newTotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0) - pCur(editBillModal.data.chietkhau);
+                                                setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: newTotal } }));
+                                             }}
+                                          />
+                                       </td>
+                                       <td style={{ padding: '8px', textAlign: 'right' }}>
+                                          <input 
+                                             type="text" 
+                                             style={{ padding: '4px 8px', textAlign: 'right', fontSize: '0.9rem' }}
+                                             value={fCur(item.giaban)} 
+                                             onChange={e => {
+                                                const newItems = [...editBillModal.data.items];
+                                                newItems[idx].giaban = pCur(e.target.value);
+                                                const newTotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0) - pCur(editBillModal.data.chietkhau);
+                                                setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: newTotal } }));
+                                             }}
+                                          />
+                                       </td>
+                                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>{fCur(item.qty * item.giaban)} ₫</td>
+                                       <td style={{ padding: '4px', textAlign: 'center' }}>
+                                          <button 
+                                             type="button" 
+                                             title="Xóa dòng"
+                                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                                             onClick={() => {
+                                                const newItems = editBillModal.data.items.filter((_, i) => i !== idx);
+                                                const newTotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0) - pCur(editBillModal.data.chietkhau);
+                                                setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: newTotal } }));
+                                             }}
+                                          >
+                                             <Trash2 size={16} />
+                                          </button>
+                                       </td>
+                                    </tr>
+                                 ))}
+                                 <tr>
+                                    <td colSpan="5" style={{ padding: '8px' }}>
+                                       <button 
+                                          type="button"
+                                          className="btn-primary"
+                                          style={{ padding: '6px 12px', fontSize: '0.85rem', background: '#3b82f6' }}
+                                          onClick={() => {
+                                             const newItems = [...editBillModal.data.items, { mahang: '', tenhang: 'Sản phẩm mới', dvt: 'Cái', qty: 1, giaban: 0 }];
+                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems } }));
+                                          }}
+                                       >
+                                          <Plus size={14} /> Thêm hàng hóa
+                                       </button>
+                                    </td>
+                                 </tr>
+                              </tbody>
+                           </table>
+                        </div>
+
+                        <div className="form-grid">
+                           <div className="form-group">
+                              <label>Chiết khấu (giảm bill):</label>
+                              <input
+                                 type="text"
+                                 value={fCur(editBillModal.data.chietkhau)}
+                                 onChange={e => {
+                                    const val = pCur(e.target.value);
+                                    const subtotal = editBillModal.data.items.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                    setEditBillModal(p => ({ ...p, data: { ...p.data, chietkhau: val, tongcong: subtotal - val } }));
+                                 }}
+                              />
+                           </div>
+                           <div className="form-group">
+                              <label>Lợi nhuận ròng:</label>
+                              <input
+                                 type="text"
+                                 value={fCur(editBillModal.data.loinhuan)}
+                                 onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, loinhuan: pCur(e.target.value) } }))}
+                              />
+                           </div>
+                           <div className="form-group">
+                              <label>Hình thức thanh toán:</label>
+                              <select 
+                                 style={{ minHeight: '44px' }}
+                                 value={editBillModal.data.hinhthuc}
+                                 onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))}
+                              >
+                                 {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                              </select>
+                           </div>
+                           <div className="form-group">
+                              <label style={{ color: '#10b981', fontWeight: 800 }}>TỔNG BILL (Tự động):</label>
+                              <div style={{ padding: '0.75rem', background: '#f0fdf4', borderRadius: '10px', fontSize: '1.25rem', fontWeight: 800, color: '#16a34a', border: '1px solid #bbf7d0', textAlign: 'right' }}>
+                                 {fCur(editBillModal.data.tongcong)} ₫
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="form-group" style={{ borderTop: '2px solid #fee2e2', marginTop: '1.5rem', paddingTop: '1.5rem' }}>
+                           <label style={{ color: '#ef4444', fontWeight: 800 }}>MẬT KHẨU XÁC THỰC SỬA:</label>
+                           <input
+                              type="password"
+                              required
+                              placeholder="Nhập mật khẩu để lưu thay đổi..."
+                              value={editBillModal.password}
+                              onChange={e => setEditBillModal(p => ({ ...p, password: e.target.value }))}
+                              style={{ border: '2px solid #ef4444', height: '48px', fontSize: '1.1rem' }}
+                           />
+                        </div>
+                     </div>
+                     <div className="fm-modal-footer">
+                        <button type="button" className="btn-gray" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })}>Quay lại</button>
+                        <button type="submit" className="btn-primary" style={{ background: '#10b981', border: 'none' }}>Lưu thay đổi</button>
+                     </div>
+                  </form>
                </div>
             </div>,
             document.body
