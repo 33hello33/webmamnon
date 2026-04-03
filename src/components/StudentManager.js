@@ -20,20 +20,14 @@ const INITIAL_FORM = {
   gioitinh: 'Nam', cccd: '', tinhtrangsk: '',
   nghenghiepba: '', nghenghiepme: '',
   ngaysinhba: new Date().toISOString().split('T')[0],
-  ngaysinhme: new Date().toISOString().split('T')[0],
-  username: '', password: '', hinhthucdong: ''
+  ngaysinhme: new Date().toISOString().split('T')[0]
 };
 
 export default function StudentManager({ activeSubTab }) {
   const { config } = useConfig();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
-  const walletsConfig = (config ? [
-    { id: 'vi1', name: config.vi1?.name || '' },
-    { id: 'vi2', name: config.vi2?.name || '' },
-    { id: 'vi3', name: config.vi3?.name || '' },
-    { id: 'vi4', name: config.vi4?.name || '' }
-  ].filter(w => w.name.trim() !== '') : []);
+
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -790,14 +784,7 @@ export default function StudentManager({ activeSubTab }) {
                       <option value="Đã Nghỉ">Đã Nghỉ</option>
                     </select>
                   </div>
-                  <div className="sm-form-group">
-                    <label style={{ fontWeight: 800, color: '#db2777', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hình thức đóng mặc định</label>
-                    <select name="hinhthucdong" value={formData.hinhthucdong || ''} onChange={handleChange} style={{ fontWeight: 600 }}>
-                      <option value="">-- Chọn hình thức --</option>
-                      <option value="Tiền mặt">Tiền mặt</option>
-                      {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
-                    </select>
-                  </div>
+
                 </div>
               </div>
 
@@ -861,16 +848,6 @@ export default function StudentManager({ activeSubTab }) {
                 <input type="text" name="tinhtrangsk" value={formData.tinhtrangsk} onChange={handleChange} />
               </div>
 
-              <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#10b981' }}>TÀI KHOẢN CHAT (Dành cho Phụ huynh)</div>
-              
-              <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
-                <label style={{ color: '#10b981' }}>Tên đăng nhập (Username)</label>
-                <input type="text" name="username" value={formData.username || ''} onChange={handleChange} placeholder="Nhập tên đăng nhập cho phụ huynh..." />
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
-                <label style={{ color: '#10b981' }}>Mật khẩu (Password)</label>
-                <input type="text" name="password" value={formData.password || ''} onChange={handleChange} placeholder="Nhập mật khẩu..." />
-              </div>
               <div className="form-actions full-width">
                 <button type="button" className="btn btn-outline" onClick={() => setIsFormOpen(false)}>Hủy</button>
                 <button type="submit" className="btn btn-primary">{isEditMode ? 'Cập Nhật' : 'Thêm Mới'}</button>
