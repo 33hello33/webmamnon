@@ -27,6 +27,7 @@ export default function AttendanceManager({ students, showMessage }) {
   const [viewCalendarStudent, setViewCalendarStudent] = useState(null);
   const [showMobileDetails, setShowMobileDetails] = useState(false);
   const [employees, setEmployees] = useState([]);
+  const [todayAttendance, setTodayAttendance] = useState([]);
   const { config } = useConfig();
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -57,8 +58,17 @@ export default function AttendanceManager({ students, showMessage }) {
       const session = JSON.parse(sessionStr);
       setCurrentUser(session.user);
     }
+    const fetchTodayAttendance = async () => {
+      try {
+        const todayIso = new Date().toISOString().split('T')[0];
+        const { data } = await supabase.from('tbl_diemdanh').select('malop, mahv').eq('ngay', todayIso).eq('trangthai', 'Có mặt');
+        if (data) setTodayAttendance(data);
+      } catch (err) { console.error(err); }
+    };
+
     fetchClasses();
     fetchEmployees();
+    fetchTodayAttendance();
   }, []);
 
   // Fetch student marking data if in marking mode
@@ -108,39 +118,39 @@ export default function AttendanceManager({ students, showMessage }) {
     if (!selectedId) return showMessage('error', 'Chưa chọn lớp!');
     setLoading(true);
     try {
-      // 1. Get current max ID for tbl_diemdanh (since the schema uses integer without auto-increment)
-      const { data: maxAttData } = await supabase.from('tbl_diemdanh').select('id').order('id', { ascending: false }).limit(1);
-      let currentMaxAttId = (maxAttData && maxAttData.length > 0) ? parseInt(maxAttData[0].id, 10) : 0;
-      if (isNaN(currentMaxAttId)) currentMaxAttId = 0;
+      // 1. Re-fetch existing records for this day/class to avoid race conditions
+      const { data: currentRecs } = await supabase.from('tbl_diemdanh').select('id, mahv').eq('malop', selectedId).eq('ngay', attDate);
+      const dbIdMap = {};
+      (currentRecs || []).forEach(r => { dbIdMap[r.mahv] = r.id; });
 
       for (const st of attStudents) {
-        const rec = attRecords[st.mahv];
-        if (!rec || !rec.trangthai) continue;
+        const localRec = attRecords[st.mahv];
+        if (!localRec || !localRec.trangthai) continue;
+        
         const payload = {
           mahv: st.mahv, malop: selectedId, ngay: attDate,
-          trangthai: rec.trangthai, ghichu: rec.ghichu || '',
+          trangthai: localRec.trangthai, ghichu: localRec.ghichu || '',
           manv: currentUser?.manv || currentUser?.username || 'admin'
         };
         
-        if (rec.id) {
-          await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
+        const existingId = localRec.id || dbIdMap[st.mahv];
+        
+        if (existingId) {
+          await supabase.from('tbl_diemdanh').update(payload).eq('id', existingId);
         } else {
-          currentMaxAttId++;
-          const insertPayload = { ...payload, id: currentMaxAttId };
-          const { error: insErr } = await supabase.from('tbl_diemdanh').insert([insertPayload]);
+          // Database handles ID generation automatically
+          const { error: insErr } = await supabase.from('tbl_diemdanh').insert([payload]);
           if (insErr) throw insErr;
         }
       }
 
-      // 2. Save lesson content (tbl_noidungday)
-      const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
-      if (exists) {
-        await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
+      // 3. Save lesson content (tbl_noidungday)
+      const { data: ndExists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
+      if (ndExists) {
+        await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', ndExists.id);
       } else {
-        // Handle ID for tbl_noidungday as well
-        const { data: maxNdData } = await supabase.from('tbl_noidungday').select('id').order('id', { ascending: false }).limit(1);
-        let nextNdId = (maxNdData && maxNdData.length > 0) ? (maxNdData[0].id + 1) : 1;
-        await supabase.from('tbl_noidungday').insert([{ id: nextNdId, malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
+        // Table tbl_noidungday has identity column, no manual ID needed
+        await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
       }
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
@@ -309,7 +319,7 @@ export default function AttendanceManager({ students, showMessage }) {
         .filter(c => c.malop && c.malop.trim() !== '')
         .map(c => {
           // Calculate student count for class
-          const siso = students.filter(s => {
+          const classStudents = students.filter(s => {
             const smalop = (s.malop || '').toString().trim().toLowerCase();
             const selId = (c.malop || '').toString().trim().toLowerCase();
             let matches = (smalop === selId);
@@ -318,7 +328,15 @@ export default function AttendanceManager({ students, showMessage }) {
               else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
             }
             return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
-          }).length;
+          });
+          
+          const totalCount = classStudents.length;
+
+          // Calculate "present today" count
+          const presentTodayCount = todayAttendance.filter(a => 
+            a.malop === c.malop && 
+            classStudents.some(s => s.mahv === a.mahv)
+          ).length;
 
           // Find teacher
           const teacher = employees.find(e => e.manv === c.manv);
@@ -326,7 +344,7 @@ export default function AttendanceManager({ students, showMessage }) {
           return {
             id: c.malop,
             title: c.tenlop || 'Lớp chưa đặt tên',
-            siso: siso,
+            siso: `${presentTodayCount} / ${totalCount}`,
             teacherName: teacher ? teacher.tennv : (c.manv || 'Chưa phân công')
           };
         });

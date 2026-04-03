@@ -1067,8 +1067,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         <th>Mã HS</th>
                         <th>Tên Học Sinh</th>
                         <th>Trạng Thái</th>
-                        <th>Ngày Bắt Đầu</th>
-                        <th>Ngày Kết Thúc</th>
+                        <th>Thời lượng</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1101,8 +1100,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   {s.trangthai || 'Chưa cập nhật'}
                                 </span>
                               </td>
-                              <td>{latestHd?.ngaybatdau ? new Date(latestHd.ngaybatdau).toLocaleDateString('vi-VN') : '-'}</td>
-                              <td>{latestHd?.ngayketthuc ? new Date(latestHd.ngayketthuc).toLocaleDateString('vi-VN') : '-'}</td>
+                              <td>{latestHd?.thoiluong || '-'}</td>
                             </tr>
                           );
                         })
@@ -1146,16 +1144,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           </div>
 
                           <div className="student-dates">
-                            <span>
-                              BĐ: {latestHd?.ngaybatdau
-                                ? new Date(latestHd.ngaybatdau).toLocaleDateString('vi-VN')
-                                : '-'}
-                            </span>
-                            <span>
-                              KT: {latestHd?.ngayketthuc
-                                ? new Date(latestHd.ngayketthuc).toLocaleDateString('vi-VN')
-                                : '-'}
-                            </span>
+                            <span>Thời lượng: {latestHd?.thoiluong || '-'}</span>
                           </div>
 
                           <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
