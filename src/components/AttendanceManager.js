@@ -108,6 +108,11 @@ export default function AttendanceManager({ students, showMessage }) {
     if (!selectedId) return showMessage('error', 'Chưa chọn lớp!');
     setLoading(true);
     try {
+      // 1. Get current max ID for tbl_diemdanh (since the schema uses integer without auto-increment)
+      const { data: maxAttData } = await supabase.from('tbl_diemdanh').select('id').order('id', { ascending: false }).limit(1);
+      let currentMaxAttId = (maxAttData && maxAttData.length > 0) ? parseInt(maxAttData[0].id, 10) : 0;
+      if (isNaN(currentMaxAttId)) currentMaxAttId = 0;
+
       for (const st of attStudents) {
         const rec = attRecords[st.mahv];
         if (!rec || !rec.trangthai) continue;
@@ -116,13 +121,27 @@ export default function AttendanceManager({ students, showMessage }) {
           trangthai: rec.trangthai, ghichu: rec.ghichu || '',
           manv: currentUser?.manv || currentUser?.username || 'admin'
         };
-        if (rec.id) await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
-        else await supabase.from('tbl_diemdanh').insert([payload]);
+        
+        if (rec.id) {
+          await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
+        } else {
+          currentMaxAttId++;
+          const insertPayload = { ...payload, id: currentMaxAttId };
+          const { error: insErr } = await supabase.from('tbl_diemdanh').insert([insertPayload]);
+          if (insErr) throw insErr;
+        }
       }
-      // Save lesson content
+
+      // 2. Save lesson content (tbl_noidungday)
       const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
-      if (exists) await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-      else await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
+      if (exists) {
+        await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
+      } else {
+        // Handle ID for tbl_noidungday as well
+        const { data: maxNdData } = await supabase.from('tbl_noidungday').select('id').order('id', { ascending: false }).limit(1);
+        let nextNdId = (maxNdData && maxNdData.length > 0) ? (maxNdData[0].id + 1) : 1;
+        await supabase.from('tbl_noidungday').insert([{ id: nextNdId, malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
+      }
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
       // Update the report data too
@@ -288,19 +307,45 @@ export default function AttendanceManager({ students, showMessage }) {
     if (viewMode === 'class') {
       items = classes
         .filter(c => c.malop && c.malop.trim() !== '')
-        .map(c => ({
-          id: c.malop,
-          title: c.tenlop || 'Lớp chưa đặt tên',
-          subtitle: `Mã lớp: ${c.malop}`
-        }));
+        .map(c => {
+          // Calculate student count for class
+          const siso = students.filter(s => {
+            const smalop = (s.malop || '').toString().trim().toLowerCase();
+            const selId = (c.malop || '').toString().trim().toLowerCase();
+            let matches = (smalop === selId);
+            if (!matches && s.malop_list) {
+              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+            }
+            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+          }).length;
+
+          // Find teacher
+          const teacher = employees.find(e => e.manv === c.manv);
+
+          return {
+            id: c.malop,
+            title: c.tenlop || 'Lớp chưa đặt tên',
+            siso: siso,
+            teacherName: teacher ? teacher.tennv : (c.manv || 'Chưa phân công')
+          };
+        });
     } else {
       items = students
         .filter(s => s.mahv && s.mahv.trim() !== '' && s.trangthai !== 'Đã Nghỉ' && s.trangthai !== 'Bảo Lưu')
-        .map(s => ({
-          id: s.mahv,
-          title: s.tenhv || s.name || s.mahv,
-          subtitle: `Lớp: ${s.malop_list?.join(', ') || 'Chưa xếp lớp'}`
-        }));
+        .map(s => {
+          let list = [];
+          if (s.malop) list.push(s.malop);
+          if (Array.isArray(s.malop_list)) list = [...new Set([...list, ...s.malop_list])];
+          
+          const classNames = list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+
+          return {
+            id: s.mahv,
+            title: s.tenhv || s.name || s.mahv,
+            subtitle: `Lớp: ${classNames || 'Chưa xếp lớp'}`
+          };
+        });
     }
 
     if (searchTerm) {
@@ -396,6 +441,10 @@ export default function AttendanceManager({ students, showMessage }) {
             />
           </div>
 
+          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.95rem', fontWeight: 800, color: '#334155' }}>
+            {viewMode === 'class' ? `Danh sách lớp học (${listItems.length})` : `Học sinh (${listItems.length})`}
+          </div>
+
           <div className="item-list">
             {listItems.length > 0 ? (
               listItems.map(item => (
@@ -403,13 +452,36 @@ export default function AttendanceManager({ students, showMessage }) {
                   key={item.id}
                   className={`list-item ${selectedId === item.id ? 'active' : ''}`}
                   onClick={() => { setSelectedId(item.id); setShowMobileDetails(true); }}
+                  style={{ 
+                    padding: '1rem',
+                    marginBottom: '8px',
+                    gap: '1.25rem',
+                    alignItems: 'flex-start'
+                  }}
                 >
-                  <div className="item-icon">
-                    {viewMode === 'class' ? <Users size={18} /> : <User size={18} />}
+                  <div className="item-icon" style={{ 
+                    width: '42px', 
+                    height: '42px', 
+                    borderRadius: '12px',
+                    background: selectedId === item.id ? '#4f46e5' : '#eef2ff',
+                    color: selectedId === item.id ? 'white' : '#4f46e5'
+                  }}>
+                    {viewMode === 'class' ? <Users size={22} /> : <User size={22} />}
                   </div>
                   <div className="item-info">
-                    <h4>{item.title}</h4>
-                    <span>{item.subtitle}</span>
+                    <h4 style={{ 
+                      fontSize: '1rem', 
+                      color: selectedId === item.id ? '#4f46e5' : '#4f46e5',
+                      fontWeight: 700 
+                    }}>{item.title}</h4>
+                    {viewMode === 'class' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Sĩ số: {item.siso} HV</span>
+                        <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>GV: {item.teacherName}</span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>{item.subtitle}</span>
+                    )}
                   </div>
                 </div>
               ))
@@ -472,8 +544,13 @@ export default function AttendanceManager({ students, showMessage }) {
                         <span style={{ color: '#1e293b', fontWeight: 700 }}>
                           {(() => {
                             const std = students.find(s => s.mahv === selectedId);
-                            if (!std?.malop_list || std.malop_list.length === 0) return 'Chưa xếp lớp';
-                            return std.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+                            if (!std) return '...';
+                            let list = [];
+                            if (std.malop) list.push(std.malop);
+                            if (Array.isArray(std.malop_list)) list = [...new Set([...list, ...std.malop_list])];
+                            
+                            if (list.length === 0) return 'Chưa xếp lớp';
+                            return list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
                           })()}
                         </span>
                       </div>
