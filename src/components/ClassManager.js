@@ -20,9 +20,17 @@ const formatMonthYear = (dateStr) => {
 };
 
 const getQRUrl = (hoaDon, walletsConfig) => {
-  if (!walletsConfig || !hoaDon.hinhthuc) return null;
+  if (!walletsConfig || !hoaDon.hinhthuc) {
+    console.log('[getQRUrl] Missing data:', { hasWallets: !!walletsConfig, hinhthuc: hoaDon.hinhthuc });
+    return null;
+  }
   const hinhThucTrim = String(hoaDon.hinhthuc).trim();
   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
+
+  if (!matchedWallet) {
+    console.warn(`[getQRUrl] No wallet matched for "${hinhThucTrim}". Available:`, walletsConfig.map(w => w.name));
+  }
+
   if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
     const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
@@ -31,13 +39,7 @@ const getQRUrl = (hoaDon, walletsConfig) => {
     const tenhv = hoaDon.tenhv || '';
     const mahd = hoaDon.mahd || '';
 
-    // Rút gọn tên nếu cần (lấy tối đa 2 từ cuối để vừa độ dài QR nếu quá dài)
-    let shortenedName = tenhv.trim();
-    /* 
-    const nameParts = shortenedName.split(' ');
-    if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
-    */
-
+    // Nội dung chuyển khoản theo định dạng MãHV-TênHV
     const info = encodeURIComponent(`${mahv}-${tenhv}`.trim());
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
@@ -185,6 +187,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [batchStudentsData, setBatchStudentsData] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [noticesToPrint, setNoticesToPrint] = useState([]);
+  const [exportingNotice, setExportingNotice] = useState(null);
   const [isViewStudentOpen, setIsViewStudentOpen] = useState(false);
   const [viewStudentData, setViewStudentData] = useState(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -413,7 +416,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const s = String(dStr);
         if (s.includes('T')) return s.split('T')[0];
         if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
-        const parts = s.split(/[\/\- :]/);
+        const parts = s.split(/[/ :\-]/);
         if (parts.length >= 3) {
           const d = parseInt(parts[0], 10);
           const m = parseInt(parts[1], 10);
@@ -683,7 +686,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
         const tl = formatMonthYear(row.ngaybatdau);
 
-        return {
+        const notice = {
           ...row,
           batchId: `${batchId}-${i}`,
           mahd: newMaHD,
@@ -693,13 +696,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           tenlop: selectedClass?.tenlop || '',
           thoiluong: tl,
           ngaylap: localNow,
-          // Pre-format strings to avoid any render-time recalculation errors
           hocphiStr: formatTuition(row.hocphi),
           giamhocphiStr: formatTuition(row.giamhocphi),
           truTienAnStr: formatTuition(row.truTienAn || 0),
           truHocPhiStr: formatTuition(row.truHocPhi || 0),
-          tongcongStr: formatTuition(row.tongcong)
+          tongcongStr: formatTuition(row.tongcong),
+          qrUrl: (() => {
+            const base = getQRUrl({
+              ...row,
+              mahv: studentId,
+              tenhv: masterStudent.tenhv || row.tenhv,
+              mahd: newMaHD
+            }, walletsConfig);
+            const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
+            console.log(`[Batch Export] Generated notice for ${masterStudent.tenhv || row.tenhv}:`, { mahv: studentId, tongcong: row.tongcong, qrUrl: finalUrl });
+            return finalUrl;
+          })()
         };
+        return notice;
       });
 
       const recordsToInsert = finalNotices.map(n => ({
@@ -759,9 +773,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     }
   };
 
-  const getNoticeQRUrl = (hoaDon) => {
-    return getQRUrl(hoaDon, walletsConfig);
-  };
+
 
   useEffect(() => {
     if (noticesToPrint.length > 0 && !isProcessingRef.current) {
@@ -771,45 +783,88 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           // Wait for DOM to fully settle
           await new Promise(r => setTimeout(r, 3500));
 
-          // Ensure all images are loaded
-          const allImageTags = Array.from(document.querySelectorAll('[id^="print-notice-"] img'));
-          await Promise.all(
-            allImageTags.map(img => {
-              if (img.complete) return Promise.resolve();
-              return new Promise(resolve => {
-                img.onload = resolve;
-                img.onerror = resolve;
-                setTimeout(resolve, 5000);
-              });
-            })
-          );
-
-          await new Promise(r => setTimeout(r, 1000));
-
           for (let i = 0; i < noticesToPrint.length; i++) {
             const notice = noticesToPrint[i];
-            const node = document.getElementById(`batch-notice-${notice.batchId}`);
-            if (node) {
-              // Bring it "visually" to the viewport but almost transparent
-              node.style.position = 'fixed';
-              node.style.top = '0';
-              node.style.left = '0';
-              node.style.zIndex = '99999';
-              node.style.opacity = '1';
-              node.style.visibility = 'visible';
-
-              // Small wait before capture
-              await new Promise(r => setTimeout(r, 600));
-
+            console.log(`[Batch Export] === PROCESSING: ${notice.tenhv} (${notice.mahv}) ===`);
+            
+            // Pre-fetch QR as Base64 to avoid all capture-time loading issues
+            if (notice.qrUrl) {
               try {
+                console.log(`[Batch Export] Fetching QR as Base64 for ${notice.tenhv}...`);
+                const response = await fetch(notice.qrUrl);
+                const blob = await response.blob();
+                const base64 = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.readAsDataURL(blob);
+                });
+                notice.qrBase64 = base64;
+                console.log(`[Batch Export] QR Base64 ready (Len: ${base64.length})`);
+              } catch (fetchErr) {
+                console.warn(`[Batch Export] QR Fetch failed for ${notice.tenhv}:`, fetchErr);
+              }
+            }
+
+            // Clear old state to force a fresh mount/unmount cycle
+            setExportingNotice(null);
+            await new Promise(r => setTimeout(r, 800));
+
+            setExportingNotice(notice);
+
+            // Chờ React render và DOM cập nhật (tối đa 5s polling)
+            let isUpdated = false;
+            for (let retry = 0; retry < 12; retry++) {
+              await new Promise(r => setTimeout(r, 500));
+              const node = document.getElementById('batch-capture-node');
+              if (node && node.dataset.studentId === notice.mahv) {
+                isUpdated = true;
+                console.log(`[Batch Export] Step 1: DOM Mounted for ${notice.tenhv} (Retry ${retry})`);
+                break;
+              }
+            }
+
+            if (!isUpdated) {
+              console.warn(`[Batch Export] DOM NOT found for ${notice.tenhv}. Waiting more...`);
+              await new Promise(r => setTimeout(r, 2000));
+            }
+
+            // Đảm bảo tất cả hình ảnh (đặc biệt là QR) trong node đang capture tải xong
+            const node = document.getElementById(`batch-capture-node`);
+            if (!node) continue;
+
+            const currentImages = Array.from(node.querySelectorAll('img'));
+            console.log(`[Batch Export] Step 2: Waiting for ${currentImages.length} images...`);
+
+            await Promise.all(
+              currentImages.map(img => {
+                if (img.complete && img.naturalWidth > 0) {
+                  console.log(`[Batch Export] Image already complete: ${img.src.substring(0, 50)}...`);
+                  return Promise.resolve();
+                }
+                return new Promise(resolve => {
+                  img.onload = () => { console.log(`[Batch Export] Image LOADED: ${img.src.substring(0, 50)}...`); resolve(); };
+                  img.onerror = () => { console.warn(`[Batch Export] Image FAILED: ${img.src}`); resolve(); };
+                  setTimeout(resolve, 8000);
+                });
+              })
+            );
+
+            // Extra delay for image buffer to paint
+            await new Promise(r => setTimeout(r, 1000));
+
+            if (node) {
+              try {
+                console.log(`[Batch Export] Step 3: Capturing PNG for ${notice.tenhv}...`);
+                // Đảm bảo node hiển thị đầy đủ
+                node.style.opacity = '1';
+                node.style.visibility = 'visible';
+
                 const dataUrl = await toPng(node, {
                   cacheBust: true,
-                  backgroundColor: '#ffffff'
+                  backgroundColor: '#ffffff',
+                  width: 800,
+                  height: 1150
                 });
-
-                // Set back to hidden state immediately after capture but keep in DOM
-                node.style.position = 'static';
-                node.style.opacity = '0.01';
 
                 if (dataUrl && dataUrl.length > 2500) {
                   const link = document.createElement('a');
@@ -819,8 +874,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   link.click();
                   document.body.removeChild(link);
                 } else {
-                  console.warn(`Empty or tiny dataUrl for index ${i}. Length: ${dataUrl?.length}`);
-                  // Immediate retry with simple capture
+                  // Retry nếu lỗi
                   const retryUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
                   if (retryUrl && retryUrl.length > 2500) {
                     const link = document.createElement('a');
@@ -832,12 +886,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   }
                 }
               } catch (nodeErr) {
-                console.error(`Lỗi capturing node ${i}:`, nodeErr);
+                console.error(`Lỗi capturing student ${notice.tenhv}:`, nodeErr);
               }
-
-              // Pause between downloads
-              await new Promise(r => setTimeout(r, 1800));
             }
+
+            // Nghỉ ngắn giữa các lần tải để tránh quá tải trình duyệt
+            await new Promise(r => setTimeout(r, 800));
           }
           showMessage('success', 'Đã tải xong hình ảnh thông báo!');
         } catch (err) {
@@ -846,6 +900,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         } finally {
           setIsGenerating(false);
           setNoticesToPrint([]);
+          setExportingNotice(null);
           setIsBatchNoticeOpen(false);
           isProcessingRef.current = false;
         }
@@ -1720,141 +1775,145 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         document.body
       )}
 
-      {/* HIDDEN PRINT TEMPLATES FOR BATCH */}
-      {noticesToPrint.length > 0 && (
-        <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-          {noticesToPrint.map((printHoaDon) => (
-            <div key={printHoaDon.batchId} id={`batch-notice-${printHoaDon.batchId}`} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
-              {/* HEADER */}
-              <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {/* LEFT: Logo */}
-                <div style={{ width: '180px', textAlign: 'left' }}>
-                  <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                </div>
+      {/* SEQUENTIAL PRINT TEMPLATE FOR BATCH - Portal to end of body for capture safety */}
+      {exportingNotice && createPortal(
+        <div
+          id="batch-capture-node"
+          key={exportingNotice.mahv}
+          data-student-id={exportingNotice.mahv}
+          className="print-a5-receipt"
+          style={{
+            position: 'fixed',
+            left: 0,
+            top: 0,
+            width: '800px',
+            background: '#ffffff',
+            padding: '30px',
+            boxSizing: 'border-box',
+            display: 'block',
+            zIndex: 99999,
+            pointerEvents: 'none'
+          }}
+        >
+          {/* HEADER */}
+          <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ width: '180px', textAlign: 'left' }}>
+              <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+            </div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', color: '#000' }}>
+                {config?.tencongty || 'E-Skills Academy'}
+              </h3>
+              <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+              <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+            </div>
+            <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+              <div>Mã HD: <b style={{ fontWeight: 950, color: '#000' }}>{exportingNotice.mahd}</b></div>
+              <div>Ngày lập: <span style={{ fontWeight: 600, color: '#000' }}>{new Date(exportingNotice.ngaylap).toLocaleDateString("vi-VN")}</span></div>
+            </div>
+          </div>
 
-                {/* CENTER: Info */}
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                    {config?.tencongty || 'E-Skills Academy'}
-                  </h3>
-                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
-                </div>
+          <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+            THÔNG BÁO THU HỌC PHÍ
+          </div>
 
-                {/* RIGHT: Invoice info */}
-                <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                  <div>Mã HD: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
-                  <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
-                </div>
+          <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div>Họ và tên: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{exportingNotice.tenhv}</b></div>
+              <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{exportingNotice.mahv}</b></div>
+            </div>
+
+            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '16px', padding: '24px', marginTop: '15px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                <div style={{ fontWeight: 600 }}>Học phí:</div>
+                <div style={{ fontWeight: 900 }}>{exportingNotice.hocphiStr} đ</div>
               </div>
-
-              {/* TITLE */}
-              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                THÔNG BÁO THU HỌC PHÍ
-              </div>
-
-              {/* INFO */}
-              <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div>Họ và tên: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.tenhv}</b></div>
-                  <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.mahv}</b></div>
+              {parseInt(String(exportingNotice.giamhocphi).replace(/\D/g, '')) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                  <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                  <div style={{ fontWeight: 900 }}>{exportingNotice.giamhocphiStr} đ</div>
                 </div>
-
-                {/* FEES BOX */}
-                <div style={{
-                  background: '#f0f9ff',
-                  border: '1px solid #bae6fd',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  marginTop: '15px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
-                    <div style={{ fontWeight: 600 }}>Học phí:</div>
-                    <div style={{ fontWeight: 900 }}>{printHoaDon.hocphiStr} đ</div>
-                  </div>
-
-                  {parseInt(String(printHoaDon.giamhocphi).replace(/\D/g, '')) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
-                      <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
-                      <div style={{ fontWeight: 900 }}>{printHoaDon.giamhocphiStr} đ</div>
+              )}
+              {(parseInt(String(exportingNotice.truTienAn).replace(/\D/g, '')) > 0 || parseInt(String(exportingNotice.truHocPhi).replace(/\D/g, '')) > 0) && (
+                <>
+                  <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                  {parseInt(String(exportingNotice.truTienAn).replace(/\D/g, '')) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                      <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn ({exportingNotice.nghiLienTiep}n):</div>
+                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truTienAnStr} đ</div>
                     </div>
                   )}
-
-                  {(parseInt(String(printHoaDon.truTienAn).replace(/\D/g, '')) > 0 || parseInt(String(printHoaDon.truHocPhi).replace(/\D/g, '')) > 0) && (
-                    <>
-                      <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
-                      {parseInt(String(printHoaDon.truTienAn).replace(/\D/g, '')) > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                          <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn ({printHoaDon.nghiLienTiep}n):</div>
-                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truTienAnStr} đ</div>
-                        </div>
-                      )}
-                      {parseInt(String(printHoaDon.truHocPhi).replace(/\D/g, '')) > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
-                          <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học ({printHoaDon.nghiLienTiep}n):</div>
-                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truHocPhiStr} đ</div>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
-                    <div>TỔNG CỘNG:</div>
-                    <div>{printHoaDon.tongcongStr} VNĐ</div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
-                  <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b></div>
-                  {printHoaDon.diemDanhInfo && (
-                    <div style={{ opacity: 0.9 }}>
-                      Điểm danh ({printHoaDon.diemDanhInfo.statsPeriod}):
-                      <span> Đi học: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.diHoc}</b></span>,
-                      <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiPhep}</b></span>,
-                      <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{printHoaDon.diemDanhInfo.nghiKP}</b></span>
+                  {parseInt(String(exportingNotice.truHocPhi).replace(/\D/g, '')) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                      <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học ({exportingNotice.nghiLienTiep}n):</div>
+                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truHocPhiStr} đ</div>
                     </div>
                   )}
-                  {printHoaDon.ghichu && (
-                    <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{printHoaDon.ghichu}</b></div>
-                  )}
-                </div>
-
-                {/* QR SECTION */}
-                {(() => {
-                  const qrUrl = getNoticeQRUrl(printHoaDon);
-                  if (!qrUrl) return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
-                      <div style={{ fontWeight: '950', fontSize: '14pt' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span></div>
-                    </div>
-                  );
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
-                      <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span></div>
-                      <div style={{ textAlign: 'center' }}>
-                        <img crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
-                        <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* FOOTER */}
-              <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                <div style={{ lineHeight: '1.6' }}>
-                  <b style={{ fontWeight: 950, fontSize: '17pt' }}>{config?.tencongty || 'E-Skills Academy'} </b><br />
-                  Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                  Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{printHoaDon.manv || printHoaDon.nhanvien || 'Ban Tuyển Sinh'}</b>
-                </div>
-                <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
-                  (Ký tên / Xác nhận)
-                </div>
+                </>
+              )}
+              <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                <div>TỔNG CỘNG:</div>
+                <div>{exportingNotice.tongcongStr} VNĐ</div>
               </div>
             </div>
-          ))}
-        </div>
+
+            <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+              <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{exportingNotice.thoiluong || "..."}</b></div>
+              {exportingNotice.diemDanhInfo && (
+                <div style={{ opacity: 0.9 }}>
+                  Điểm danh ({exportingNotice.diemDanhInfo.statsPeriod}):
+                  <span> Đi học: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diHoc}</b></span>,
+                  <span> Nghỉ phép: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.nghiPhep}</b></span>,
+                  <span> Nghỉ KP: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.nghiKP}</b></span>
+                </div>
+              )}
+              {exportingNotice.ghichu && (
+                <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{exportingNotice.ghichu}</b></div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+              <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%', color: '#000' }}>Hình thức thanh toán: {exportingNotice.hinhthuc}</div>
+              {exportingNotice.qrUrl && (
+                <div style={{ textAlign: 'center' }}>
+                  <img 
+                    crossOrigin="anonymous" 
+                    src={exportingNotice.qrBase64 || exportingNotice.qrUrl} 
+                    alt="Mã QR" 
+                    style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} 
+                  />
+                  <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+            <div style={{ lineHeight: '1.6', color: '#000' }}>
+              <b style={{ fontWeight: 950, fontSize: '17pt' }}>{config?.tencongty || 'E-Skills Academy'} </b><br />
+              Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+              Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{exportingNotice.manv || exportingNotice.nhanvien || 'Ban Tuyển Sinh'}</b>
+            </div>
+            <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, color: '#000' }}>
+              (Ký tên / Xác nhận)
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
+
+
+
+
+
+
+
+
+
+
+
+
       {/* Lesson Content Modal */}
       {isNoidungModalOpen && createPortal(
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
