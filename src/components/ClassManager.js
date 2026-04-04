@@ -489,6 +489,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let tuitionRefund = 0;
         let maxLeave = 0;
         const mealRefundRate = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+        const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+        const p6 = parseFloat(config?.nghi6ngay || '0');
+        const p12 = parseFloat(config?.nghi12ngay || '0');
 
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
@@ -497,8 +500,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           if (count >= 3) {
             mealRefund += count * mealRefundRate;
           }
-          if (count >= 6) {
-            tuitionRefund += (count / 30) * initHocPhi;
+          if (count >= 12) {
+            tuitionRefund += count * tuitionRefundRate * (p12 / 100);
+          } else if (count >= 6) {
+            tuitionRefund += count * tuitionRefundRate * (p6 / 100);
           }
         });
 
