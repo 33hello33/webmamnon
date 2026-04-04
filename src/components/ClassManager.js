@@ -21,29 +21,20 @@ const formatMonthYear = (dateStr) => {
 
 const getQRUrl = (hoaDon, walletsConfig) => {
   if (!walletsConfig || !hoaDon.hinhthuc) {
-    console.log('[getQRUrl] Missing data:', { hasWallets: !!walletsConfig, hinhthuc: hoaDon.hinhthuc });
     return null;
   }
   const hinhThucTrim = String(hoaDon.hinhthuc).trim();
   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
 
-  if (!matchedWallet) {
-    console.warn(`[getQRUrl] No wallet matched for "${hinhThucTrim}". Available:`, walletsConfig.map(w => w.name));
-  }
+  if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) return null;
+  const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
-  if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-    const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
+  const mahv = hoaDon.mahv || '';
+  const tenhv = hoaDon.tenhv || '';
+  const mahd = hoaDon.mahd || '';
 
-    // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
-    const mahv = hoaDon.mahv || '';
-    const tenhv = hoaDon.tenhv || '';
-    const mahd = hoaDon.mahd || '';
-
-    // Nội dung chuyển khoản theo định dạng MãHV-TênHV
-    const info = encodeURIComponent(`${mahv}-${tenhv}`.trim());
-    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
-  }
-  return null;
+  const info = encodeURIComponent(`${mahv}-${tenhv}`.trim());
+  return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
 };
 const formatTuition = (val) => {
   if (!val && val !== 0) return '';
@@ -163,16 +154,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Data for Joins
   const [teachers, setTeachers] = useState([]);
   const [contracts, setContracts] = useState([]);
 
-  // Form
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM);
 
-  // Batch Notice
   const [isBatchNoticeOpen, setIsBatchNoticeOpen] = useState(false);
   const [batchNoticeData, setBatchNoticeData] = useState({
     loaiDong: 'Tháng',
@@ -193,19 +181,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferTargetClassId, setTransferTargetClassId] = useState('');
   const [transferringStudent, setTransferringStudent] = useState(null);
-  const isProcessingRef = React.useRef(false);
 
-
-
-  // Lesson Content
   const [isNoidungModalOpen, setIsNoidungModalOpen] = useState(false);
   const [noidungFilter, setNoidungFilter] = useState('this_month');
   const [noidungList, setNoidungList] = useState([]);
   const [noidungLoading, setNoidungLoading] = useState(false);
 
-  // Delete Confirmation
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+
+  const isProcessingRef = useRef(false);
 
   const fetchClasses = async () => {
     setLoading(true);
@@ -245,7 +230,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   useEffect(() => {
     fetchClasses();
     fetchTeachers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchNoidungDay = useCallback(async (filter) => {
@@ -289,7 +273,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     } finally {
       setNoidungLoading(false);
     }
-  }, [selectedClassId]);
+  }, [selectedClassId, showMessage]);
 
   useEffect(() => {
     if (isNoidungModalOpen) {
@@ -301,11 +285,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (!selectedClassId || !students) return [];
 
     return students.filter(s => {
-      // 1. Normalize malop comparison
       const smalop = (s.malop || '').toString().trim().toLowerCase();
       const selId = (selectedClassId || '').toString().trim().toLowerCase();
 
-      // 2. Check in malop or malop_list (handling both array and string variants)
       let matchesClass = (smalop === selId);
 
       if (!matchesClass && s.malop_list) {
@@ -318,9 +300,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       if (!matchesClass) return false;
 
-      // 3. Status check (normalize state)
       const st = (s.trangthai || '').trim().toLowerCase();
-      // Only hide if 'đã nghỉ'
       return st !== 'đã nghỉ';
     });
   }, [students, selectedClassId]);
@@ -349,13 +329,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (selectedClassId) {
       fetchContractsForClass();
     }
-  }, [selectedClassId, classStudents]); // Dependency triggers when class or static students change
+  }, [selectedClassId, classStudents]);
 
-  // Today's Day Code (T2, T3... CN)
   const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   const todayCode = dayNames[new Date().getDay()];
 
-  // Filter & Sort Classes
   const filteredClasses = classes
     .filter(c =>
       c.tenlop?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -364,7 +342,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   const selectedClass = classes.find(c => c.malop === selectedClassId);
 
-  // --- BATCH NOTICE HANDLERS ---
   const handleOpenBatchNotice = async () => {
     const activeStudents = classStudents.filter(s => (s.trangthai || '').trim().toLowerCase().includes('đang học'));
     if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào "Đang Học" để gửi thông báo');
@@ -404,7 +381,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const startStr = new Date(firstDayThisMonth.getTime() - firstDayThisMonth.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
-      // Fetch latest docs for all active students to determine their previous billing cycle
       const studentIds = activeStudents.map(s => s.mahv);
       const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
         supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, thoiluong, mahd').in('mahv', studentIds).neq('daxoa', 'Đã Xóa'),
@@ -416,7 +392,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const s = String(dStr);
         if (s.includes('T')) return s.split('T')[0];
         if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
-        const parts = s.split(/[/ :\-]/);
+        const parts = s.split(/[/ :-]/);
         if (parts.length >= 3) {
           const d = parseInt(parts[0], 10);
           const m = parseInt(parts[1], 10);
@@ -432,7 +408,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return isNaN(t) ? 0 : t;
       };
 
-      // Map each student to their latest doc's date range
       const studentRanges = {};
       activeStudents.forEach(s => {
         const docs = [
@@ -460,7 +435,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         }
       });
 
-      // Fetch attendance for all identified ranges (broad fetch for simplicity but covered by MIN/MAX)
       const allStarts = Object.values(studentRanges).map(r => r.start);
       const allEnds = Object.values(studentRanges).map(r => r.end);
 
@@ -494,7 +468,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       });
 
       const initData = activeStudents.map((s, sIdx) => {
-        // Find specific student data again to be 100% sure of identity
         const studentRaw = students.find(st => st.mahv === s.mahv) || s;
         const currentMahv = studentRaw.mahv;
         const currentTenhv = studentRaw.tenhv;
@@ -526,7 +499,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           }
         });
 
-        // Round to nearest 1000
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
 
@@ -557,7 +529,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       setBatchStudentsData(initData);
     } catch (err) {
-      console.error('Lỗi mở thông báo hàng loạt:', err);
       showMessage('error', 'Đã xảy ra lỗi khi chuẩn bị thông báo: ' + err.message);
       setIsBatchNoticeOpen(false);
     } finally {
@@ -681,7 +652,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const batchId = Date.now();
       const finalNotices = filteredExport.map((row, i) => {
         const studentId = row.mahv;
-        // Re-fetch from master list to be absolutely sure of identity
         const masterStudent = students.find(s => s.mahv === studentId) || {};
         const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
         const tl = formatMonthYear(row.ngaybatdau);
@@ -709,7 +679,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               mahd: newMaHD
             }, walletsConfig);
             const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
-            console.log(`[Batch Export] Generated notice for ${masterStudent.tenhv || row.tenhv}:`, { mahv: studentId, tongcong: row.tongcong, qrUrl: finalUrl });
             return finalUrl;
           })()
         };
@@ -741,7 +710,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (error) throw error;
       }
 
-      // EXCEL EXPORT
       const excelData = finalNotices.map((n, idx) => ({
         "STT": idx + 1,
         "Mã học sinh": n.mahv,
@@ -766,31 +734,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         setNoticesToPrint(finalNotices);
       }
     } catch (err) {
-      console.error('Lỗi khi lưu thông báo hàng loạt:', err);
       if (err.code === '42P01') showMessage('error', 'Chưa có bảng tbl_thongbao trong CSDL để lưu trữ.');
       else showMessage('error', 'Lỗi lưu dữ liệu: ' + err.message);
       setIsGenerating(false);
     }
   };
 
-
-
   useEffect(() => {
     if (noticesToPrint.length > 0 && !isProcessingRef.current) {
       isProcessingRef.current = true;
       const processPngs = async () => {
         try {
-          // Wait for DOM to fully settle
           await new Promise(r => setTimeout(r, 3500));
 
           for (let i = 0; i < noticesToPrint.length; i++) {
             const notice = noticesToPrint[i];
-            console.log(`[Batch Export] === PROCESSING: ${notice.tenhv} (${notice.mahv}) ===`);
             
-            // Pre-fetch QR as Base64 to avoid all capture-time loading issues
             if (notice.qrUrl) {
               try {
-                console.log(`[Batch Export] Fetching QR as Base64 for ${notice.tenhv}...`);
                 const response = await fetch(notice.qrUrl);
                 const blob = await response.blob();
                 const base64 = await new Promise((resolve) => {
@@ -799,36 +760,30 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   reader.readAsDataURL(blob);
                 });
                 notice.qrBase64 = base64;
-                console.log(`[Batch Export] QR Base64 ready (Len: ${base64.length})`);
               } catch (fetchErr) {
-                console.warn(`[Batch Export] QR Fetch failed for ${notice.tenhv}:`, fetchErr);
+                // ignore
               }
             }
 
-            // Clear old state to force a fresh mount/unmount cycle
             setExportingNotice(null);
             await new Promise(r => setTimeout(r, 800));
 
             setExportingNotice(notice);
 
-            // Chờ React render và DOM cập nhật (tối đa 5s polling)
             let isUpdated = false;
             for (let retry = 0; retry < 12; retry++) {
               await new Promise(r => setTimeout(r, 500));
               const node = document.getElementById('batch-capture-node');
               if (node && node.dataset.studentId === notice.mahv) {
                 isUpdated = true;
-                console.log(`[Batch Export] Step 1: DOM Mounted for ${notice.tenhv} (Retry ${retry})`);
                 break;
               }
             }
 
             if (!isUpdated) {
-              console.warn(`[Batch Export] DOM NOT found for ${notice.tenhv}. Waiting more...`);
               await new Promise(r => setTimeout(r, 2000));
             }
 
-            // Đảm bảo tất cả hình ảnh (đặc biệt là QR) trong node đang capture tải xong
             const node = document.getElementById(`batch-capture-node`);
             if (!node) continue;
 
