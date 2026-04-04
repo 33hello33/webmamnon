@@ -111,8 +111,6 @@ export default function DebtManager() {
         nhanvien: cashier,
         hocphi: '0',
         giamhocphi: '0',
-        phuphi: '0',
-        dsphuphi: '',
         tongcong: '0',
         dadong: formatCurrency(payVal),
         conno: formatCurrency(newConno),
