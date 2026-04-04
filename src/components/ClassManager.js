@@ -451,11 +451,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         attendance = attData || [];
       }
 
-      const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
-      const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-      const p6 = parseFloat(config?.nghi6ngay) || 0;
-      const p12 = parseFloat(config?.nghi12ngay) || 0;
-
       setBatchNoticeData({
         loaiDong: initLoaiDong,
         soLuong: initSoLuong,
@@ -467,48 +462,48 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ghiChu: ''
       });
 
-      const initData = activeStudents.map((s, sIdx) => {
+      const tl = formatMonthYear(startStr);
+      const initData = activeStudents.map((s) => {
         const studentRaw = students.find(st => st.mahv === s.mahv) || s;
         const currentMahv = studentRaw.mahv;
         const currentTenhv = studentRaw.tenhv;
 
-        const range = studentRanges[currentMahv];
+        const range = studentRanges[currentMahv] || { start: startStr, end: startStr, period: tl };
         let studentAttendance = [];
-        if (range && attendance) {
+        if (attendance) {
           studentAttendance = attendance.filter(a => a.mahv === currentMahv && a.ngay >= range.start && a.ngay <= range.end);
         }
 
-        const groups = calculateConsecutiveLeave(studentAttendance);
+        const daHoc = studentAttendance.filter(a => {
+          const st = (a.trangthai || '').trim().toLowerCase();
+          return st === 'có mặt' || st === 'đi học';
+        }).length;
+        const nghiPhep = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ phép').length;
+        const nghiKhongPhep = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ không phép').length;
 
+        const groups = calculateConsecutiveLeave(studentAttendance);
         let mealRefund = 0;
         let tuitionRefund = 0;
         let maxLeave = 0;
+        const mealRefundRate = parseInt(String(selectedClass?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
 
-          if (count >= 12) {
-            tuitionRefund += count * trutiennghi_val * (p12 / 100);
-          } else if (count >= 6) {
-            tuitionRefund += count * trutiennghi_val * (p6 / 100);
-          }
-
           if (count >= 3) {
-            mealRefund += count * trutienan_val;
+            mealRefund += count * mealRefundRate;
+          }
+          if (count >= 6) {
+            tuitionRefund += (count / 30) * initHocPhi;
           }
         });
 
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
 
-        const stHinhThuc = studentRaw.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
         const totalRefund = mealRefund + tuitionRefund;
-
-        const diHoc = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'có mặt').length;
-        const nghiPhep = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ phép').length;
-        const nghiKP = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ không phép').length;
-        const statsPeriod = range ? formatMonthYear(range.start) : '';
+        const stHinhThuc = studentRaw.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
 
         return {
           mahv: currentMahv,
@@ -523,7 +518,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           hinhthuc: stHinhThuc,
           ghichu: '',
           thoigianbieu: selectedClass?.thoigianbieu || '',
-          diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod }
+          diemDanhInfo: { daHoc, nghiPhep, nghiKhongPhep, statsPeriod: range.period }
         };
       });
 
@@ -1818,9 +1813,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               {exportingNotice.diemDanhInfo && (
                 <div style={{ opacity: 0.9 }}>
                   Điểm danh ({exportingNotice.diemDanhInfo.statsPeriod}):
-                  <span> Đi học: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diHoc}</b></span>,
-                  <span> Nghỉ phép: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.nghiPhep}</b></span>,
-                  <span> Nghỉ KP: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.nghiKP}</b></span>
+                  <span> Đi học: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.daHoc}</b></span>,
+                  <span> Nghỉ phép: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.nghiPhep}</b></span>,
+                  <span> Nghỉ KP: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.nghiKhongPhep}</b></span>
                 </div>
               )}
               {exportingNotice.ghichu && (
