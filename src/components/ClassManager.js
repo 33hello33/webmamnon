@@ -26,14 +26,19 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
     const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
-    /*
-    let suffix = '';
-    if (hoaDon.tenhv) {
-       const parts = hoaDon.tenhv.trim().split(' ');
-       suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
-    }
+    // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
+    const mahv = hoaDon.mahv || '';
+    const tenhv = hoaDon.tenhv || '';
+    const mahd = hoaDon.mahd || '';
+
+    // Rút gọn tên nếu cần (lấy tối đa 2 từ cuối để vừa độ dài QR nếu quá dài)
+    let shortenedName = tenhv.trim();
+    /* 
+    const nameParts = shortenedName.split(' ');
+    if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
     */
-    const info = encodeURIComponent(`${hoaDon.mahv}${hoaDon.tenhv}`);
+
+    const info = encodeURIComponent(`${mahd} ${mahv} ${shortenedName}`.trim());
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
   return null;
@@ -485,11 +490,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ghiChu: ''
       });
 
-      const initData = activeStudents.map(s => {
-        const range = studentRanges[s.mahv];
+      const initData = activeStudents.map((s, sIdx) => {
+        // Find specific student data again to be 100% sure of identity
+        const studentRaw = students.find(st => st.mahv === s.mahv) || s;
+        const currentMahv = studentRaw.mahv;
+        const currentTenhv = studentRaw.tenhv;
+
+        const range = studentRanges[currentMahv];
         let studentAttendance = [];
-        if (range) {
-          studentAttendance = attendance.filter(a => a.mahv === s.mahv && a.ngay >= range.start && a.ngay <= range.end);
+        if (range && attendance) {
+          studentAttendance = attendance.filter(a => a.mahv === currentMahv && a.ngay >= range.start && a.ngay <= range.end);
         }
 
         const groups = calculateConsecutiveLeave(studentAttendance);
@@ -517,7 +527,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
 
-        const stHinhThuc = s.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
+        const stHinhThuc = studentRaw.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
         const totalRefund = mealRefund + tuitionRefund;
 
         const diHoc = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'có mặt').length;
@@ -526,8 +536,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const statsPeriod = range ? formatMonthYear(range.start) : '';
 
         return {
-          mahv: s.mahv,
-          tenhv: s.tenhv,
+          mahv: currentMahv,
+          tenhv: currentTenhv,
           hocphi: initHocPhi,
           giamhocphi: 0,
           truTienAn: mealRefund,
@@ -651,12 +661,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const handleRemoveBatchStudent = (mahv) => {
     setBatchStudentsData(prev => prev.filter(item => item.mahv !== mahv));
   };
-
   const handleConfirmBatchExport = async () => {
     setIsGenerating(true);
     try {
-      const recordsToInsert = [];
-      const currentNotices = [];
       const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
       const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
@@ -667,70 +674,73 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       }
 
       const filteredExport = (batchStudentsData || []).filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter);
-      for (let i = 0; i < filteredExport.length; i++) {
-        const row = filteredExport[i];
-        const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
 
+      const batchId = Date.now();
+      const finalNotices = filteredExport.map((row, i) => {
+        const studentId = row.mahv;
+        // Re-fetch from master list to be absolutely sure of identity
+        const masterStudent = students.find(s => s.mahv === studentId) || {};
+        const newMaHD = `TB${String(nextNum + i).padStart(5, '0')}`;
         const tl = formatMonthYear(row.ngaybatdau);
 
-        const insertData = {
-          mahd: newMaHD,
-          ngaylap: localNow,
-          mahv: row.mahv,
-          tenlop: selectedClass?.tenlop || '',
-          ngaybatdau: row.ngaybatdau || null,
-          ngayketthuc: null,
-          manv: 'Hệ thống',
-          hocphi: formatTuition(row.hocphi),
-          giamhocphi: formatTuition(row.giamhocphi),
-          truTienAn: formatTuition(row.truTienAn),
-          truHocPhi: formatTuition(row.truHocPhi),
-          phuthu: null,
-          tongcong: formatTuition(row.tongcong),
-          dadong: '0',
-          conno: formatTuition(row.tongcong),
-          hinhthuc: row.hinhthuc,
-          ghichu: row.ghichu,
-          daxoa: null,
-          malop: selectedClass?.malop || '',
-          thoiluong: tl,
-          sobuoihoc: tl
-        };
-
-        // Final database insert object (sum up discounts into giamhocphi for DB standard)
-        const dbPush = {
-          ...insertData,
-          giamhocphi: formatTuition((row.giamhocphi || 0) + (row.truTienAn || 0) + (row.truHocPhi || 0))
-        };
-        delete dbPush.truTienAn;
-        delete dbPush.truHocPhi;
-
-        recordsToInsert.push(dbPush);
-
-        currentNotices.push({
+        return {
           ...row,
-          ...insertData,
-          sdt: students.find(s => s.mahv === row.mahv)?.sdt || ''
-        });
+          batchId: `${batchId}-${i}`,
+          mahd: newMaHD,
+          mahv: studentId,
+          tenhv: masterStudent.tenhv || row.tenhv,
+          sdt: masterStudent.sdt || '',
+          tenlop: selectedClass?.tenlop || '',
+          thoiluong: tl,
+          ngaylap: localNow,
+          // Pre-format strings to avoid any render-time recalculation errors
+          hocphiStr: formatTuition(row.hocphi),
+          giamhocphiStr: formatTuition(row.giamhocphi),
+          truTienAnStr: formatTuition(row.truTienAn || 0),
+          truHocPhiStr: formatTuition(row.truHocPhi || 0),
+          tongcongStr: formatTuition(row.tongcong)
+        };
+      });
+
+      const recordsToInsert = finalNotices.map(n => ({
+        mahd: n.mahd,
+        ngaylap: n.ngaylap,
+        mahv: n.mahv,
+        tenlop: n.tenlop,
+        ngaybatdau: n.ngaybatdau,
+        manv: 'Hệ thống',
+        hocphi: n.hocphiStr,
+        giamhocphi: formatTuition((n.giamhocphi || 0) + (n.truTienAn || 0) + (n.truHocPhi || 0)),
+        tongcong: n.tongcongStr,
+        dadong: '0',
+        conno: n.tongcongStr,
+        hinhthuc: n.hinhthuc,
+        ghichu: n.ghichu,
+        malop: selectedClass?.malop || '',
+        thoiluong: n.thoiluong,
+        sobuoihoc: n.thoiluong,
+        daxoa: null
+      }));
+
+      if (recordsToInsert.length > 0) {
+        const { error } = await supabase.from('tbl_thongbao').insert(recordsToInsert);
+        if (error) throw error;
       }
 
-      const { error } = await supabase.from('tbl_thongbao').insert(recordsToInsert);
-      if (error) throw error;
-
-      // EXCEL EXPORT: Bổ sung theo yêu cầu người dùng
-      const excelData = filteredExport.map((row, idx) => ({
+      // EXCEL EXPORT
+      const excelData = finalNotices.map((n, idx) => ({
         "STT": idx + 1,
-        "Mã học sinh": row.mahv,
-        "Họ và tên": row.tenhv,
-        "Lớp": selectedClass?.tenlop || '',
-        "Tháng": formatMonthYear(row.ngaybatdau),
-        "Học phí": row.hocphi || 0,
-        "Giảm trừ": row.giamhocphi || 0,
-        "Hoàn tiền ăn": row.truTienAn || 0,
-        "Hoàn tiền học": row.truHocPhi || 0,
-        "Tổng cộng": row.tongcong || 0,
-        "Hình thức": row.hinhthuc,
-        "Ghi chú": row.ghichu
+        "Mã học sinh": n.mahv,
+        "Họ và tên": n.tenhv,
+        "Lớp": n.tenlop,
+        "Tháng": n.thoiluong,
+        "Học phí": n.hocphi || 0,
+        "Giảm học phí": n.giamhocphi || 0,
+        "Hoàn tiền ăn": n.truTienAn || 0,
+        "Hoàn tiền học": n.truHocPhi || 0,
+        "Tổng cộng": n.tongcong || 0,
+        "Hình thức": n.hinhthuc,
+        "Ghi chú": n.ghichu
       }));
 
       const ws = XLSX.utils.json_to_sheet(excelData);
@@ -738,11 +748,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       XLSX.utils.book_append_sheet(wb, ws, "DanhSachHocPhi");
       XLSX.writeFile(wb, `DS_Thong_Bao_HP_${selectedClass?.tenlop}_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`);
 
-      setNoticesToPrint(currentNotices);
+      if (finalNotices.length > 0) {
+        setNoticesToPrint(finalNotices);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Lỗi khi lưu thông báo hàng loạt:', err);
       if (err.code === '42P01') showMessage('error', 'Chưa có bảng tbl_thongbao trong CSDL để lưu trữ.');
-      else showMessage('error', 'Lỗi lưu thông báo hàng loạt: ' + err.message);
+      else showMessage('error', 'Lỗi lưu dữ liệu: ' + err.message);
       setIsGenerating(false);
     }
   };
@@ -775,13 +787,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           await new Promise(r => setTimeout(r, 1000));
 
           for (let i = 0; i < noticesToPrint.length; i++) {
-            const node = document.getElementById(`print-notice-${i}`);
+            const notice = noticesToPrint[i];
+            const node = document.getElementById(`batch-notice-${notice.batchId}`);
             if (node) {
               // Bring it "visually" to the viewport but almost transparent
               node.style.position = 'fixed';
               node.style.top = '0';
               node.style.left = '0';
-              node.style.zIndex = '9999';
+              node.style.zIndex = '99999';
               node.style.opacity = '1';
               node.style.visibility = 'visible';
 
@@ -800,7 +813,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                 if (dataUrl && dataUrl.length > 2500) {
                   const link = document.createElement('a');
-                  link.download = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
+                  link.download = `ThongBao_${notice.tenhv}_${notice.mahd}.png`;
                   link.href = dataUrl;
                   document.body.appendChild(link);
                   link.click();
@@ -811,7 +824,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   const retryUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
                   if (retryUrl && retryUrl.length > 2500) {
                     const link = document.createElement('a');
-                    link.download = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}_retry.png`;
+                    link.download = `ThongBao_${notice.tenhv}_${notice.mahd}_retry.png`;
                     link.href = retryUrl;
                     document.body.appendChild(link);
                     link.click();
@@ -1623,64 +1636,64 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         {(batchStudentsData || [])
                           .filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter)
                           .map((row, idx) => (
-                          <tr key={row.mahv} style={{ fontSize: '0.85rem' }}>
-                            <td style={{ padding: '8px' }}>
-                              <button onClick={() => handleRemoveBatchStudent(row.mahv)} style={{ color: '#ef4444', background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer' }}>
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                            <td style={{ color: '#64748b' }}>{idx + 1}</td>
-                            <td style={{ fontWeight: 600, color: '#64748b' }}>#{row.mahv}</td>
-                            <td style={{ fontWeight: 700, color: '#1e293b', textAlign: 'left' }}>{row.tenhv}</td>
-                            <td>
-                              <input
-                                type="text"
-                                value={formatTuition(row.hocphi)}
-                                onChange={e => handleBatchStudentChange(row.mahv, 'hocphi', e.target.value)}
-                                className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600 }}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={formatTuition(row.giamhocphi)}
-                                onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
-                                className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
-                              />
-                            </td>
-                            <td style={{ fontWeight: 700, color: '#f59e0b' }}>{row.nghiLienTiep || 0} n</td>
-                            <td>
-                              <input
-                                type="text"
-                                value={formatTuition(row.truTienAn)}
-                                onChange={e => handleBatchStudentChange(row.mahv, 'truTienAn', e.target.value)}
-                                className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={formatTuition(row.truHocPhi)}
-                                onChange={e => handleBatchStudentChange(row.mahv, 'truHocPhi', e.target.value)}
-                                className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
-                              />
-                            </td>
-                            <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
-                            <td>
-                              <select value={row.hinhthuc} onChange={e => handleBatchStudentChange(row.mahv, 'hinhthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px' }}>
-                                {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                                {walletsConfig.map(w => (
-                                  <option key={w.id} value={w.name}>{w.name}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td><input type="text" value={row.ghichu} onChange={e => handleBatchStudentChange(row.mahv, 'ghichu', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px' }} placeholder="..." /></td>
-                          </tr>
-                        ))}
+                            <tr key={row.mahv} style={{ fontSize: '0.85rem' }}>
+                              <td style={{ padding: '8px' }}>
+                                <button onClick={() => handleRemoveBatchStudent(row.mahv)} style={{ color: '#ef4444', background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer' }}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                              <td style={{ color: '#64748b' }}>{idx + 1}</td>
+                              <td style={{ fontWeight: 600, color: '#64748b' }}>#{row.mahv}</td>
+                              <td style={{ fontWeight: 700, color: '#1e293b', textAlign: 'left' }}>{row.tenhv}</td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.hocphi)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'hocphi', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600 }}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.giamhocphi)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
+                                />
+                              </td>
+                              <td style={{ fontWeight: 700, color: '#f59e0b' }}>{row.nghiLienTiep || 0} n</td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.truTienAn)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'truTienAn', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.truHocPhi)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'truHocPhi', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
+                                />
+                              </td>
+                              <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
+                              <td>
+                                <select value={row.hinhthuc} onChange={e => handleBatchStudentChange(row.mahv, 'hinhthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px' }}>
+                                  {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                  {walletsConfig.map(w => (
+                                    <option key={w.id} value={w.name}>{w.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td><input type="text" value={row.ghichu} onChange={e => handleBatchStudentChange(row.mahv, 'ghichu', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px' }} placeholder="..." /></td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
@@ -1710,8 +1723,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {/* HIDDEN PRINT TEMPLATES FOR BATCH */}
       {noticesToPrint.length > 0 && (
         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-          {noticesToPrint.map((printHoaDon, idx) => (
-            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
+          {noticesToPrint.map((printHoaDon) => (
+            <div key={printHoaDon.batchId} id={`batch-notice-${printHoaDon.batchId}`} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
               {/* HEADER */}
               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 {/* LEFT: Logo */}
@@ -1743,6 +1756,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               {/* INFO */}
               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <div>Mã học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.mahv}</b></div>
                   <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.tenhv}</b></div>
                   <div>SĐT: <b style={{ fontWeight: 900 }}>{printHoaDon.sdt || ""}</b></div>
                 </div>
@@ -1757,13 +1771,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                     <div style={{ fontWeight: 600 }}>Học phí:</div>
-                    <div style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</div>
+                    <div style={{ fontWeight: 900 }}>{printHoaDon.hocphiStr} đ</div>
                   </div>
 
                   {parseInt(String(printHoaDon.giamhocphi).replace(/\D/g, '')) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                       <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
-                      <div style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi} đ</div>
+                      <div style={{ fontWeight: 900 }}>{printHoaDon.giamhocphiStr} đ</div>
                     </div>
                   )}
 
@@ -1773,13 +1787,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       {parseInt(String(printHoaDon.truTienAn).replace(/\D/g, '')) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                           <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn ({printHoaDon.nghiLienTiep}n):</div>
-                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truTienAn} đ</div>
+                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truTienAnStr} đ</div>
                         </div>
                       )}
                       {parseInt(String(printHoaDon.truHocPhi).replace(/\D/g, '')) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
                           <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học ({printHoaDon.nghiLienTiep}n):</div>
-                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truHocPhi} đ</div>
+                          <div style={{ fontWeight: 700 }}>-{printHoaDon.truHocPhiStr} đ</div>
                         </div>
                       )}
                     </>
@@ -1788,7 +1802,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                     <div>TỔNG CỘNG:</div>
-                    <div>{printHoaDon.tongcong} VNĐ</div>
+                    <div>{printHoaDon.tongcongStr} VNĐ</div>
                   </div>
                 </div>
 

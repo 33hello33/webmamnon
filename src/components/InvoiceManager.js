@@ -52,13 +52,19 @@ const getQRUrl = (hoaDon, walletsConfig) => {
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
-      let suffix = '';
-      if (hoaDon.tenhv) {
-         const parts = hoaDon.tenhv.trim().split(' ');
-         suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
-      }
+      // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
+      const mahv = hoaDon.mahv || '';
+      const tenhv = hoaDon.tenhv || '';
+      const mahd = hoaDon.mahd || '';
 
-      const info = encodeURIComponent(`${hoaDon.mahv}${hoaDon.tenhv}`);
+      // Rút gọn tên nếu cần (lấy tối đa 2 từ cuối để vừa độ dài QR nếu quá dài)
+      let shortenedName = tenhv.trim();
+      /* 
+      const nameParts = shortenedName.split(' ');
+      if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
+      */
+
+      const info = encodeURIComponent(`${mahd} ${mahv} ${shortenedName}`.trim());
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
@@ -1426,16 +1432,16 @@ export default function InvoiceManager() {
                            <div className="im-fi-item-col">
                               <label>💳 Hình thức thanh toán</label>
                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                 <select 
-                                    className="im-select" 
-                                    value={invoiceData.hinhThuc} 
-                                    onChange={e => handleFormChange('hinhThuc', e.target.value)} 
-                                    disabled={isHinhThucLocked} 
-                                    style={{ 
+                                 <select
+                                    className="im-select"
+                                    value={invoiceData.hinhThuc}
+                                    onChange={e => handleFormChange('hinhThuc', e.target.value)}
+                                    disabled={isHinhThucLocked}
+                                    style={{
                                        flex: 1,
-                                       opacity: isHinhThucLocked ? 0.7 : 1, 
-                                       cursor: isHinhThucLocked ? 'not-allowed' : 'pointer', 
-                                       background: isHinhThucLocked ? '#f1f5f9' : 'white' 
+                                       opacity: isHinhThucLocked ? 0.7 : 1,
+                                       cursor: isHinhThucLocked ? 'not-allowed' : 'pointer',
+                                       background: isHinhThucLocked ? '#f1f5f9' : 'white'
                                     }}
                                  >
                                     {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
@@ -1443,7 +1449,7 @@ export default function InvoiceManager() {
                                        <option key={w.id} value={w.name}>{w.name}</option>
                                     ))}
                                  </select>
-                                 <button 
+                                 <button
                                     type="button"
                                     className={`im-unlock-btn ${isHinhThucLocked ? 'locked' : 'unlocked'}`}
                                     onClick={() => setIsHinhThucLocked(!isHinhThucLocked)}
@@ -1671,16 +1677,17 @@ export default function InvoiceManager() {
                {/* INFO */}
                <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Mã học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
                      <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
                      <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
                   </div>
 
                   {/* FEES BOX */}
-                  <div style={{ 
-                     background: '#f0f9ff', 
-                     border: '1px solid #bae6fd', 
-                     borderRadius: '16px', 
-                     padding: '24px', 
+                  <div style={{
+                     background: '#f0f9ff',
+                     border: '1px solid #bae6fd',
+                     borderRadius: '16px',
+                     padding: '24px',
                      marginTop: '15px',
                      lineHeight: '1.6'
                   }}>
@@ -1688,7 +1695,7 @@ export default function InvoiceManager() {
                         <div style={{ fontWeight: 600 }}>Học phí:</div>
                         <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
                      </div>
-                     
+
                      {parseInt(String(downloadingNotice?.giamhocphi).replace(/\D/g, '')) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                            <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
@@ -1726,9 +1733,9 @@ export default function InvoiceManager() {
                      <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
                      {downloadingNotice?.diemDanhInfo && (
                         <div style={{ opacity: 0.9 }}>
-                           Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}): 
-                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>, 
-                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>, 
+                           Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}):
+                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>,
+                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>,
                            <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
                         </div>
                      )}

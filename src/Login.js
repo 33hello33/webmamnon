@@ -68,7 +68,7 @@ function Login() {
 
       return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png
 ?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}
-&addInfo=${encodeURIComponent(parentMahv + nameSuffix)}
+&addInfo=${encodeURIComponent(parentMahv + '-' + parentData?.student?.tenhv)}
 &accountName=${encodeURIComponent(matched.accName)}`;
 
    };
