@@ -157,6 +157,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [teachers, setTeachers] = useState([]);
   const [contracts, setContracts] = useState([]);
 
+  const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+  const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM);
@@ -673,9 +676,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               tenhv: masterStudent.tenhv || row.tenhv,
               mahd: newMaHD
             }, walletsConfig);
-            const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
+           const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
             return finalUrl;
-          })()
+          })(),
+          manv: cashier
         };
         return notice;
       });
@@ -686,7 +690,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         mahv: n.mahv,
         tenlop: n.tenlop,
         ngaybatdau: n.ngaybatdau,
-        manv: 'Hệ thống',
+        manv: n.manv,
         hocphi: n.hocphiStr,
         giamhocphi: formatTuition((n.giamhocphi || 0) + (n.truTienAn || 0) + (n.truHocPhi || 0)),
         tongcong: n.tongcongStr,
@@ -1843,7 +1847,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             <div style={{ lineHeight: '1.6', color: '#000' }}>
               <b style={{ fontWeight: 950, fontSize: '17pt' }}>{config?.tencongty || 'E-Skills Academy'} </b><br />
               Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-              Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{exportingNotice.manv || exportingNotice.nhanvien || 'Ban Tuyển Sinh'}</b>
+              Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{exportingNotice.manv || cashier}</b>
             </div>
             <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, color: '#000' }}>
               (Ký tên / Xác nhận)
