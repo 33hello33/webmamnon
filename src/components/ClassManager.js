@@ -497,15 +497,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
 
-          if (count >= 3) {
-            mealRefund += count * mealRefundRate;
-          }
           if (count >= 12) {
             tuitionRefund += count * tuitionRefundRate * (p12 / 100);
           } else if (count >= 6) {
             tuitionRefund += count * tuitionRefundRate * (p6 / 100);
           }
         });
+
+        // Hoàn trả tiền ăn: Tổng số ngày nghỉ phép >= 3 ngày
+        if (nghiPhep >= 3) {
+          mealRefund = nghiPhep * mealRefundRate;
+        }
 
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;

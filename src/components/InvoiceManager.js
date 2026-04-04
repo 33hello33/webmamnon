@@ -790,102 +790,6 @@ export default function InvoiceManager() {
       handleFormChange('ngayBatDau', d.toISOString().split('T')[0]);
    };
 
-   const handleExportNotice = async () => {
-      const currentTimePeriod = calculateThoiluong(invoiceData);
-      if (currentTimePeriod) {
-         const { data: allDocs } = await supabase.from('tbl_hd')
-            .select('mahd, daxoa, thoiluong')
-            .eq('mahv', selectedStudent.mahv)
-            .eq('malop', activeClass?.malop || '');
-
-         const validHDs = (allDocs || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
-         const currentMonths = currentTimePeriod.split(',').map(m => m.trim());
-         const existingMonths = validHDs.flatMap(d => (d.thoiluong || '').split(',').map(m => m.trim()));
-
-         const overlappingMonth = currentMonths.find(m => existingMonths.includes(m));
-         if (overlappingMonth) {
-            setWarningModal({
-               isOpen: true,
-               title: 'Cảnh Báo Đóng Trùng Học Phí',
-               message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Vui lòng kiểm tra lại các Hóa Đơn cũ của học sinh!`
-            });
-            return;
-         }
-      }
-
-      // Generate TB code
-      const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
-      let nextNum = 1;
-      if (recentTB && recentTB.length > 0 && recentTB[0].mahd) {
-         const numPart = recentTB[0].mahd.replace(/\D/g, '');
-         if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
-      }
-      const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
-      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
-
-      const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
-      const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
-      const insertData = {
-         mahd: newMaTB,
-         ngaylap: localNow,
-         mahv: selectedStudent.mahv,
-         tenlop: activeClass?.tenlop || '',
-         ngaybatdau: invoiceData.ngayBatDau || null,
-         ngayketthuc: invoiceData.ngayKetThuc || null,
-         manv: auth.user?.manv || auth.user?.username || '',
-         hocphi: formatCurrency(invoiceData.hocphi),
-         giamhocphi: formatCurrency(invoiceData.giamHocphi),
-         tongcong: formatCurrency(tongCong),
-         dadong: '0',
-         conno: formatCurrency(tongCong),
-         hinhthuc: invoiceData.hinhThuc,
-         tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
-         trutienan: formatCurrency(Math.round(actualMealRefund)),
-         ghichu: `${invoiceData.ghiChu}${billNote}`,
-         phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
-         daxoa: null,
-         malop: activeClass?.malop || '',
-         thoiluong: currentTimePeriod,
-         sobuoihoc: sobuoihocFinal
-      };
-
-      try {
-         const { error } = await supabase.from('tbl_thongbao').insert([insertData]);
-         if (error) throw error;
-
-         setDownloadingNotice({
-            mahd: newMaTB,
-            ngaylap: localNow,
-            tenhv: selectedStudent.tenhv,
-            mahv: selectedStudent.mahv,
-            sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
-            tenlop: activeClass?.tenlop || '',
-            ngaybatdau: invoiceData.ngayBatDau || null,
-            ngayketthuc: invoiceData.ngayKetThuc || null,
-            hocphi: formatCurrency(invoiceData.hocphi) + ' đ',
-            giamhocphi: formatCurrency(invoiceData.giamHocphi) + ' đ',
-            tongcong: formatCurrency(tongCong),
-            hinhthuc: invoiceData.hinhThuc,
-            ghichu: `${invoiceData.ghiChu}${billNote}`,
-            thoiluong: currentTimePeriod,
-            sobuoihoc: sobuoihocFinal,
-            phuthu: invoiceData.phuthu,
-            nghiLienTiep: studySummary?.maxConsecutive || 0,
-            actualMealRefund: formatCurrency(Math.round(actualMealRefund)),
-            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund)),
-            diemDanhInfo: studySummary ? {
-               diHoc: studySummary.daHoc,
-               nghiPhep: studySummary.nghiPhep,
-               nghiKP: studySummary.nghiKhongPhep,
-               statsPeriod: studySummary.period
-            } : null
-         });
-      } catch (err) {
-         console.error(err);
-         showMessage('error', 'Lỗi lưu thông báo: ' + err.message);
-      }
-   };
-
    const handleSaveInvoice = async () => {
       setIsSaving(true);
       try {
@@ -1056,11 +960,12 @@ export default function InvoiceManager() {
          } else if (count >= 6) {
             tuitionRefund += count * trutiennghi_val * (p6 / 100);
          }
-         // Hoàn trả tiền ăn: >= 3 ngày liên tiếp
-         if (count >= 3) {
-            mealRefund += count * trutienan_val;
-         }
       });
+   }
+
+   // Hoàn trả tiền ăn: Tổng số ngày nghỉ phép >= 3 ngày
+   if (studySummary?.nghiPhep >= 3) {
+      mealRefund = studySummary.nghiPhep * trutienan_val;
    }
 
    // Round to nearest 1000
@@ -1461,10 +1366,6 @@ export default function InvoiceManager() {
                         </div>
 
                         <div className="im-actions" style={{ display: 'flex', gap: '10px' }}>
-                           <button className="im-btn-submit" style={{ background: '#3b82f6', borderColor: '#3b82f6' }} onClick={handleExportNotice}>
-                              <MessageSquare size={18} />
-                              Xuất Thông Báo
-                           </button>
                            <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
                               <Receipt size={18} />
                               {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}
