@@ -458,7 +458,10 @@ export default function InvoiceManager() {
          if (recentDoc) {
             setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
             const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
-            hocphi = parseCur(recentDoc.hocphi);
+            const loadedHocPhi = parseCur(recentDoc.hocphi);
+            if (loadedHocPhi > 0) {
+               hocphi = loadedHocPhi;
+            }
             giamHocphi = parseCur(recentDoc.giamhocphi);
             const studentHinhThuc = (student.hinhthucdong || '').trim();
             hinhThuc = studentHinhThuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');

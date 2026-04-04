@@ -699,7 +699,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ngaybatdau: n.ngaybatdau,
         manv: n.manv,
         hocphi: n.hocphiStr,
-        giamhocphi: formatTuition((n.giamhocphi || 0) + (n.truTienAn || 0) + (n.truHocPhi || 0)),
+        giamhocphi: n.giamhocphiStr,
         tongcong: n.tongcongStr,
         dadong: '0',
         conno: n.tongcongStr,
@@ -708,6 +708,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         malop: selectedClass?.malop || '',
         thoiluong: n.thoiluong,
         sobuoihoc: n.thoiluong,
+        tiennghiphep: n.truHocPhiStr,
+        trutienan: n.truTienAnStr,
         daxoa: null
       }));
 
