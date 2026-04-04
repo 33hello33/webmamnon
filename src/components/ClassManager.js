@@ -488,7 +488,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let mealRefund = 0;
         let tuitionRefund = 0;
         let maxLeave = 0;
-        const mealRefundRate = parseInt(String(selectedClass?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+        const mealRefundRate = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
 
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
