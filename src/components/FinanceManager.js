@@ -5,7 +5,7 @@ import { supabase, generateId } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock
+   Printer, History, Clock, Edit
 } from 'lucide-react';
 
 import './FinanceManager.css';
@@ -118,6 +118,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [deletePassword, setDeletePassword] = useState('');
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
+
+   const [editHoaDonModal, setEditHoaDonModal] = useState(false);
+   const [editHoaDonData, setEditHoaDonData] = useState(null);
 
    // Batch Import
    const [productList, setProductList] = useState([]);
@@ -310,6 +313,33 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          } catch (err) {
             console.error(err);
             alert('Đã xảy ra lỗi khi cân đối: ' + err.message);
+         }
+      } else if (confirmDialog.actionType === 'EDIT_HOADON') {
+         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         if (deletePassword !== auth.user?.password) {
+            alert('Mật khẩu của bạn không đúng, vui lòng thử lại!');
+            return;
+         }
+         const r = confirmDialog.payload;
+         const { error } = await supabase.from('tbl_hd')
+            .update({
+               hocphi: r.hocphi,
+               giamhocphi: r.giamhocphi,
+               phuthu: r.phuthu ? (typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu)) : null,
+               tongcong: r.tongcong.toString(),
+               dadong: r.dadong.toString(),
+               conno: r.conno.toString(),
+               hinhthuc: r.hinhthuc,
+               ghichu: r.ghichu
+            })
+            .eq('mahd', r.mahd);
+
+         if (error) alert("Lỗi khi cập nhật hóa đơn: " + error.message);
+         else {
+            setEditHoaDonModal(false);
+            fetchData();
+            fetchBalances();
+            alert("Cập nhật hóa đơn thành công!");
          }
       }
    };
@@ -760,6 +790,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
+   const handleEditHoaDon = (record) => {
+      setEditHoaDonData({ ...record });
+      setEditHoaDonModal(true);
+   };
+
    const renderContent = () => {
       let filteredData = [...data];
       if (searchTerm) {
@@ -787,7 +822,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                const productName = (hhMap[item.mahang] || '').toLowerCase();
                if (studentName.includes(lowerQ) || productName.includes(lowerQ)) return true;
             }
-            
+
             return false;
          });
       }
@@ -1011,6 +1046,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
                                  <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {currentUser?.role === 'Quản lý' && <button title="Sửa hóa đơn" className="btn-blue" onClick={() => handleEditHoaDon(r)}><Edit size={16} /></button>}
                                     <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
                                     <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
                                  </td>
@@ -1049,6 +1085,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
                               )}
                               <div className="fm-card-actions">
+                                 <button className="btn-blue-sm" style={{ background: '#0ea5e9' }} onClick={() => handleEditHoaDon(r)}><Edit size={16} /> Sửa</button>
                                  <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
                                  <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
                               </div>
@@ -1276,16 +1313,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <span className="text-muted" style={{ fontSize: '0.9rem', fontWeight: 500 }}>
                            Ngày mốc: <strong style={{ color: '#334155' }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
                         </span>
-                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            {!initialBalances.id && (
-                               <button className="fm-btn-add-dauky" onClick={() => {
-                                  setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
-                                  setBalanceModal(true);
-                               }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
-                            )}
-                            <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
-                            <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
-                         </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                           {!initialBalances.id && (
+                              <button className="fm-btn-add-dauky" onClick={() => {
+                                 setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
+                                 setBalanceModal(true);
+                              }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
+                           )}
+                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
+                        </div>
                      </div>
                   </div>
 
@@ -1586,7 +1623,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ width: '180px', textAlign: 'left' }}>
                         <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     
+
                      {/* CENTER: Info */}
                      <div style={{ flex: 1, textAlign: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
@@ -1680,7 +1717,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ width: '180px', textAlign: 'left' }}>
                         <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     
+
                      {/* CENTER: Info */}
                      <div style={{ flex: 1, textAlign: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
@@ -1930,7 +1967,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ width: '180px', textAlign: 'left' }}>
                         <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-                     
+
                      {/* CENTER: Info */}
                      <div style={{ flex: 1, textAlign: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
@@ -2158,6 +2195,125 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
+         {editHoaDonModal && editHoaDonData && document.body && createPortal(
+            <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
+               <div className="fm-modal animate-slide-up" style={{ maxWidth: '500px', background: '#fff', borderRadius: '20px' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {editHoaDonData.mahd}</h3>
+                     <button onClick={() => setEditHoaDonModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+                  </div>
+                  <form style={{ padding: '1.5rem' }} onSubmit={(e) => {
+                     e.preventDefault();
+                     setDeletePassword('');
+                     setConfirmDialog({
+                        isOpen: true,
+                        title: 'Xác nhận chỉnh sửa',
+                        message: 'Mọi thay đổi về số tiền sẽ ảnh hưởng đến báo cáo tài chính và công nợ của học sinh. Bạn có chắc chắn muốn cập nhật không?',
+                        actionType: 'EDIT_HOADON',
+                        payload: editHoaDonData
+                     });
+                  }}>
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
+                           <input type="text" value={fCur(editHoaDonData.hocphi)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editHoaDonData.hocphi);
+                              const diff = val - old;
+                              const newTong = pCur(editHoaDonData.tongcong) + diff;
+                              setEditHoaDonData({ ...editHoaDonData, hocphi: fCur(val), tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ (đ)</label>
+                           <input type="text" value={fCur(editHoaDonData.giamhocphi)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editHoaDonData.giamhocphi);
+                              const diff = val - old;
+                              const newTong = pCur(editHoaDonData.tongcong) - diff;
+                              setEditHoaDonData({ ...editHoaDonData, giamhocphi: fCur(val), tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                     </div>
+
+                     <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Phụ thu</label>
+                        {(() => {
+                           let pts = [];
+                           try {
+                              pts = typeof editHoaDonData.phuthu === 'string' ? JSON.parse(editHoaDonData.phuthu) : (Array.isArray(editHoaDonData.phuthu) ? editHoaDonData.phuthu : []);
+                           } catch (e) { }
+                           return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                 {pts.map((pt, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
+                                       <input type="text" value={pt.name} onChange={e => {
+                                          const newPts = [...pts];
+                                          newPts[i].name = e.target.value;
+                                          setEditHoaDonData({ ...editHoaDonData, phuthu: newPts });
+                                       }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #e2e8f0' }} placeholder="Tên phụ thu" />
+                                       <input type="text" value={fCur(pt.amount)} onChange={e => {
+                                          const oldPtVal = pts[i].amount || 0;
+                                          const newPtVal = pCur(e.target.value);
+                                          const diff = newPtVal - oldPtVal;
+                                          const newPts = [...pts];
+                                          newPts[i].amount = newPtVal;
+                                          const newTong = pCur(editHoaDonData.tongcong) + diff;
+                                          setEditHoaDonData({ ...editHoaDonData, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
+                                       }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #e2e8f0' }} placeholder="Số tiền" />
+                                       <button type="button" onClick={() => {
+                                          const deletedVal = pts[i].amount || 0;
+                                          const newPts = pts.filter((_, idx) => idx !== i);
+                                          const newTong = pCur(editHoaDonData.tongcong) - deletedVal;
+                                          setEditHoaDonData({ ...editHoaDonData, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
+                                       }} style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '0.4rem' }}><X size={14} /></button>
+                                    </div>
+                                 ))}
+                                 <button type="button" onClick={() => {
+                                    const newPts = [...pts, { name: '', amount: 0 }];
+                                    setEditHoaDonData({ ...editHoaDonData, phuthu: newPts });
+                                 }} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }}>+ Thêm phụ thu</button>
+                              </div>
+                           );
+                        })()}
+                     </div>
+
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#0ea5e9' }}>Đã nộp (đ)</label>
+                           <input type="text" value={fCur(editHoaDonData.dadong)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              setEditHoaDonData({ ...editHoaDonData, dadong: val, conno: pCur(editHoaDonData.tongcong) - val });
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #0ea5e9', fontWeight: 700 }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Còn nợ (đ)</label>
+                           <input disabled type="text" value={fCur(editHoaDonData.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', fontWeight: 700 }} />
+                        </div>
+                     </div>
+
+                     <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
+                        <select value={editHoaDonData.hinhthuc} onChange={e => setEditHoaDonData({ ...editHoaDonData, hinhthuc: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                           {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
+                        </select>
+                     </div>
+
+                     <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
+                        <textarea value={editHoaDonData.ghichu} onChange={e => setEditHoaDonData({ ...editHoaDonData, ghichu: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
+                     </div>
+
+                     <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button type="button" onClick={() => setEditHoaDonModal(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Hủy</button>
+                        <button type="submit" style={{ flex: 2, padding: '0.75rem', borderRadius: '10px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Lưu Thay Đổi</button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
+
          {confirmDialog.isOpen && document.body && createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 2000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
                <div className="fm-modal-content animate-slide-up" style={{ backgroundColor: 'white', maxWidth: '400px', width: '90%', borderRadius: '16px', textAlign: 'center', padding: '2.5rem 1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -2179,7 +2335,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      {confirmDialog.message}
                   </p>
 
-                  {(confirmDialog.actionType === 'DELETE' || confirmDialog.actionType === 'CONFIRM_CANDOI') && (
+                  {(confirmDialog.actionType === 'DELETE' || confirmDialog.actionType === 'CONFIRM_CANDOI' || confirmDialog.actionType === 'EDIT_HOADON') && (
                      <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Xác nhận mật khẩu:</label>
                         <input
@@ -2202,9 +2358,21 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </button>
                      <button
                         onClick={() => executeConfirmAction()}
-                        style={{ padding: '0.75rem 1.5rem', borderRadius: '10px', border: 'none', background: confirmDialog.actionType === 'DELETE' ? '#ef4444' : (confirmDialog.actionType === 'CONFIRM_CANDOI' ? '#8b5cf6' : '#22c55e'), color: 'white', fontWeight: 600, cursor: 'pointer', flex: 1, fontSize: '1rem', boxShadow: confirmDialog.actionType === 'DELETE' ? '0 4px 14px 0 rgba(239, 68, 68, 0.39)' : '0 4px 14px 0 rgba(34, 197, 94, 0.39)', transition: 'all 0.2s' }}
+                        style={{
+                           padding: '0.75rem 1.5rem',
+                           borderRadius: '10px',
+                           border: 'none',
+                           background: confirmDialog.actionType === 'DELETE' ? '#ef4444' : (confirmDialog.actionType === 'CONFIRM_CANDOI' ? '#8b5cf6' : (confirmDialog.actionType === 'EDIT_HOADON' ? '#3b82f6' : '#22c55e')),
+                           color: 'white',
+                           fontWeight: 600,
+                           cursor: 'pointer',
+                           flex: 1,
+                           fontSize: '1rem',
+                           boxShadow: confirmDialog.actionType === 'DELETE' ? '0 4px 14px 0 rgba(239, 68, 68, 0.39)' : (confirmDialog.actionType === 'EDIT_HOADON' ? '0 4px 14px 0 rgba(59, 130, 246, 0.39)' : '0 4px 14px 0 rgba(34, 197, 94, 0.39)'),
+                           transition: 'all 0.2s'
+                        }}
                      >
-                        {confirmDialog.actionType === 'DELETE' ? 'Xoá ngay' : 'Đồng ý'}
+                        {confirmDialog.actionType === 'DELETE' ? 'Xoá ngay' : (confirmDialog.actionType === 'EDIT_HOADON' ? 'Cập nhật' : 'Đồng ý')}
                      </button>
                   </div>
                </div>

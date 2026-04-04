@@ -683,7 +683,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               tenhv: masterStudent.tenhv || row.tenhv,
               mahd: newMaHD
             }, walletsConfig);
-           const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
+            const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
             return finalUrl;
           })(),
           manv: cashier
@@ -757,7 +757,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
           for (let i = 0; i < noticesToPrint.length; i++) {
             const notice = noticesToPrint[i];
-            
+
             if (notice.qrUrl) {
               try {
                 const response = await fetch(notice.qrUrl);
@@ -1840,11 +1840,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%', color: '#000' }}>Hình thức thanh toán: {exportingNotice.hinhthuc}</div>
               {exportingNotice.qrUrl && (
                 <div style={{ textAlign: 'center' }}>
-                  <img 
-                    crossOrigin="anonymous" 
-                    src={exportingNotice.qrBase64 || exportingNotice.qrUrl} 
-                    alt="Mã QR" 
-                    style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} 
+                  <img
+                    crossOrigin="anonymous"
+                    src={exportingNotice.qrBase64 || exportingNotice.qrUrl}
+                    alt="Mã QR"
+                    style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }}
                   />
                   <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                 </div>
