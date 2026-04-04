@@ -273,35 +273,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
          const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
          const manv = auth.user?.manv || '';
-         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+         const now = new Date();
+         const localNow = new Date(now - now.getTimezoneOffset() * 60000).toISOString();
+         const slipTime = new Date(now - now.getTimezoneOffset() * 60000 - 1000).toISOString();
 
-         // 1. Insert into tbl_candoidongtien
-         const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
-            noidung: canDoiData.noidung,
-            manv: manv,
-            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
-            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
-            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
-            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
-         }]);
+         try {
+            // 1. Insert into tbl_candoidongtien (Log)
+            const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
+               noidung: canDoiData.noidung,
+               manv: manv,
+               vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
+               vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
+               vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
+               vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
+            }]);
 
-         if (err1) {
-            alert('Lỗi khi lưu thông tin cân đối: ' + err1.message);
-            return;
-         }
+            if (err1) throw err1;
 
-         // 2. Update existing tbl_tiendauky or Insert if none exists
-         let res2;
-         if (initialBalances.id) {
-            res2 = await supabase.from('tbl_tiendauky').update({
-               vi1: canDoiData.vi1.toString(),
-               vi2: canDoiData.vi2.toString(),
-               vi3: canDoiData.vi3.toString(),
-               vi4: canDoiData.vi4.toString(),
-               nguoilap: currentUser
-            }).eq('id', initialBalances.id);
-         } else {
-            res2 = await supabase.from('tbl_tiendauky').insert([{
+            // 3. Create NEW Milestone (tbl_tiendauky)
+            const { error: res2Err } = await supabase.from('tbl_tiendauky').insert([{
                ngaylap: localNow,
                vi1: canDoiData.vi1.toString(),
                vi2: canDoiData.vi2.toString(),
@@ -309,14 +299,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                vi4: canDoiData.vi4.toString(),
                nguoilap: currentUser
             }]);
-         }
 
-         if (res2.error) {
-            alert('Lỗi khi cập nhật tiền đầu kỳ: ' + res2.error.message);
-         } else {
+            if (res2Err) throw res2Err;
+
             setCanDoiModal(false);
             fetchBalances();
+            fetchData();
             alert('Cân đối dòng tiền thành công!');
+
+         } catch (err) {
+            console.error(err);
+            alert('Đã xảy ra lỗi khi cân đối: ' + err.message);
          }
       }
    };
@@ -445,10 +438,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleOpenCanDoi = () => {
       setCanDoiData({
-         vi1: initialBalances.vi1.toString(),
-         vi2: initialBalances.vi2.toString(),
-         vi3: initialBalances.vi3.toString(),
-         vi4: initialBalances.vi4.toString(),
+         vi1: currentBalances.vi1.toString(),
+         vi2: currentBalances.vi2.toString(),
+         vi3: currentBalances.vi3.toString(),
+         vi4: currentBalances.vi4.toString(),
          noidung: 'Cân đối dòng tiền định kỳ'
       });
       setCanDoiModal(true);
@@ -2062,6 +2055,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <span>Sổ sách:</span> <b>{fCur(currentBalances[w.id])}</b>
                                  </div>
                                  <input type="text" required value={fCur(canDoiData[w.id])} onChange={e => setCanDoiData({ ...canDoiData, [w.id]: e.target.value.replace(/,/g, '') })} style={{ width: '100%', padding: '0.55rem', marginTop: '0.3rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '1.05rem', fontWeight: 700, color: '#8b5cf6', textAlign: 'right' }} placeholder="Đầu kỳ mới..." />
+                                 {(() => {
+                                    const truoc = currentBalances[w.id] || 0;
+                                    const sau = pCur(canDoiData[w.id]);
+                                    const chenhLech = truoc - sau;
+                                    if (chenhLech === 0) return null;
+                                    const isDeficit = chenhLech > 0;
+                                    return (
+                                       <div style={{ fontSize: '0.75rem', fontWeight: 800, color: isDeficit ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '4px', background: isDeficit ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px' }}>
+                                          {isDeficit ? '↓ Chênh lệch: -' : '↑ Chênh lệch: +'}{fCur(Math.abs(chenhLech))}
+                                       </div>
+                                    );
+                                 })()}
                               </div>
                            ))}
                         </div>
@@ -2112,7 +2117,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const diff = h[w.id] || {};
                                           const truoc = pCur(diff.truoc) || 0;
                                           const sau = pCur(diff.sau) || 0;
-                                          const offset = sau - truoc;
                                           return (
                                              <div key={w.id} style={{ background: 'white', padding: '10px 14px', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                                 <div style={{ fontSize: '0.75rem', fontWeight: 850, color: '#475569', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px' }}>{w.name}</div>
@@ -2130,7 +2134,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                                       <span style={{ color: '#8b5cf6' }}>{fCur(sau)}</span>
                                                    </div>
                                                    {(() => {
-                                                      const chenhLech = (pCur(diff.dauky) || 0) - sau;
+                                                      const chenhLech = truoc - sau;
                                                       if (chenhLech === 0) return null;
                                                       return (
                                                          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: chenhLech > 0 ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '2px', background: chenhLech > 0 ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px', alignSelf: 'flex-end' }}>
