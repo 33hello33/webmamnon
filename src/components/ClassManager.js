@@ -38,7 +38,7 @@ const getQRUrl = (hoaDon, walletsConfig) => {
     if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
     */
 
-    const info = encodeURIComponent(`${mahd} ${mahv} ${shortenedName}`.trim());
+    const info = encodeURIComponent(`${mahv}-${tenhv}`.trim());
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
   return null;
@@ -1756,9 +1756,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               {/* INFO */}
               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div>Mã học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.mahv}</b></div>
-                  <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.tenhv}</b></div>
-                  <div>SĐT: <b style={{ fontWeight: 900 }}>{printHoaDon.sdt || ""}</b></div>
+                  <div>Họ và tên: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.tenhv}</b></div>
+                  <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{printHoaDon.mahv}</b></div>
                 </div>
 
                 {/* FEES BOX */}

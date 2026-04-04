@@ -1677,9 +1677,8 @@ export default function InvoiceManager() {
                {/* INFO */}
                <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Mã học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
                      <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
-                     <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
+                     <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
                   </div>
 
                   {/* FEES BOX */}
