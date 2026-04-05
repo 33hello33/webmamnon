@@ -10,11 +10,28 @@ import {
 
 import './FinanceManager.css';
 
-const pCur = (val) => parseInt(String(val || 0).replace(/,/g, ''), 10) || 0;
-const safeParse = (arr) => (arr || []).filter(item => {
-   if (typeof item.daxoa === 'string') return item.daxoa?.toLowerCase() !== 'đã xóa';
-   return item.daxoa !== true;
-});
+const pCur = (val) => {
+   if (val === undefined || val === null || val === '') return 0;
+   const sVal = String(val).replace(/,/g, '');
+   if (sVal === '-') return 0;
+   const parsed = parseInt(sVal, 10);
+   return isNaN(parsed) ? 0 : parsed;
+};
+const fCur = (val) => {
+   if (val === undefined || val === null || val === '') return '0';
+   const sVal = String(val).replace(/,/g, '');
+   if (sVal === '-') return '-';
+   const parsed = parseInt(sVal, 10);
+   return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+const isDeleted = (item) => {
+   if (!item) return false;
+   if (typeof item.daxoa === 'string') return item.daxoa?.toLowerCase() === 'đã xóa';
+   if (item.daxoa === true) return true;
+   if (typeof item.trangthai === 'string') return item.trangthai?.toLowerCase() === 'đã xóa';
+   return false;
+};
+const safeParse = (arr) => (arr || []).filter(item => !isDeleted(item));
 
 // Moved inside component to use config
 const READ_NUMBER_VN = (number) => {
@@ -668,10 +685,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          buildQuery('tbl_billhanghoa', 'ngaylap')
       ]);
 
-      const chiList = safeParse(resChi.data || []).filter(c => !c.daxoa);
-      const khoList = safeParse(resKho.data || []).filter(c => !c.daxoa);
-      const hdList = safeParse(resHd.data || []).filter(c => !c.daxoa);
-      const billList = safeParse(resBill.data || []).filter(c => !c.daxoa);
+      const chiList = resChi.data || [];
+      const khoList = resKho.data || [];
+      const hdList = resHd.data || [];
+      const billList = resBill.data || [];
 
       const filterByWallet = (list) => {
          if (!hinhThucFilter) return list;
@@ -687,11 +704,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalBill = filterByWallet(billList);
 
       setStats({
-         phieuChi: finalChi.filter(c => !c.loaiphieu || c.loaiphieu === 'Chi').reduce((s, c) => s + pCur(c.chiphi), 0),
-         thuKhac: finalChi.filter(c => c.loaiphieu === 'Thu').reduce((s, c) => s + pCur(c.chiphi), 0),
-         nhapKho: finalKho.reduce((s, k) => s + pCur(k.thanhtien), 0),
-         thuHocPhi: finalHd.reduce((s, h) => s + pCur(h.dadong), 0),
-         thuBanHang: finalBill.reduce((s, b) => s + pCur(b.tongcong), 0)
+         phieuChi: finalChi.filter(c => !isDeleted(c) && (!c.loaiphieu || c.loaiphieu === 'Chi')).reduce((s, c) => s + pCur(c.chiphi), 0),
+         thuKhac: finalChi.filter(c => !isDeleted(c) && c.loaiphieu === 'Thu').reduce((s, c) => s + pCur(c.chiphi), 0),
+         nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
+         thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
+         thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0)
       });
 
       let activeDataRaw = [];
@@ -701,7 +718,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') activeDataRaw = billList;
 
       let orderBy = activeSubTab === 'nhapkho' ? 'ngaynhap' : 'ngaylap';
-      const sorted = safeParse(activeDataRaw).sort((a, b) => new Date(b[orderBy]) - new Date(a[orderBy]));
+      const sorted = [...activeDataRaw].sort((a, b) => {
+         const aDel = isDeleted(a);
+         const bDel = isDeleted(b);
+         if (aDel !== bDel) return aDel ? 1 : -1;
+         return new Date(b[orderBy]) - new Date(a[orderBy]);
+      });
       setData(sorted);
 
       setLoading(false);
@@ -713,8 +735,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    }, [fetchData]);
 
    const fCur = (val) => {
-      if (!val) return '0';
-      const parsed = parseInt(String(val).replace(/,/g, ''), 10);
+      if (val === undefined || val === null || val === '') return '0';
+      const sVal = String(val).replace(/,/g, '');
+      if (sVal === '-') return '-';
+      const parsed = parseInt(sVal, 10);
       return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
    };
 
@@ -920,6 +944,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       if (sortConfig.key) {
          filteredData.sort((a, b) => {
+            const isDelA = isDeleted(a);
+            const isDelB = isDeleted(b);
+            if (isDelA !== isDelB) return isDelA ? 1 : -1;
+
             let aVal = a[sortConfig.key];
             let bVal = b[sortConfig.key];
 
@@ -973,9 +1001,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            </tr>
                         </thead>
                         <tbody>
-                           {filteredData.map(r => (
-                              <tr key={r.maphieuchi}>
-                                 <td className="fm-code font-semibold text-primary">{r.maphieuchi}</td>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.maphieuchi} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                    <td className="fm-code font-semibold text-primary" style={deleted ? { color: '#64748b' } : {}}>{r.maphieuchi}</td>
                                  <td><span className={`fm-badge ${r.loaiphieu === 'Thu' ? 'bg-success' : 'bg-warning'}`}>{r.loaiphieu || 'Chi'}</span></td>
                                  <td>{formatDate(r.ngaylap)}</td>
                                  <td>{nvMap[r.manv] || r.manv || '_'}</td>
@@ -986,21 +1016,29 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     {r.loaiphieu === 'Thu' ? '+' : '-'}{fCur(r.chiphi)}
                                  </td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    <button title="In chứng từ" className="btn-blue" onClick={() => handlePrint(r)}><Printer size={16} /></button>
-                                    <button title="Huỷ chứng từ" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /></button>
+                                    {!deleted && (
+                                       <>
+                                          <button title="In chứng từ" className="btn-blue" onClick={() => handlePrint(r)}><Printer size={16} /></button>
+                                          <button title="Huỷ chứng từ" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /></button>
+                                       </>
+                                    )}
+                                    {deleted && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Đã Xóa</span>}
                                  </td>
                               </tr>
-                           ))}
-                        </tbody>
+                           );
+                        })}
+                     </tbody>
                      </table>
                   </div>
 
                   {/* Card View for Mobile */}
                   <div className="fm-card-list">
-                     {filteredData.map(r => (
-                        <div key={r.maphieuchi} className="fm-card">
-                           <div className="fm-card-header">
-                              <span className="fm-card-code">{r.maphieuchi}</span>
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.maphieuchi} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : {}}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.maphieuchi}</span>
                               <span className={`fm-badge ${r.loaiphieu === 'Thu' ? 'bg-success' : 'bg-warning'}`}>{r.loaiphieu || 'Chi'}</span>
                            </div>
                            <div className="fm-card-body">
@@ -1014,12 +1052,19 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  </strong>
                               </div>
                               <div className="fm-card-actions">
-                                 <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrint(r)}><Printer size={16} /> In</button>
-                                 <button className="btn-danger-sm" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /> Xóa</button>
+                                 {!deleted ? (
+                                    <>
+                                       <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrint(r)}><Printer size={16} /> In</button>
+                                       <button className="btn-danger-sm" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /> Xóa</button>
+                                    </>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 )}
                               </div>
                            </div>
                         </div>
-                     ))}
+                     );
+                  })}
                   </div>
                </>
             );
@@ -1047,9 +1092,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            </tr>
                         </thead>
                         <tbody>
-                           {filteredData.map(r => (
-                              <tr key={r.mahd} style={r.dasua ? { background: '#fff7ed' } : {}}>
-                                 <td className="fm-code font-semibold">{r.mahd}</td>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
+                                    <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
                                  <td>{formatDate(r.ngaylap)}</td>
                                  <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
                                  <td>{r.tenlop}</td>
@@ -1062,22 +1109,31 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
                                  <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
-                                    <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
-                                    <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
+                                    {!deleted ? (
+                                       <>
+                                          <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
+                                          <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
+                                          <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                    )}
                                  </td>
                               </tr>
-                           ))}
-                        </tbody>
+                           );
+                        })}
+                     </tbody>
                      </table>
                   </div>
 
                   {/* Card View for Mobile */}
                   <div className="fm-card-list">
-                     {filteredData.map(r => (
-                        <div key={r.mahd} className="fm-card" style={r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {}}>
-                           <div className="fm-card-header">
-                              <span className="fm-card-code">{r.mahd}</span>
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
                               <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                            </div>
                            <div className="fm-card-body">
@@ -1101,13 +1157,20 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
                               )}
                               <div className="fm-card-actions">
-                                 <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
-                                 <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
-                                 <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
+                                 {!deleted ? (
+                                    <>
+                                       <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
+                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
+                                       <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
+                                    </>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 )}
                               </div>
                            </div>
                         </div>
-                     ))}
+                     );
+                  })}
                   </div>
                </>
             );
@@ -1131,9 +1194,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            </tr>
                         </thead>
                         <tbody>
-                           {filteredData.map(r => (
-                              <tr key={r.manhapkho}>
-                                 <td className="fm-code font-semibold text-warning">{r.manhapkho}</td>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.manhapkho} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                    <td className="fm-code font-semibold text-warning" style={deleted ? { color: '#64748b' } : {}}>{r.manhapkho}</td>
                                  <td>{formatDate(r.ngaynhap)}</td>
                                  <td className="font-semibold text-primary">{hhMap[r.mahang] || r.mahang}</td>
                                  <td>{r.nhacungcap || '_'}</td>
@@ -1143,20 +1208,27 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td className="text-right">{fCur(r.gianhap)}</td>
                                  <td className="text-right font-bold text-danger">-{fCur(r.thanhtien)}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    <button title="Hủy biên lai nhập" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /></button>
+                                    {!deleted ? (
+                                       <button title="Hủy biên lai nhập" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /></button>
+                                    ) : (
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                    )}
                                  </td>
                               </tr>
-                           ))}
-                        </tbody>
+                           );
+                        })}
+                     </tbody>
                      </table>
                   </div>
 
                   {/* Card View for Mobile */}
                   <div className="fm-card-list">
-                     {filteredData.map(r => (
-                        <div key={r.manhapkho} className="fm-card">
-                           <div className="fm-card-header">
-                              <span className="fm-card-code" style={{ color: '#f59e0b' }}>{r.manhapkho}</span>
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.manhapkho} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : {}}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : { color: '#f59e0b' }}>{r.manhapkho}</span>
                               <span className="text-muted">{formatDateRaw(r.ngaynhap)}</span>
                            </div>
                            <div className="fm-card-body">
@@ -1167,11 +1239,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <strong className="text-danger">-{fCur(r.thanhtien)} ₫</strong>
                               </div>
                               <div className="fm-card-actions">
-                                 <button className="btn-danger-sm" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /> Hủy nhập</button>
+                                 {!deleted ? (
+                                    <button className="btn-danger-sm" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /> Hủy nhập</button>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 )}
                               </div>
                            </div>
                         </div>
-                     ))}
+                     );
+                  })}
                   </div>
                </>
             );
@@ -1196,9 +1273,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            </tr>
                         </thead>
                         <tbody>
-                           {filteredData.map(r => (
-                              <tr key={r.mabill} style={r.dasua ? { background: '#fff7ed' } : {}}>
-                                 <td className="fm-code font-semibold text-success">{r.mabill}</td>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.mabill} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
+                                    <td className="fm-code font-semibold text-success" style={deleted ? { color: '#64748b' } : {}}>{r.mabill}</td>
                                  <td>{formatDate(r.ngaylap)}</td>
                                  <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
                                  <td className="fm-desc" style={{ maxWidth: '220px' }}>
@@ -1210,22 +1289,31 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td>{r.hinhthuc}</td>
                                  <td>{r.nhanvien}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
-                                    <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
-                                    <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
+                                    {!deleted ? (
+                                       <>
+                                          <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
+                                          <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
+                                          <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                    )}
                                  </td>
                               </tr>
-                           ))}
-                        </tbody>
+                           );
+                        })}
+                     </tbody>
                      </table>
                   </div>
 
                   {/* Card View for Mobile */}
                   <div className="fm-card-list">
-                     {filteredData.map(r => (
-                        <div key={r.mabill} className="fm-card" style={r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {}}>
-                           <div className="fm-card-header">
-                              <span className="fm-card-code" style={{ color: '#10b981' }}>{r.mabill}</span>
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.mabill} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : { color: '#10b981' }}>{r.mabill}</span>
                               <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                            </div>
                            <div className="fm-card-body">
@@ -1247,13 +1335,20 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <strong className="text-success">+{fCur(r.tongcong)} ₫</strong>
                               </div>
                               <div className="fm-card-actions">
-                                 <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
-                                 <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
-                                 <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
+                                 {!deleted ? (
+                                    <>
+                                       <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
+                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
+                                       <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
+                                    </>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 )}
                               </div>
                            </div>
                         </div>
-                     ))}
+                     );
+                  })}
                   </div>
                </>
             );

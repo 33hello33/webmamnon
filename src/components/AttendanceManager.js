@@ -27,22 +27,27 @@ export default function AttendanceManager({ students, showMessage }) {
   const [viewCalendarStudent, setViewCalendarStudent] = useState(null);
   const [showMobileDetails, setShowMobileDetails] = useState(false);
   const [employees, setEmployees] = useState([]);
-  const [todayAttendance, setTodayAttendance] = useState([]);
   const { config } = useConfig();
   const [currentUser, setCurrentUser] = useState(null);
 
   // Marking UI states
   const [markingMode, setMarkingMode] = useState(false);
-  const [attDate, setAttDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [attDate, setAttDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [attStudents, setAttStudents] = useState([]);
   const [attRecords, setAttRecords] = useState({});
   const [lessonContent, setLessonContent] = useState('');
+
+  const [todayAttendance, setTodayAttendance] = useState([]);
+  const today = new Date().toISOString().split('T')[0];
 
   // Fetch classes on mount
   useEffect(() => {
     const fetchClasses = async () => {
       try {
-        const { data } = await supabase.from('tbl_lop').select('*').neq('daxoa', 'Đã Xóa').order('tenlop');
+        const { data } = await supabase.from('tbl_lop').select('*').order('tenlop');
         if (data) setClasses(data);
       } catch (err) { console.error(err); }
     };
@@ -52,20 +57,20 @@ export default function AttendanceManager({ students, showMessage }) {
         if (data) setEmployees(data);
       } catch (err) { console.error(err); }
     };
+    const fetchTodayAttendance = async () => {
+      try {
+        const now = new Date();
+        const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const { data } = await supabase.from('tbl_diemdanh').select('malop, mahv').eq('ngay', todayIso).eq('trangthai', 'Có mặt');
+        if (data) setTodayAttendance(data);
+      } catch (err) { console.error(err); }
+    };
 
     const sessionStr = localStorage.getItem('auth_session');
     if (sessionStr) {
       const session = JSON.parse(sessionStr);
       setCurrentUser(session.user);
     }
-    const fetchTodayAttendance = async () => {
-      try {
-        const todayIso = new Date().toISOString().split('T')[0];
-        const { data } = await supabase.from('tbl_diemdanh').select('malop, mahv').eq('ngay', todayIso).eq('trangthai', 'Có mặt');
-        if (data) setTodayAttendance(data);
-      } catch (err) { console.error(err); }
-    };
-
     fetchClasses();
     fetchEmployees();
     fetchTodayAttendance();
@@ -118,40 +123,21 @@ export default function AttendanceManager({ students, showMessage }) {
     if (!selectedId) return showMessage('error', 'Chưa chọn lớp!');
     setLoading(true);
     try {
-      // 1. Re-fetch existing records for this day/class to avoid race conditions
-      const { data: currentRecs } = await supabase.from('tbl_diemdanh').select('id, mahv').eq('malop', selectedId).eq('ngay', attDate);
-      const dbIdMap = {};
-      (currentRecs || []).forEach(r => { dbIdMap[r.mahv] = r.id; });
-
       for (const st of attStudents) {
-        const localRec = attRecords[st.mahv];
-        if (!localRec || !localRec.trangthai) continue;
-        
+        const rec = attRecords[st.mahv];
+        if (!rec || !rec.trangthai) continue;
         const payload = {
           mahv: st.mahv, malop: selectedId, ngay: attDate,
-          trangthai: localRec.trangthai, ghichu: localRec.ghichu || '',
+          trangthai: rec.trangthai, ghichu: rec.ghichu || '',
           manv: currentUser?.manv || currentUser?.username || 'admin'
         };
-        
-        const existingId = localRec.id || dbIdMap[st.mahv];
-        
-        if (existingId) {
-          await supabase.from('tbl_diemdanh').update(payload).eq('id', existingId);
-        } else {
-          // Database handles ID generation automatically
-          const { error: insErr } = await supabase.from('tbl_diemdanh').insert([payload]);
-          if (insErr) throw insErr;
-        }
+        if (rec.id) await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
+        else await supabase.from('tbl_diemdanh').insert([payload]);
       }
-
-      // 3. Save lesson content (tbl_noidungday)
-      const { data: ndExists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
-      if (ndExists) {
-        await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', ndExists.id);
-      } else {
-        // Table tbl_noidungday has identity column, no manual ID needed
-        await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
-      }
+      // Save lesson content
+      const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
+      if (exists) await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
+      else await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
       // Update the report data too
@@ -183,26 +169,32 @@ export default function AttendanceManager({ students, showMessage }) {
       try {
         let query = supabase.from('tbl_diemdanh').select('*');
         if (viewMode === 'class') {
-          query = query.eq('malop', selectedId);
-          const stdIds = students.filter(s => {
-            const smalop = (s.malop || '').toString().trim().toLowerCase();
-            const selId = (selectedId || '').toString().trim().toLowerCase();
-            let matches = (smalop === selId);
-            if (!matches && s.malop_list) {
-              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
-              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+          // Lấy danh sách học sinh của lớp từ prop students
+          const classStudents = (students || []).filter(s => {
+            if ((s.trangthai || '').trim().toLowerCase() === 'đã nghỉ') return false;
+            const sLop = String(s.malop || '').trim().toLowerCase();
+            const targetLop = String(selectedId || '').trim().toLowerCase();
+            if (sLop === targetLop) return true;
+
+            // Kiểm tra malop_list (nếu học sinh có nhiều lớp)
+            if (Array.isArray(s.malop_list)) {
+              return s.malop_list.some(m => String(m || '').trim().toLowerCase() === targetLop);
+            } else if (typeof s.malop_list === 'string') {
+              return s.malop_list.toLowerCase().includes(targetLop);
             }
-            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
-          }).map(s => s.mahv);
+            return false;
+          });
+
+          const stdIds = classStudents.map(s => s.mahv);
 
           if (stdIds.length === 0) {
             setAttendanceRecords([]);
             setLoading(false);
             return;
           }
+          // Truy vấn điểm danh của những học sinh này (không lọc theo malop ở tbl_diemdanh để lấy lịch sử)
           query = query.in('mahv', stdIds);
         } else {
-          // Xem theo Học Sinh: lấy tất cả các lớp mà học sinh này tham gia
           query = query.eq('mahv', selectedId);
         }
 
@@ -211,20 +203,27 @@ export default function AttendanceManager({ students, showMessage }) {
         let startIso = null;
         let endIso = null;
 
+        const toLocalISO = (d) => {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+
         if (dateFilter === 'this_week') {
           const day = now.getDay() || 7;
           const start = new Date(now);
           start.setDate(now.getDate() - day + 1);
           const end = new Date(start);
           end.setDate(start.getDate() + 6);
-          startIso = start.toISOString().split('T')[0];
-          endIso = end.toISOString().split('T')[0];
+          startIso = toLocalISO(start);
+          endIso = toLocalISO(end);
         } else if (dateFilter === 'this_month') {
-          startIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-          endIso = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+          startIso = toLocalISO(new Date(now.getFullYear(), now.getMonth(), 1));
+          endIso = toLocalISO(new Date(now.getFullYear(), now.getMonth() + 1, 0));
         } else if (dateFilter === 'last_month') {
-          startIso = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-          endIso = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+          startIso = toLocalISO(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+          endIso = toLocalISO(new Date(now.getFullYear(), now.getMonth(), 0));
         } else if (dateFilter === 'custom') {
           if (customStart) startIso = customStart;
           if (customEnd) endIso = customEnd;
@@ -247,7 +246,7 @@ export default function AttendanceManager({ students, showMessage }) {
       }
     };
     fetchAttendance();
-  }, [selectedId, viewMode, dateFilter, customStart, customEnd]);
+  }, [selectedId, viewMode, dateFilter, customStart, customEnd, students]);
 
   useEffect(() => {
     const aggregateData = async () => {
@@ -329,12 +328,12 @@ export default function AttendanceManager({ students, showMessage }) {
             }
             return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
           });
-          
+
           const totalCount = classStudents.length;
 
           // Calculate "present today" count
-          const presentTodayCount = todayAttendance.filter(a => 
-            a.malop === c.malop && 
+          const presentTodayCount = todayAttendance.filter(a =>
+            a.malop === c.malop &&
             classStudents.some(s => s.mahv === a.mahv)
           ).length;
 
@@ -355,7 +354,7 @@ export default function AttendanceManager({ students, showMessage }) {
           let list = [];
           if (s.malop) list.push(s.malop);
           if (Array.isArray(s.malop_list)) list = [...new Set([...list, ...s.malop_list])];
-          
+
           const classNames = list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
 
           return {
@@ -470,16 +469,16 @@ export default function AttendanceManager({ students, showMessage }) {
                   key={item.id}
                   className={`list-item ${selectedId === item.id ? 'active' : ''}`}
                   onClick={() => { setSelectedId(item.id); setShowMobileDetails(true); }}
-                  style={{ 
+                  style={{
                     padding: '1rem',
                     marginBottom: '8px',
                     gap: '1.25rem',
                     alignItems: 'flex-start'
                   }}
                 >
-                  <div className="item-icon" style={{ 
-                    width: '42px', 
-                    height: '42px', 
+                  <div className="item-icon" style={{
+                    width: '42px',
+                    height: '42px',
                     borderRadius: '12px',
                     background: selectedId === item.id ? '#4f46e5' : '#eef2ff',
                     color: selectedId === item.id ? 'white' : '#4f46e5'
@@ -487,10 +486,10 @@ export default function AttendanceManager({ students, showMessage }) {
                     {viewMode === 'class' ? <Users size={22} /> : <User size={22} />}
                   </div>
                   <div className="item-info">
-                    <h4 style={{ 
-                      fontSize: '1rem', 
+                    <h4 style={{
+                      fontSize: '1rem',
                       color: selectedId === item.id ? '#4f46e5' : '#4f46e5',
-                      fontWeight: 700 
+                      fontWeight: 700
                     }}>{item.title}</h4>
                     {viewMode === 'class' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
@@ -562,13 +561,8 @@ export default function AttendanceManager({ students, showMessage }) {
                         <span style={{ color: '#1e293b', fontWeight: 700 }}>
                           {(() => {
                             const std = students.find(s => s.mahv === selectedId);
-                            if (!std) return '...';
-                            let list = [];
-                            if (std.malop) list.push(std.malop);
-                            if (Array.isArray(std.malop_list)) list = [...new Set([...list, ...std.malop_list])];
-                            
-                            if (list.length === 0) return 'Chưa xếp lớp';
-                            return list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+                            if (!std?.malop_list || std.malop_list.length === 0) return 'Chưa xếp lớp';
+                            return std.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
                           })()}
                         </span>
                       </div>
