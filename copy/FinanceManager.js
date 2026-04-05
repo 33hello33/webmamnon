@@ -5,12 +5,85 @@ import { supabase, generateId } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2
+   Printer, History, Clock, Edit
 } from 'lucide-react';
 
 import './FinanceManager.css';
 
 const pCur = (val) => parseInt(String(val || 0).replace(/,/g, ''), 10) || 0;
+const fCur = (val) => new Intl.NumberFormat('vi-VN').format(pCur(val));
+
+const parseBillItems = (csv) => {
+   if (!csv) return [];
+   const lines = csv.split(/\r?\n/).filter(line => line.trim() !== "");
+   if (lines.length === 0) return [];
+
+   const parseCSVLine = (line) => {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+         const char = line[i];
+         if (char === '"' && line[i + 1] === '"') {
+            current += '"';
+            i++;
+         } else if (char === '"') {
+            inQuotes = !inQuotes;
+         } else if (char === ',' && !inQuotes) {
+            result.push(current);
+            current = "";
+         } else {
+            current += char;
+         }
+      }
+      result.push(current);
+      return result;
+   };
+
+   // Heuristic to check if first line is a header
+   const firstLinePts = parseCSVLine(lines[0]);
+   const hasHeader = firstLinePts.some(p => p.toLowerCase().includes('hàng') || p.toLowerCase().includes('mã'));
+   const startIndex = hasHeader ? 1 : 0;
+
+   const items = [];
+   for (let i = startIndex; i < lines.length; i++) {
+      const pts = parseCSVLine(lines[i]);
+      if (pts.length < 4) continue; // Minimum required fields
+      items.push({
+         mahang: pts[0] || '',
+         tenhang: pts[1] || 'Sản phẩm',
+         dvt: pts[2] || '',
+         qty: parseInt(pts[3], 10) || 0,
+         giaban: pCur(pts[4] || 0),
+         thanhtien: pCur(pts[5] || 0)
+      });
+   }
+
+   // If still empty but we have raw text, treat as one legacy item
+   if (items.length === 0 && csv.length > 3) {
+      return [{
+         mahang: 'LG001',
+         tenhang: csv.split('\n')[0].substring(0, 50),
+         dvt: '-',
+         qty: 1,
+         giaban: 0,
+         thanhtien: 0
+      }];
+   }
+
+   return items;
+};
+
+const stringifyBillItems = (items) => {
+   let csvStr = "Mã Hàng,Tên Hàng,Đơn Vị Tính,Số Lượng,Đơn Giá,Thành Tiền\n";
+   csvStr += items.map(c => {
+      const q = (s) => `"${(s || '').toString().replace(/"/g, '""')}"`;
+      const tt = pCur(c.giaban) * (parseInt(c.qty) || 0);
+      return `${q(c.mahang)},${q(c.tenhang)},${q(c.dvt)},${c.qty},${q(fCur(c.giaban))},${q(fCur(tt))}`;
+   }).join('\n');
+   return csvStr;
+};
+
 const safeParse = (arr) => (arr || []).filter(item => {
    if (typeof item.daxoa === 'string') return item.daxoa?.toLowerCase() !== 'đã xóa';
    return item.daxoa !== true;
@@ -116,10 +189,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [printBill, setPrintBill] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
    const [deletePassword, setDeletePassword] = useState('');
-   const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
-   const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
+
+   const [editHoaDonModal, setEditHoaDonModal] = useState(false);
+   const [editHoaDonData, setEditHoaDonData] = useState(null);
+
+   const [editBillModal, setEditBillModal] = useState(false);
+   const [editBillData, setEditBillData] = useState(null);
 
    // Batch Import
    const [productList, setProductList] = useState([]);
@@ -245,67 +322,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    };
 
 
-   const handleOpenEditInvoice = (invoice) => {
-      setEditInvoiceModal({
-         isOpen: true,
-         data: { ...invoice },
-         password: ''
-      });
-   };
-
-   const handleSaveEditInvoice = (e) => {
-      e.preventDefault();
-      setDeletePassword('');
-      setConfirmDialog({
-         isOpen: true,
-         title: 'Xác nhận sửa hóa đơn',
-         message: 'Mọi thay đổi về số tiền sẽ ảnh hưởng đến báo cáo tài chính và công nợ của học sinh. Bạn có chắc chắn muốn cập nhật không?',
-         actionType: 'EDIT_HOADON'
-      });
-   };
-
-   const handleOpenEditBill = (bill) => {
-      const parsed = parseNoidung(bill.hanghoa);
-      const items = parsed.rows.map(row => ({
-         mahang: row[0] || '',
-         tenhang: row[1] || '',
-         dvt: row[2] || '',
-         qty: parseInt(row[3], 10) || 0,
-         giaban: pCur(row[4]),
-         thanhtien: pCur(row[5])
-      }));
-
-      setEditBillModal({
-         isOpen: true,
-         data: {
-            ...bill,
-            items,
-            tongcong: pCur(bill.tongcong),
-            chietkhau: pCur(bill.chietkhau),
-            loinhuan: pCur(bill.loinhuan),
-            dadong: pCur(bill.dadong || bill.tongcong),
-            conno: pCur(bill.conno || 0),
-            hinhthuc: bill.hinhthuc || walletsConfig[0]?.name || 'Tiền mặt'
-         },
-         password: ''
-      });
-   };
-
-   const handleSaveEditBill = (e) => {
-      e.preventDefault();
-      setDeletePassword('');
-      setConfirmDialog({
-         isOpen: true,
-         title: 'Xác nhận sửa bill',
-         message: 'Mọi thay đổi về giá trị bill sẽ ảnh hưởng đến dòng tiền và báo cáo lợi nhuận. Bạn có chắc chắn muốn cập nhật không?',
-         actionType: 'EDIT_BILL'
-      });
-   };
-
    const executeConfirmAction = async () => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
-      if (confirmDialog.actionType === 'DELETE') {
+      if (confirmDialog.actionType === 'CONFIRM_LUONG') {
+         const id = confirmDialog.payload;
+         const { error } = await supabase.from('tbl_phieuchamcong').update({ daxacnhan: true }).eq('id', id);
+         if (error) alert("Lỗi khi xác nhận: " + error.message);
+         else {
+            fetchData();
+            fetchBalances();
+         }
+      } else if (confirmDialog.actionType === 'DELETE') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          if (deletePassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
@@ -316,47 +344,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          const { error } = await supabase.from(table).update({ daxoa: 'Đã xóa' }).eq(idField, idVal);
          if (error) alert('Lỗi khi xoá: ' + error.message);
          else fetchData();
-      } else if (confirmDialog.actionType === 'EDIT_BILL') {
-         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (deletePassword !== auth.user?.password) {
-            alert('Mật khẩu không đúng, vui lòng thử lại!');
-            return;
-         }
-
-         const { mabill, items, chietkhau, loinhuan, hinhthuc, tongcong, dadong, conno, noidung } = editBillModal.data;
-
-         let csvStr = "Mã Hàng,Tên Hàng,Đơn Vị Tính,Số Lượng,Đơn Giá,Thành Tiền\n";
-         csvStr += items.map(c => {
-            const mahang = `"${(c.mahang || '').replace(/"/g, '""')}"`;
-            const tenhang = `"${(c.tenhang || '').replace(/"/g, '""')}"`;
-            const dvt = `"${(c.dvt || '').replace(/"/g, '""')}"`;
-            const sl = c.qty;
-            const dg = `"${fCur(c.giaban)}"`;
-            const tt = `"${fCur(c.giaban * c.qty)}"`;
-            return `${mahang},${tenhang},${dvt},${sl},${dg},${tt}`;
-         }).join('\n');
-
-         const { error } = await supabase.from('tbl_billhanghoa').update({
-            tongcong: tongcong.toString(),
-            chietkhau: chietkhau.toString(),
-            loinhuan: loinhuan.toString(),
-            dadong: dadong.toString(),
-            conno: conno.toString(),
-            noidung: noidung || '',
-            hinhthuc,
-            hanghoa: csvStr,
-            dasua: true
-         }).eq('mabill', mabill);
-
-         if (error) {
-            alert('Lỗi cập nhật bill hàng: ' + error.message);
-         } else {
-            alert('Cập nhật bill hàng thành công!');
-            setEditBillModal({ isOpen: false, data: null, password: '' });
-            setDeletePassword('');
-            fetchData();
-            fetchBalances();
-         }
       } else if (confirmDialog.actionType === 'CONFIRM_CANDOI') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          if (deletePassword !== auth.user?.password) {
@@ -365,35 +352,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
          const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
          const manv = auth.user?.manv || '';
-         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+         const now = new Date();
+         const localNow = new Date(now - now.getTimezoneOffset() * 60000).toISOString();
+         const slipTime = new Date(now - now.getTimezoneOffset() * 60000 - 1000).toISOString();
 
-         // 1. Insert into tbl_candoidongtien
-         const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
-            noidung: canDoiData.noidung,
-            manv: manv,
-            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
-            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
-            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
-            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
-         }]);
+         try {
+            // 1. Insert into tbl_candoidongtien (Log)
+            const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
+               noidung: canDoiData.noidung,
+               manv: manv,
+               vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
+               vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
+               vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
+               vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
+            }]);
 
-         if (err1) {
-            alert('Lỗi khi lưu thông tin cân đối: ' + err1.message);
-            return;
-         }
+            if (err1) throw err1;
 
-         // 2. Update existing tbl_tiendauky or Insert if none exists
-         let res2;
-         if (initialBalances.id) {
-            res2 = await supabase.from('tbl_tiendauky').update({
-               vi1: canDoiData.vi1.toString(),
-               vi2: canDoiData.vi2.toString(),
-               vi3: canDoiData.vi3.toString(),
-               vi4: canDoiData.vi4.toString(),
-               nguoilap: currentUser
-            }).eq('id', initialBalances.id);
-         } else {
-            res2 = await supabase.from('tbl_tiendauky').insert([{
+            // 3. Create NEW Milestone (tbl_tiendauky)
+            const { error: res2Err } = await supabase.from('tbl_tiendauky').insert([{
                ngaylap: localNow,
                vi1: canDoiData.vi1.toString(),
                vi2: canDoiData.vi2.toString(),
@@ -401,27 +378,29 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                vi4: canDoiData.vi4.toString(),
                nguoilap: currentUser
             }]);
-         }
 
-         if (res2.error) {
-            alert('Lỗi khi cập nhật tiền đầu kỳ: ' + res2.error.message);
-         } else {
+            if (res2Err) throw res2Err;
+
             setCanDoiModal(false);
             fetchBalances();
+            fetchData();
             alert('Cân đối dòng tiền thành công!');
+
+         } catch (err) {
+            console.error(err);
+            alert('Đã xảy ra lỗi khi cân đối: ' + err.message);
          }
       } else if (confirmDialog.actionType === 'EDIT_HOADON') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          if (deletePassword !== auth.user?.password) {
-            alert('Mật khẩu không đúng, vui lòng thử lại!');
+            alert('Mật khẩu của bạn không đúng, vui lòng thử lại!');
             return;
          }
-
-         const r = editInvoiceModal.data;
+         const r = confirmDialog.payload;
          const { error } = await supabase.from('tbl_hd')
             .update({
-               hocphi: r.hocphi.toString(),
-               giamhocphi: r.giamhocphi.toString(),
+               hocphi: r.hocphi,
+               giamhocphi: r.giamhocphi,
                phuthu: r.phuthu ? (typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu)) : null,
                tongcong: r.tongcong.toString(),
                dadong: r.dadong.toString(),
@@ -432,19 +411,53 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             })
             .eq('mahd', r.mahd);
 
-         if (error) {
-            alert("Lỗi khi cập nhật hóa đơn: " + error.message);
-         } else {
-            setEditInvoiceModal({ isOpen: false, data: null, password: '' });
-            setDeletePassword('');
+         if (error) alert("Lỗi khi cập nhật hóa đơn: " + error.message);
+         else {
+            setEditHoaDonModal(false);
             fetchData();
             fetchBalances();
             alert("Cập nhật hóa đơn thành công!");
          }
+      } else if (confirmDialog.actionType === 'EDIT_BILL') {
+         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         if (deletePassword !== auth.user?.password) {
+            alert('Mật khẩu của bạn không đúng, vui lòng thử lại!');
+            return;
+         }
+         const r = confirmDialog.payload;
+         const { error } = await supabase.from('tbl_billhanghoa')
+            .update({
+               hanghoa: stringifyBillItems(r.items || []),
+               chietkhau: r.chietkhau?.toString(),
+               tongcong: r.tongcong?.toString(),
+               dadong: r.dadong?.toString(),
+               conno: r.conno?.toString(),
+               hinhthuc: r.hinhthuc,
+               noidung: r.noidung,
+               loinhuan: r.loinhuan?.toString(),
+               dasua: true
+            })
+            .eq('mabill', r.mabill);
+
+         if (error) alert("Lỗi khi cập nhật bill: " + error.message);
+         else {
+            setEditBillModal(false);
+            fetchData();
+            fetchBalances();
+            alert("Cập nhật bill hàng thành công!");
+         }
       }
    };
 
-
+   const handleConfirmLuong = (id) => {
+      setConfirmDialog({
+         isOpen: true,
+         title: 'Xác nhận duyệt lương',
+         message: 'Bạn có chắc chắn muốn xác nhận đã chuyển khoản / chi trả tiền lương tháng này cho bộ hồ sơ này không? Danh sách quỹ sẽ được ghi nhận.',
+         actionType: 'CONFIRM_LUONG',
+         payload: id
+      });
+   };
 
    const parseNoidung = (nd) => {
       if (!nd || typeof nd !== 'string') return { headers: [], rows: [] };
@@ -497,7 +510,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       };
       window.addEventListener('afterprint', handleAfterPrint);
       return () => window.removeEventListener('afterprint', handleAfterPrint);
-   }, []);
+   }, [fetchBalances]);
 
    // Relational mappings
    const [hvMap, setHvMap] = useState({});
@@ -560,10 +573,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleOpenCanDoi = () => {
       setCanDoiData({
-         vi1: initialBalances.vi1.toString(),
-         vi2: initialBalances.vi2.toString(),
-         vi3: initialBalances.vi3.toString(),
-         vi4: initialBalances.vi4.toString(),
+         vi1: currentBalances.vi1.toString(),
+         vi2: currentBalances.vi2.toString(),
+         vi3: currentBalances.vi3.toString(),
+         vi4: currentBalances.vi4.toString(),
          noidung: 'Cân đối dòng tiền định kỳ'
       });
       setCanDoiModal(true);
@@ -882,6 +895,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
+   const handleEditHoaDon = (record) => {
+      setEditHoaDonData({ ...record });
+      setEditHoaDonModal(true);
+   };
+
+   const handleEditBill = (record) => {
+      const parsedItems = parseBillItems(record.hanghoa);
+      setEditBillData({ ...record, items: parsedItems });
+      setEditBillModal(true);
+      if (productList && productList.length === 0) {
+         fetchInventory();
+      }
+   };
+
+   async function fetchInventory() {
+      const { data } = await supabase.from('tbl_hanghoa').select('*');
+      setProductList((data || []).filter(h => h.daxoa !== 'Đã Xóa'));
+   }
+
    const renderContent = () => {
       let filteredData = [...data];
       if (searchTerm) {
@@ -895,7 +927,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (activeSubTab === 'hoadon') {
                const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
                if (studentName.includes(lowerQ)) return true;
-
+            } else if (activeSubTab === 'phieuluong') {
+               const teacherName = (item.tennv || nvMap[item.manv] || '').toLowerCase();
+               if (teacherName.includes(lowerQ)) return true;
             } else if (activeSubTab === 'nhapkho') {
                const productName = (hhMap[item.mahang] || '').toLowerCase();
                if (productName.includes(lowerQ)) return true;
@@ -1023,7 +1057,76 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
                </>
             );
+         case 'phieuluong':
+            return (
+               <>
+                  <div className="table-scroll-wrapper">
+                     <table className="fm-table">
+                        <thead>
+                           <tr>
+                              <th>ID Phiếu</th>
+                              <th>Ngày Lập</th>
+                              <th>Hồ Sơ Nhận Lương</th>
 
+                              <th>Ghi Chú</th>
+                              <th>Hình Thức</th>
+                              <th>Đã Xác Nhận</th>
+                              <th className="text-right">Tổng Thanh Toán</th>
+                              <th className="text-center">Hành động</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {filteredData.map(r => (
+                              <tr key={r.id}>
+                                 <td className="fm-code">{r.id}</td>
+                                 <td>{formatDate(r.ngaylap)}</td>
+                                 <td className="font-semibold text-primary">{r.tennv || nvMap[r.manv] || r.manv}</td>
+
+                                 <td className="fm-desc">{r.ghichu}</td>
+                                 <td>{r.hinhthuc}</td>
+                                 <td><span className={`fm-badge ${r.daxacnhan ? 'bg-success' : 'bg-pending'}`}>{r.daxacnhan ? 'Đã duyệt' : 'Chờ ký'}</span></td>
+                                 <td className="text-right font-bold text-success">{fCur(r.tongcong)}</td>
+                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {!r.daxacnhan && <button title="Xác nhận chi lương" className="btn-blue" onClick={() => handleConfirmLuong(r.id)}><CheckCircle2 size={16} /></button>}
+                                    <button title="In phiếu" className="btn-blue" onClick={() => handlePrintLuong(r)}><Printer size={16} /></button>
+                                    <button title="Hủy phiếu lương" onClick={() => handleDelete('id', r.id, 'tbl_phieuchamcong')}><Trash2 size={16} /></button>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+
+                  {/* Card View for Mobile */}
+                  <div className="fm-card-list">
+                     {filteredData.map(r => (
+                        <div key={r.id} className="fm-card">
+                           <div className="fm-card-header">
+                              <span className="fm-card-code">#{r.id}</span>
+                              <span className={`fm-badge ${r.daxacnhan ? 'bg-success' : 'bg-pending'}`}>{r.daxacnhan ? 'Đã duyệt' : 'Chờ ký'}</span>
+                           </div>
+                           <div className="fm-card-body">
+                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-primary">{r.tennv || nvMap[r.manv] || r.manv}</strong></div>
+                              <div className="fm-card-row"><span>Ngày lập:</span> <span>{formatDate(r.ngaylap)}</span></div>
+                              <div className="fm-card-row price-row">
+                                 <span>Thanh toán:</span>
+                                 <strong className="text-success">{fCur(r.tongcong)} ₫</strong>
+                              </div>
+                              <div className="fm-card-actions">
+                                 {!r.daxacnhan && (
+                                    <button className="btn-success-sm" onClick={() => handleConfirmLuong(r.id)}>
+                                       <CheckCircle2 size={16} /> Duyệt
+                                    </button>
+                                 )}
+                                 <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintLuong(r)}><Printer size={16} /> In</button>
+                                 <button className="btn-danger-sm" onClick={() => handleDelete('id', r.id, 'tbl_phieuchamcong')}><Trash2 size={16} /> Xóa</button>
+                              </div>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </>
+            );
          case 'hoadon':
             return (
                <>
@@ -1048,7 +1151,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         </thead>
                         <tbody>
                            {filteredData.map(r => (
-                              <tr key={r.mahd} style={r.dasua ? { background: '#fff7ed' } : {}}>
+                              <tr key={r.mahd} style={r.dasua ? { backgroundColor: '#fff7ed', borderLeft: '4px solid #f97316' } : {}}>
                                  <td className="fm-code font-semibold">{r.mahd}</td>
                                  <td>{formatDate(r.ngaylap)}</td>
                                  <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
@@ -1062,8 +1165,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
                                  <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {currentUser?.role === 'Quản lý' && <button title="Sửa hóa đơn" className="btn-blue" onClick={() => handleEditHoaDon(r)}><Edit size={16} /></button>}
                                     <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
-                                    <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
                                     <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
                                  </td>
                               </tr>
@@ -1075,7 +1178,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   {/* Card View for Mobile */}
                   <div className="fm-card-list">
                      {filteredData.map(r => (
-                        <div key={r.mahd} className="fm-card" style={r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {}}>
+                        <div key={r.mahd} className="fm-card" style={r.dasua ? { border: '1px solid #f97316', background: '#fff7ed' } : {}}>
                            <div className="fm-card-header">
                               <span className="fm-card-code">{r.mahd}</span>
                               <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
@@ -1101,8 +1204,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
                               )}
                               <div className="fm-card-actions">
+                                 <button className="btn-blue-sm" style={{ background: '#0ea5e9' }} onClick={() => handleEditHoaDon(r)}><Edit size={16} /> Sửa</button>
                                  <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
-                                 <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
                                  <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
                               </div>
                            </div>
@@ -1186,10 +1289,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th onClick={() => requestSort('mabill')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã Bill <SortIcon columnKey="mabill" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày Bán <SortIcon columnKey="ngaylap" /></th>
                               <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên Học Sinh <SortIcon columnKey="mahv" /></th>
-                              <th>Danh Mục Sp</th>
-                              <th>Chiết Khấu</th>
+                              <th>Giỏ hàng (SP)</th>
+                              <th>Ghi chú</th>
+                              <th>Chiết khấu</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Thu <SortIcon columnKey="tongcong" /></th>
-                              <th className="text-right">Biên Lợi Nhuận</th>
+                              <th className="text-right">Lợi nhuận</th>
                               <th>Hình thức</th>
                               <th>Người Bán</th>
                               <th className="text-center">Hành động</th>
@@ -1197,21 +1301,22 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         </thead>
                         <tbody>
                            {filteredData.map(r => (
-                              <tr key={r.mabill} style={r.dasua ? { background: '#fff7ed' } : {}}>
+                              <tr key={r.mabill} style={r.dasua ? { backgroundColor: '#fff7ed', borderLeft: '4px solid #f97316' } : {}}>
                                  <td className="fm-code font-semibold text-success">{r.mabill}</td>
                                  <td>{formatDate(r.ngaylap)}</td>
                                  <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
-                                 <td className="fm-desc" style={{ maxWidth: '220px' }}>
-                                    {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\\r\\n|\\n|\\r/).filter(Boolean).length - 1} Loại SP (Bấm in để xem)` : r.hanghoa}
+                                 <td className="fm-desc" style={{ maxWidth: '200px' }}>
+                                    {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\r?\n/).filter(Boolean).length - 1} Loại SP (Xem chi tiết ở in)` : r.hanghoa}
                                  </td>
+                                 <td className="fm-desc" style={{ maxWidth: '150px' }}>{r.noidung || ''}</td>
                                  <td>{fCur(r.chietkhau)}</td>
                                  <td className="text-right font-bold text-success">+{fCur(r.tongcong)}</td>
                                  <td className="text-right font-bold text-primary">{fCur(r.loinhuan)}</td>
                                  <td>{r.hinhthuc}</td>
                                  <td>{r.nhanvien}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {currentUser?.role === 'Quản lý' && <button title="Sửa bill hàng" className="btn-blue" onClick={() => handleEditBill(r)}><Edit size={16} /></button>}
                                     <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
-                                    <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
                                     <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
                                  </td>
                               </tr>
@@ -1223,7 +1328,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   {/* Card View for Mobile */}
                   <div className="fm-card-list">
                      {filteredData.map(r => (
-                        <div key={r.mabill} className="fm-card" style={r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {}}>
+                        <div key={r.mabill} className="fm-card" style={r.dasua ? { border: '1px solid #f97316', background: '#fff7ed' } : {}}>
                            <div className="fm-card-header">
                               <span className="fm-card-code" style={{ color: '#10b981' }}>{r.mabill}</span>
                               <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
@@ -1231,24 +1336,19 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <div className="fm-card-body">
                               <div className="fm-card-row"><span>Khách hàng:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</strong></div>
                               <div className="fm-card-row">
-                                 <span>Hàng hóa:</span>
+                                 <span>Giỏ hàng:</span>
                                  <span className="text-slate-600">
-                                    {(function () {
-                                       if (!r.hanghoa) return '0 loại SP';
-                                       if (!r.hanghoa.includes('Tên Hàng')) return r.hanghoa;
-                                       // Split by real newline and carriage return
-                                       const rows = r.hanghoa.split(/\r?\n/).filter(line => line.trim() !== "");
-                                       return `${rows.length > 0 ? rows.length - 1 : 0} loại SP`;
-                                    })()}
+                                    {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\r?\n/).filter(Boolean).length - 1} Loại SP` : r.hanghoa}
                                  </span>
                               </div>
+                              {r.noidung && <div className="fm-card-row"><span>Ghi chú:</span> <span style={{ fontSize: '0.85rem' }}>{r.noidung}</span></div>}
                               <div className="fm-card-row price-row">
                                  <span>Tổng thu:</span>
                                  <strong className="text-success">+{fCur(r.tongcong)} ₫</strong>
                               </div>
                               <div className="fm-card-actions">
+                                 <button className="btn-blue-sm" style={{ background: '#0ea5e9' }} onClick={() => handleEditBill(r)}><Edit size={16} /> Sửa</button>
                                  <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
-                                 <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
                                  <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
                               </div>
                            </div>
@@ -1261,7 +1361,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             return <div className="p-5 text-center text-muted">Vui lòng chọn một phân hệ Quản lý Tài chính/Kho/Dịch vụ.</div>
       }
    };
-
    let extractedNguoiNhan = printReceipt?.nguoinhan || '';
    let extractedMota = printReceipt?.mota || printReceipt?.hangmucchi || '';
 
@@ -1625,6 +1724,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU THU CHI */}
          {printReceipt && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
+               {/* WATERMARK WAVY LINES */}
+               <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 0,
+                  opacity: 0.25,
+                  pointerEvents: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'repeat'
+               }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
@@ -1708,6 +1817,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU LƯƠNG */}
          {printLuong && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
+               {/* WATERMARK WAVY LINES */}
+               <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 0,
+                  opacity: 0.25,
+                  pointerEvents: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'repeat'
+               }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1822,6 +1941,33 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
          {printHoaDon && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+               {/* WATERMARK WAVY LINES */}
+               <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 0,
+                  opacity: 0.2,
+                  pointerEvents: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'repeat'
+               }} />
+               <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%) rotate(-30deg)',
+                  fontSize: '60pt',
+                  fontWeight: 'bold',
+                  color: 'rgba(0, 102, 204, 0.05)',
+                  zIndex: 0,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  textAlign: 'center',
+                  width: '150%'
+               }}>
+                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
+               </div>
+
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
@@ -1901,7 +2047,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   {/* FOOTER */}
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        Facebook: {config?.tencongty} <br />
+                        Facebook: Trường Lá - E Skills School <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
@@ -1921,6 +2067,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* PRINT TEMPLATE - PHIẾU BILL HÀNG POS */}
          {printBill && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
+               {/* WATERMARK WAVY LINES */}
+               <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 0,
+                  opacity: 0.25,
+                  pointerEvents: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'repeat'
+               }} />
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2053,6 +2209,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <span>Sổ sách:</span> <b>{fCur(currentBalances[w.id])}</b>
                                  </div>
                                  <input type="text" required value={fCur(canDoiData[w.id])} onChange={e => setCanDoiData({ ...canDoiData, [w.id]: e.target.value.replace(/,/g, '') })} style={{ width: '100%', padding: '0.55rem', marginTop: '0.3rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '1.05rem', fontWeight: 700, color: '#8b5cf6', textAlign: 'right' }} placeholder="Đầu kỳ mới..." />
+                                 {(() => {
+                                    const truoc = currentBalances[w.id] || 0;
+                                    const sau = pCur(canDoiData[w.id]);
+                                    const chenhLech = truoc - sau;
+                                    if (chenhLech === 0) return null;
+                                    const isDeficit = chenhLech > 0;
+                                    return (
+                                       <div style={{ fontSize: '0.75rem', fontWeight: 800, color: isDeficit ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '4px', background: isDeficit ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px' }}>
+                                          {isDeficit ? '↓ Chênh lệch: -' : '↑ Chênh lệch: +'}{fCur(Math.abs(chenhLech))}
+                                       </div>
+                                    );
+                                 })()}
                               </div>
                            ))}
                         </div>
@@ -2103,7 +2271,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const diff = h[w.id] || {};
                                           const truoc = pCur(diff.truoc) || 0;
                                           const sau = pCur(diff.sau) || 0;
-                                          const offset = sau - truoc;
                                           return (
                                              <div key={w.id} style={{ background: 'white', padding: '10px 14px', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                                 <div style={{ fontSize: '0.75rem', fontWeight: 850, color: '#475569', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px' }}>{w.name}</div>
@@ -2121,7 +2288,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                                       <span style={{ color: '#8b5cf6' }}>{fCur(sau)}</span>
                                                    </div>
                                                    {(() => {
-                                                      const chenhLech = (pCur(diff.dauky) || 0) - sau;
+                                                      const chenhLech = truoc - sau;
                                                       if (chenhLech === 0) return null;
                                                       return (
                                                          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: chenhLech > 0 ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '2px', background: chenhLech > 0 ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px', alignSelf: 'flex-end' }}>
@@ -2145,78 +2312,43 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {confirmDialog.isOpen && document.body && createPortal(
-            <div className="fm-modal-overlay" style={{ zIndex: 2000 }}>
-               <div className="fm-modal-content animate-slide-up" style={{ backgroundColor: 'white', maxWidth: '440px', borderRadius: '32px', padding: '2.5rem', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                     {confirmDialog.actionType === 'DELETE' ? (
-                        <div style={{ background: '#fee2e2', padding: '1.5rem', borderRadius: '50%', color: '#ef4444' }}>
-                           <Trash2 size={40} />
-                        </div>
-                     ) : (
-                        <div style={{ background: '#dcfce3', padding: '1.5rem', borderRadius: '50%', color: '#22c55e' }}>
-                           <CheckCircle2 size={40} />
-                        </div>
-                     )}
-                  </div>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '1rem', color: '#0f172a' }}>
-                     {confirmDialog.title}
-                  </h3>
-                  <p style={{ color: '#64748b', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '2rem', padding: '0 10px' }}>
-                     {confirmDialog.message}
-                  </p>
-
-                  {confirmDialog.actionType && (
-                     <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
-                        <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
-                        <input
-                           type="password"
-                           autoFocus
-                           value={deletePassword}
-                           onChange={(e) => setDeletePassword(e.target.value)}
-                           onKeyDown={(e) => e.key === 'Enter' && executeConfirmAction()}
-                           placeholder="Mật khẩu của bạn..."
-                           style={{ width: '100%', height: '52px', padding: '0 1rem', borderRadius: '14px', border: '1px solid #e2e8f0', fontSize: '1rem', transition: 'border-color 0.2s' }}
-                        />
-                     </div>
-                  )}
-
-                  <div style={{ display: 'flex', gap: '1.25rem' }}>
-                     <button onClick={() => { setConfirmDialog({ ...confirmDialog, isOpen: false }); setDeletePassword(''); }} style={{ flex: 1, height: '56px', borderRadius: '16px', background: 'white', border: '1px solid #e2e8f0', color: '#475569', fontSize: '1.1rem', fontWeight: 700, cursor: 'pointer' }}>Quay lại</button>
-                     <button onClick={() => executeConfirmAction()} style={{ flex: 1, height: '56px', borderRadius: '16px', background: '#22c55e', border: 'none', color: 'white', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.4)' }}>Đồng ý</button>
-                  </div>
-               </div>
-            </div>,
-            document.body
-         )}
-
-         {editInvoiceModal.isOpen && editInvoiceModal.data && document.body && createPortal(
+         {editHoaDonModal && editHoaDonData && document.body && createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
                <div className="fm-modal animate-slide-up" style={{ maxWidth: '500px', background: '#fff', borderRadius: '20px' }}>
                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '1.20rem', fontWeight: 800, color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {editInvoiceModal.data.mahd}</h3>
-                     <button onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+                     <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {editHoaDonData.mahd}</h3>
+                     <button onClick={() => setEditHoaDonModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
                   </div>
-                  <form style={{ padding: '1.5rem' }} onSubmit={handleSaveEditInvoice}>
+                  <form style={{ padding: '1.5rem' }} onSubmit={(e) => {
+                     e.preventDefault();
+                     setDeletePassword('');
+                     setConfirmDialog({
+                        isOpen: true,
+                        title: 'Xác nhận chỉnh sửa',
+                        message: 'Mọi thay đổi về số tiền sẽ ảnh hưởng đến báo cáo tài chính và công nợ của học sinh. Bạn có chắc chắn muốn cập nhật không?',
+                        actionType: 'EDIT_HOADON',
+                        payload: editHoaDonData
+                     });
+                  }}>
                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.hocphi)} onChange={e => {
+                           <input type="text" value={fCur(editHoaDonData.hocphi)} onChange={e => {
                               const val = pCur(e.target.value);
-                              const old = pCur(editInvoiceModal.data.hocphi);
+                              const old = pCur(editHoaDonData.hocphi);
                               const diff = val - old;
-                              const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                              const newTong = pCur(editHoaDonData.tongcong) + diff;
+                              setEditHoaDonData({ ...editHoaDonData, hocphi: fCur(val), tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                         </div>
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.giamhocphi)} onChange={e => {
+                           <input type="text" value={fCur(editHoaDonData.giamhocphi)} onChange={e => {
                               const val = pCur(e.target.value);
-                              const old = pCur(editInvoiceModal.data.giamhocphi);
+                              const old = pCur(editHoaDonData.giamhocphi);
                               const diff = val - old;
-                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, giamhocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                              const newTong = pCur(editHoaDonData.tongcong) - diff;
+                              setEditHoaDonData({ ...editHoaDonData, giamhocphi: fCur(val), tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                         </div>
                      </div>
@@ -2226,7 +2358,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         {(() => {
                            let pts = [];
                            try {
-                              pts = typeof editInvoiceModal.data.phuthu === 'string' ? JSON.parse(editInvoiceModal.data.phuthu) : (Array.isArray(editInvoiceModal.data.phuthu) ? editInvoiceModal.data.phuthu : []);
+                              pts = typeof editHoaDonData.phuthu === 'string' ? JSON.parse(editHoaDonData.phuthu) : (Array.isArray(editHoaDonData.phuthu) ? editHoaDonData.phuthu : []);
                            } catch (e) { }
                            return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -2235,7 +2367,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        <input type="text" value={pt.name} onChange={e => {
                                           const newPts = [...pts];
                                           newPts[i].name = e.target.value;
-                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
+                                          setEditHoaDonData({ ...editHoaDonData, phuthu: newPts });
                                        }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #e2e8f0' }} placeholder="Tên phụ thu" />
                                        <input type="text" value={fCur(pt.amount)} onChange={e => {
                                           const oldPtVal = pts[i].amount || 0;
@@ -2243,21 +2375,21 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const diff = newPtVal - oldPtVal;
                                           const newPts = [...pts];
                                           newPts[i].amount = newPtVal;
-                                          const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
-                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                                          const newTong = pCur(editHoaDonData.tongcong) + diff;
+                                          setEditHoaDonData({ ...editHoaDonData, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
                                        }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #e2e8f0' }} placeholder="Số tiền" />
                                        <button type="button" onClick={() => {
                                           const deletedVal = pts[i].amount || 0;
                                           const newPts = pts.filter((_, idx) => idx !== i);
-                                          const newTong = pCur(editInvoiceModal.data.tongcong) - deletedVal;
-                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                                          const newTong = pCur(editHoaDonData.tongcong) - deletedVal;
+                                          setEditHoaDonData({ ...editHoaDonData, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(editHoaDonData.dadong) });
                                        }} style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '0.4rem' }}><X size={14} /></button>
                                     </div>
                                  ))}
                                  <button type="button" onClick={() => {
                                     const newPts = [...pts, { name: '', amount: 0 }];
-                                    setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
-                                 }} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600 }}>+ Thêm phụ thu</button>
+                                    setEditHoaDonData({ ...editHoaDonData, phuthu: newPts });
+                                 }} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }}>+ Thêm phụ thu</button>
                               </div>
                            );
                         })()}
@@ -2266,32 +2398,32 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#0ea5e9' }}>Đã nộp (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.dadong)} onChange={e => {
+                           <input type="text" value={fCur(editHoaDonData.dadong)} onChange={e => {
                               const val = pCur(e.target.value);
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: pCur(p.data.tongcong) - val } }));
+                              setEditHoaDonData({ ...editHoaDonData, dadong: val, conno: pCur(editHoaDonData.tongcong) - val });
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #0ea5e9', fontWeight: 700 }} />
                         </div>
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Còn nợ (đ)</label>
-                           <input disabled type="text" value={fCur(editInvoiceModal.data.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', fontWeight: 700, color: '#ef4444' }} />
+                           <input disabled type="text" value={fCur(editHoaDonData.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', fontWeight: 700 }} />
                         </div>
                      </div>
 
                      <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
-                        <select value={editInvoiceModal.data.hinhthuc} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                        <select value={editHoaDonData.hinhthuc} onChange={e => setEditHoaDonData({ ...editHoaDonData, hinhthuc: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                            {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
                         </select>
                      </div>
 
                      <div style={{ marginBottom: '1.5rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
-                        <textarea value={editInvoiceModal.data.ghichu} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
+                        <textarea value={editHoaDonData.ghichu} onChange={e => setEditHoaDonData({ ...editHoaDonData, ghichu: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
                      </div>
 
                      <div style={{ display: 'flex', gap: '1rem' }}>
-                        <button type="button" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Hủy</button>
-                        <button type="submit" style={{ flex: 2, padding: '0.75rem', borderRadius: '10px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)' }}>Lưu Thay Đổi</button>
+                        <button type="button" onClick={() => setEditHoaDonModal(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Hủy</button>
+                        <button type="submit" style={{ flex: 2, padding: '0.75rem', borderRadius: '10px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Lưu Thay Đổi</button>
                      </div>
                   </form>
                </div>
@@ -2299,119 +2431,159 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {editBillModal.isOpen && createPortal(
-            <div className="fm-modal-overlay">
-               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '540px', width: '95%', maxHeight: '90vh', borderRadius: '20px', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
-                  <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Bill Bán Hàng {editBillModal.data?.mabill}</h3>
-                     <button type="button" className="tm-btn-icon" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })} style={{ color: '#94a3b8' }}><X size={24} /></button>
+         {editBillModal && editBillData && document.body && createPortal(
+            <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
+               <div className="fm-modal animate-slide-up" style={{ maxWidth: '460px', background: '#fff', borderRadius: '20px' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>Sửa Bill Bán Hàng {editBillData.mabill}</h3>
+                     <button onClick={() => setEditBillModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
                   </div>
-                  <form onSubmit={handleSaveEditBill} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                     <div className="fm-modal-body" style={{ padding: '1.5rem', overflowY: 'auto', background: '#fff', flex: 1 }}>
-                        {/* Product List Card */}
-                        <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '1rem', marginBottom: '1.5rem' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                              <span style={{ fontWeight: 700, color: '#334155' }}>Danh sách sản phẩm</span>
-                              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{editBillModal.data.items.length} mục</span>
-                           </div>
+                  <form style={{ padding: '1.5rem' }} onSubmit={(e) => {
+                     e.preventDefault();
+                     setDeletePassword('');
+                     setConfirmDialog({
+                        isOpen: true,
+                        title: 'Xác nhận sửa bill',
+                        message: 'Mọi thay đổi về giá trị bill sẽ ảnh hưởng đến dòng tiền và báo cáo lợi nhuận. Bạn có chắc chắn muốn cập nhật không?',
+                        actionType: 'EDIT_BILL',
+                        payload: editBillData
+                     });
+                  }}>
 
-                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                              {editBillModal.data.items.map((item, idx) => (
-                                 <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', position: 'relative' }}>
+                     <div style={{ marginBottom: '1rem', background: '#f8fafc', borderRadius: '12px', padding: '1rem', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                           <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#334155' }}>Danh sách sản phẩm</label>
+                           <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{editBillData.items?.length || 0} mục</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                           {editBillData.items && editBillData.items.map((item, idx) => (
+                              <div key={idx} style={{ background: '#fff', padding: '0.75rem', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                    <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'black' }}>{item.tenhang}</span>
                                     <button type="button" onClick={() => {
-                                       const newItems = editBillModal.data.items.filter((_, i) => i !== idx);
-                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                       const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
-                                       setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                                    }} style={{ position: 'absolute', top: '8px', right: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
-
-                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', paddingRight: '20px' }}>
-                                       {item.mahang ? `${item.mahang}|` : ''}{item.tenhang}{item.dvt ? `|${item.dvt}` : ''}
+                                       const newItems = editBillData.items.filter((_, i) => i !== idx);
+                                       const subTotal = newItems.reduce((s, it) => s + (pCur(it.giaban) * (it.qty || 0)), 0);
+                                       const chietkhau = pCur(editBillData.chietkhau);
+                                       const newTong = subTotal - chietkhau;
+                                       const oldTong = pCur(editBillData.tongcong);
+                                       const diff = newTong - oldTong;
+                                       setEditBillData({
+                                          ...editBillData,
+                                          items: newItems,
+                                          tongcong: newTong,
+                                          loinhuan: pCur(editBillData.loinhuan) + diff,
+                                          conno: newTong - pCur(editBillData.dadong)
+                                       });
+                                    }} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer' }}><X size={14} /></button>
+                                 </div>
+                                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(60px, 1fr) 1.5fr 1.5fr', gap: '0.5rem', alignItems: 'center' }}>
+                                    <div>
+                                       <label style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>SL ({item.dvt})</label>
+                                       <input type="number" value={item.qty} onChange={e => {
+                                          const newItems = [...editBillData.items];
+                                          const newVal = parseInt(e.target.value) || 0;
+                                          newItems[idx].qty = newVal;
+                                          const subTotal = newItems.reduce((s, it) => s + (pCur(it.giaban) * (it.qty || 0)), 0);
+                                          const chietkhau = pCur(editBillData.chietkhau);
+                                          const newTong = subTotal - chietkhau;
+                                          const oldTong = pCur(editBillData.tongcong);
+                                          const diff = newTong - oldTong;
+                                          setEditBillData({
+                                             ...editBillData,
+                                             items: newItems,
+                                             tongcong: newTong,
+                                             loinhuan: pCur(editBillData.loinhuan) + diff,
+                                             conno: newTong - pCur(editBillData.dadong)
+                                          });
+                                       }} style={{ width: '100%', padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }} />
                                     </div>
-
-                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-                                       <div style={{ flex: 1 }}>
-                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>SL (-)</label>
-                                          <input type="number" value={item.qty} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
-                                             const val = parseInt(e.target.value, 10) || 0;
-                                             const newItems = [...editBillModal.data.items];
-                                             newItems[idx].qty = val;
-                                             const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                             const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
-                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                                          }} />
-                                       </div>
-                                       <div style={{ flex: 1.5 }}>
-                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Đơn giá (đ)</label>
-                                          <input type="text" value={fCur(item.giaban)} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
-                                             const val = pCur(e.target.value);
-                                             const newItems = [...editBillModal.data.items];
-                                             newItems[idx].giaban = val;
-                                             const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                             const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
-                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                                          }} />
-                                       </div>
-                                       <div style={{ flex: 1, textAlign: 'right' }}>
-                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Thành tiền</label>
-                                          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0ea5e9' }}>{fCur(item.qty * item.giaban)}</div>
-                                       </div>
+                                    <div>
+                                       <label style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>Đơn giá (đ)</label>
+                                       <input type="text" value={fCur(item.giaban)} onChange={e => {
+                                          const newItems = [...editBillData.items];
+                                          const newVal = pCur(e.target.value);
+                                          newItems[idx].giaban = newVal;
+                                          const subTotal = newItems.reduce((s, it) => s + (pCur(it.giaban) * (it.qty || 0)), 0);
+                                          const chietkhau = pCur(editBillData.chietkhau);
+                                          const newTong = subTotal - chietkhau;
+                                          const oldTong = pCur(editBillData.tongcong);
+                                          const diff = newTong - oldTong;
+                                          setEditBillData({
+                                             ...editBillData,
+                                             items: newItems,
+                                             tongcong: newTong,
+                                             loinhuan: pCur(editBillData.loinhuan) + diff,
+                                             conno: newTong - pCur(editBillData.dadong)
+                                          });
+                                       }} style={{ width: '100%', padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }} />
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                       <label style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>Thành tiền</label>
+                                       <span style={{ fontWeight: 700, color: '#0ea5e9', fontSize: '0.85rem' }}>{fCur(pCur(item.giaban) * (item.qty || 0))}</span>
                                     </div>
                                  </div>
-                              ))}
-                              <button type="button" onClick={() => {
-                                 const newItems = [...editBillModal.data.items, { mahang: '', tenhang: 'Sản phẩm mới', dvt: 'Cái', qty: 1, giaban: 0 }];
-                                 setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems } }));
-                              }} style={{ width: '100%', padding: '10px', background: '#fff', border: '1px dashed #e2e8f0', borderRadius: '12px', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }}>+ Thêm sản phẩm</button>
-                           </div>
-                        </div>
-
-                        {/* Financial Grid */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Chiết khấu (đ)</label>
-                              <input type="text" value={fCur(editBillModal.data.chietkhau)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} onChange={e => {
-                                 const val = pCur(e.target.value);
-                                 const subtotal = editBillModal.data.items.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                 const finalTotal = subtotal - val;
-                                 setEditBillModal(p => ({ ...p, data: { ...p.data, chietkhau: val, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                              }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#16a34a', marginBottom: '0.5rem' }}>Tổng cộng (đ)</label>
-                              <input type="text" disabled value={fCur(editBillModal.data.tongcong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>Đã thanh toán (đ)</label>
-                              <input type="text" value={fCur(editBillModal.data.dadong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #3b82f6', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} onChange={e => {
-                                 const val = pCur(e.target.value);
-                                 setEditBillModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: p.data.tongcong - val } }));
-                              }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>Còn nợ (đ)</label>
-                              <input type="text" disabled value={fCur(editBillModal.data.conno)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '1rem', fontWeight: 700, color: '#ef4444' }} />
-                           </div>
-                        </div>
-
-                        {/* Form Group for Payment & Notes */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
-                              <select style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', background: '#fff' }} value={editBillModal.data.hinhthuc} onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))}>
-                                 {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
-                              </select>
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú bill</label>
-                              <textarea style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.95rem', resize: 'none' }} value={editBillModal.data.ghichu} onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} placeholder="Nhập ghi chú cho bill..." />
-                           </div>
+                              </div>
+                           ))}
                         </div>
                      </div>
 
-                     <div className="fm-modal-footer" style={{ padding: '1.5rem', display: 'flex', gap: '1rem', background: '#fff', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-                        <button type="button" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, height: '52px', background: '#f1f5f9', border: 'none', borderRadius: '12px', color: '#475569', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Bỏ qua</button>
-                        <button type="submit" style={{ flex: 2, height: '52px', background: '#10b981', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>Cập Nhật Bill</button>
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Chiết khấu (đ)</label>
+                           <input type="text" value={fCur(editBillData.chietkhau)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const oldChietKhau = pCur(editBillData.chietkhau);
+                              const diff = val - oldChietKhau;
+                              const currentTong = pCur(editBillData.tongcong);
+                              // When discount increases, total decreases
+                              const newTong = currentTong - diff;
+                              const oldLoiNhuan = pCur(editBillData.loinhuan);
+                              const newLoiNhuan = oldLoiNhuan - diff;
+
+                              setEditBillData({
+                                 ...editBillData,
+                                 chietkhau: val,
+                                 tongcong: newTong,
+                                 loinhuan: newLoiNhuan,
+                                 conno: newTong - pCur(editBillData.dadong)
+                              });
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#16a34a' }}>Tổng cộng (đ)</label>
+                           <input disabled type="text" value={fCur(editBillData.tongcong)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700, background: '#f8fafc' }} />
+                        </div>
+                     </div>
+
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#0ea5e9' }}>Đã thanh toán (đ)</label>
+                           <input type="text" value={fCur(editBillData.dadong)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              setEditBillData({ ...editBillData, dadong: val, conno: pCur(editBillData.tongcong) - val });
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #0ea5e9', fontWeight: 700 }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Còn nợ (đ)</label>
+                           <input disabled type="text" value={fCur(editBillData.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', fontWeight: 700 }} />
+                        </div>
+                     </div>
+
+                     <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
+                        <select value={editBillData.hinhthuc} onChange={e => setEditBillData({ ...editBillData, hinhthuc: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                           {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
+                        </select>
+                     </div>
+
+                     <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú bill</label>
+                        <textarea value={editBillData.noidung} onChange={e => setEditBillData({ ...editBillData, noidung: e.target.value })} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
+                     </div>
+
+                     <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button type="button" onClick={() => setEditBillModal(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Bỏ qua</button>
+                        <button type="submit" style={{ flex: 2, padding: '0.75rem', borderRadius: '10px', background: '#10b981', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Cập Nhật Bill</button>
                      </div>
                   </form>
                </div>
@@ -2419,7 +2591,71 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
+         {confirmDialog.isOpen && document.body && createPortal(
+            <div className="fm-modal-overlay" style={{ zIndex: 2000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+               <div className="fm-modal-content animate-slide-up" style={{ backgroundColor: 'white', maxWidth: '400px', width: '90%', borderRadius: '16px', textAlign: 'center', padding: '2.5rem 1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+                     {confirmDialog.actionType === 'DELETE' ? (
+                        <div style={{ background: '#fee2e2', padding: '1.25rem', borderRadius: '50%', color: '#ef4444' }}>
+                           <Trash2 size={36} />
+                        </div>
+                     ) : (
+                        <div style={{ background: '#dcfce3', padding: '1.25rem', borderRadius: '50%', color: '#22c55e' }}>
+                           <CheckCircle2 size={36} />
+                        </div>
+                     )}
+                  </div>
+                  <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.75rem', color: '#0f172a' }}>
+                     {confirmDialog.title}
+                  </h3>
+                  <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: confirmDialog.actionType === 'DELETE' ? '1rem' : '2.5rem', lineHeight: 1.6 }}>
+                     {confirmDialog.message}
+                  </p>
 
+                  {(confirmDialog.actionType === 'DELETE' || confirmDialog.actionType === 'CONFIRM_CANDOI' || confirmDialog.actionType === 'EDIT_HOADON' || confirmDialog.actionType === 'EDIT_BILL') && (
+                     <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Xác nhận mật khẩu:</label>
+                        <input
+                           type="password"
+                           value={deletePassword}
+                           onChange={(e) => setDeletePassword(e.target.value)}
+                           onKeyDown={(e) => e.key === 'Enter' && executeConfirmAction()}
+                           placeholder="Mật khẩu của bạn..."
+                           autoFocus
+                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', transition: 'all 0.2s' }}
+                        />
+                     </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                     <button
+                        onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+                        style={{ padding: '0.75rem 1.5rem', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 600, color: '#475569', cursor: 'pointer', flex: 1, fontSize: '1rem', transition: 'all 0.2s' }}
+                     >
+                        Quay lại
+                     </button>
+                     <button
+                        onClick={() => executeConfirmAction()}
+                        style={{
+                           padding: '0.75rem 1.5rem',
+                           borderRadius: '10px',
+                           border: 'none',
+                           background: confirmDialog.actionType === 'DELETE' ? '#ef4444' : (confirmDialog.actionType === 'CONFIRM_CANDOI' ? '#8b5cf6' : (confirmDialog.actionType === 'EDIT_HOADON' ? '#3b82f6' : '#22c55e')),
+                           color: 'white',
+                           fontWeight: 600,
+                           cursor: 'pointer',
+                           flex: 1,
+                           fontSize: '1rem',
+                           boxShadow: confirmDialog.actionType === 'DELETE' ? '0 4px 14px 0 rgba(239, 68, 68, 0.39)' : (confirmDialog.actionType === 'EDIT_HOADON' ? '0 4px 14px 0 rgba(59, 130, 246, 0.39)' : '0 4px 14px 0 rgba(34, 197, 94, 0.39)'),
+                           transition: 'all 0.2s'
+                        }}
+                     >
+                        {confirmDialog.actionType === 'DELETE' ? 'Xoá ngay' : (confirmDialog.actionType === 'EDIT_HOADON' ? 'Cập nhật' : 'Đồng ý')}
+                     </button>
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
       </div>
    );
 }
