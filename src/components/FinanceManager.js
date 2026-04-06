@@ -761,7 +761,23 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       let mappedData = [];
       if (activeSubTab === 'phieuchi') {
          headers = ['Mã phiếu', 'Ngày lập', 'Loại', 'Hạng mục', 'Mô tả', 'Số tiền', 'Hình thức', 'Nhân viên'];
-         mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv]);
+         mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv || i.nhanvien]);
+      } else if (activeSubTab === 'hoadon') {
+         headers = ['Mã HĐ', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Đã thu', 'Còn nợ'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.dadong), fCur(i.conno)]);
+      } else if (activeSubTab === 'nhapkho') {
+         headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
+         mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
+      } else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') {
+         headers = ['Mã Bill', 'Ngày bán', 'Khách hàng', 'Sản phẩm', 'Chiết khấu', 'Tổng thu', 'Lợi nhuận', 'Hình thức', 'Người bán'];
+         mappedData = data.map(i => {
+            let spSummary = i.hanghoa || '';
+            if (spSummary.includes('Tên Hàng')) {
+               const parsed = parseNoidung(spSummary);
+               spSummary = parsed.rows.map(r => `${r[1]} (x${r[3]})`).join('; ');
+            }
+            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
+         });
       } else {
          alert('Chưa hỗ trợ xuất cho tab này'); return;
       }
@@ -1519,13 +1535,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <button className="fm-btn-add-dauky" style={{ background: '#3b82f6' }} onClick={handleOpenBatchImport}>
                         <Plus size={16} /> Nhập Hàng Loạt
                      </button>
-                     <button className="fm-btn-export" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}>
-                        <DownloadCloud size={16} /> Trích Xuất Dữ Liệu
+                     <button className="fm-btn-export" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}>
+                        <DownloadCloud size={16} /> Xuất ra excel
                      </button>
                   </>
                ) : (
-                  <button className="fm-btn-export" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}>
-                     <DownloadCloud size={16} /> Trích Xuất Dữ Liệu
+                  <button className="fm-btn-export" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}>
+                     <DownloadCloud size={16} /> Xuất ra excel
                   </button>
                )}
             </div>
