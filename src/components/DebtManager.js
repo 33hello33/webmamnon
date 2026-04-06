@@ -92,19 +92,23 @@ export default function DebtManager() {
       const tableName = selectedDebt.loai === 'Hóa Đơn' ? 'tbl_hd' : 'tbl_billhanghoa';
       const idField = selectedDebt.loai === 'Hóa Đơn' ? 'mahd' : 'mabill';
 
+      // Update old record to 0 debt
       const { error: updateErr } = await supabase.from(tableName)
         .update({ conno: '0' })
         .eq(idField, selectedDebt.mahd);
 
       if (updateErr) throw updateErr;
 
-      const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
+      // Generate New ID based on type
+      const { data: recentRecords } = await supabase.from(tableName).select(idField).order(idField, { ascending: false }).limit(1);
       let nextNum = 1;
-      if (recentHD && recentHD.length > 0 && recentHD[0].mahd) {
-        const numPart = recentHD[0].mahd.replace(/\D/g, '');
+      const idPrefix = selectedDebt.loai === 'Hóa Đơn' ? 'HD' : 'BH';
+      if (recentRecords && recentRecords.length > 0) {
+        const lastFullId = recentRecords[0][idField] || '';
+        const numPart = lastFullId.replace(/\D/g, '');
         if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
       }
-      const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
+      const newMaID = `${idPrefix}${String(nextNum).padStart(5, '0')}`;
 
       const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
@@ -119,7 +123,6 @@ export default function DebtManager() {
       };
 
       let oldThoiLuong = '';
-
       if (selectedDebt.loai === 'Hóa Đơn') {
         const { data: oldInfo } = await supabase.from('tbl_hd')
           .select('thoiluong')
@@ -131,35 +134,58 @@ export default function DebtManager() {
         }
       }
 
-      const insertData = {
-        mahd: newMaHD,
-        ngaylap: localNow,
-        mahv: selectedDebt.mahv,
-        tenlop: selectedDebt.tenlop || '',
-        nhanvien: cashier,
-        hocphi: '0',
-        giamhocphi: '0',
-        tongcong: '0',
-        dadong: formatCurrency(payVal),
-        conno: formatCurrency(newConno),
-        hinhthuc: paymentMethod,
-        ghichu: paymentNote,
-        daxoa: null,
-        thoiluong: oldThoiLuong,
-        malop: malop
-      };
+      let insertErr = null;
+      if (selectedDebt.loai === 'Hóa Đơn') {
+        const insertData = {
+          mahd: newMaID,
+          ngaylap: localNow,
+          mahv: selectedDebt.mahv,
+          tenlop: selectedDebt.tenlop || '',
+          nhanvien: cashier,
+          hocphi: '0',
+          giamhocphi: '0',
+          tongcong: '0',
+          dadong: formatCurrency(payVal),
+          conno: formatCurrency(newConno),
+          hinhthuc: paymentMethod,
+          ghichu: paymentNote,
+          daxoa: null,
+          thoiluong: oldThoiLuong,
+          malop: malop
+        };
+        const res = await supabase.from('tbl_hd').insert([insertData]);
+        insertErr = res.error;
+      } else {
+        const insertData = {
+          mabill: newMaID,
+          ngaylap: localNow,
+          mahv: selectedDebt.mahv,
+          hanghoa: selectedDebt.hanghoa || '', // Keep items info for the new record
+          nhanvien: cashier,
+          chietkhau: '0',
+          tongcong: '0',
+          dadong: formatCurrency(payVal),
+          conno: formatCurrency(newConno),
+          noidung: paymentNote,
+          daxoa: null,
+          loinhuan: '0',
+          hinhthuc: paymentMethod,
+          daxacnhan: true
+        };
+        const res = await supabase.from('tbl_billhanghoa').insert([insertData]);
+        insertErr = res.error;
+      }
 
-      const { error: insertErr } = await supabase.from('tbl_hd').insert([insertData]);
       if (insertErr) throw insertErr;
 
-      setPaymentSuccess('Trả nợ thành công! Đã cập nhật hóa đơn.');
+      setPaymentSuccess('Trả nợ thành công! ' + (selectedDebt.loai === 'Hóa Đơn' ? 'Đã tạo hóa đơn HD...' : 'Đã tạo bill BH...'));
       setDebtList(prev => prev.filter(d => d.mahd !== selectedDebt.mahd));
 
       // Trigger auto download
       const targetStudent = students.find(s => s.mahv === selectedDebt.mahv) || {};
-        setDownloadingInvoice({
+      setDownloadingInvoice({
         loai: selectedDebt.loai,
-        mahd: newMaHD,
+        mahd: newMaID,
         ngaylap: localNow,
         tenhv: selectedDebt.tenhv,
         sdt: targetStudent.sdt || '',
@@ -177,8 +203,7 @@ export default function DebtManager() {
         monthlyMealFee: 0,
         phuthu: [],
         deductionSum: 0,
-        // For POS Bill template if needed
-        mabill: newMaHD,
+        mabill: newMaID,
         cart: parseCsvCart(selectedDebt.hanghoa),
         tongcong_num: payVal + newConno
       });
@@ -252,11 +277,20 @@ export default function DebtManager() {
         const cMap = classData || [];
         setClasses(cMap);
 
-        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, sdt, trangthai, malop');
-        const studentsList = (stdRaw || []).map(s => ({
-          ...s,
-          malop_list: s.malop ? [s.malop] : []
-        }));
+        const { data: stdRaw } = await supabase.from('tbl_hv').select('*');
+        const studentsList = (stdRaw || []).map(s => {
+          // Normalize keys to lowercase for robust access
+          const normalized = {};
+          Object.keys(s).forEach(key => {
+            normalized[key.toLowerCase()] = s[key];
+          });
+          return {
+            ...normalized,
+            mahv: normalized.mahv || normalized.mahv,
+            tenhv: normalized.tenhv || '',
+            malop_list: normalized.malop ? [normalized.malop] : []
+          };
+        });
         setStudents(studentsList);
 
         // Fetch Hợp Đồng (HD)
@@ -273,15 +307,24 @@ export default function DebtManager() {
         const validHd = (hdData || []).filter(h => (h.daxoa || '') !== 'Đã Xóa');
         const validBill = billData.filter(b => (b.daxoa || '') !== 'Đã Xóa');
 
+        const parseCur = (v) => parseInt(String(v || '0').replace(/,/g, ''), 10) || 0;
+        const formatCur = (val) => {
+          const num = parseCur(val);
+          return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        };
+
         // BẢNG 1: Tổng Hợp Danh Sách Còn Nợ
         const mergedTemp = [];
         validHd.forEach(hd => {
-          if (hd.conno && hd.conno !== '0' && hd.conno !== 0) {
-            const std = studentsList.find(s => s.mahv === hd.mahv) || {};
+          const debtNum = parseCur(hd.conno);
+          if (debtNum > 0) {
+            const currentMaHV = String(hd.mahv || '').trim().toLowerCase();
+            const std = studentsList.find(s => String(s.mahv || '').trim().toLowerCase() === currentMaHV) || {};
+
             mergedTemp.push({
               mahv: hd.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              conno: hd.conno,
+              conno: formatCur(hd.conno),
               tenlop: hd.tenlop || '',
               loai: 'Hóa Đơn',
               mahd: hd.mahd
@@ -290,15 +333,23 @@ export default function DebtManager() {
         });
 
         validBill.forEach(bill => {
-          if (bill.conno && bill.conno !== '0' && bill.conno !== 0) {
-            const std = studentsList.find(s => s.mahv === bill.mahv) || {};
-            const firstMalop = std.malop_list && std.malop_list.length > 0 ? std.malop_list[0] : null;
-            const stClass = cMap.find(c => c.malop === firstMalop);
+          const debtNum = parseCur(bill.conno);
+          if (debtNum > 0) {
+            const currentMaHV = String(bill.mahv || '').trim().toLowerCase();
+            const std = studentsList.find(s => String(s.mahv || '').trim().toLowerCase() === currentMaHV) || {};
+
+            let tenLopBill = '';
+            if (std.malop_list && std.malop_list.length > 0) {
+              const firstMalop = std.malop_list[0];
+              const stClass = cMap.find(c => c.malop === firstMalop);
+              if (stClass) tenLopBill = stClass.tenlop;
+            }
+
             mergedTemp.push({
               mahv: bill.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              conno: bill.conno,
-              tenlop: stClass ? stClass.tenlop : '',
+              conno: formatCur(bill.conno),
+              tenlop: tenLopBill,
               loai: 'Bill Hàng',
               mahd: bill.mabill,
               hanghoa: bill.hanghoa,
@@ -389,7 +440,7 @@ export default function DebtManager() {
           <div className="stat-info">
             <label>Tổng Tiền Nợ</label>
             <div className="value">
-              {debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0).toLocaleString()}
+              {debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
               <span>₫</span>
             </div>
           </div>
@@ -444,7 +495,7 @@ export default function DebtManager() {
                         <td className="font-medium">{d.mahd}</td>
                         <td>{d.tenlop}</td>
                         <td className="text-right font-bold text-danger">
-                          {d.conno.toLocaleString()}
+                          {d.conno}
                         </td>
                         <td className="text-center">
                           <button
@@ -485,7 +536,7 @@ export default function DebtManager() {
                         <span><strong>Lớp:</strong> {d.tenlop}</span>
                       </div>
                       <div className="info-line amount-row">
-                        <span className="debt-amount">{d.conno.toLocaleString()} ₫</span>
+                        <span className="debt-amount">{d.conno} ₫</span>
                         <button className="btn-pay" onClick={() => openPaymentModal(d)}>Trả nợ</button>
                       </div>
                     </div>
