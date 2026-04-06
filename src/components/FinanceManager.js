@@ -1916,12 +1916,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
          {printHoaDon && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '20px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
                      <div style={{ width: '180px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '120px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
 
                      {/* CENTER: Info */}
@@ -1939,11 +1939,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                   </div>
 
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "18pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                      BIÊN LAI THU HỌC PHÍ
                   </div>
 
-                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
+                  <div style={{ fontSize: "12pt", lineHeight: "1.5", margin: '10px 0' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                         <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
                         <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
@@ -1955,7 +1955,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ marginTop: '5px' }}>
                         Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>
                      </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '10px 0' }} />
 
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
@@ -2001,7 +2001,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
 
                   {/* FOOTER */}
-                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+                  <div style={{ marginTop: 20, fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
                         Facebook: {config?.tencongty} <br />
                         SĐT/Zalo: {config?.sdtcongty}
