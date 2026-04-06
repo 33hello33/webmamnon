@@ -27,6 +27,22 @@ const formatMonthYear = (dateStr) => {
    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+const getWorkingDaysInMonth = (dateStr) => {
+   if (!dateStr) return 0;
+   const d = new Date(dateStr);
+   const year = d.getFullYear();
+   const month = d.getMonth();
+   const daysInMonth = new Date(year, month + 1, 0).getDate();
+   let workingDays = 0;
+   for (let i = 1; i <= daysInMonth; i++) {
+      const day = new Date(year, month, i).getDay();
+      if (day !== 0 && day !== 6) { // 0: Sunday, 6: Saturday
+         workingDays++;
+      }
+   }
+   return workingDays;
+};
+
 const calculateThoiluong = (inv) => {
    if (!inv.ngayBatDau) return '';
    const SL = parseInt(inv.soLuong) || 1;
@@ -745,7 +761,11 @@ export default function InvoiceManager() {
    const actualTuitionRefund = tuitionRefund;
    const deductionSum = studySummary ? (actualMealRefund + actualTuitionRefund) : 0;
 
-   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum - invoiceData.giamHocphi - deductionSum;
+   const workingDaysCount = getWorkingDaysInMonth(invoiceData.ngayBatDau);
+   const isMonthly = (invoiceData.loaiDong || '').toLowerCase().includes('tháng');
+   const monthlyMealFee = isMonthly ? (workingDaysCount * trutienan_val) : 0;
+
+   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum + monthlyMealFee - invoiceData.giamHocphi - deductionSum;
    const conLai = tongCong - invoiceData.daDong;
 
    const handleExportNotice = async () => {
@@ -802,7 +822,8 @@ export default function InvoiceManager() {
          daxoa: null,
          malop: activeClass?.malop || '',
          thoiluong: currentTimePeriod,
-         sobuoihoc: sobuoihocFinal
+         sobuoihoc: sobuoihocFinal,
+         tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee }) : null
       };
 
       try {
@@ -831,7 +852,9 @@ export default function InvoiceManager() {
             actualTuitionRefund,
             deductionSum,
             trutienan_val,
-            trutiennghi_val
+            trutiennghi_val,
+            monthlyMealFee,
+            workingDaysCount
          });
       } catch (err) {
          console.error(err);
@@ -900,7 +923,9 @@ export default function InvoiceManager() {
             daxoa: null,
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
-            sobuoihoc: sobuoihocFinal
+            sobuoihoc: sobuoihocFinal,
+            nocu: formatCurrency(noCu),
+            tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee }) : null
          };
 
          const res = await supabase.from('tbl_hd').insert([insertData]);
@@ -963,7 +988,9 @@ export default function InvoiceManager() {
             actualTuitionRefund,
             deductionSum,
             trutienan_val,
-            trutiennghi_val
+            trutiennghi_val,
+            monthlyMealFee,
+            workingDaysCount
          });
 
          // Reload old debt dynamically mimicking real-time refresh
@@ -1219,10 +1246,17 @@ export default function InvoiceManager() {
                         <h3 className="im-section-title"><Wallet size={18} /> Quyết Toán Tổng (VNĐ)</h3>
 
                         {/* HÀNG 1: NỢ CŨ, HỌC PHÍ, VOUCHER */}
-                        <div className="im-finance-row grid-3">
+                        <div className="im-finance-row grid-4">
                            <div className="im-fi-item">
                               <label>Nợ cũ</label>
                               <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>{formatCurrency(noCu)} ₫</div>
+                           </div>
+                           <div className="im-fi-item">
+                              <label>Tiền ăn</label>
+                              <div className="fi-val-display text-primary">{formatCurrency(monthlyMealFee)} ₫</div>
+                              {workingDaysCount > 0 && isMonthly && (
+                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>Tháng {new Date(invoiceData.ngayBatDau).getMonth() + 1}: {workingDaysCount} ngày</div>
+                              )}
                            </div>
                            <div className="im-fi-item">
                               <label>Học phí</label>
@@ -1256,9 +1290,9 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item">
                               <label>Giảm HP</label>
-                              <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '5px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                                  <div className="fi-input-wrapper">
-                                    <input type="text" placeholder="%" value={invoiceData.discountPercent > 0 ? invoiceData.discountPercent : ''} onChange={handlePercentDiscount} />
+                                    <input type="text" placeholder="Nhập % giảm..." value={invoiceData.discountPercent > 0 ? invoiceData.discountPercent : ''} onChange={handlePercentDiscount} />
                                     <span className="unit">%</span>
                                  </div>
                                  <div className="fi-input-wrapper">
@@ -1423,6 +1457,7 @@ export default function InvoiceManager() {
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
                         <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
+                        <div>Tiền ăn: <b>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
                         <div>Nợ cũ: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
                      {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
@@ -1525,6 +1560,9 @@ export default function InvoiceManager() {
                      </div>
                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>Giảm trừ:</span> <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</b>
+                     </div>
+                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Tiền ăn hàng tháng ({downloadingNotice?.workingDaysCount} ngày):</span> <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b>
                      </div>
                      {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
                         <div style={{ borderTop: '1px solid #bae6fd', marginTop: '10px', paddingTop: '10px' }}>

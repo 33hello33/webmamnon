@@ -1973,11 +1973,45 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '10px 0' }} />
 
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
-                        <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
-                        <div>Nợ cũ: <b>{fCur(printHoaDon.nocu || 0)} đ</b></div>
-                     </div>
+                     {(() => {
+                        const hocV = pCur(printHoaDon.hocphi);
+                        const giamV = pCur(printHoaDon.giamhocphi);
+                        const tongV = pCur(printHoaDon.tongcong);
+                        let ptS = 0;
+                        try {
+                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                           if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
+                        } catch (e) { }
+                        let taS = 0;
+                        try {
+                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                           if (ta && ta.amount) taS = ta.amount;
+                         } catch (e) { }
+                        const rM = pCur(printHoaDon.trutienan);
+                        const rT = pCur(printHoaDon.tiennghiphep);
+                        const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
+                        return (
+                           <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
+                              <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
+                              <div>Nợ cũ: <b>{fCur(calcNocu)} đ</b></div>
+                           </div>
+                        );
+                     })()}
+
+                     {printHoaDon.tienan && (() => {
+                        try {
+                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                           if (ta && ta.amount > 0) {
+                              return (
+                                 <div style={{ marginTop: '5px', fontSize: '11pt', color: '#3b82f6', fontWeight: 800 }}>
+                                    + Tiền ăn ({ta.days} ngày): {fCur(ta.amount)} đ
+                                 </div>
+                              );
+                           }
+                        } catch (e) { }
+                        return null;
+                     })()}
 
                      {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
                         <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
