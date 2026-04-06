@@ -1029,8 +1029,14 @@
 
 .study-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.75rem;
+}
+
+.ss-consecutive {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
 }
 
 .ss-badge {
@@ -1087,7 +1093,7 @@
 
 @media (max-width: 768px) {
   .study-summary-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   
   .ss-num {

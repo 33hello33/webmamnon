@@ -67,7 +67,11 @@ const ConfigManager = () => {
         cotdiemdanh: config.cotdiemdanh || {
           available: ['comat', 'vangP', 'vangKP'],
           selected: ['comat', 'vangP', 'vangKP']
-        }
+        },
+        nghilientiep: typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : (config.nghilientiep || {
+          songaynghilientiep: 7,
+          phantramgiam: 50
+        })
       });
     }
   }, [config]);
@@ -545,6 +549,38 @@ const ConfigManager = () => {
                     placeholder="VD: 20,000"
                     style={{ fontSize: '0.9rem', padding: '4px 8px' }}
                   />
+                </div>
+                <div style={{ marginTop: '0.8rem', padding: '10px', background: '#fff5f7', borderRadius: '8px', border: '1px solid #fce7f3' }}>
+                  <div className="section-subtitle" style={{ fontSize: '0.8rem', fontWeight: 800, color: '#be185d', marginBottom: '8px', textTransform: 'uppercase' }}>Hoàn học phí liên tiếp</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div className="form-group">
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Nghỉ ≥ (ngày)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formData.nghilientiep?.songaynghilientiep || 7}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          nghilientiep: { ...formData.nghilientiep, songaynghilientiep: parseInt(e.target.value) || 0 } 
+                        })}
+                        style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Giảm (%)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={formData.nghilientiep?.phantramgiam || 0}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          nghilientiep: { ...formData.nghilientiep, phantramgiam: parseInt(e.target.value) || 0 } 
+                        })}
+                        style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

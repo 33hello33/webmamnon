@@ -2,8 +2,39 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { BadgeDollarSign, Clock, CheckCircle } from 'lucide-react';
+import { BadgeDollarSign, Clock, CheckCircle, Receipt, X } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import './DebtManager.css';
+
+const parseCsvCart = (csv) => {
+  if (!csv) return [];
+  try {
+    const lines = csv.split('\n');
+    if (lines.length <= 1) return []; // header only
+    const items = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      // CSV simple parser (handle quotes)
+      const parts = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+      const clean = parts.map(p => p.replace(/^"|"$/g, ''));
+      if (clean.length >= 6) {
+        items.push({
+          mahang: clean[0],
+          tenhang: clean[1],
+          dvt: clean[2],
+          qty: parseInt(clean[3]) || 0,
+          giaban: clean[4],
+          thanhtien: clean[5]
+        });
+      }
+    }
+    return items;
+  } catch (e) {
+    console.error('Lỗi parse CSV:', e);
+    return [];
+  }
+};
 
 export default function DebtManager() {
   const { config } = useConfig();
@@ -17,6 +48,7 @@ export default function DebtManager() {
   const [classes, setClasses] = useState([]);
   const [debtList, setDebtList] = useState([]);
   const [overdueList, setOverdueList] = useState([]);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -27,9 +59,11 @@ export default function DebtManager() {
   const [paymentSuccess, setPaymentSuccess] = useState('');
   const [paymentError, setPaymentError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Tiền mặt');
+  const [downloadingInvoice, setDownloadingInvoice] = useState(null);
+  const [previewImg, setPreviewImg] = useState(null);
 
   const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-  const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
+  const cashier = auth.user?.manv || auth.user?.manv || '';
 
   const openPaymentModal = (debtItem) => {
     setSelectedDebt(debtItem);
@@ -84,20 +118,16 @@ export default function DebtManager() {
         return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
       };
 
-      let oldNgayBatDau = null;
-      let oldNgayKetThuc = null;
-      let oldSoBuoiHoc = '';
+      let oldThoiLuong = '';
 
       if (selectedDebt.loai === 'Hóa Đơn') {
         const { data: oldInfo } = await supabase.from('tbl_hd')
-          .select('ngaybatdau, ngayketthuc, sobuoihoc')
+          .select('thoiluong')
           .eq('mahd', selectedDebt.mahd)
           .single();
 
         if (oldInfo) {
-          oldNgayBatDau = oldInfo.ngaybatdau;
-          oldNgayKetThuc = oldInfo.ngayketthuc;
-          oldSoBuoiHoc = oldInfo.sobuoihoc || '';
+          oldThoiLuong = oldInfo.thoiluong || '';
         }
       }
 
@@ -106,20 +136,16 @@ export default function DebtManager() {
         ngaylap: localNow,
         mahv: selectedDebt.mahv,
         tenlop: selectedDebt.tenlop || '',
-        ngaybatdau: oldNgayBatDau,
-        ngayketthuc: oldNgayKetThuc,
         nhanvien: cashier,
         hocphi: '0',
         giamhocphi: '0',
-        phuphi: '0',
-        dsphuphi: '',
         tongcong: '0',
         dadong: formatCurrency(payVal),
         conno: formatCurrency(newConno),
         hinhthuc: paymentMethod,
         ghichu: paymentNote,
         daxoa: null,
-        sobuoihoc: oldSoBuoiHoc,
+        thoiluong: oldThoiLuong,
         malop: malop
       };
 
@@ -128,6 +154,34 @@ export default function DebtManager() {
 
       setPaymentSuccess('Trả nợ thành công! Đã cập nhật hóa đơn.');
       setDebtList(prev => prev.filter(d => d.mahd !== selectedDebt.mahd));
+
+      // Trigger auto download
+      const targetStudent = students.find(s => s.mahv === selectedDebt.mahv) || {};
+        setDownloadingInvoice({
+        loai: selectedDebt.loai,
+        mahd: newMaHD,
+        ngaylap: localNow,
+        tenhv: selectedDebt.tenhv,
+        sdt: targetStudent.sdt || '',
+        tenlop: selectedDebt.tenlop || '',
+        hocphi: '0',
+        giamhocphi: '0',
+        tongcong: formatCurrency(payVal + newConno),
+        dadong: formatCurrency(payVal),
+        conno: formatCurrency(newConno),
+        hinhthuc: paymentMethod,
+        ghichu: paymentNote,
+        nhanvien: cashier,
+        thoiluong: oldThoiLuong,
+        nocu: formatCurrency(oldDebtVal),
+        monthlyMealFee: 0,
+        phuthu: [],
+        deductionSum: 0,
+        // For POS Bill template if needed
+        mabill: newMaHD,
+        cart: parseCsvCart(selectedDebt.hanghoa),
+        tongcong_num: payVal + newConno
+      });
 
       setTimeout(() => {
         setShowPaymentModal(false);
@@ -142,6 +196,55 @@ export default function DebtManager() {
   };
 
   useEffect(() => {
+    if (downloadingInvoice) {
+      const processPng = async () => {
+        try {
+          await new Promise(r => setTimeout(r, 1200));
+          const nodeId = downloadingInvoice.loai === 'Hóa Đơn' ? 'download-invoice-node' : 'pos-print-temp';
+          const node = document.getElementById(nodeId);
+          if (node) {
+            node.style.position = 'fixed';
+            node.style.top = '0';
+            node.style.left = '0';
+            node.style.zIndex = '9999';
+            node.style.opacity = '1';
+            node.style.visibility = 'visible';
+
+            const images = node.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+              if (img.complete) return Promise.resolve();
+              return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
+            }));
+            await new Promise(r => setTimeout(r, 600));
+
+            const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+
+            node.style.position = 'static';
+            node.style.opacity = '0.01';
+
+            if (window.innerWidth <= 991) {
+              setPreviewImg(dataUrl);
+            } else {
+              const link = document.createElement('a');
+              const fileNamePrefix = downloadingInvoice.loai === 'Hóa Đơn' ? 'BienLai_TraNo' : 'Bill_TraNo';
+              link.download = `${fileNamePrefix}_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
+              link.href = dataUrl;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }
+        } catch (err) {
+          console.error('Lỗi xuất PNG:', err);
+        } finally {
+          setDownloadingInvoice(null);
+        }
+      };
+      processPng();
+    }
+  }, [downloadingInvoice]);
+
+  useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -149,11 +252,12 @@ export default function DebtManager() {
         const cMap = classData || [];
         setClasses(cMap);
 
-        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, trangthai, malop');
-        const students = (stdRaw || []).map(s => ({
+        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, sdt, trangthai, malop');
+        const studentsList = (stdRaw || []).map(s => ({
           ...s,
           malop_list: s.malop ? [s.malop] : []
         }));
+        setStudents(studentsList);
 
         // Fetch Hợp Đồng (HD)
         const { data: hdData } = await supabase.from('tbl_hd')
@@ -162,7 +266,7 @@ export default function DebtManager() {
         // Fetch Bill Hàng Hóa (Cho dù bảng chưa tạo cũng sẽ không crash hệ thống)
         let billData = [];
         const { data: bData, error } = await supabase.from('tbl_billhanghoa')
-          .select('mabill, mahv, conno, daxoa');
+          .select('mabill, mahv, conno, daxoa, hanghoa, noidung');
         if (!error && bData) billData = bData;
 
         // Remove 'Đã Xóa' as requested
@@ -173,7 +277,7 @@ export default function DebtManager() {
         const mergedTemp = [];
         validHd.forEach(hd => {
           if (hd.conno && hd.conno !== '0' && hd.conno !== 0) {
-            const std = students.find(s => s.mahv === hd.mahv) || {};
+            const std = studentsList.find(s => s.mahv === hd.mahv) || {};
             mergedTemp.push({
               mahv: hd.mahv,
               tenhv: std.tenhv || 'Không rõ',
@@ -187,7 +291,7 @@ export default function DebtManager() {
 
         validBill.forEach(bill => {
           if (bill.conno && bill.conno !== '0' && bill.conno !== 0) {
-            const std = students.find(s => s.mahv === bill.mahv) || {};
+            const std = studentsList.find(s => s.mahv === bill.mahv) || {};
             const firstMalop = std.malop_list && std.malop_list.length > 0 ? std.malop_list[0] : null;
             const stClass = cMap.find(c => c.malop === firstMalop);
             mergedTemp.push({
@@ -196,7 +300,9 @@ export default function DebtManager() {
               conno: bill.conno,
               tenlop: stClass ? stClass.tenlop : '',
               loai: 'Bill Hàng',
-              mahd: bill.mabill
+              mahd: bill.mabill,
+              hanghoa: bill.hanghoa,
+              noidung: bill.noidung
             });
           }
         });
@@ -206,7 +312,7 @@ export default function DebtManager() {
         // BẢNG 2: Danh Sách Quá Hạn Đóng Tiền
         const overdueTemp = [];
         // Lọc các học sinh không phải 'Đã Nghỉ'
-        const activeStudents = students.filter(s => (s.trangthai || '') !== 'Đã Nghỉ');
+        const activeStudents = studentsList.filter(s => (s.trangthai || '') !== 'Đã Nghỉ');
 
         const today = new Date();
         const localNow = new Date(today - today.getTimezoneOffset() * 60000);
@@ -560,6 +666,176 @@ export default function DebtManager() {
         </div>,
         document.body
       )}
+
+      {/* SUCCESS MODAL / PREVIEW FOR MOBILE */}
+      {previewImg && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '10px', maxWidth: '100%', maxHeight: '80vh', overflow: 'auto', marginBottom: '15px' }}>
+            <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', height: 'auto', display: 'block' }} />
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+               onClick={() => setPreviewImg(null)}
+               style={{ padding: '12px 24px', borderRadius: '8px', background: '#fff', color: '#333', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+            >
+               Đóng
+            </button>
+            <a
+               href={previewImg}
+               download={`BienLai_${selectedDebt?.tenhv}.png`}
+               style={{ padding: '12px 24px', borderRadius: '8px', background: '#3b82f6', color: '#fff', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}
+            >
+               Tải xuống
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT (Same as InvoiceManager) */}
+      <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+        <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ width: '180px', textAlign: 'left' }}>
+                {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                {!config?.logo && <div style={{ height: 20 }}></div>}
+              </div>
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                  {config?.tencongty || 'Tên Công Ty'}
+                </h2>
+                <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+              </div>
+              <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
+              </div>
+            </div>
+            <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+              BIÊN LAI THU HỌC PHÍ (THANH TOÁN NỢ)
+            </div>
+            <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
+                <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
+              </div>
+              <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
+              <div>
+                Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
+              </div>
+              <div style={{ marginTop: '5px' }}>
+                Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
+              </div>
+              <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div>Số tiền trả nợ: <b style={{ fontSize: '16pt', color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: '10px' }}>
+                <div>Dư nợ trước trả: <b>{downloadingInvoice?.nocu} đ</b></div>
+                <div>Còn nợ sau trả: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
+              </div>
+              <div style={{ marginTop: '10px' }}>
+                Ghi chú: {downloadingInvoice?.ghichu || ""}
+              </div>
+            </div>
+            <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+              <div>
+                Facebook: {config?.tencongty} <br />
+                SĐT/Zalo: {config?.sdtcongty}
+              </div>
+              <div style={{ textAlign: "center" }}>
+                Nhân viên thu tiền <br /><br /><br />
+                <b>{downloadingInvoice?.nhanvien}</b>
+              </div>
+            </div>
+            <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+              Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* HIDDEN TEMPLATE FOR BILL HANG HOA PNG EXPORT (Same as SalesPOS) */}
+      <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+        <div id="pos-print-temp" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>{config?.tencongty || 'Tên Công Ty'}</h3>
+                <p style={{ margin: '4px 0' }}>ĐC: {config?.diachicongty}</p>
+                <p style={{ margin: '4px 0' }}>SĐT: {config?.sdtcongty}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div>Mã Bill: <b>{downloadingInvoice?.mahd || '...'}</b></div>
+                <div>Ngày lập: {downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString('vi-VN') : '...'}</div>
+                {config?.logo && <img src={config.logo} alt="logo" crossOrigin="anonymous" style={{ width: 80, marginTop: 5 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                {!config?.logo && <div style={{ height: 20 }}></div>}
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "18pt", margin: "10px 0" }}>
+              BIÊN LAI BÁN HÀNG (THANH TOÁN NỢ)
+            </div>
+
+            <div style={{ fontSize: "13pt", lineHeight: "1.8", marginBottom: '15px' }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div>Họ và tên: <b>{downloadingInvoice?.tenhv || 'Khách vãng lai'}</b></div>
+                <div>SĐT: <b>{downloadingInvoice?.sdt || "_"}</b></div>
+              </div>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid black', background: '#f8fafc' }}>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Tên Hàng</th>
+                  <th style={{ padding: '10px', textAlign: 'center' }}>Số Lượng</th>
+                  <th style={{ padding: '10px', textAlign: 'right' }}>Đơn giá</th>
+                  <th style={{ padding: '10px', textAlign: 'right' }}>Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                {downloadingInvoice?.cart?.map((c, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px' }}>{c.tenhang}</td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>{c.qty}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{c.giaban}</td>
+                    <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold' }}>{c.thanhtien}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ marginTop: '15px', padding: '12px 0', borderTop: '2.5px solid #333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12pt" }}>
+                <div>Nợ trước trả: <b>{downloadingInvoice?.nocu} đ</b></div>
+                <div>Tổng bill: <b style={{ fontSize: '14pt' }}>{downloadingInvoice?.tongcong} đ</b></div>
+                <div style={{ color: '#0ea5e9', fontWeight: 'bold' }}>Hình thức: {downloadingInvoice?.hinhthuc}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5pt", paddingTop: '8px', borderTop: '1px dashed #ddd', fontWeight: 'bold' }}>
+                <div style={{ color: '#16a34a' }}>Đã trả: {downloadingInvoice?.dadong} đ</div>
+                <div style={{ color: (parseInt(String(downloadingInvoice?.conno).replace(/\D/g, '')) > 0 ? '#ef4444' : '#16a34a') }}>
+                  Nợ còn lại: {downloadingInvoice?.conno} đ
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+              <div>
+                Facebook: {config?.tencongty} <br />
+                SĐT/Zalo: {config?.sdtcongty}
+              </div>
+              <div style={{ textAlign: "center" }}>
+                Nhân viên thu tiền <br /><br /><br />
+                <b>{downloadingInvoice?.nhanvien}</b>
+              </div>
+            </div>
+
+            <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+              Cảm ơn quý khách đã tin dùng dịch vụ của chúng tôi!
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
