@@ -101,6 +101,40 @@ const calculateThoiluong = (ngayBatDau, soLuong, loaiDong) => {
   return `${String(start.getUTCMonth() + 1).padStart(2, '0')}/${start.getUTCFullYear()}`;
 };
 
+const calculateConsecutiveLeave = (attendance) => {
+  if (!attendance || attendance.length === 0) return [];
+  const excusedLeaveDays = attendance
+    .filter(att => (att.trangthai || '').trim().toLowerCase() === 'nghỉ phép')
+    .map(att => {
+      const d = new Date(att.ngay);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    })
+    .sort((a, b) => a - b);
+  if (excusedLeaveDays.length === 0) return [];
+  const groups = [];
+  let currentGroup = [excusedLeaveDays[0]];
+  for (let i = 1; i < excusedLeaveDays.length; i++) {
+    const prev = new Date(excusedLeaveDays[i - 1]);
+    const curr = new Date(excusedLeaveDays[i]);
+    const diffInDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+    let isConsecutive = false;
+    if (diffInDays === 1) isConsecutive = true;
+    else if (diffInDays === 2) {
+      const middleDay = new Date(prev);
+      middleDay.setDate(prev.getDate() + 1);
+      if (middleDay.getDay() === 0) isConsecutive = true;
+    }
+    if (isConsecutive) currentGroup.push(curr);
+    else {
+      groups.push([...currentGroup]);
+      currentGroup = [curr];
+    }
+  }
+  groups.push(currentGroup);
+  return groups;
+};
+
 export default function ClassManager({ students, showMessage, fetchStudents }) {
   const { config } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
@@ -405,7 +439,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       setBatchNoticeData({
         loaiDong: initLoaiDong,
-        soLuong: initSoLuong,
+        soLuong: initLoaiDong === 'Buổi' ? initSoLuong : 1,
         hocPhiOpt: initHocPhiOpt,
         hinhThuc: walletsConfig[0]?.name || 'Tiền mặt',
         ngayBatDau: startStr,
@@ -439,9 +473,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         }
         const nghiPhep = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ phép').length;
         const nghiKP = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ không phép').length;
+        const consecutiveGroups = calculateConsecutiveLeave(studentAttendance);
+        const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
         const soNgayNghi = nghiPhep + nghiKP;
-        const mealRefund = soNgayNghi * trutienan_val;
-        const tuitionRefund = soNgayNghi * trutiennghi_val;
+        const mealRefund = nghiPhep * trutienan_val;
+
+        // Tuition refund logic
+        const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
+        const threshold = thresholdCfg.songaynghilientiep || 7;
+        let tuitionRefund = 0;
+        if (maxConsecutive >= threshold) {
+           tuitionRefund = maxConsecutive * trutiennghi_val;
+        }
 
         return {
           mahv: s.mahv,
@@ -451,6 +494,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           giamhocphi: 0,
           nghiPhep,
           nghiKP,
+          maxConsecutive,
           soNgayNghi,
           truTienAn: mealRefund,
           truTienNghi: tuitionRefund,
@@ -533,7 +577,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     setBatchStudentsData(prev => (prev || []).map(item => {
       let sobuoi = `${batchNoticeData.soLuong} ${batchNoticeData.loaiDong.toLowerCase()}`;
-      const tc = Math.max(0, hpNumber - (parseInt(batchNoticeData.giamHocphi) || 0));
+      const tc = Math.max(0, hpNumber - (parseInt(batchNoticeData.giamHocphi) || 0) - item.truTienAn - item.truTienNghi);
 
       let finalKetThuc = '';
       const activeDays = parseScheduleDays(item.thoigianbieu);
@@ -571,26 +615,32 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truTienNghi', 'soNgayNghi'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truTienNghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         let newItem = { ...item, [field]: cleanVal };
 
         // Auto recalculate refunds if leave days change
-        if (field === 'soNgayNghi') {
+        if (field === 'nghiPhep' || field === 'maxConsecutive') {
           const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
           const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-          newItem.truTienAn = newItem.soNgayNghi * trutienan_val;
-          newItem.truTienNghi = newItem.soNgayNghi * trutiennghi_val;
+          newItem.truTienAn = newItem.nghiPhep * trutienan_val;
+          
+          const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
+          const threshold = thresholdCfg.songaynghilientiep || 7;
+          if (newItem.maxConsecutive >= threshold) {
+             newItem.truTienNghi = newItem.maxConsecutive * trutiennghi_val;
+          } else {
+             newItem.truTienNghi = 0;
+          }
         }
 
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truTienNghi', 'soNgayNghi'].includes(field)) {
-          const hp = parseInt(newItem.hocphi || 0);
-          const ghp = parseInt(newItem.giamhocphi || 0);
-          const tta = parseInt(newItem.truTienAn || 0);
-          const tth = parseInt(newItem.truTienNghi || 0);
-          newItem.tongcong = Math.max(0, hp - ghp - tta - tth);
-        }
+        const hp = parseInt(newItem.hocphi || 0);
+        const ghp = parseInt(newItem.giamhocphi || 0);
+        const tta = parseInt(newItem.truTienAn || 0);
+        const tth = parseInt(newItem.truTienNghi || 0);
+        newItem.tongcong = Math.max(0, hp - ghp - tta - tth);
+        
         return newItem;
       }
       return item;
@@ -1502,9 +1552,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '130px', minWidth: '130px' }}>Thời lượng</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Học phí</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
-                          <th style={{ width: '80px', minWidth: '80px' }}>Nghỉ</th>
+                          <th style={{ width: '80px', minWidth: '80px' }}>Nghỉ Phép</th>
+                          <th style={{ width: '80px', minWidth: '80px' }}>Liên Tiếp</th>
+                          <th style={{ width: '80px', minWidth: '80px' }}>Không Phép</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Trừ Tiền Ăn</th>
-                          <th style={{ width: '130px', minWidth: '130px' }}>Trừ Tiền Nghỉ</th>
+                          <th style={{ width: '130px', minWidth: '130px' }}>Hoàn Học Phí</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>TỔNG THU</th>
                           <th style={{ width: '130px' }}>Hình thức</th>
                           <th style={{ minWidth: '150px' }}>Ghi chú</th>
@@ -1544,7 +1596,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             </td>
 
                             <td>
-                              <input type="text" value={row.soNgayNghi} onChange={e => handleBatchStudentChange(row.mahv, 'soNgayNghi', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center' }} />
+                              <input type="text" value={row.nghiPhep} onChange={e => handleBatchStudentChange(row.mahv, 'nghiPhep', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center' }} />
+                            </td>
+                            <td>
+                              <input type="text" value={row.maxConsecutive} onChange={e => handleBatchStudentChange(row.mahv, 'maxConsecutive', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center' }} />
+                            </td>
+                            <td>
+                              <input type="text" value={row.nghiKP} onChange={e => handleBatchStudentChange(row.mahv, 'nghiKP', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center' }} />
                             </td>
                             <td>
                               <input type="text" value={formatTuition(row.truTienAn)} onChange={e => handleBatchStudentChange(row.mahv, 'truTienAn', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
@@ -1641,8 +1699,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                 {/* FEES */}
                 <div style={{ display: "flex", justifyContent: "space-between", borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                  <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi}</b></div>
-                  <div>Giảm HP: <b style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi}</b></div>
                   <div>Nợ cũ: <b style={{ fontWeight: 800 }}>0 đ</b></div>
                 </div>
 
