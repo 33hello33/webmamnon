@@ -238,7 +238,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const enriched = {
          ...record,
          tenhv: hv.tenhv,
-         sdt: hv.sdt
+         sdt: hv.sdt,
+         nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_'
       };
       setPrintHoaDon(enriched);
 
@@ -252,7 +253,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const enriched = {
          ...record,
          tenhv: hv.tenhv,
-         sdt: hv.sdt
+         sdt: hv.sdt,
+         nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_'
       };
       setPrintBill(enriched);
 
@@ -1006,28 +1008,28 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               return (
                                  <tr key={r.maphieuchi} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
                                     <td className="fm-code font-semibold text-primary" style={deleted ? { color: '#64748b' } : {}}>{r.maphieuchi}</td>
-                                 <td><span className={`fm-badge ${r.loaiphieu === 'Thu' ? 'bg-success' : 'bg-warning'}`}>{r.loaiphieu || 'Chi'}</span></td>
-                                 <td>{formatDate(r.ngaylap)}</td>
-                                 <td>{nvMap[r.manv] || r.manv || '_'}</td>
-                                 <td className="font-medium">{r.hangmucchi}</td>
-                                 <td className="fm-desc">{r.mota}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td className="text-right font-bold" style={{ color: r.loaiphieu === 'Thu' ? '#16a34a' : '#dc2626' }}>
-                                    {r.loaiphieu === 'Thu' ? '+' : '-'}{fCur(r.chiphi)}
-                                 </td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!deleted && (
-                                       <>
-                                          <button title="In chứng từ" className="btn-blue" onClick={() => handlePrint(r)}><Printer size={16} /></button>
-                                          <button title="Huỷ chứng từ" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /></button>
-                                       </>
-                                    )}
-                                    {deleted && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Đã Xóa</span>}
-                                 </td>
-                              </tr>
-                           );
-                        })}
-                     </tbody>
+                                    <td><span className={`fm-badge ${r.loaiphieu === 'Thu' ? 'bg-success' : 'bg-warning'}`}>{r.loaiphieu || 'Chi'}</span></td>
+                                    <td>{formatDate(r.ngaylap)}</td>
+                                    <td>{nvMap[r.manv] || r.manv || '_'}</td>
+                                    <td className="font-medium">{r.hangmucchi}</td>
+                                    <td className="fm-desc">{r.mota}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td className="text-right font-bold" style={{ color: r.loaiphieu === 'Thu' ? '#16a34a' : '#dc2626' }}>
+                                       {r.loaiphieu === 'Thu' ? '+' : '-'}{fCur(r.chiphi)}
+                                    </td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted && (
+                                          <>
+                                             <button title="In chứng từ" className="btn-blue" onClick={() => handlePrint(r)}><Printer size={16} /></button>
+                                             <button title="Huỷ chứng từ" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /></button>
+                                          </>
+                                       )}
+                                       {deleted && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Đã Xóa</span>}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
                      </table>
                   </div>
 
@@ -1039,32 +1041,32 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <div key={r.maphieuchi} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : {}}>
                               <div className="fm-card-header">
                                  <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.maphieuchi}</span>
-                              <span className={`fm-badge ${r.loaiphieu === 'Thu' ? 'bg-success' : 'bg-warning'}`}>{r.loaiphieu || 'Chi'}</span>
-                           </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Ngày:</span> <span>{formatDate(r.ngaylap)}</span></div>
-                              <div className="fm-card-row"><span>Hạng mục:</span> <span className="font-medium">{r.hangmucchi}</span></div>
-                              <div className="fm-card-row"><span>Người lập:</span> <span>{nvMap[r.manv] || r.manv}</span></div>
-                              <div className="fm-card-row price-row">
-                                 <span>Giá trị:</span>
-                                 <strong className={r.loaiphieu === 'Thu' ? 'text-success' : 'text-danger'}>
-                                    {r.loaiphieu === 'Thu' ? '+' : '-'}{fCur(r.chiphi)}
-                                 </strong>
+                                 <span className={`fm-badge ${r.loaiphieu === 'Thu' ? 'bg-success' : 'bg-warning'}`}>{r.loaiphieu || 'Chi'}</span>
                               </div>
-                              <div className="fm-card-actions">
-                                 {!deleted ? (
-                                    <>
-                                       <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrint(r)}><Printer size={16} /> In</button>
-                                       <button className="btn-danger-sm" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /> Xóa</button>
-                                    </>
-                                 ) : (
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
-                                 )}
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Ngày:</span> <span>{formatDate(r.ngaylap)}</span></div>
+                                 <div className="fm-card-row"><span>Hạng mục:</span> <span className="font-medium">{r.hangmucchi}</span></div>
+                                 <div className="fm-card-row"><span>Người lập:</span> <span>{nvMap[r.manv] || r.manv}</span></div>
+                                 <div className="fm-card-row price-row">
+                                    <span>Giá trị:</span>
+                                    <strong className={r.loaiphieu === 'Thu' ? 'text-success' : 'text-danger'}>
+                                       {r.loaiphieu === 'Thu' ? '+' : '-'}{fCur(r.chiphi)}
+                                    </strong>
+                                 </div>
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <>
+                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrint(r)}><Printer size={16} /> In</button>
+                                          <button className="btn-danger-sm" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /> Xóa</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
                               </div>
                            </div>
-                        </div>
-                     );
-                  })}
+                        );
+                     })}
                   </div>
                </>
             );
@@ -1082,8 +1084,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th>Tên lớp</th>
                               <th>Người lập</th>
                               <th>Thời lượng</th>
-                              <th>Ngày bắt đầu</th>
-                              <th>Ngày kết thúc</th>
                               <th>Hình thức</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
                               <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Thu <SortIcon columnKey="dadong" /></th>
@@ -1097,32 +1097,30 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               return (
                                  <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
                                     <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
-                                 <td>{formatDate(r.ngaylap)}</td>
-                                 <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
-                                 <td>{r.tenlop}</td>
-                                 <td>{r.nhanvien}</td>
-                                 <td>{r.sobuoihoc ? `${r.sobuoihoc} buổi` : '_'}</td>
-                                 <td>{r.ngaybatdau}</td>
-                                 <td>{r.ngayketthuc}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td className="text-right">{fCur(r.tongcong)}</td>
-                                 <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
-                                 <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!deleted ? (
-                                       <>
-                                          <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
-                                          <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
-                                          <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
-                                       </>
-                                    ) : (
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
-                                    )}
-                                 </td>
-                              </tr>
-                           );
-                        })}
-                     </tbody>
+                                    <td>{formatDate(r.ngaylap)}</td>
+                                    <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                    <td>{r.tenlop}</td>
+                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                    <td>{r.thoiluong ? `${r.thoiluong}` : '_'}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td className="text-right">{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
+                                    <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted ? (
+                                          <>
+                                             <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
+                                             <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
+                                             <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
+                                          </>
+                                       ) : (
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
                      </table>
                   </div>
 
@@ -1134,43 +1132,44 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
                               <div className="fm-card-header">
                                  <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
-                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
-                           </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
-                              <div className="fm-card-row"><span>Kết thúc:</span> <span>{r.ngayketthuc || '_'}</span></div>
-                              <div className="fm-card-row">
-                                 <span>Tổng cộng:</span>
-                                 <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                               </div>
-                              {pCur(r.giamhocphi) > 0 && (
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                                 <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                                 <div className="fm-card-row"><span>Kết thúc:</span> <span>{r.ngayketthuc || '_'}</span></div>
                                  <div className="fm-card-row">
-                                    <span>Giảm trừ:</span>
-                                    <strong className="text-orange-500">-{fCur(r.giamhocphi)} ₫</strong>
+                                    <span>Tổng cộng:</span>
+                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
                                  </div>
-                              )}
-                              <div className="fm-card-row price-row">
-                                 <span>Đã nộp:</span>
-                                 <strong className="text-success">{fCur(r.dadong)} ₫</strong>
-                              </div>
-                              {pCur(r.conno) > 0 && (
-                                 <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
-                              )}
-                              <div className="fm-card-actions">
-                                 {!deleted ? (
-                                    <>
-                                       <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
-                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
-                                       <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
-                                    </>
-                                 ) : (
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 {pCur(r.giamhocphi) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Giảm trừ:</span>
+                                       <strong className="text-orange-500">-{fCur(r.giamhocphi)} ₫</strong>
+                                    </div>
                                  )}
+                                 <div className="fm-card-row price-row">
+                                    <span>Đã nộp:</span>
+                                    <strong className="text-success">{fCur(r.dadong)} ₫</strong>
+                                 </div>
+                                 {pCur(r.conno) > 0 && (
+                                    <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
+                                 )}
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <>
+                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
+                                          <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
                               </div>
                            </div>
-                        </div>
-                     );
-                  })}
+                        );
+                     })}
                   </div>
                </>
             );
@@ -1199,25 +1198,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               return (
                                  <tr key={r.manhapkho} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
                                     <td className="fm-code font-semibold text-warning" style={deleted ? { color: '#64748b' } : {}}>{r.manhapkho}</td>
-                                 <td>{formatDate(r.ngaynhap)}</td>
-                                 <td className="font-semibold text-primary">{hhMap[r.mahang] || r.mahang}</td>
-                                 <td>{r.nhacungcap || '_'}</td>
-                                 <td>{nvMap[r.manv] || r.manv}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td className="text-center font-bold">+{r.soluong}</td>
-                                 <td className="text-right">{fCur(r.gianhap)}</td>
-                                 <td className="text-right font-bold text-danger">-{fCur(r.thanhtien)}</td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!deleted ? (
-                                       <button title="Hủy biên lai nhập" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /></button>
-                                    ) : (
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
-                                    )}
-                                 </td>
-                              </tr>
-                           );
-                        })}
-                     </tbody>
+                                    <td>{formatDate(r.ngaynhap)}</td>
+                                    <td className="font-semibold text-primary">{hhMap[r.mahang] || r.mahang}</td>
+                                    <td>{r.nhacungcap || '_'}</td>
+                                    <td>{nvMap[r.manv] || r.manv}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td className="text-center font-bold">+{r.soluong}</td>
+                                    <td className="text-right">{fCur(r.gianhap)}</td>
+                                    <td className="text-right font-bold text-danger">-{fCur(r.thanhtien)}</td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted ? (
+                                          <button title="Hủy biên lai nhập" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /></button>
+                                       ) : (
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
                      </table>
                   </div>
 
@@ -1229,26 +1228,26 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <div key={r.manhapkho} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : {}}>
                               <div className="fm-card-header">
                                  <span className="fm-card-code" style={deleted ? { color: '#64748b' } : { color: '#f59e0b' }}>{r.manhapkho}</span>
-                              <span className="text-muted">{formatDateRaw(r.ngaynhap)}</span>
-                           </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Sản phẩm:</span> <strong className="text-primary">{hhMap[r.mahang] || r.mahang}</strong></div>
-                              <div className="fm-card-row"><span>Số lượng:</span> <strong className="text-success">+{r.soluong}</strong></div>
-                              <div className="fm-card-row price-row">
-                                 <span>Tổng tiền nhập:</span>
-                                 <strong className="text-danger">-{fCur(r.thanhtien)} ₫</strong>
+                                 <span className="text-muted">{formatDateRaw(r.ngaynhap)}</span>
                               </div>
-                              <div className="fm-card-actions">
-                                 {!deleted ? (
-                                    <button className="btn-danger-sm" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /> Hủy nhập</button>
-                                 ) : (
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
-                                 )}
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Sản phẩm:</span> <strong className="text-primary">{hhMap[r.mahang] || r.mahang}</strong></div>
+                                 <div className="fm-card-row"><span>Số lượng:</span> <strong className="text-success">+{r.soluong}</strong></div>
+                                 <div className="fm-card-row price-row">
+                                    <span>Tổng tiền nhập:</span>
+                                    <strong className="text-danger">-{fCur(r.thanhtien)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <button className="btn-danger-sm" onClick={() => handleDelete('manhapkho', r.manhapkho, 'tbl_nhapkho')}><Trash2 size={16} /> Hủy nhập</button>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
                               </div>
                            </div>
-                        </div>
-                     );
-                  })}
+                        );
+                     })}
                   </div>
                </>
             );
@@ -1278,31 +1277,31 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               return (
                                  <tr key={r.mabill} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
                                     <td className="fm-code font-semibold text-success" style={deleted ? { color: '#64748b' } : {}}>{r.mabill}</td>
-                                 <td>{formatDate(r.ngaylap)}</td>
-                                 <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
-                                 <td className="fm-desc" style={{ maxWidth: '220px' }}>
-                                    {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\\r\\n|\\n|\\r/).filter(Boolean).length - 1} Loại SP (Bấm in để xem)` : r.hanghoa}
-                                 </td>
-                                 <td>{fCur(r.chietkhau)}</td>
-                                 <td className="text-right font-bold text-success">+{fCur(r.tongcong)}</td>
-                                 <td className="text-right font-bold text-primary">{fCur(r.loinhuan)}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td>{r.nhanvien}</td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!deleted ? (
-                                       <>
-                                          <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
-                                          <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
-                                          <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
-                                       </>
-                                    ) : (
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
-                                    )}
-                                 </td>
-                              </tr>
-                           );
-                        })}
-                     </tbody>
+                                    <td>{formatDate(r.ngaylap)}</td>
+                                    <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
+                                    <td className="fm-desc" style={{ maxWidth: '220px' }}>
+                                       {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\\r\\n|\\n|\\r/).filter(Boolean).length - 1} Loại SP (Bấm in để xem)` : r.hanghoa}
+                                    </td>
+                                    <td>{fCur(r.chietkhau)}</td>
+                                    <td className="text-right font-bold text-success">+{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold text-primary">{fCur(r.loinhuan)}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted ? (
+                                          <>
+                                             <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
+                                             <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
+                                             <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
+                                          </>
+                                       ) : (
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
                      </table>
                   </div>
 
@@ -1314,41 +1313,42 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <div key={r.mabill} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
                               <div className="fm-card-header">
                                  <span className="fm-card-code" style={deleted ? { color: '#64748b' } : { color: '#10b981' }}>{r.mabill}</span>
-                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                              </div>
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Khách hàng:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</strong></div>
+                                 <div className="fm-card-row"><span>Người bán:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                                 <div className="fm-card-row">
+                                    <span>Hàng hóa:</span>
+                                    <span className="text-slate-600">
+                                       {(function () {
+                                          if (!r.hanghoa) return '0 loại SP';
+                                          if (!r.hanghoa.includes('Tên Hàng')) return r.hanghoa;
+                                          // Split by real newline and carriage return
+                                          const rows = r.hanghoa.split(/\r?\n/).filter(line => line.trim() !== "");
+                                          return `${rows.length > 0 ? rows.length - 1 : 0} loại SP`;
+                                       })()}
+                                    </span>
+                                 </div>
+                                 <div className="fm-card-row price-row">
+                                    <span>Tổng thu:</span>
+                                    <strong className="text-success">+{fCur(r.tongcong)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <>
+                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
+                                          <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
+                              </div>
                            </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Khách hàng:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</strong></div>
-                              <div className="fm-card-row">
-                                 <span>Hàng hóa:</span>
-                                 <span className="text-slate-600">
-                                    {(function () {
-                                       if (!r.hanghoa) return '0 loại SP';
-                                       if (!r.hanghoa.includes('Tên Hàng')) return r.hanghoa;
-                                       // Split by real newline and carriage return
-                                       const rows = r.hanghoa.split(/\r?\n/).filter(line => line.trim() !== "");
-                                       return `${rows.length > 0 ? rows.length - 1 : 0} loại SP`;
-                                    })()}
-                                 </span>
-                              </div>
-                              <div className="fm-card-row price-row">
-                                 <span>Tổng thu:</span>
-                                 <strong className="text-success">+{fCur(r.tongcong)} ₫</strong>
-                              </div>
-                              <div className="fm-card-actions">
-                                 {!deleted ? (
-                                    <>
-                                       <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
-                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
-                                       <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
-                                    </>
-                                 ) : (
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
-                                 )}
-                              </div>
-                           </div>
-                        </div>
-                     );
-                  })}
+                        );
+                     })}
                   </div>
                </>
             );
@@ -1962,6 +1962,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
                         <div>Nợ cũ: <b>{fCur(printHoaDon.nocu || 0)} đ</b></div>
                      </div>
+
+                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
+                           {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
+                           {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
+                        </div>
+                     )}
 
                      {printHoaDon.phuthu && (() => {
                         try {
