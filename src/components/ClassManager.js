@@ -101,6 +101,21 @@ const calculateThoiluong = (ngayBatDau, soLuong, loaiDong) => {
   return `${String(start.getUTCMonth() + 1).padStart(2, '0')}/${start.getUTCFullYear()}`;
 };
 
+const calculateWorkingDaysInMonth = (dateStr) => {
+  if (!dateStr) return 0;
+  const d = new Date(dateStr);
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  let workingDays = 0;
+  for (let i = 1; i <= lastDay; i++) {
+    const checkDate = new Date(year, month, i);
+    const day = checkDate.getDay();
+    if (day !== 0 && day !== 6) workingDays++;
+  }
+  return workingDays;
+};
+
 const calculateConsecutiveLeave = (attendance) => {
   if (!attendance || attendance.length === 0) return [];
   const excusedLeaveDays = attendance
@@ -477,13 +492,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
         const soNgayNghi = nghiPhep + nghiKP;
         const mealRefund = nghiPhep * trutienan_val;
+        const workingDays = calculateWorkingDaysInMonth(startStr);
+        const monthlyMealFee = workingDays * trutienan_val;
 
         // Tuition refund logic
         const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
         const threshold = thresholdCfg.songaynghilientiep || 7;
         let tuitionRefund = 0;
         if (maxConsecutive >= threshold) {
-           tuitionRefund = maxConsecutive * trutiennghi_val;
+          tuitionRefund = maxConsecutive * trutiennghi_val;
         }
 
         return {
@@ -491,14 +508,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           tenhv: s.tenhv,
           sobuoihoc: `${initSoLuong} ${initLoaiDong.toLowerCase()}`,
           hocphi: initHocPhi,
+          tienan: monthlyMealFee,
           giamhocphi: 0,
           nghiPhep,
           nghiKP,
           maxConsecutive,
           soNgayNghi,
-          truTienAn: mealRefund,
-          truTienNghi: tuitionRefund,
-          tongcong: Math.max(0, initHocPhi - mealRefund - tuitionRefund),
+          trutienan: mealRefund,
+          trutiennghi: tuitionRefund,
+          tongcong: Math.max(0, initHocPhi + monthlyMealFee - mealRefund - tuitionRefund),
           ngaybatdau: startStr,
           ngayketthuc: finalKetThuc,
           hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
@@ -577,7 +595,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     setBatchStudentsData(prev => (prev || []).map(item => {
       let sobuoi = `${batchNoticeData.soLuong} ${batchNoticeData.loaiDong.toLowerCase()}`;
-      const tc = Math.max(0, hpNumber - (parseInt(batchNoticeData.giamHocphi) || 0) - item.truTienAn - item.truTienNghi);
+      const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
+      const monthlyMealFee = workingDays * trutienan_val;
+      const tc = Math.max(0, hpNumber + monthlyMealFee - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
 
       let finalKetThuc = '';
       const activeDays = parseScheduleDays(item.thoigianbieu);
@@ -600,6 +621,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       return {
         ...item,
         hocphi: hpNumber,
+        tienan: monthlyMealFee,
         giamhocphi: batchNoticeData.giamHocphi || 0,
         hinhthuc: batchNoticeData.hinhThuc,
         ngaybatdau: batchNoticeData.ngayBatDau,
@@ -615,7 +637,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truTienNghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive'].includes(field)) {
+        if (['hocphi', 'tienan', 'giamhocphi', 'trutienan', 'trutiennghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         let newItem = { ...item, [field]: cleanVal };
@@ -624,23 +646,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (field === 'nghiPhep' || field === 'maxConsecutive') {
           const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
           const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-          newItem.truTienAn = newItem.nghiPhep * trutienan_val;
-          
+          newItem.trutienan = newItem.nghiPhep * trutienan_val;
+
           const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
           const threshold = thresholdCfg.songaynghilientiep || 7;
           if (newItem.maxConsecutive >= threshold) {
-             newItem.truTienNghi = newItem.maxConsecutive * trutiennghi_val;
+            newItem.trutiennghi = newItem.maxConsecutive * trutiennghi_val;
           } else {
-             newItem.truTienNghi = 0;
+            newItem.trutiennghi = 0;
           }
         }
 
         const hp = parseInt(newItem.hocphi || 0);
+        const ta = parseInt(newItem.tienan || 0);
         const ghp = parseInt(newItem.giamhocphi || 0);
-        const tta = parseInt(newItem.truTienAn || 0);
-        const tth = parseInt(newItem.truTienNghi || 0);
-        newItem.tongcong = Math.max(0, hp - ghp - tta - tth);
-        
+        const tta = parseInt(newItem.trutienan || 0);
+        const tth = parseInt(newItem.trutiennghi || 0);
+        newItem.tongcong = Math.max(0, hp + ta - ghp - tta - tth);
+
         return newItem;
       }
       return item;
@@ -679,12 +702,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           ngaylap: localNow,
           mahv: row.mahv,
           tenlop: selectedClass?.tenlop || '',
-          ngaybatdau: row.ngaybatdau || null,
-          ngayketthuc: row.ngayketthuc || null,
           manv: 'Hệ thống',
+          hocphi: formatTuition(row.hocphi),
+          tienan: formatTuition(row.tienan),
           giamhocphi: formatTuition(row.giamhocphi),
-          truTienAn: formatTuition(row.truTienAn),
-          truHocPhi: formatTuition(row.truTienNghi),
+          trutienan: formatTuition(row.trutienan),
+          tiennghiphep: formatTuition(row.trutiennghi),
           phuthu: null,
           tongcong: formatTuition(row.tongcong),
           dadong: '0',
@@ -1551,6 +1574,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '160px' }}>Học Sinh</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Thời lượng</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Học phí</th>
+                          <th style={{ width: '130px', minWidth: '130px' }}>Tiền ăn</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Nghỉ Phép</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Liên Tiếp</th>
@@ -1588,6 +1612,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             <td>
                               <input
                                 type="text"
+                                value={formatTuition(row.tienan)}
+                                onChange={e => handleBatchStudentChange(row.mahv, 'tienan', e.target.value)}
+                                className="td-input"
+                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
                                 value={formatTuition(row.giamhocphi)}
                                 onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
                                 className="td-input"
@@ -1605,10 +1638,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               <input type="text" value={row.nghiKP} onChange={e => handleBatchStudentChange(row.mahv, 'nghiKP', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center' }} />
                             </td>
                             <td>
-                              <input type="text" value={formatTuition(row.truTienAn)} onChange={e => handleBatchStudentChange(row.mahv, 'truTienAn', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
+                              <input type="text" value={formatTuition(row.trutienan)} onChange={e => handleBatchStudentChange(row.mahv, 'trutienan', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
                             </td>
                             <td>
-                              <input type="text" value={formatTuition(row.truTienNghi)} onChange={e => handleBatchStudentChange(row.mahv, 'truTienNghi', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
+                              <input type="text" value={formatTuition(row.trutiennghi)} onChange={e => handleBatchStudentChange(row.mahv, 'trutiennghi', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
                             </td>
                             <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
                             <td>
@@ -1697,13 +1730,32 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b>
                 </div>
 
-                {/* FEES */}
-                <div style={{ display: "flex", justifyContent: "space-between", borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                  <div>Nợ cũ: <b style={{ fontWeight: 800 }}>0 đ</b></div>
+                {/* FEES BREAKDOWN */}
+                <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                    <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</b></div>
+                    <div>Tiền ăn ({calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{printHoaDon.tienan} đ</b></div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi} đ</b></div>
+                    <div>Nợ cũ: <b style={{ fontWeight: 800 }}>0 đ</b></div>
+                  </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '15px', fontSize: '16pt' }}>
-                  <div>Tổng cộng: <b style={{ fontWeight: 950 }}>{printHoaDon.tongcong}</b></div>
+                <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc' }}>
+                   <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Trừ tiền ăn ({printHoaDon.nghiPhep} ngày nghỉ phép):</div>
+                     <b style={{ fontWeight: 800 }}>-{printHoaDon.trutienan} đ</b>
+                   </div>
+                   <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Hoàn học phí ({printHoaDon.maxConsecutive} ngày nghỉ liên tiếp):</div>
+                     <b style={{ fontWeight: 800 }}>-{printHoaDon.tiennghiphep} đ</b>
+                   </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '15px', fontSize: '18pt', background: '#f8fafc' }}>
+                  <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
+                  <div style={{ color: '#000' }}>{printHoaDon.tongcong} đ</div>
                 </div>
 
                 <div style={{ marginBottom: '15px' }}>

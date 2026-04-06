@@ -43,6 +43,8 @@ const getWorkingDaysInMonth = (dateStr) => {
    return workingDays;
 };
 
+const calculateWorkingDaysInMonth = getWorkingDaysInMonth;
+
 const calculateThoiluong = (inv) => {
    if (!inv.ngayBatDau) return '';
    const SL = parseInt(inv.soLuong) || 1;
@@ -867,8 +869,6 @@ export default function InvoiceManager() {
          ngaylap: localNow,
          mahv: selectedStudent.mahv,
          tenlop: activeClass?.tenlop || '',
-         ngaybatdau: invoiceData.ngayBatDau || null,
-         ngayketthuc: invoiceData.ngayKetThuc || null,
          manv: auth.user?.manv || auth.user?.username || '',
          hocphi: formatCurrency(invoiceData.hocphi),
          giamhocphi: formatCurrency(invoiceData.giamHocphi),
@@ -1517,23 +1517,27 @@ export default function InvoiceManager() {
                   </div>
                   <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
-                        <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
+                        <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.tenhv}</b></div>
+                        <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
-                     <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
-                     <div>
-                        Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
-                     </div>
-                     <div style={{ marginTop: '5px' }}>
-                        Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
-                     </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+                     <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
-                        <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
-                        <div>Tiền ăn: <b>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
-                        <div>Nợ cũ: <b>{downloadingInvoice?.nocu} đ</b></div>
+                        <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
+                        <div>Hình thức: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
                      </div>
+
+                     {/* FEES BREAKDOWN */}
+                     <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
+                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                          <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi} đ</b></div>
+                          <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
+                       </div>
+                       <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi} đ</b></div>
+                          <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.nocu || 0} đ</b></div>
+                       </div>
+                     </div>
+
                      {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
                         <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
                            {downloadingInvoice.phuthu.map((pt, i) => (
@@ -1544,23 +1548,30 @@ export default function InvoiceManager() {
                            ))}
                         </div>
                      )}
+
                      {downloadingInvoice?.deductionSum > 0 && (
-                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
+                        <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '5px' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Hoàn trả tiền ăn ({downloadingInvoice.studySummary?.nghiPhep || 0} ngày):</span>
-                              <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                              <span>- Trừ tiền ăn ({downloadingInvoice.studySummary?.nghiPhep || 0} ngày nghỉ phép):</span>
+                              <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥{downloadingInvoice.studySummary?.threshold || threshold} ngày):</span>
-                              <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                              <span>- Hoàn học phí (Nghỉ liên tiếp ≥{downloadingInvoice.studySummary?.threshold || 7} ngày):</span>
+                              <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
                            </div>
                         </div>
                      )}
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
-                        <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
+
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginTop: '10px', fontSize: '18pt', background: '#f8fafc' }}>
+                       <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
+                       <div style={{ color: '#000' }}>{downloadingInvoice?.tongcong} đ</div>
+                     </div>
+
+                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14pt", marginTop: '5px' }}>
                         <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
                         <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
                      </div>
+
                      <div style={{ marginTop: '10px' }}>
                         Ghi chú: {downloadingInvoice?.ghichu || ""}
                      </div>
@@ -1618,83 +1629,52 @@ export default function InvoiceManager() {
                      <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
                   </div>
 
-                  <div>
-                     Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b>
+                  <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                  <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
+
+                  {/* FEES BREAKDOWN */}
+                  <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                       <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi} đ</b></div>
+                       <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingNotice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                       <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi} đ</b></div>
+                       <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatCurrency(noCu)} đ</b></div>
+                    </div>
                   </div>
 
-                  {downloadingNotice?.thoiluong && (
-                     <div style={{ color: '#059669', fontWeight: 950 }}>
-                        Tháng đóng học phí/Thời lượng: <span style={{ textDecoration: 'underline' }}>{downloadingNotice.thoiluong}</span>
-                     </div>
-                  )}
-
-                  <div style={{ background: '#f0f9ff', padding: '15px', borderRadius: '12px', border: '2px solid #0369a1', margin: '15px 0' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Học phí:</span> <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</b>
-                     </div>
-                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Giảm trừ:</span> <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</b>
-                     </div>
-                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Tiền ăn hàng tháng ({downloadingNotice?.workingDaysCount} ngày):</span> <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b>
-                     </div>
-                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
-                        <div style={{ borderTop: '1px solid #bae6fd', marginTop: '10px', paddingTop: '10px' }}>
-                           {downloadingNotice.phuthu.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                 <span>+ {pt.name || 'Phụ thu'}:</span>
-                                 <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
-                              </div>
-                           ))}
-                        </div>
-                     )}
-                     {downloadingNotice?.deductionSum > 0 && (
-                        <div style={{ borderTop: '1px solid #bae6fd', marginTop: '10px', paddingTop: '10px' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>- Hoàn trả tiền ăn ({downloadingNotice.studySummary.nghiPhep} ngày):</span>
-                              <b style={{ fontWeight: 900 }}>-{formatCurrency(downloadingNotice.actualMealRefund)} đ</b>
+                  {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                     <div style={{ marginTop: '5px', padding: '10px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                        {downloadingNotice.phuthu.map((pt, i) => (
+                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
+                              <span>+ {pt.name || 'Phụ thu'}:</span>
+                              <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
                            </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥7 ngày):</span>
-                              <b style={{ fontWeight: 900 }}>-{formatCurrency(Math.round(downloadingNotice.actualTuitionRefund))} đ</b>
-                           </div>
-                        </div>
-                     )}
-                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', marginTop: '10px', borderTop: '2px solid #0369a1', paddingTop: '10px' }}>
-                        <span style={{ fontWeight: 950 }}>TỔNG CỘNG:</span>
-                        <b style={{ color: '#dc2626', fontSize: '1.5rem', fontWeight: 950 }}>{downloadingNotice?.tongcong} VNĐ</b>
+                        ))}
+                     </div>
+                   )}
+
+                  <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '10px' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between" }}>
+                       <div>Trừ tiền ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} ngày nghỉ phép):</div>
+                       <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b>
+                     </div>
+                     <div style={{ display: "flex", justifyContent: "space-between" }}>
+                       <div>Hoàn học phí ({downloadingNotice?.studySummary?.maxConsecutive || 0} ngày nghỉ liên tiếp):</div>
+                       <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b>
                      </div>
                   </div>
 
-                  <div>
-                     Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b>
-                  </div>
-                  <div>
-                     Hình thức đóng tiền: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hinhthuc || "..."}</b>
-                  </div>
-                  {downloadingNotice?.studySummary && (
-                     <div style={{ fontSize: '13pt', marginTop: '5px', opacity: 0.9 }}>
-                        Điểm danh ({downloadingNotice.studySummary.period || downloadingNotice.studySummary.sourceHd || 'kỳ trước'}): &nbsp;
-                        Đi học: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice.studySummary.daHoc}</b>, &nbsp;
-                        Nghỉ phép: <b style={{ color: '#0369a1', fontWeight: 900 }}>{downloadingNotice.studySummary.nghiPhep}</b>, &nbsp;
-                        Nghi KP: <b style={{ color: '#dc2626', fontWeight: 900 }}>{downloadingNotice.studySummary.nghiKhongPhep || 0}</b>
-                     </div>
-                  )}
-
-                  {/* FEES */}
-                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                     <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</b></div>
-                     <div>Giảm HP: <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</b></div>
-                     <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatCurrency(noCu)} đ</b></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '15px', fontSize: '18pt', background: '#f8fafc' }}>
+                    <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
+                    <div style={{ color: '#000' }}>{downloadingNotice?.tongcong} đ</div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '15px', fontSize: '16pt' }}>
-                     <div>Tổng cộng: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tongcong} đ</b></div>
-                  </div>
-
-                  <div style={{ marginBottom: '15px' }}>
+                  <div style={{ marginBottom: '10px' }}>
                      Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu || ""}</b>
                   </div>
+                  <div style={{ fontSize: '14pt' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hinhthuc || "..."}</b></div>
 
                   {/* QR SECTION */}
                   {(() => {

@@ -726,17 +726,17 @@ export default function DebtManager() {
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-               onClick={() => setPreviewImg(null)}
-               style={{ padding: '12px 24px', borderRadius: '8px', background: '#fff', color: '#333', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+              onClick={() => setPreviewImg(null)}
+              style={{ padding: '12px 24px', borderRadius: '8px', background: '#fff', color: '#333', fontWeight: 600, border: 'none', cursor: 'pointer' }}
             >
-               Đóng
+              Đóng
             </button>
             <a
-               href={previewImg}
-               download={`BienLai_${selectedDebt?.tenhv}.png`}
-               style={{ padding: '12px 24px', borderRadius: '8px', background: '#3b82f6', color: '#fff', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}
+              href={previewImg}
+              download={`BienLai_${selectedDebt?.tenhv}.png`}
+              style={{ padding: '12px 24px', borderRadius: '8px', background: '#3b82f6', color: '#fff', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}
             >
-               Tải xuống
+              Tải xuống
             </a>
           </div>
         </div>
