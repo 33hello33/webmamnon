@@ -534,7 +534,7 @@ export default function InvoiceManager() {
 
       setInvoiceData({
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
-         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu, daDong: 0
+         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu
       });
 
       try {
