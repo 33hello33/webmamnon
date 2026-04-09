@@ -331,7 +331,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         try {
           const { data, error } = await supabase
             .from('tbl_hd')
-            .select('mahv, ngaybatdau, ngayketthuc, ngaylap')
+            .select('mahv, thoiluong, ngaylap')
             .in('mahv', stdIds)
             .order('ngaylap', { ascending: false });
           if (!error && data) {
@@ -1743,14 +1743,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 </div>
 
                 <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc' }}>
-                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Trừ tiền ăn ({printHoaDon.nghiPhep} ngày nghỉ phép):</div>
-                     <b style={{ fontWeight: 800 }}>-{printHoaDon.trutienan} đ</b>
-                   </div>
-                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Hoàn học phí ({printHoaDon.maxConsecutive} ngày nghỉ liên tiếp):</div>
-                     <b style={{ fontWeight: 800 }}>-{printHoaDon.tiennghiphep} đ</b>
-                   </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div>Trừ tiền ăn ({printHoaDon.nghiPhep} ngày nghỉ phép):</div>
+                    <b style={{ fontWeight: 800 }}>-{printHoaDon.trutienan} đ</b>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div>Hoàn học phí ({printHoaDon.maxConsecutive} ngày nghỉ liên tiếp):</div>
+                    <b style={{ fontWeight: 800 }}>-{printHoaDon.tiennghiphep} đ</b>
+                  </div>
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '15px', fontSize: '18pt', background: '#f8fafc' }}>
