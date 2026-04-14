@@ -267,7 +267,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const handleOpenEditInvoice = (invoice) => {
       setEditInvoiceModal({
          isOpen: true,
-         data: { ...invoice },
+         data: { 
+            ...invoice,
+            hocphi: pCur(invoice.hocphi),
+            giamhocphi: pCur(invoice.giamhocphi),
+            trutienan: pCur(invoice.trutienan),
+            tiennghiphep: pCur(invoice.tiennghiphep),
+            tongcong: pCur(invoice.tongcong),
+            dadong: pCur(invoice.dadong),
+            conno: pCur(invoice.conno)
+         },
          password: ''
       });
    };
@@ -439,9 +448,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          const r = editInvoiceModal.data;
          const { error } = await supabase.from('tbl_hd')
             .update({
+               ngaylap: r.ngaylap,
+               thoiluong: r.thoiluong,
+               sobuoihoc: r.sobuoihoc,
+               ngaybatdau: r.ngaybatdau,
+               ngayketthuc: r.ngayketthuc,
                hocphi: r.hocphi.toString(),
                giamhocphi: r.giamhocphi.toString(),
+               trutienan: r.trutienan ? r.trutienan.toString() : '0',
+               tiennghiphep: r.tiennghiphep ? r.tiennghiphep.toString() : '0',
                phuthu: r.phuthu ? (typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu)) : null,
+               tienan: r.tienan ? (typeof r.tienan === 'string' ? r.tienan : JSON.stringify(r.tienan)) : null,
                tongcong: r.tongcong.toString(),
                dadong: r.dadong.toString(),
                conno: r.conno.toString(),
@@ -2344,13 +2361,36 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          {editInvoiceModal.isOpen && editInvoiceModal.data && document.body && createPortal(
             <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
-               <div className="fm-modal animate-slide-up" style={{ maxWidth: '500px', background: '#fff', borderRadius: '20px' }}>
-                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <div className="fm-modal animate-slide-up" style={{ maxWidth: '600px', background: '#fff', borderRadius: '20px', width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                      <h3 style={{ margin: 0, fontSize: '1.20rem', fontWeight: 800, color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {editInvoiceModal.data.mahd}</h3>
                      <button onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
                   </div>
-                  <form style={{ padding: '1.5rem' }} onSubmit={handleSaveEditInvoice}>
+                  <form style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }} onSubmit={handleSaveEditInvoice}>
                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày lập HĐ</label>
+                           <input type="date" value={editInvoiceModal.data.ngaylap ? editInvoiceModal.data.ngaylap.split('T')[0] : ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngaylap: e.target.value + 'T' + (p.data.ngaylap?.split('T')[1] || '00:00:00') } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Thời lượng / Tháng</label>
+                           <input type="text" value={editInvoiceModal.data.thoiluong || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, thoiluong: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} placeholder="VD: Tháng 10/2023" />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Số buổi học</label>
+                           <input type="number" value={editInvoiceModal.data.sobuoihoc || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, sobuoihoc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày bắt đầu</label>
+                           <input type="date" value={editInvoiceModal.data.ngaybatdau || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngaybatdau: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày kết thúc</label>
+                           <input type="date" value={editInvoiceModal.data.ngayketthuc || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngayketthuc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                     </div>
+
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
                            <input type="text" value={fCur(editInvoiceModal.data.hocphi)} onChange={e => {
@@ -2359,22 +2399,75 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               const diff = val - old;
                               const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }} />
                         </div>
                         <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ (đ)</label>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ học phí (đ)</label>
                            <input type="text" value={fCur(editInvoiceModal.data.giamhocphi)} onChange={e => {
                               const val = pCur(e.target.value);
                               const old = pCur(editInvoiceModal.data.giamhocphi);
                               const diff = val - old;
                               const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, giamhocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#dc2626' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền ăn (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.trutienan)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.trutienan);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, trutienan: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ HP nghỉ (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.tiennghiphep)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.tiennghiphep);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tiennghiphep: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                         </div>
                      </div>
 
-                     <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Phụ thu</label>
+                     <div style={{ marginBottom: '1rem', padding: '1rem', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>Tiền ăn</label>
+                        {(() => {
+                           let ta = { amount: 0, days: 0 };
+                           try {
+                              ta = typeof editInvoiceModal.data.tienan === 'string' ? JSON.parse(editInvoiceModal.data.tienan) : (editInvoiceModal.data.tienan || { amount: 0, days: 0 });
+                           } catch (e) { }
+                           return (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                 <div>
+                                    <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số tiền (đ)</label>
+                                    <input type="text" value={fCur(ta.amount)} onChange={e => {
+                                       const val = pCur(e.target.value);
+                                       const old = pCur(ta.amount);
+                                       const diff = val - old;
+                                       const newTa = { ...ta, amount: val };
+                                       const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
+                                       setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tienan: newTa, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                                    }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
+                                 </div>
+                                 <div>
+                                    <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số ngày</label>
+                                    <input type="number" value={ta.days || 0} onChange={e => {
+                                       const val = parseInt(e.target.value, 10) || 0;
+                                       const newTa = { ...ta, days: val };
+                                       setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tienan: newTa } }));
+                                    }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
+                                 </div>
+                              </div>
+                           );
+                        })()}
+                     </div>
+
+                     <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f3ff', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#5b21b6' }}>Phụ thu</label>
                         {(() => {
                            let pts = [];
                            try {
@@ -2388,7 +2481,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const newPts = [...pts];
                                           newPts[i].name = e.target.value;
                                           setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
-                                       }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #e2e8f0' }} placeholder="Tên phụ thu" />
+                                       }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Tên phụ thu" />
                                        <input type="text" value={fCur(pt.amount)} onChange={e => {
                                           const oldPtVal = pts[i].amount || 0;
                                           const newPtVal = pCur(e.target.value);
@@ -2397,7 +2490,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           newPts[i].amount = newPtVal;
                                           const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
                                           setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                                       }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #e2e8f0' }} placeholder="Số tiền" />
+                                       }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Số tiền" />
                                        <button type="button" onClick={() => {
                                           const deletedVal = pts[i].amount || 0;
                                           const newPts = pts.filter((_, idx) => idx !== i);
@@ -2409,41 +2502,49 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <button type="button" onClick={() => {
                                     const newPts = [...pts, { name: '', amount: 0 }];
                                     setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
-                                 }} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600 }}>+ Thêm phụ thu</button>
+                                 }} style={{ background: '#fff', border: '1px dashed #7c3aed', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#7c3aed', fontWeight: 600 }}>+ Thêm phụ thu</button>
                               </div>
                            );
                         })()}
                      </div>
 
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #ffedd5' }}>
                         <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#0ea5e9' }}>Đã nộp (đ)</label>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.tongcong)} onChange={e => {
+                               const val = pCur(e.target.value);
+                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#059669' }}>Đã nộp (đ)</label>
                            <input type="text" value={fCur(editInvoiceModal.data.dadong)} onChange={e => {
                               const val = pCur(e.target.value);
                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: pCur(p.data.tongcong) - val } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #0ea5e9', fontWeight: 700 }} />
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #059669', fontWeight: 700, color: '#059669' }} />
                         </div>
                         <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Còn nợ (đ)</label>
-                           <input disabled type="text" value={fCur(editInvoiceModal.data.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', fontWeight: 700, color: '#ef4444' }} />
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#dc2626' }}>Còn nợ (đ)</label>
+                           <input disabled type="text" value={fCur(editInvoiceModal.data.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff', fontWeight: 700, color: '#dc2626' }} />
                         </div>
                      </div>
 
-                     <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
-                        <select value={editInvoiceModal.data.hinhthuc} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
-                           {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
-                        </select>
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
+                           <select value={editInvoiceModal.data.hinhthuc} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} style={{ width: '100%', height: '42px', padding: '0 0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                              {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
+                           </select>
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
+                           <textarea value={editInvoiceModal.data.ghichu} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
+                        </div>
                      </div>
 
-                     <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
-                        <textarea value={editInvoiceModal.data.ghichu} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
-                     </div>
-
-                     <div style={{ display: 'flex', gap: '1rem' }}>
-                        <button type="button" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Hủy</button>
-                        <button type="submit" style={{ flex: 2, padding: '0.75rem', borderRadius: '10px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)' }}>Lưu Thay Đổi</button>
+                     <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
+                        <button type="button" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, padding: '0.85rem', borderRadius: '12px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer', color: '#64748b' }}>Hủy bỏ</button>
+                        <button type="submit" style={{ flex: 2, padding: '0.85rem', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.4)', fontSize: '1.05rem' }}>Lưu Thay Đổi</button>
                      </div>
                   </form>
                </div>
