@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToGDrive } from '../utils/googleDrive';
@@ -14,80 +14,186 @@ import {
   Trash2,
   MoreVertical,
   X,
-  ChevronRight,
+  ChevronLeft,
   RefreshCw,
   FileText,
   File,
   Loader2,
-  Pin,
   Calendar,
   Phone,
   MapPin,
-  Hash
+  Hash,
+  ArrowLeft,
+  Clock,
+  LayoutGrid
 } from 'lucide-react';
 import './ChatManager.css';
 
 const ChatManager = ({ currentUser }) => {
   const { config } = useConfig();
+  
+  // Views
+  const [view, setView] = useState('dashboard'); // 'dashboard' or 'chat'
+  
+  // Data
   const [classes, setClasses] = useState([]);
-  const [selectedClass, setSelectedClass] = useState(null);
+  const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [latestMessages, setLatestMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Filters
+  const [searchParent, setSearchParent] = useState('');
+  const [classFilter, setClassFilter] = useState('Tất cả');
+  const [dateFilter, setDateFilter] = useState('Hôm nay'); // 'Hôm nay', 'Tuần này', 'Tháng này', 'Tuỳ chọn'
+  const [customRange, setCustomRange] = useState({
+    start: new Date().toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
+  
+  // Chat State
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [searchClass, setSearchClass] = useState('');
-  const [searchStudent, setSearchStudent] = useState('');
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
   
   const scrollRef = useRef();
 
-  // ----- Load Classes -----
+  // ----- Initial Data Fetching -----
   useEffect(() => {
-    const fetchClasses = async () => {
-      const { data, error } = await supabase
-        .from('tbl_lop')
-        .select('*')
-        .neq('daxoa', 'Đã Xóa')
-        .order('tenlop');
-      if (data) setClasses(data);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch Classes
+        const { data: classData } = await supabase.from('tbl_lop').select('*').neq('daxoa', 'Đã Xóa');
+        if (classData) setClasses(classData);
+
+        // Fetch Teachers
+        const { data: nvData } = await supabase.from('tbl_nv').select('manv, tennv').in('role', ['Giáo viên', 'Trợ giảng']);
+        if (nvData) setTeachers(nvData);
+
+        // Fetch Students
+        const { data: studentData } = await supabase.from('tbl_hv').select('*').neq('trangthai', 'Đã Nghỉ');
+        if (studentData) setStudents(studentData);
+
+        // Fetch Latest Messages
+        await fetchSummaries();
+      } catch (err) {
+        console.error('Error fetching chat dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchClasses();
+    fetchData();
   }, []);
 
-  // ----- Load Students when Class is selected -----
-  useEffect(() => {
-    if (!selectedClass) {
-      setStudents([]);
-      return;
-    }
-    const fetchStudents = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('tbl_hv')
-        .select('*')
-        .eq('malop', selectedClass.malop)
-        .neq('trangthai', 'Đã Nghỉ')
-        .order('tenhv');
-      if (data) setStudents(data);
-      setLoading(false);
-    };
-    fetchStudents();
-  }, [selectedClass]);
+  const fetchSummaries = async () => {
+    // Determine time range based on dateFilter
+    let startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
 
-  // ----- Load Messages and Realtime -----
-  useEffect(() => {
-    if (!selectedStudent) {
-      setMessages([]);
-      setDocuments([]);
-      return;
+    if (dateFilter === 'Tuần này') {
+      const day = startDate.getDay() || 7;
+      startDate.setDate(startDate.getDate() - (day - 1));
+    } else if (dateFilter === 'Tháng này') {
+      startDate.setDate(1);
+    } else if (dateFilter === 'tháng trước tới nay') {
+      startDate.setMonth(startDate.getMonth() - 1);
+      startDate.setDate(1);
+    } else if (dateFilter === 'Tuỳ chọn') {
+      startDate = new Date(customRange.start);
+      startDate.setHours(0, 0, 0, 0);
     }
+
+    let query = supabase
+      .from('hv_messages')
+      .select('*')
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (dateFilter === 'Tuỳ chọn') {
+      const endDate = new Date(customRange.end);
+      endDate.setHours(23, 59, 59, 999);
+      query = query.lte('created_at', endDate.toISOString());
+    }
+
+    const { data: msgs, error } = await query;
+
+    if (msgs) setLatestMessages(msgs);
+  };
+
+  useEffect(() => {
+    if (view === 'dashboard') fetchSummaries();
+  }, [dateFilter, view, customRange]);
+
+  // ----- Table Data Computation -----
+  const parentSummaries = useMemo(() => {
+    // 1. Group latest message per student
+    const studentLatestMap = {};
+    latestMessages.forEach(m => {
+      if (!studentLatestMap[m.mahv]) {
+        studentLatestMap[m.mahv] = m;
+      }
+    });
+
+    // 2. Map students to summaries
+    return students.map(s => {
+      const lastMsg = studentLatestMap[s.mahv];
+      const cls = classes.find(c => c.malop === s.malop);
+      const teacher = teachers.find(t => t.manv === cls?.manv);
+
+      // Determine notification type from content
+      let notifType = 'TIN NHẮN';
+      const content = (lastMsg?.content || '').toLowerCase();
+      if (content.includes('nghỉ')) notifType = 'XIN NGHỈ';
+      else if (content.includes('thuốc')) notifType = 'BÁO THUỐC';
+      else if (content.includes('đổi người')) notifType = 'ĐỔI NGƯỜI ĐÓN';
+      else if (content.includes('muộn') || content.includes('trễ')) notifType = 'XIN VỀ TRỄ';
+
+      return {
+        ...s,
+        lastMsg,
+        className: cls?.tenlop || s.malop || 'Chưa xếp lớp',
+        teacherName: teacher?.tennv || cls?.giaovien || 'Chưa cập nhật',
+        notifType: lastMsg ? notifType : null,
+        lastTime: lastMsg ? new Date(lastMsg.created_at) : null
+      };
+    }).filter(s => {
+      // Search filter
+      const matchesSearch = s.tenhv?.toLowerCase().includes(searchParent.toLowerCase()) || 
+                           s.mahv?.toLowerCase().includes(searchParent.toLowerCase());
+      // Class filter
+      const matchesClass = classFilter === 'Tất cả' || s.malop === classFilter;
+      
+      return matchesSearch && matchesClass;
+    }).sort((a, b) => {
+      // Sort by newest message first
+      if (!a.lastTime) return 1;
+      if (!b.lastTime) return -1;
+      return b.lastTime - a.lastTime;
+    });
+  }, [students, classes, teachers, latestMessages, searchParent, classFilter]);
+
+  // Quick Report Counts
+  const reports = useMemo(() => {
+    return {
+      xinNghi: latestMessages.filter(m => (m.content || '').toLowerCase().includes('nghỉ')).length,
+      baoThuoc: latestMessages.filter(m => (m.content || '').toLowerCase().includes('thuốc')).length,
+      doiNguoi: latestMessages.filter(m => (m.content || '').toLowerCase().includes('đổi người')).length,
+      guiTinNhan: latestMessages.length,
+      veTre: latestMessages.filter(m => (m.content || '').toLowerCase().includes('muộn') || (m.content || '').toLowerCase().includes('trễ')).length,
+    };
+  }, [latestMessages]);
+
+  // ----- Chat Logic -----
+  useEffect(() => {
+    if (!selectedStudent || view !== 'chat') return;
 
     const fetchMessages = async () => {
       setLoadingMessages(true);
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('hv_messages')
         .select('*')
         .eq('mahv', selectedStudent.mahv)
@@ -109,7 +215,6 @@ const ChatManager = ({ currentUser }) => {
     fetchMessages();
     fetchDocs();
 
-    // Realtime subscription - IMPORTANT: You must enable "Realtime" for the "hv_messages" table in Supabase Dashboard
     const channel = supabase
       .channel(`chat_${selectedStudent.mahv}`)
       .on('postgres_changes', { 
@@ -119,8 +224,7 @@ const ChatManager = ({ currentUser }) => {
         filter: `mahv=eq.${selectedStudent.mahv}` 
       }, (payload) => {
         setMessages(prev => {
-          // Prevent duplicates if optimistic update already added it
-          const exists = prev.some(m => m.id === payload.new.id || (m.created_at === payload.new.created_at && m.content === payload.new.content));
+          const exists = prev.some(m => m.id === payload.new.id);
           if (exists) return prev;
           return [...prev, payload.new];
         });
@@ -131,17 +235,15 @@ const ChatManager = ({ currentUser }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedStudent]);
+  }, [selectedStudent, view]);
 
   const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   };
 
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
-    if (!selectedStudent || (!inputText.trim())) return;
+    if (!selectedStudent || !inputText.trim()) return;
 
     const newMessage = {
       mahv: selectedStudent.mahv,
@@ -152,16 +254,8 @@ const ChatManager = ({ currentUser }) => {
     const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
     if (!error && data) {
       setInputText('');
-      // Optimistic update if Realtime is slow or disabled
-      setMessages(prev => {
-        const exists = prev.some(m => m.id === data[0].id);
-        if (exists) return prev;
-        return [...prev, data[0]];
-      });
+      setMessages(prev => [...prev, data[0]]);
       setTimeout(scrollToBottom, 50);
-    } else {
-      console.error(error);
-      alert('Lỗi gửi tin nhắn');
     }
   };
 
@@ -172,348 +266,292 @@ const ChatManager = ({ currentUser }) => {
     setUploading(true);
     try {
       let finalUrl = '';
-      let finalFileName = file.name;
-
-      if (config.gdrive_enabled && (config.gdrive_client_id || config.gdrive_service_json)) {
-        const gResult = await uploadToGDrive(
-          file, 
-          config.gdrive_folder_id, 
-          config.gdrive_client_id, 
-          config.gdrive_api_key,
-          config.gdrive_auth_type,
-          config.gdrive_service_json
-        );
-        
-        if (type === 'image') {
-          // Direct view link trick for Google Drive images
-          finalUrl = `https://drive.google.com/uc?export=view&id=${gResult.id}`;
-        } else {
-          finalUrl = gResult.webViewLink || gResult.webContentLink;
-        }
+      if (config.gdrive_enabled) {
+        const gResult = await uploadToGDrive(file, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
+        finalUrl = type === 'image' ? `https://drive.google.com/uc?export=view&id=${gResult.id}` : (gResult.webViewLink || gResult.webContentLink);
       } else {
-        // --- Default: Upload to Supabase Storage ---
         const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
         const folder = type === 'image' ? 'chat-images' : 'chat-files';
-        const { data, error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+        const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
         if (error) throw error;
         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
         finalUrl = publicUrl;
       }
 
-      // Insert message with file
       const msgPayload = {
         mahv: selectedStudent.mahv,
         manv: currentUser.manv || currentUser.username,
         content: '',
         image_url: type === 'image' ? finalUrl : null,
         file_url: type !== 'image' ? finalUrl : null,
-        file_name: finalFileName,
+        file_name: file.name,
         file_mime_type: file.type
       };
 
-      await supabase.from('hv_messages').insert([msgPayload]);
+      const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
+      if (data) setMessages(prev => [...prev, data[0]]);
 
-      // Also add to documents table for persistence
       await supabase.from('documents').insert([{
         mahv: selectedStudent.mahv,
-        name: finalFileName,
+        name: file.name,
         category: type === 'image' ? 'Ảnh' : 'Tài liệu',
         file_url: finalUrl,
         mime_type: file.type
       }]);
-
-      // Refresh docs
-      const { data: newDocs } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('mahv', selectedStudent.mahv)
-        .order('created_at', { ascending: false });
-      if (newDocs) setDocuments(newDocs);
-
     } catch (err) {
-      console.error(err);
-      alert('Lỗi tải tệp lên: ' + (err.message || 'Hủy bỏ'));
+      alert('Lỗi: ' + err.message);
     } finally {
       setUploading(false);
     }
   };
 
-  const filteredClasses = classes.filter(c => 
-    c.tenlop?.toLowerCase().includes(searchClass.toLowerCase()) || 
-    c.malop?.toLowerCase().includes(searchClass.toLowerCase())
-  );
+  const formatTime = (date) => {
+    if (!date) return '--:--';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
-  const filteredStudents = students.filter(s => 
-    s.tenhv?.toLowerCase().includes(searchStudent.toLowerCase()) || 
-    s.mahv?.toLowerCase().includes(searchStudent.toLowerCase())
-  );
+  const getInitials = (name) => {
+    if (!name) return '??';
+    const parts = name.split(' ');
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
 
-  return (
-    <div className="chat-manager-layout">
-      {/* 1st Column: Class List */}
-      <div className="chat-col class-list-col">
-        <div className="col-header">
-          <h3>Lớp Học</h3>
-          <div className="search-box">
-            <Search size={16} />
-            <input 
-              type="text" 
-              placeholder="Tìm lớp..." 
-              value={searchClass}
-              onChange={(e) => setSearchClass(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="col-body scrollable">
-          {filteredClasses.map(c => (
-            <div 
-              key={c.malop} 
-              className={`list-item class-item ${selectedClass?.malop === c.malop ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedClass(c);
-                setSelectedStudent(null);
-              }}
-            >
-              <div className="class-icon"><Users size={18} /></div>
-              <div className="item-info">
-                <span className="item-title">{c.tenlop}</span>
-                <span className="item-subtitle">{c.malop}</span>
+  if (view === 'chat' && selectedStudent) {
+    return (
+      <div className="chat-manager-layout chat-thread-view">
+        <div className="chat-col chat-main-col" style={{ flex: 1 }}>
+          <div className="chat-main-header">
+            <div className="header-left">
+              <button className="back-to-dashboard" onClick={() => setView('dashboard')}>
+                <ArrowLeft size={18} /> Quay lại
+              </button>
+              <div className="header-avatar">
+                {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <div className="avatar-placeholder">{selectedStudent.tenhv?.charAt(0)}</div>}
               </div>
-              <ChevronRight size={14} className="arrow" />
+              <div className="header-info">
+                <h4>{selectedStudent.tenhv} - {selectedStudent.mahv}</h4>
+                <span className="status-online">Cuốn trao đổi trực tiếp với Phụ huynh</span>
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 2nd Column: Student List */}
-      <div className="chat-col student-list-col">
-        <div className="col-header">
-          <h3>Học Sinh</h3>
-          <div className="search-box">
-            <Search size={16} />
-            <input 
-              type="text" 
-              placeholder="Tìm học sinh/mã..." 
-              value={searchStudent}
-              onChange={(e) => setSearchStudent(e.target.value)}
-            />
+            <div className="header-right">
+              <button className="icon-btn" onClick={() => fetchSummaries()}><RefreshCw size={20} /></button>
+            </div>
           </div>
-        </div>
-        <div className="col-body scrollable">
-          {loading ? (
-             <div className="loading-center"><Loader2 size={24} className="spinner" /></div>
-          ) : selectedClass ? (
-            filteredStudents.length > 0 ? filteredStudents.map(s => (
-              <div 
-                key={s.mahv} 
-                className={`list-item student-item ${selectedStudent?.mahv === s.mahv ? 'active' : ''}`}
-                onClick={() => setSelectedStudent(s)}
-              >
-                <div className="student-avatar">
-                  {s.imgpath ? (
-                    <img src={s.imgpath} alt="" />
-                  ) : (
-                    <div className="avatar-placeholder">{s.tenhv?.charAt(0)}</div>
-                  )}
-                </div>
-                <div className="item-info">
-                  <div className="item-top">
-                    <span className="item-title text-truncate">{s.tenhv}</span>
-                    <span className="item-time">10:45</span>
+
+          <div className="chat-messages scrollable" ref={scrollRef}>
+            {loadingMessages ? <div className="loading-center"><Loader2 size={32} className="spinner" /></div> : (
+              messages.map((m, idx) => {
+                const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
+                return (
+                  <div key={m.id || idx} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
+                     <div className="message-bubble">
+                        {m.content && <div className="msg-text">{m.content}</div>}
+                        {m.image_url && <div className="msg-image"><img src={m.image_url} alt="" onClick={() => window.open(m.image_url)} /></div>}
+                        {m.file_url && (
+                          <div className="msg-file" onClick={() => window.open(m.file_url)}>
+                            <FileText size={20} /> <span>{m.file_name}</span>
+                          </div>
+                        )}
+                        <div className="msg-time">{formatTime(new Date(m.created_at))}</div>
+                     </div>
                   </div>
-                  <div className="item-preview text-truncate">ID: {s.mahv}</div>
-                </div>
-              </div>
-            )) : <div className="empty-state">Không có học sinh</div>
-          ) : (
-            <div className="empty-state">Chọn lớp trước</div>
-          )}
-        </div>
-      </div>
-
-      {/* 3rd Column: Chat Main View */}
-      <div className="chat-col chat-main-col">
-        {!selectedStudent ? (
-          <div className="chat-welcome">
-            <div className="welcome-icon"><MessageSquare size={64} /></div>
-            <h2>Kênh trao đổi với Phụ Huynh</h2>
-            <p>Chọn một phụ huynh trong danh sách để bắt đầu hội thoại.</p>
+                );
+              })
+            )}
           </div>
-        ) : (
-          <>
-            <div className="chat-main-header">
-              <div className="header-left">
-                <div className="header-avatar">
-                   {selectedStudent.imgpath ? (
-                     <img src={selectedStudent.imgpath} alt="" />
-                   ) : (
-                     <div className="avatar-placeholder">{selectedStudent.tenhv?.charAt(0)}</div>
-                   )}
-                </div>
-                <div className="header-info">
-                  <h4>{selectedStudent.tenhv} - {selectedStudent.mahv}</h4>
-                  <span className="status-online">Thành viên: Phụ huynh & {currentUser.tennv || 'Nhân viên'}</span>
-                </div>
-              </div>
-              <div className="header-right">
-                <button className="icon-btn" title="Tìm kiếm"><Search size={20} /></button>
-                <button className="icon-btn" title="Làm mới tin nhắn" onClick={() => {
-                  setLoadingMessages(true);
-                  supabase.from('hv_messages')
-                    .select('*')
-                    .eq('mahv', selectedStudent.mahv)
-                    .order('created_at', { ascending: true })
-                    .then(({ data }) => {
-                      if (data) setMessages(data);
-                      setLoadingMessages(false);
-                      setTimeout(scrollToBottom, 100);
-                    });
-                }}><RefreshCw size={20} /></button>
-                <button className="icon-btn" title="Thêm"><MoreVertical size={20} /></button>
-              </div>
-            </div>
 
-            <div className="chat-messages scrollable" ref={scrollRef}>
-              {loadingMessages ? (
-                <div className="loading-messages"><Loader2 size={32} className="spinner" /></div>
-              ) : (
-                <>
-                  <div className="chat-date-divider"><span>Bắt đầu cuộc hội thoại</span></div>
-                  {messages.map((m, idx) => {
-                    const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
-                    return (
-                      <div key={m.id || idx} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
-                        <div className="message-bubble">
-                          {m.content && <div className="msg-text">{m.content}</div>}
-                          {m.image_url && (
-                             <div className="msg-image">
-                               <img src={m.image_url} alt="image_content" onClick={() => window.open(m.image_url, '_blank')} />
-                             </div>
-                          )}
-                          {m.file_url && (
-                            <div className="msg-file" onClick={() => window.open(m.file_url, '_blank')}>
-                              <div className="file-icon"><FileText size={24} /></div>
-                              <div className="file-info">
-                                <span className="file-name">{m.file_name || 'Tài liệu'}</span>
-                                <span className="file-meta">{m.file_mime_type?.split('/')[1]?.toUpperCase() || 'FILE'}</span>
-                              </div>
-                              <Download size={18} className="dl-icon" />
-                            </div>
-                          )}
-                          <div className="msg-time">{new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-
-            <div className="chat-input-area">
-              <form className="chat-input-toolbar" onSubmit={handleSendMessage}>
+          <div className="chat-input-area">
+             <form className="chat-input-toolbar" onSubmit={handleSendMessage}>
                 <div className="toolbar-left">
                    <label className="toolbar-btn">
-                     <ImageIcon size={20} />
-                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'image')} />
+                      <ImageIcon size={20} />
+                      <input type="file" accept="image/*" hidden onChange={(e) => handleFileUpload(e, 'image')} />
                    </label>
                    <label className="toolbar-btn">
-                     <Paperclip size={20} />
-                     <input type="file" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'file')} />
+                      <Paperclip size={20} />
+                      <input type="file" hidden onChange={(e) => handleFileUpload(e, 'file')} />
                    </label>
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Nhập tin nhắn tới đây... (Shift+Enter xuống dòng)" 
+                  placeholder="Nhập nội dung tin nhắn..." 
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   disabled={uploading}
                 />
                 <button type="submit" className="send-btn" disabled={!inputText.trim() || uploading}>
-                   {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
+                  {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
                 </button>
-              </form>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* 4th Column: Detail / File Storage */}
-      {selectedStudent && (
-        <div className="chat-col details-col">
-          <div className="details-header">
-             <div className="large-avatar">
-               {selectedStudent.imgpath ? (
-                 <img src={selectedStudent.imgpath} alt="" />
-               ) : (
-                 <div className="avatar-placeholder">{selectedStudent.tenhv?.charAt(0)}</div>
-               )}
-             </div>
-             <h3>{selectedStudent.tenhv}</h3>
-             <span className="id-tag">ID: {selectedStudent.mahv}</span>
+             </form>
           </div>
+        </div>
 
+        <div className="chat-col details-col" style={{ width: '300px' }}>
+          <div className="details-header">
+             <div className="large-avatar-circle" style={{ backgroundColor: '#ec4899' }}>
+               {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <span>{getInitials(selectedStudent.tenhv)}</span>}
+             </div>
+             <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtba || selectedStudent.sdtme || 'N/A'} - {selectedStudent.className}</h3>
+          </div>
+          
           <div className="details-body scrollable">
              <div className="details-section">
-                <h4><User size={16} /> Thông tin khách hàng</h4>
-                <div className="info-list">
-                   <div className="info-item">
-                      <Hash size={14} /> <span>{selectedStudent.mahv}</span>
-                   </div>
-                   <div className="info-item">
-                      <Phone size={14} /> <span>{selectedStudent.sdtba || selectedStudent.sdtme || 'Chưa cập nhật'}</span>
-                   </div>
-                   <div className="info-item">
-                      <MapPin size={14} /> <span>{selectedStudent.diachi || 'Chưa cập nhật'}</span>
-                   </div>
-                   <div className="info-item">
-                      <Calendar size={14} /> <span>Lớp: {selectedClass?.tenlop}</span>
-                   </div>
+                <h4 className="section-header-title"><LayoutGrid size={18} /> Thông tin khách hàng</h4>
+                <div className="info-list-modern">
+                   <div className="info-item-modern"><User size={16} /> <span>{selectedStudent.tenhv}</span></div>
+                   <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtba || selectedStudent.sdtme || 'N/A'}</span></div>
+                   <div className="info-item-modern"><MapPin size={16} /> <span>{selectedStudent.diachi || 'N/A'}</span></div>
+                   <div className="info-item-modern"><FileText size={16} /> <span>{selectedStudent.className}</span></div>
                 </div>
              </div>
 
-             <div className="details-section">
-                <h4><Users size={16} /> Thành viên (2)</h4>
-                <div className="member-list">
-                   <div className="member-item">
-                      <div className="member-avatar adm">AD</div>
-                      <div className="member-info">
-                         <span className="member-name">{currentUser.tennv || 'Nhân viên'}</span>
-                         <span className="member-role">Quản trị viên</span>
-                      </div>
-                   </div>
-                   <div className="member-item">
-                      <div className="member-avatar ph">PH</div>
-                      <div className="member-info">
-                         <span className="member-name">{selectedStudent.tenhv}</span>
-                         <span className="member-role">Phụ huynh</span>
-                      </div>
-                   </div>
-                </div>
-             </div>
+             <div className="details-divider"></div>
 
              <div className="details-section">
-                <div className="section-title-row">
-                   <h4><File size={16} /> Kho lưu trữ</h4>
-                   <button className="text-btn">Xem tất cả</button>
+                <h4 className="section-header-title"><File size={18} /> Kho lưu trữ</h4>
+                <div className="storage-tabs-modern">
+                   <button className="storage-tab active">Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})</button>
+                   <button className="storage-tab">File ({documents.filter(d => d.category !== 'Ảnh').length})</button>
                 </div>
-                <div className="tabs-mini">
-                   <button className="tab-mini active">Tài liệu ({documents.length})</button>
-                </div>
-                <div className="file-grid">
-                   {documents.slice(0, 6).map(doc => (
-                     <div key={doc.id} className="file-thumb" title={doc.name} onClick={() => window.open(doc.file_url, '_blank')}>
-                        <div className="thumb-icon">
-                          {doc.category === 'Ảnh' ? <ImageIcon size={20} /> : <FileText size={20} />}
-                        </div>
-                        <span className="thumb-name">{doc.name}</span>
-                     </div>
-                   ))}
-                   {documents.length === 0 && <div className="no-files">Chưa có tập tin</div>}
+                <div className="empty-storage-msg">
+                   Chưa có hình ảnh nào
                 </div>
              </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-dashboard animate-fade-in">
+      {/* Filters Row */}
+      <div className="chat-filters-row">
+        <div className="filter-group">
+          <span className="filter-label">Phụ huynh</span>
+          <div className="search-input-wrapper">
+            <Search size={18} className="search-icon-inside" />
+            <input 
+              type="text" 
+              placeholder="TÌM KIẾM THEO TÊN/MÃ..." 
+              value={searchParent}
+              onChange={(e) => setSearchParent(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <span className="filter-label">Lọc theo:</span>
+          <select 
+            className="class-select-styled"
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+          >
+            <option value="Tất cả">LỚP: TẤT CẢ</option>
+            {classes.map(c => (
+              <option key={c.malop} value={c.malop}>{c.tenlop}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <span className="filter-label" style={{ whiteSpace: 'nowrap' }}>Thời gian cập nhật:</span>
+          <div className="date-filters">
+            {['Hôm nay', 'Tuần này', 'Tháng này', 'tháng trước tới nay', 'Tuỳ chọn'].map(f => (
+              <button 
+                key={f}
+                className={`date-filter-btn ${dateFilter === f ? 'active' : ''}`}
+                onClick={() => setDateFilter(f)}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {dateFilter === 'Tuỳ chọn' && (
+            <div className="custom-date-picker" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '12px' }}>
+              <input 
+                type="date" 
+                className="class-select-styled" 
+                style={{ padding: '0.4rem 0.75rem', minWidth: 'auto' }}
+                value={customRange.start}
+                onChange={(e) => setCustomRange({...customRange, start: e.target.value})}
+              />
+              <span className="filter-label">đến</span>
+              <input 
+                type="date" 
+                className="class-select-styled" 
+                style={{ padding: '0.4rem 0.75rem', minWidth: 'auto' }}
+                value={customRange.end}
+                onChange={(e) => setCustomRange({...customRange, end: e.target.value})}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Reports Section */}
+      <div className="quick-reports-container">
+        <div className="report-card xin-nghi">
+          <span className="report-label">Xin nghỉ</span>
+          <span className="report-value">{String(reports.xinNghi).padStart(2, '0')}</span>
+        </div>
+        <div className="report-card bao-thuoc">
+          <span className="report-label">Báo thuốc</span>
+          <span className="report-value">{String(reports.baoThuoc).padStart(2, '0')}</span>
+        </div>
+        <div className="report-card gui-tin-nhan">
+          <span className="report-label">Gửi tin nhắn</span>
+          <span className="report-value">{String(reports.guiTinNhan).padStart(2, '0')}</span>
+        </div>
+        <div className="report-card doi-nguoi">
+          <span className="report-label">Báo đổi người đón trẻ</span>
+          <span className="report-value">{String(reports.doiNguoi).padStart(2, '0')}</span>
+        </div>
+        <div className="report-card ve-tre">
+          <span className="report-label">Xin về trễ</span>
+          <span className="report-value">{String(reports.veTre).padStart(2, '0')}</span>
+        </div>
+      </div>
+
+      {/* Main Table Section */}
+      <div className="chat-table-wrapper">
+        <table className="chat-data-table">
+          <thead>
+            <tr>
+              <th style={{ width: '25%' }}>Họ và tên</th>
+              <th style={{ width: '15%' }}>Số điện thoại</th>
+              <th style={{ width: '10%' }}>Lớp</th>
+              <th style={{ width: '20%' }}>Giáo viên</th>
+              <th style={{ width: '20%' }}>Thông báo mới</th>
+              <th style={{ width: '10%' }}>Thời gian</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="6" className="no-results"><Loader2 size={24} className="spinner" /> Đang tải dữ liệu...</td></tr>
+            ) : parentSummaries.length === 0 ? (
+              <tr><td colSpan="6" className="no-results">Không tìm thấy thông tin phù hợp</td></tr>
+            ) : parentSummaries.map(s => (
+              <tr key={s.mahv} onClick={() => { setSelectedStudent(s); setView('chat'); }}>
+                <td className="student-name-cell">{s.tenhv}</td>
+                <td className="phone-cell">{s.sdtba || s.sdtme || s.mahv}</td>
+                <td>{s.className}</td>
+                <td>{s.teacherName}</td>
+                <td>
+                  {s.notifType ? (
+                    <span className={`badge-notification badge-${s.notifType.toLowerCase().replace(/ /g, '-')}`}>
+                      {s.notifType}
+                    </span>
+                  ) : <span style={{color: '#cbd5e1'}}>--</span>}
+                </td>
+                <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
