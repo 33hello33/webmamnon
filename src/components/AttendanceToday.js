@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
-import { Users, Clock, Loader2, Search, Calendar, MessageCircle } from 'lucide-react';
+import { Users, Loader2, Search, Calendar, MessageCircle } from 'lucide-react';
 
 export default function AttendanceToday({ students, classes: allAvailableClasses }) {
   const [loading, setLoading] = useState(false);
   const [todayAttendance, setTodayAttendance] = useState([]);
-  const [classSchedules, setClassSchedules] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
 
   const todayStr = useMemo(() => {
@@ -28,22 +27,6 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
 
       if (attErr) throw attErr;
       setTodayAttendance(attendanceData || []);
-
-
-      // 2. Fetch giohoc info from tbl_lop for found classes (Thay thế tbl_lichhoc_lop)
-      if (attendanceData && attendanceData.length > 0) {
-        const classIds = [...new Set(attendanceData.map(d => d.malop))];
-        const { data: schedData } = await supabase
-          .from('tbl_lop')
-          .select('malop, giohoc')
-          .in('malop', classIds);
-
-        const finalMap = {};
-        (schedData || []).forEach(s => {
-          finalMap[s.malop] = s.giohoc || '';
-        });
-        setClassSchedules(finalMap);
-      }
     } catch (err) {
       console.error('Error fetching today attendance:', err);
     } finally {
@@ -81,14 +64,13 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
         groups.push({
           classId: mid,
           className: classInfo?.tenlop || mid,
-          giohoc: classSchedules[mid] || '_',
           students: studentsInClass
         });
       }
     });
 
     return groups;
-  }, [todayAttendance, classSchedules, students, allAvailableClasses, searchTerm]);
+  }, [todayAttendance, students, allAvailableClasses, searchTerm]);
 
   if (loading) {
     return (
@@ -136,10 +118,6 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                   <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 700 }}>{group.className}</h3>
                   <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>{group.classId}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#6366f1', fontSize: '0.9rem', fontWeight: 600 }}>
-                  <Clock size={16} />
-                  <span>Giờ học: {group.giohoc}</span>
                 </div>
               </div>
 
