@@ -71,7 +71,7 @@ const ALL_TABS = [
     ]
   },
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
-  { id: 'chat', label: 'Kênh Chat', icon: MessageSquare },
+  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare },
   { id: 'employees', label: 'Nhân viên', icon: Users },
   { id: 'tasks', label: 'Công việc', icon: Briefcase },
   { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
