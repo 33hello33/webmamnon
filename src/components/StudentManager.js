@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, generateId } from '../supabase';
+import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera
@@ -165,6 +165,8 @@ export default function StudentManager({ activeSubTab }) {
       }
 
       showMessage('success', isEditMode ? 'Cập nhật thành công' : 'Thêm học sinh thành công');
+      const detailDesc = `[${isEditMode ? 'CẬP NHẬT HS' : 'ĐĂNG KÝ HS'}] Mã: ${dataToSave.mahv} | Tên: ${dataToSave.tenhv} | Lớp: ${classes.find(c => c.malop === dataToSave.malop)?.tenlop || dataToSave.malop || '_'}`;
+      insertLog(detailDesc);
       setIsFormOpen(false);
       fetchStudents();
     } catch (err) {
@@ -208,6 +210,8 @@ export default function StudentManager({ activeSubTab }) {
       if (error) throw error;
 
       showMessage('success', 'Đã chuyển trạng thái học sinh thành Đã Nghỉ và cập nhật lý do');
+      const detailDesc = `[XÓA/NGHỈ HỌC] Mã: ${selectedStudentId} | Tên: ${student?.tenhv} | Lý do: ${deleteReason}`;
+      insertLog(detailDesc);
       setIsDeleteOpen(false);
       fetchStudents();
     } catch (err) {
@@ -235,6 +239,7 @@ export default function StudentManager({ activeSubTab }) {
       if (error) throw error;
 
       showMessage('success', 'Đã khôi phục học sinh thành công');
+      insertLog(`[KHÔI PHỤC HS] Mã: ${selectedStudentId} | Tên: ${student.tenhv}`);
       fetchStudents();
     } catch (err) {
       console.error(err);
@@ -258,6 +263,9 @@ export default function StudentManager({ activeSubTab }) {
       if (error) throw error;
 
       showMessage('success', 'Chuyển lớp thành công!');
+      const studentName = students.find(s => s.mahv === selectedStudentId)?.tenhv || selectedStudentId;
+      const targetClassName = classes.find(c => c.malop === transferClassId)?.tenlop || transferClassId;
+      insertLog(`[CHUYỂN LỚP] Mã: ${selectedStudentId} | Tên: ${studentName} | Lớp mới: ${targetClassName}`);
       setIsTransferClassOpen(false);
       fetchStudents();
     } catch (err) {
@@ -427,6 +435,7 @@ export default function StudentManager({ activeSubTab }) {
           }
 
           showMessage('success', `Đã nhập Excel thành công ${successCount} học sinh`);
+          insertLog(`[NHẬP EXCEL HS] Số lượng: ${successCount} học sinh`);
           fetchStudents();
         }
       } catch (err) {

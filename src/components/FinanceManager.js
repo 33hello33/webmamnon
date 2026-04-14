@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
-import { supabase, generateId } from '../supabase';
+import { supabase, generateId, insertLog } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
@@ -343,7 +343,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          const { idField, idVal, table } = confirmDialog.payload;
          const { error } = await supabase.from(table).update({ daxoa: 'Đã xóa' }).eq(idField, idVal);
          if (error) alert('Lỗi khi xoá: ' + error.message);
-         else fetchData();
+         else {
+            const detailDesc = `[XÓA] Bảng: ${table} | Mã: ${idVal}`;
+            insertLog(detailDesc);
+            fetchData();
+         }
       } else if (confirmDialog.actionType === 'EDIT_BILL') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          if (deletePassword !== auth.user?.password) {
@@ -379,6 +383,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          if (error) {
             alert('Lỗi cập nhật bill hàng: ' + error.message);
          } else {
+            const detailDesc = `[SỬA BILL] Mã: ${mabill} | Tổng: ${fCur(tongcong)} | Học sinh: ${hvMap[editBillModal.data.mahv]?.tenhv || 'Khách vãng lai'}`;
+            insertLog(detailDesc);
             alert('Cập nhật bill hàng thành công!');
             setEditBillModal({ isOpen: false, data: null, password: '' });
             setDeletePassword('');
@@ -434,6 +440,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          if (res2.error) {
             alert('Lỗi khi cập nhật tiền đầu kỳ: ' + res2.error.message);
          } else {
+            const detailDesc = `[CÂN ĐỐI QUỸ] Nội dung: ${canDoiData.noidung}`;
+            insertLog(detailDesc);
             setCanDoiModal(false);
             fetchBalances();
             alert('Cân đối dòng tiền thành công!');
@@ -471,6 +479,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          if (error) {
             alert("Lỗi khi cập nhật hóa đơn: " + error.message);
          } else {
+            const detailDesc = `[SỬA HÓA ĐƠN] Mã: ${r.mahd} | Tổng: ${fCur(r.tongcong)} | Học sinh: ${hvMap[r.mahv]?.tenhv || '_'}`;
+            insertLog(detailDesc);
             setEditInvoiceModal({ isOpen: false, data: null, password: '' });
             setDeletePassword('');
             fetchData();
@@ -831,8 +841,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }]);
 
       if (!error) {
+         const detailDesc = `[${addPhieuModal.type === 'Thu' ? 'PHIẾU THU' : 'PHIẾU CHI'}] Mã: ${maphieuchi} | Hạng mục: ${phieuData.hangmucchi} | Giá trị: ${fCur(phieuData.chiphi)} | Người GD: ${phieuData.nguoinhan || '_'}`;
+         insertLog(detailDesc);
          setAddPhieuModal({ isOpen: false, type: 'Chi' });
-         // Alert or message? Using alert as consistent with existing code
          alert(`Tạo phiếu ${addPhieuModal.type} thành công!`);
          setTimeout(() => {
             fetchData();
@@ -922,6 +933,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             hinhthuc: batchImportData.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt')
          }]);
       }
+
+      const logDesc = `[NHẬP KHO LOẠT] ${validRows.length} mặt hàng | Tổng trị giá: ${fCur(validRows.reduce((sum, r) => sum + (parseInt(r.soluongThem) * pCur(r.gianhap)), 0))} | NCC: ${batchImportData.nhacungcap || '_'}`;
+      insertLog(logDesc);
 
       setIsBatchImportOpen(false);
       fetchData();

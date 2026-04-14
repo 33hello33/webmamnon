@@ -64,15 +64,59 @@ window.fetch = async (...args) => {
    if (url.includes('/rest/v1/') && ['POST', 'PATCH', 'DELETE'].includes(method)) {
       const match = url.match(/\/rest\/v1\/([^?]+)/);
       if (match) {
-         const table = match[1];
-         if (table !== 'tbl_log') {
+         const table = match[1].split('?')[0].replace(/\/$/, '');
+         // Exclude tables that have manual logging to avoid duplicates
+         const manualLoggedTables = [
+            'tbl_log', 'tbl_hv', 'tbl_nv', 'tbl_hanghoa', 'tbl_lop', 
+            'tbl_ghichu', 'tbl_hd', 'tbl_nhapkho', 'tbl_thongbao', 
+            'tbl_config', 'tbl_phieuchi', 'tbl_billhanghoa', 
+            'tbl_diemdanh', 'tbl_noidungday'
+         ];
+         if (!manualLoggedTables.includes(table)) {
             let action = '';
             if (method === 'POST') action = 'Nhập mới dòng vào DB';
             if (method === 'PATCH') action = 'Sửa/Cập nhật dòng ở DB';
             if (method === 'DELETE') action = 'Xóa dòng khỏi DB';
 
             if (response.ok) {
-               insertLog(`[${action}] Bảng: ${table}`);
+               let extraInfo = '';
+               try {
+                  const body = args[1]?.body ? JSON.parse(args[1].body) : null;
+                  if (body) {
+                     const data = Array.isArray(body) ? body[0] : body;
+                     // Try to find identifying fields
+                     const identityFields = [
+                        'tenhv', 'tennv', 'tenlop', 'ten_hanghoa', 'tensp', 
+                        'ten_kh', 'ma_hanghoa', 'mahv', 'manv', 'malop', 
+                        'so_hd', 'sohoadon', 'tieude'
+                     ];
+                     const foundField = identityFields.find(f => data[f]);
+                     if (foundField) {
+                        extraInfo = ` | Chi tiết: ${data[foundField]}`;
+                     }
+                     
+                     // For updates, we might want to know what changed if the body is small
+                     if (method === 'PATCH' && Object.keys(data).length <= 5) {
+                        const changes = Object.entries(data)
+                           .filter(([k]) => !['updated_at', 'created_at'].includes(k))
+                           .map(([k, v]) => `${k}=${v}`)
+                           .join(', ');
+                        if (changes) extraInfo += ` (${changes})`;
+                     }
+                  }
+               } catch (e) {
+                  console.warn('Could not parse request body for logging', e);
+               }
+
+               // Extract ID from URL if possible for PATCH/DELETE
+               if ((method === 'PATCH' || method === 'DELETE') && !extraInfo) {
+                  const idMatch = url.match(/[?&]([^=]+)=eq\.([^&]+)/);
+                  if (idMatch) {
+                     extraInfo = ` | ID: ${idMatch[2]}`;
+                  }
+               }
+
+               insertLog(`[${action}] Bảng: ${table}${extraInfo}`);
             } else {
                insertLog(`[LỖI ${action}] Bảng: ${table}`);
             }

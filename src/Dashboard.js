@@ -18,7 +18,8 @@ import {
   BarChart3,
   Key,
   MessageSquare,
-  BookOpen
+  BookOpen,
+  Activity
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
@@ -34,6 +35,7 @@ import FinanceManager from './components/FinanceManager';
 import ConfigManager from './components/ConfigManager';
 import Statistics from './components/Statistics';
 import ChatManager from './components/ChatManager';
+import SystemLogs from './components/SystemLogs';
 
 const ALL_TABS = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
@@ -75,6 +77,7 @@ const ALL_TABS = [
   { id: 'employees', label: 'Nhân viên', icon: Users },
   { id: 'tasks', label: 'Công việc', icon: Briefcase },
   { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
+  { id: 'system_logs', label: 'Lịch sử', icon: Activity, adminOnly: true },
   { id: 'config', label: 'Cấu hình', icon: Settings }
 ];
 
@@ -105,7 +108,10 @@ function Dashboard() {
     if (!pq) return ALL_TABS.filter(t => t.id === 'overview'); // Safe fallback
     if (pq.full) return ALL_TABS;
 
-    return ALL_TABS.filter(t => (pq.tabs || []).includes(t.id));
+    return ALL_TABS.filter(t => {
+      if (t.adminOnly) return false;
+      return (pq.tabs || []).includes(t.id);
+    });
   };
 
   const visibleTabs = getVisibleTabs();
@@ -300,7 +306,13 @@ function Dashboard() {
                                   let table = match[2].trim();
                                   let actionLabel = actionType.includes('nhập mới') ? 'Đã thêm' : (actionType.includes('sửa') ? 'Đã cập nhật' : (actionType.includes('xóa') ? 'Đã xóa' : actionType));
                                   let tableLabel = tableNames[table] || table;
-                                  return `${actionLabel} ${tableLabel.toLowerCase()}`;
+                                  let res = `${actionLabel} ${tableLabel.toLowerCase()}`;
+                                  
+                                  // Add detail if available in our new format
+                                  const detailMatch = m.match(/\| Chi tiết: (.*?)(?: \||$|\()/);
+                                  if (detailMatch) res += `: ${detailMatch[1]}`;
+                                  
+                                  return res;
                                 }
                                 return m;
                               })()}
@@ -414,6 +426,7 @@ function Dashboard() {
             {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
+            {currentTab?.id === 'system_logs' && <SystemLogs />}
             {currentTab?.id === 'config' && <ConfigManager />}
           </div>
         </div>

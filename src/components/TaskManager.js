@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import { Plus, Clock, Search, Edit2, Trash2, X, Filter, Briefcase, RefreshCw, CheckCircle } from 'lucide-react';
 import './TaskManager.css';
 
@@ -69,6 +69,8 @@ export default function TaskManager() {
            manv: formData.manv
         }]);
      }
+     const targetEmp = employees.find(e => e.manv === formData.manv)?.tennv || formData.manv;
+     insertLog(`[CÔNG VIỆC] ${isEdit ? 'Cập nhật' : 'Giao việc mới'} tới: ${targetEmp} | Trạng thái: ${formData.tinhtrang} | Nội dung: ${formData.noidung.substring(0, 50)}...`);
      setIsFormOpen(false);
      fetchTasks();
   };
@@ -76,6 +78,7 @@ export default function TaskManager() {
   const handleDelete = async (id) => {
      if (!window.confirm("Thao tác này sẽ xoá vĩnh viễn ghi chú. Bạn chắc chắn chứ?")) return;
      await supabase.from('tbl_ghichu').delete().eq('id', id);
+     insertLog(`[CÔNG VIỆC] Xóa ghi chú/công việc ID: ${id}`);
      fetchTasks();
   };
 
@@ -85,6 +88,7 @@ export default function TaskManager() {
      else if (task.tinhtrang === 'Hoàn thành') nextStatus = 'Chưa xử lý';
 
      await supabase.from('tbl_ghichu').update({ tinhtrang: nextStatus }).eq('id', task.id);
+     insertLog(`[CÔNG VIỆC] Chuyển trạng thái công việc ID ${task.id} thành: ${nextStatus}`);
      fetchTasks();
   };
 

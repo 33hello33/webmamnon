@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { getOAuthToken } from '../utils/googleDrive';
 import {
@@ -102,6 +102,7 @@ const ConfigManager = () => {
 
       if (error) throw error;
       setMsg({ type: 'success', text: 'Đã lưu cấu hình hệ thống thành công!' });
+      insertLog(`[CẤU HÌNH] Cập nhật tham số hệ thống`);
       refreshConfig();
     } catch (err) {
       console.error(err);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Users, User, Search, Download, Calendar, Filter, X, CheckSquare, Save, Loader2, BookOpen
@@ -140,6 +140,9 @@ export default function AttendanceManager({ students, showMessage }) {
       else await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
+      const className = classes.find(c => c.malop === selectedId)?.tenlop || selectedId;
+      const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
+      insertLog(logDesc);
       // Update the report data too
       const { data: fresh } = await supabase.from('tbl_diemdanh').select('*').eq('malop', selectedId).gte('ngay', attDate).lte('ngay', attDate);
       if (fresh) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import { Search, PlusCircle, Edit, Trash2, DownloadCloud, UploadCloud, PackageOpen, X, Info, Plus } from 'lucide-react';
 import './ProductManager.css';
@@ -105,6 +105,8 @@ export default function ProductManager({ currentUser }) {
             daxoa: null
          }]);
       }
+      const logDesc = `[KHO HÀNG] ${isEdit ? 'Cập nhật' : 'Thêm mới'} SP: ${formData.mahang} | Tên: ${formData.tenhang}`;
+      insertLog(logDesc);
       setIsFormOpen(false);
       fetchItems();
    };
@@ -112,6 +114,8 @@ export default function ProductManager({ currentUser }) {
    const handleDelete = async (masp) => {
       if (!window.confirm("Cập nhật trạng thái: Bạn có chắc chắn muốn Xóa mặt hàng này khỏi kho chứ?")) return;
       await supabase.from('tbl_hanghoa').update({ daxoa: 'Đã Xóa' }).eq('mahang', masp);
+      const prodName = products.find(p => p.mahang === masp)?.tenhang || masp;
+      insertLog(`[XÓA KHO] SP: ${masp} | Tên: ${prodName}`);
       fetchItems();
    };
 
@@ -170,6 +174,8 @@ export default function ProductManager({ currentUser }) {
             hinhthuc: importData.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt'),
             daxoa: null
          }]);
+         const detailDesc = `[NHẬP KHO] SP: ${importData.mahang} | Tên: ${importData.tenhang} | SL: +${rawSoluongThem} | Tổng kho: ${totalQuantity}`;
+         insertLog(detailDesc);
       }
 
       setIsImportOpen(false);
@@ -257,6 +263,8 @@ export default function ProductManager({ currentUser }) {
          }]);
       }
 
+      const logDesc = `[NHẬP KHO LOẠT] ${validRows.length} mặt hàng | Tổng trị giá: ${fCur(batchImportData.rows.reduce((sum, r) => sum + (parseInt(r.soluongThem || 0) * parseInt((r.gianhap || '').toString().replace(/,/g, '') || 0)), 0))} | NCC: ${batchImportData.nhacungcap || '_'}`;
+      insertLog(logDesc);
       setIsBatchImportOpen(false);
       fetchItems();
    };
@@ -284,6 +292,7 @@ export default function ProductManager({ currentUser }) {
          for (const item of inserts) {
             await supabase.from('tbl_hanghoa').upsert([item], { onConflict: 'mahang' });
          }
+         insertLog(`[NHẬP EXCEL KHO] Số lượng: ${inserts.length} mặt hàng`);
          fetchItems();
       };
       reader.readAsBinaryString(file);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
@@ -915,6 +915,7 @@ export default function InvoiceManager() {
             monthlyMealFee,
             workingDaysCount
          });
+         insertLog(`[THÔNG BÁO] Đã thêm mới Thông báo ${newMaTB} - ${selectedStudent.tenhv} | Lớp: ${activeClass?.tenlop} | Tổng cộng: ${tongCong.toLocaleString('vi-VN')} đ | Thời lượng: ${sobuoihocFinal}`);
       } catch (err) {
          console.error(err);
          showMessage('error', 'Lỗi lưu thông báo: ' + err.message);
@@ -1051,6 +1052,8 @@ export default function InvoiceManager() {
             monthlyMealFee,
             workingDaysCount
          });
+
+         insertLog(`[PHIẾU THU] Đã thêm mới Hóa đơn ${newMaHD} - ${selectedStudent.tenhv} | Lớp: ${activeClass?.tenlop} | Tổng cộng: ${tongCong.toLocaleString('vi-VN')} đ | Thời lượng: ${sobuoihocFinal} | Đã đóng: ${invoiceData.daDong.toLocaleString('vi-VN')} đ`);
 
          // Reload old debt dynamically mimicking real-time refresh
          calculateOldDebt(selectedStudent.mahv);

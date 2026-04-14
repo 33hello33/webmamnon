@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import { 
   Users, UserPlus, Edit, Trash2, Search, X, CheckCircle2, AlertCircle, 
   Shield, Briefcase, RefreshCw 
@@ -103,12 +103,10 @@ export default function EmployeeManager({ currentUser }) {
       if (isEditMode) {
         const { error } = await supabase.from('tbl_nv').update(formData).eq('manv', formData.manv);
         if (error) throw error;
-        showMessage('success', 'Cập nhật thành công');
-      } else {
-        const { error } = await supabase.from('tbl_nv').insert([formData]);
-        if (error) throw error;
         showMessage('success', 'Thêm nhân sự mới thành công');
       }
+      const logDesc = `[NHÂN SỰ] ${isEditMode ? 'Cập nhật' : 'Thêm mới'} NV: ${formData.manv} | Tên: ${formData.tennv} | Chức vụ: ${formData.role}`;
+      insertLog(logDesc);
       setIsFormOpen(false);
       fetchEmployees();
     } catch (err) {
@@ -134,6 +132,8 @@ export default function EmployeeManager({ currentUser }) {
       const { error } = await supabase.from('tbl_nv').update({ trangthai: 'Đã Nghỉ' }).eq('manv', selectedId);
       if (error) throw error;
       showMessage('success', 'Đã chuyển trạng thái nhân viên thành Đã Nghỉ');
+      const empName = employees.find(e => e.manv === selectedId)?.tennv || selectedId;
+      insertLog(`[NHÂN SỰ] Báo nghỉ việc NV: ${selectedId} | Tên: ${empName}`);
       setIsDeleteOpen(false);
       fetchEmployees();
     } catch (err) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { supabase, insertLog } from '../supabase';
 import { Search, Trash2, Plus, Minus, CreditCard, CheckCircle, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './SalesPOS.css';
@@ -183,6 +183,9 @@ export default function SalesPOS() {
          if (res.error) {
             throw res.error;
          }
+
+         const logDesc = `[BÁN HÀNG POS] Mã: ${newMaBill} | Học sinh: ${selectedStudent.tenhv} | Tổng: ${fCur(tongCongBill)} | Giam: ${fCur(pCur(giamGia))}`;
+         insertLog(logDesc);
 
          // Cập nhật nợ cũ trong tbl_billhanghoa (gộp vào bill mới)
          if (noCu > 0) {

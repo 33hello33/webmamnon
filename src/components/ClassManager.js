@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, generateId } from '../supabase';
+import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
@@ -732,6 +732,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       if (error) throw error;
 
       setNoticesToPrint(currentNotices);
+      insertLog(`[THÔNG BÁO] Xuất thông báo hàng loạt lớp ${selectedClass?.tenlop || selectedClass?.malop} | SL: ${batchStudentsData.length} học sinh`);
     } catch (err) {
       console.error(err);
       if (err.code === '42P01') showMessage('error', 'Chưa có bảng tbl_thongbao trong CSDL để lưu trữ.');
@@ -880,6 +881,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         setSelectedClassId(formData.malop);
       }
 
+      insertLog(`[QUẢN LÝ LỚP] ${isEditMode ? 'Cập nhật' : 'Tạo mới'} lớp: ${formData.malop} | Tên: ${formData.tenlop}`);
       showMessage('success', isEditMode ? 'Cập nhật thông tin lớp thành công!' : 'Thêm lớp học thành công!');
       setIsFormOpen(false);
       fetchClasses();
@@ -917,6 +919,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       if (error) throw error;
 
       showMessage('success', `Đã xóa lớp ${selectedClass.tenlop} thành công`);
+      insertLog(`[XÓA LỚP] Mã: ${selectedClass.malop} | Tên: ${selectedClass.tenlop}`);
       setIsDeleteOpen(false);
       setSelectedClassId(null);
       fetchClasses();
@@ -950,6 +953,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       if (error) throw error;
 
       showMessage('success', `Đã chuyển ${transferringStudent.tenhv} sang lớp mới thành công!`);
+      const targetClassName = classes.find(c => c.malop === transferTargetClassId)?.tenlop || transferTargetClassId;
+      insertLog(`[CHUYỂN LỚP] HS: ${transferringStudent.tenhv} | Từ ${selectedClass.tenlop} sang ${targetClassName}`);
       setIsTransferModalOpen(false);
       if (fetchStudents) fetchStudents(); // Refresh global student list
       fetchClasses(); // Refresh local counts if needed
