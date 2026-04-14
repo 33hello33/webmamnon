@@ -879,8 +879,9 @@ export default function StudentManager({ activeSubTab }) {
                 <label>Ghi Chú</label>
                 <textarea
                   name="ghichu"
-                  defaultValue={`Số ĐT người đón dùm :
-Họ tên người đón : Mối liên hệ với bé :
+                  placeholder={`Số ĐT người đón dùm :
+Họ tên người đón :
+Mối liên hệ với bé :
 Địa chỉ tạm trú:`}
                   onChange={handleChange}
                   rows="2"
