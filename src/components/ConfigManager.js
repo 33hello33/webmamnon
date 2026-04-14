@@ -38,7 +38,7 @@ const TAB_OPTIONS = [
   { id: 'employees', label: 'Nhân viên' },
   { id: 'tasks', label: 'Công việc' },
   { id: 'debts', label: 'Quản lý nợ' },
-  { id: 'students', label: 'Quản lý học sinh' },
+  { id: 'students', label: 'Quản lý lớp học' },
   { id: 'export_excel', label: 'Xuất Excel (Quyền)' }
 ];
 

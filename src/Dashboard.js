@@ -17,7 +17,8 @@ import {
   X,
   BarChart3,
   Key,
-  MessageSquare
+  MessageSquare,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
@@ -36,8 +37,6 @@ import ChatManager from './components/ChatManager';
 
 const ALL_TABS = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
-  { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
-  { id: 'chat', label: 'Kênh Chat', icon: MessageSquare },
   {
     id: 'finances',
     label: 'Quản lý thu chi',
@@ -47,6 +46,18 @@ const ALL_TABS = [
       { id: 'hoadon', label: 'QL hóa đơn' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
+    ]
+  },
+  { id: 'student_list', label: 'Học sinh', icon: GraduationCap },
+  {
+    id: 'students',
+    label: 'Quản lý lớp học',
+    icon: BookOpen,
+    subTabs: [
+      { id: 'classes', label: 'Lớp' },
+      { id: 'attendance_today', label: 'Danh sách đi học' },
+      { id: 'attendance', label: 'Điểm danh' },
+      { id: 'leave_list', label: 'Danh sách nghỉ' }
     ]
   },
   { id: 'invoices', label: 'Xuất hóa đơn', icon: Receipt },
@@ -59,21 +70,11 @@ const ALL_TABS = [
       { id: 'products', label: 'Quản lý kho hàng' }
     ]
   },
+  { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
+  { id: 'chat', label: 'Kênh Chat', icon: MessageSquare },
   { id: 'employees', label: 'Nhân viên', icon: Users },
   { id: 'tasks', label: 'Công việc', icon: Briefcase },
-  { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
-  {
-    id: 'students',
-    label: 'Quản lý học sinh',
-    icon: GraduationCap,
-    subTabs: [
-      { id: 'students', label: 'Học sinh' },
-      { id: 'classes', label: 'Lớp' },
-      { id: 'attendance_today', label: 'Danh sách đi học' },
-      { id: 'attendance', label: 'Điểm danh' },
-      { id: 'leave_list', label: 'Danh sách nghỉ' }
-    ]
-  },
+  { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
   { id: 'config', label: 'Cấu hình', icon: Settings }
 ];
 
@@ -396,10 +397,10 @@ function Dashboard() {
         </div>
         <div className="card-container">
           <div className="placeholder-card" style={{
-            padding: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
-            background: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
-            boxShadow: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
-            border: ['finances', 'students', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
+            padding: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
+            background: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
+            boxShadow: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
+            border: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'statistics' && <Statistics />}
@@ -409,6 +410,7 @@ function Dashboard() {
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}
             {currentTab?.id === 'sales' && activeSubTab === 'products' && <ProductManager currentUser={user} />}
             {currentTab?.id === 'tasks' && <TaskManager />}
+            {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" />}
             {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
