@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, insertLog } from '../supabase';
+import { supabase, insertLog, generateId } from '../supabase';
 import { 
   Users, UserPlus, Edit, Trash2, Search, X, CheckCircle2, AlertCircle, 
   Shield, Briefcase, RefreshCw 
@@ -58,24 +58,19 @@ export default function EmployeeManager({ currentUser }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
-  const handleOpenAdd = () => {
-    let nextId = 'NV001';
-    if (employees.length > 0) {
-      const nvIds = employees
-        .map(e => e.manv)
-        .filter(id => id && id.startsWith('NV'))
-        .map(id => parseInt(id.replace('NV', ''), 10))
-        .filter(n => !isNaN(n));
-        
-      if (nvIds.length > 0) {
-        const maxId = Math.max(...nvIds);
-        nextId = `NV${String(maxId + 1).padStart(3, '0')}`;
-      }
+  const handleOpenAdd = async () => {
+    setLoading(true);
+    try {
+      const nextId = await generateId('tbl_nv', 'manv', 'NV', 3);
+      setFormData({ ...INITIAL_FORM, manv: nextId });
+      setIsEditMode(false);
+      setIsFormOpen(true);
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'Lỗi khởi tạo mã nhân viên');
+    } finally {
+      setLoading(false);
     }
-    
-    setFormData({ ...INITIAL_FORM, manv: nextId });
-    setIsEditMode(false);
-    setIsFormOpen(true);
   };
 
   const handleOpenEdit = () => {
@@ -102,6 +97,10 @@ export default function EmployeeManager({ currentUser }) {
     try {
       if (isEditMode) {
         const { error } = await supabase.from('tbl_nv').update(formData).eq('manv', formData.manv);
+        if (error) throw error;
+        showMessage('success', 'Cập nhật nhân sự thành công');
+      } else {
+        const { error } = await supabase.from('tbl_nv').insert([formData]);
         if (error) throw error;
         showMessage('success', 'Thêm nhân sự mới thành công');
       }

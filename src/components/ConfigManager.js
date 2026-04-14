@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, insertLog } from '../supabase';
+import { createPortal } from 'react-dom';
 import { useConfig } from '../ConfigContext';
 import { getOAuthToken } from '../utils/googleDrive';
 import {
@@ -18,7 +19,8 @@ import {
   ExternalLink,
   Key,
   FileJson,
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 import './ConfigManager.css';
 
@@ -48,6 +50,7 @@ const ConfigManager = () => {
   const [loading, setLoading] = useState(false);
   const [testingGDrive, setTestingGDrive] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const [isTruTienAnModalOpen, setIsTruTienAnModalOpen] = useState(false);
 
   useEffect(() => {
     if (config) {
@@ -71,7 +74,8 @@ const ConfigManager = () => {
         nghilientiep: typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : (config.nghilientiep || {
           songaynghilientiep: 7,
           phantramgiam: 50
-        })
+        }),
+        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan
       });
     }
   }, [config]);
@@ -185,6 +189,80 @@ const ConfigManager = () => {
       cdd.selected = [...cdd.selected, val];
     }
     setFormData({ ...formData, cotdiemdanh: cdd });
+  };
+
+  const trutienanTiers = (typeof formData.trutienan === 'object' && formData.trutienan !== null) ? formData.trutienan : {};
+
+  const handleAddTier = () => {
+    const newTiers = { ...trutienanTiers };
+    newTiers["0"] = { tru_nghi: 0 };
+    setFormData({ ...formData, trutienan: newTiers });
+  };
+
+  const handleUpdateTier = (oldKey, newKey, truNghi) => {
+    const newTiers = { ...trutienanTiers };
+    const val = newTiers[oldKey];
+    delete newTiers[oldKey];
+    newTiers[newKey] = { tru_nghi: parseInt(truNghi) || 0 };
+    setFormData({ ...formData, trutienan: newTiers });
+  };
+
+  const handleRemoveTier = (key) => {
+    const newTiers = { ...trutienanTiers };
+    delete newTiers[key];
+    setFormData({ ...formData, trutienan: newTiers });
+  };
+
+  const renderTruTienAnModal = () => {
+    if (!isTruTienAnModalOpen) return null;
+
+    return createPortal(
+      <div className="config-modal-overlay">
+        <div className="config-modal">
+          <div className="modal-header">
+            <h3>Cấu hình mức trừ tiền ăn</h3>
+            <button className="btn-close" onClick={() => setIsTruTienAnModalOpen(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
+              Thiết lập số tiền hoàn trả (trừ) mỗi ngày nghỉ có phép dựa trên mức học phí tháng.
+              Ví dụ: Nếu tiền ăn là 650,000đ thì trừ 20,000đ/ngày.
+            </p>
+            <div className="tier-list">
+              <div className="tier-header">
+                <span>Mức tiền ăn (VNĐ)</span>
+                <span>Tiền trừ/ngày (VNĐ)</span>
+                <span></span>
+              </div>
+              {Object.entries(trutienanTiers).map(([key, val]) => (
+                <div key={key} className="tier-item">
+                  <input
+                    type="text"
+                    value={formatCurrency(key)}
+                    onChange={(e) => handleUpdateTier(key, e.target.value.replace(/,/g, ''), val.tru_nghi)}
+                    placeholder="VD: 650000"
+                  />
+                  <input
+                    type="text"
+                    value={formatCurrency(val.tru_nghi)}
+                    onChange={(e) => handleUpdateTier(key, key, e.target.value.replace(/,/g, ''))}
+                    placeholder="VD: 20000"
+                  />
+                  <button className="btn-remove-tier" onClick={() => handleRemoveTier(key)}>×</button>
+                </div>
+              ))}
+              <button className="btn-add-tier" onClick={handleAddTier}>
+                <Plus size={16} /> Thêm mức mới
+              </button>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-confirm" onClick={() => setIsTruTienAnModalOpen(false)}>Xong</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
   };
 
   return (
@@ -533,13 +611,25 @@ const ConfigManager = () => {
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
                 <div className="form-group">
                   <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền ăn trừ/ngày nghỉ</label>
-                  <input
-                    type="text"
-                    value={formatCurrency(formData.trutienan || '')}
-                    onChange={(e) => setFormData({ ...formData, trutienan: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
-                    placeholder="VD: 30,000"
-                    style={{ fontSize: '0.9rem', padding: '4px 8px' }}
-                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsTruTienAnModalOpen(true)}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        fontSize: '0.85rem',
+                        background: '#fdf2f8',
+                        border: '1px solid #fce7f3',
+                        borderRadius: '8px',
+                        color: '#be185d',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {Object.keys(trutienanTiers).length > 0 ? `Đã cấu hình ${Object.keys(trutienanTiers).length} mức` : 'Nhấp để cấu hình chi tiết'}
+                    </button>
+                  </div>
                 </div>
                 <div className="form-group" style={{ marginTop: '0.5rem' }}>
                   <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền học trừ/ngày nghỉ</label>
@@ -663,6 +753,7 @@ const ConfigManager = () => {
             </table>
           </div>
         </section>
+        {renderTruTienAnModal()}
       </form>
     </div>
   );

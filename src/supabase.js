@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
 
 export const supabase = createClient(
    supabaseUrl || 'https://placeholder.supabase.co',
@@ -67,9 +67,9 @@ window.fetch = async (...args) => {
          const table = match[1].split('?')[0].replace(/\/$/, '');
          // Exclude tables that have manual logging to avoid duplicates
          const manualLoggedTables = [
-            'tbl_log', 'tbl_hv', 'tbl_nv', 'tbl_hanghoa', 'tbl_lop', 
-            'tbl_ghichu', 'tbl_hd', 'tbl_nhapkho', 'tbl_thongbao', 
-            'tbl_config', 'tbl_phieuchi', 'tbl_billhanghoa', 
+            'tbl_log', 'tbl_hv', 'tbl_nv', 'tbl_hanghoa', 'tbl_lop',
+            'tbl_ghichu', 'tbl_hd', 'tbl_nhapkho', 'tbl_thongbao',
+            'tbl_config', 'tbl_phieuchi', 'tbl_billhanghoa',
             'tbl_diemdanh', 'tbl_noidungday'
          ];
          if (!manualLoggedTables.includes(table)) {
@@ -86,15 +86,15 @@ window.fetch = async (...args) => {
                      const data = Array.isArray(body) ? body[0] : body;
                      // Try to find identifying fields
                      const identityFields = [
-                        'tenhv', 'tennv', 'tenlop', 'ten_hanghoa', 'tensp', 
-                        'ten_kh', 'ma_hanghoa', 'mahv', 'manv', 'malop', 
+                        'tenhv', 'tennv', 'tenlop', 'ten_hanghoa', 'tensp',
+                        'ten_kh', 'ma_hanghoa', 'mahv', 'manv', 'malop',
                         'so_hd', 'sohoadon', 'tieude'
                      ];
                      const foundField = identityFields.find(f => data[f]);
                      if (foundField) {
                         extraInfo = ` | Chi tiết: ${data[foundField]}`;
                      }
-                     
+
                      // For updates, we might want to know what changed if the body is small
                      if (method === 'PATCH' && Object.keys(data).length <= 5) {
                         const changes = Object.entries(data)

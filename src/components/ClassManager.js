@@ -151,7 +151,7 @@ const calculateConsecutiveLeave = (attendance) => {
 };
 
 export default function ClassManager({ students, showMessage, fetchStudents }) {
-  const { config } = useConfig();
+  const { config, getTruTienAn, getTienAnConfig } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
     { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -405,8 +405,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       // 1. Fetch latest docs to determine attendance range (previous cycle)
       const studentIds = activeStudents.map(s => s.mahv);
       const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
-        supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd').in('mahv', studentIds).neq('daxoa', 'Đã Xóa'),
-        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd').in('mahv', studentIds).neq('daxoa', 'Đã Xóa')
+        supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
+        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds)
       ]);
 
       const ensureIsoDate = (dStr) => {
@@ -426,14 +426,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const studentRanges = {};
       activeStudents.forEach(s => {
         const docs = [
-          ...(allHDs || []).filter(x => x.mahv === s.mahv),
-          ...(allTBs || []).filter(x => x.mahv === s.mahv)
+          ...(allHDs || []).filter(x => x.mahv === s.mahv && (x.daxoa || '').toLowerCase() !== 'đã xóa'),
+          ...(allTBs || []).filter(x => x.mahv === s.mahv && (x.daxoa || '').toLowerCase() !== 'đã xóa')
         ].sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
 
         const recent = docs[0];
         if (recent) {
           let sStart = ensureIsoDate(recent.ngaybatdau);
           let sEnd = ensureIsoDate(recent.ngayketthuc);
+
+          // Fallback parsing from thoiluong if dates are missing
+          if ((!sStart || !sEnd) && recent.thoiluong) {
+            const m = recent.thoiluong.match(/(\d{2})\/(\d{4})/);
+            if (m) {
+              const mm = parseInt(m[1]) - 1;
+              const yyyy = parseInt(m[2]);
+              sStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
+              sEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
+            }
+          }
+
           if (sStart && sEnd) studentRanges[s.mahv] = { start: sStart, end: sEnd };
         }
       });
@@ -449,7 +461,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         attendance = attData || [];
       }
 
-      const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
       setBatchNoticeData({
@@ -491,9 +503,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const consecutiveGroups = calculateConsecutiveLeave(studentAttendance);
         const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
         const soNgayNghi = nghiPhep + nghiKP;
-        const mealRefund = nghiPhep * trutienan_val;
+        const taCfg = getTienAnConfig(initHocPhi);
+        const mealRefund = nghiPhep * taCfg.tru_nghi;
         const workingDays = calculateWorkingDaysInMonth(startStr);
-        const monthlyMealFee = workingDays * trutienan_val;
+        const monthlyMealFee = taCfg.amount;
 
         // Tuition refund logic
         const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
@@ -595,9 +608,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     setBatchStudentsData(prev => (prev || []).map(item => {
       let sobuoi = `${batchNoticeData.soLuong} ${batchNoticeData.loaiDong.toLowerCase()}`;
-      const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const taCfg_apply = getTienAnConfig(hpNumber);
       const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
-      const monthlyMealFee = workingDays * trutienan_val;
+      const monthlyMealFee = taCfg_apply.amount;
       const tc = Math.max(0, hpNumber + monthlyMealFee - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
 
       let finalKetThuc = '';
@@ -642,11 +655,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         }
         let newItem = { ...item, [field]: cleanVal };
 
-        // Auto recalculate refunds if leave days change
-        if (field === 'nghiPhep' || field === 'maxConsecutive') {
-          const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+        // Auto recalculate refunds if leave days or meal tier change
+        if (field === 'nghiPhep' || field === 'maxConsecutive' || field === 'tienAnTier') {
+          if (field === 'tienAnTier') {
+            const tierKey = value;
+            const tier = config?.trutienan ? config.trutienan[tierKey] : null;
+            if (tier) {
+              newItem.tienan = parseInt(tierKey);
+            }
+          }
+
+          const taAmount = parseInt(newItem.tienan || 0);
+          const taTier = config?.trutienan ? config.trutienan[String(taAmount)] : null;
+          const tru_nghi_val = taTier ? (parseInt(taTier.tru_nghi) || 0) : getTruTienAn(newItem.hocphi);
+          
           const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-          newItem.trutienan = newItem.nghiPhep * trutienan_val;
+          newItem.trutienan = newItem.nghiPhep * tru_nghi_val;
 
           const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
           const threshold = thresholdCfg.songaynghilientiep || 7;
@@ -704,7 +728,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           tenlop: selectedClass?.tenlop || '',
           manv: 'Hệ thống',
           hocphi: formatTuition(row.hocphi),
-          tienan: formatTuition(row.tienan),
+          tienan: row.tienan > 0 ? JSON.stringify({ 
+            days: calculateWorkingDaysInMonth(row.ngaybatdau), 
+            amount: row.tienan 
+          }) : null,
           giamhocphi: formatTuition(row.giamhocphi),
           trutienan: formatTuition(row.trutienan),
           tiennghiphep: formatTuition(row.trutiennghi),
@@ -1615,13 +1642,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               />
                             </td>
                             <td>
-                              <input
-                                type="text"
-                                value={formatTuition(row.tienan)}
-                                onChange={e => handleBatchStudentChange(row.mahv, 'tienan', e.target.value)}
-                                className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
-                              />
+                              {config?.trutienan ? (
+                                <select 
+                                  value={String(row.tienan)} 
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'tienAnTier', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f8fafc', borderRadius: '4px', padding: '4px 8px', fontWeight: 700, color: '#2563eb' }}
+                                >
+                                  {Object.keys(config.trutienan).map(key => (
+                                    <option key={key} value={key}>{formatTuition(key)} đ</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.tienan)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'tienan', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
+                                />
+                              )}
                             </td>
                             <td>
                               <input

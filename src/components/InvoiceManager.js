@@ -200,7 +200,8 @@ export default function InvoiceManager() {
       daDong: 0,
       hinhThuc: (config && (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name)) ? (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name) : 'Tiền mặt',
       ghiChu: '',
-      phuthu: []
+      phuthu: [],
+      selectedTienAnTier: null
    });
 
    const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -410,6 +411,7 @@ export default function InvoiceManager() {
       let hinhThuc = walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt';
       let ghiChu = '';
       let phuthu = [];
+      let selectedTienAnTier = null;
 
       setStudySummary(null);
       setRecentSourceText('');
@@ -497,6 +499,19 @@ export default function InvoiceManager() {
                   }
                }
             }
+            if (recentDoc.tienan) {
+               try {
+                  const taData = typeof recentDoc.tienan === 'string' ? JSON.parse(recentDoc.tienan) : recentDoc.tienan;
+                  if (taData && taData.amount) {
+                     const tierKey = String(taData.amount);
+                     if (config?.trutienan && config.trutienan[tierKey]) {
+                        selectedTienAnTier = { amount: taData.amount, ...config.trutienan[tierKey] };
+                     }
+                  }
+               } catch (e) {
+                  console.error('Error parsing tienan from recent Doc:', e);
+               }
+            }
          }
 
       } catch (err) {
@@ -534,7 +549,8 @@ export default function InvoiceManager() {
 
       setInvoiceData({
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
-         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu
+         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu,
+         selectedTienAnTier
       });
 
       try {
@@ -792,9 +808,29 @@ export default function InvoiceManager() {
 
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
-   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
-   const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
+    const { getTruTienAn } = useConfig();
+    const trutienan_config = config?.trutienan || {};
+    
+    // Tìm tier được chọn hoặc tự động (chọn tier có key gần nhất với hocphi nếu tự động, hoặc lấy tier đầu tiên)
+    let activeTier = null;
+    if (invoiceData.selectedTienAnTier) {
+       activeTier = invoiceData.selectedTienAnTier;
+    } else if (trutienan_config && typeof trutienan_config === 'object') {
+       // Tự động tìm mức phù hợp hoặc lấy mức đầu tiên làm mặc định
+       const keys = Object.keys(trutienan_config);
+       if (keys.length > 0) {
+          // Thử tìm mức trùng khớp với hocphi (mặc định cũ) hoặc lấy mức đầu tiên
+          const matchKey = keys.find(k => parseInt(k) === invoiceData.hocphi) || keys[0];
+          activeTier = { 
+             amount: parseInt(matchKey), 
+             tru_nghi: trutienan_config[matchKey].tru_nghi 
+          };
+       }
+    }
+
+    const trutienan_val = activeTier ? activeTier.tru_nghi : 0;
+    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
    let tuitionRefund = 0;
@@ -824,7 +860,8 @@ export default function InvoiceManager() {
 
    const workingDaysCount = getWorkingDaysInMonth(invoiceData.ngayBatDau);
    const isMonthly = (invoiceData.loaiDong || '').toLowerCase().includes('tháng');
-   const monthlyMealFee = isMonthly ? (workingDaysCount * trutienan_val) : 0;
+   // Tiền ăn là cố định theo mức (key của tier)
+   const monthlyMealFee = isMonthly && activeTier ? activeTier.amount : 0;
 
    const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum + monthlyMealFee - invoiceData.giamHocphi - deductionSum;
    const conLai = tongCong - invoiceData.daDong;
@@ -1330,10 +1367,25 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item">
                               <label>Tiền ăn</label>
-                              <div className="fi-val-display text-primary">{formatCurrency(monthlyMealFee)} ₫</div>
-                              {workingDaysCount > 0 && isMonthly && (
-                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>Tháng {new Date(invoiceData.ngayBatDau).getMonth() + 1}: {workingDaysCount} ngày</div>
-                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
+                                 {config?.trutienan && (
+                                    <select 
+                                       style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', fontWeight: 700, color: '#2563eb', background: '#f8fafc' }}
+                                       value={invoiceData.selectedTienAnTier ? Object.entries(config.trutienan).find(([k, v]) => v.tru_nghi === invoiceData.selectedTienAnTier.tru_nghi)?.[0] : ''}
+                                       onChange={(e) => {
+                                          const key = e.target.value;
+                                          if (key) {
+                                             setInvoiceData(prev => ({ ...prev, selectedTienAnTier: { amount: parseInt(key), ...config.trutienan[key] } }));
+                                          }
+                                       }}
+                                    >
+                                       {!invoiceData.selectedTienAnTier && <option value="">Chọn mức...</option>}
+                                       {Object.entries(typeof config.trutienan === 'object' ? config.trutienan : {}).map(([key, val]) => (
+                                          <option key={key} value={key}>{formatCurrency(key)} đ</option>
+                                       ))}
+                                    </select>
+                                 )}
+                              </div>
                            </div>
                            <div className="im-fi-item">
                               <label>Học phí</label>

@@ -398,12 +398,12 @@ export default function StudentManager({ activeSubTab }) {
             if (listMaLop.length === 0 && tenLopStr) {
               // Try to find class by name (case insensitive)
               let foundCls = classes.find(c => c.tenlop && c.tenlop.toLowerCase() === tenLopStr.toLowerCase());
-              
+
               if (!foundCls) {
                 // Auto-create class if it doesn't exist
                 const newMaLop = await generateId('tbl_lop', 'malop', 'Lop', 3);
                 const newCls = { malop: newMaLop, tenlop: tenLopStr };
-                
+
                 const { error: clsErr } = await supabase.from('tbl_lop').insert([newCls]);
                 if (!clsErr) {
                   // Add to local state & loop helper
@@ -739,15 +739,15 @@ export default function StudentManager({ activeSubTab }) {
             </div>
             <form onSubmit={handleSave} className="modal-body sm-form-grid">
               {/* Header row with Large Avatar and Basic Info */}
-              <div className="sm-form-header-row" style={{ 
-                gridColumn: '1 / -1', 
-                display: 'flex', 
-                gap: '2.5rem', 
-                alignItems: 'center', 
-                marginBottom: '1.5rem', 
-                background: '#f8fafc', 
-                padding: '2rem', 
-                borderRadius: '24px', 
+              <div className="sm-form-header-row" style={{
+                gridColumn: '1 / -1',
+                display: 'flex',
+                gap: '2.5rem',
+                alignItems: 'center',
+                marginBottom: '1.5rem',
+                background: '#f8fafc',
+                padding: '2rem',
+                borderRadius: '24px',
                 border: '1px solid #e2e8f0',
                 boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
               }}>
@@ -757,33 +757,33 @@ export default function StudentManager({ activeSubTab }) {
                     alt="Avatar"
                     style={{ width: '200px', height: '200px', borderRadius: '32px', objectFit: 'cover', border: '6px solid white', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
                   />
-                  <label htmlFor="avatar-input" style={{ 
-                    position: 'absolute', 
-                    bottom: '-12px', 
-                    right: '-12px', 
-                    background: '#3b82f6', 
-                    color: 'white', 
-                    padding: '14px', 
-                    borderRadius: '20px', 
-                    cursor: 'pointer', 
-                    boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.5)', 
+                  <label htmlFor="avatar-input" style={{
+                    position: 'absolute',
+                    bottom: '-12px',
+                    right: '-12px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    padding: '14px',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.5)',
                     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}
-                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                   >
                     <Camera size={26} />
                     <input id="avatar-input" type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
                   </label>
                 </div>
-                
-                <div className="header-info-fields" style={{ 
-                  flex: 1, 
-                  display: 'grid', 
-                  gridTemplateColumns: '1fr 1fr', 
+
+                <div className="header-info-fields" style={{
+                  flex: 1,
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
                   gap: '1.25rem',
                   alignContent: 'center'
                 }}>
@@ -877,7 +877,14 @@ export default function StudentManager({ activeSubTab }) {
 
               <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
                 <label>Ghi Chú</label>
-                <textarea name="ghichu" value={formData.ghichu} onChange={handleChange} rows="2"></textarea>
+                <textarea
+                  name="ghichu"
+                  defaultValue={`Số ĐT người đón dùm :
+Họ tên người đón : Mối liên hệ với bé :
+Địa chỉ tạm trú:`}
+                  onChange={handleChange}
+                  rows="2"
+                />
               </div>
               <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
                 <label>Tình trạng sức khỏe</label>
