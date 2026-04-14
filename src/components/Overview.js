@@ -377,9 +377,9 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
         </div>
         <div className="finance-filters">
           <div className="custom-dates animate-fade-in">
-            <input type="date" value={totalsDateRange.start} onChange={e => handleTotalsDateInput('start', e.target.value)} />
+            <input type="date" value={(totalsDateRange.start || '').split('T')[0]} onChange={e => handleTotalsDateInput('start', e.target.value)} />
             <span className="date-sep">đến</span>
-            <input type="date" value={totalsDateRange.end} onChange={e => handleTotalsDateInput('end', e.target.value)} />
+            <input type="date" value={(totalsDateRange.end || '').split('T')[0]} onChange={e => handleTotalsDateInput('end', e.target.value)} />
           </div>
         </div>
       </div>
@@ -439,9 +439,9 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
             </div>
             <div className="finance-filters">
               <div className="custom-dates custom-dates-sm animate-fade-in">
-                <input type="date" value={walletsDateRange.start} onChange={e => handleWalletsDateInput('start', e.target.value)} />
+                <input type="date" value={(walletsDateRange.start || '').split('T')[0]} onChange={e => handleWalletsDateInput('start', e.target.value)} />
                 <span className="date-sep">đến</span>
-                <input type="date" value={walletsDateRange.end} onChange={e => handleWalletsDateInput('end', e.target.value)} />
+                <input type="date" value={(walletsDateRange.end || '').split('T')[0]} onChange={e => handleWalletsDateInput('end', e.target.value)} />
               </div>
             </div>
           </div>
