@@ -877,9 +877,9 @@ export default function StudentManager({ activeSubTab }) {
 
               <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
                 <label>Ghi Chú</label>
-                <textarea
+                <textarea style={{ height: "100px" }}
                   name="ghichu"
-                  placeholder={`Số ĐT người đón dùm :
+                  defaultValue={`Số ĐT người đón dùm :
 Họ tên người đón :
 Mối liên hệ với bé :
 Địa chỉ tạm trú:`}
