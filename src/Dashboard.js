@@ -101,14 +101,23 @@ function Dashboard() {
 
   const getVisibleTabs = () => {
     if (!user) return [];
-    if (user.role === 'Quản lý') return ALL_TABS;
+    
+    // First apply global config flags
+    let filtered = ALL_TABS;
+    if (config) {
+      if (config.giaoviec === false) filtered = filtered.filter(t => t.id !== 'tasks');
+      if (config.thongke === false) filtered = filtered.filter(t => t.id !== 'statistics');
+      if (config.chat === false) filtered = filtered.filter(t => t.id !== 'chat');
+    }
+
+    if (user.role === 'Quản lý') return filtered;
 
     // Check phanquyenrole
     const pq = config?.phanquyenrole?.[user.role];
-    if (!pq) return ALL_TABS.filter(t => t.id === 'overview'); // Safe fallback
-    if (pq.full) return ALL_TABS;
+    if (!pq) return filtered.filter(t => t.id === 'overview'); // Safe fallback
+    if (pq.full) return filtered;
 
-    return ALL_TABS.filter(t => {
+    return filtered.filter(t => {
       if (t.adminOnly) return false;
       return (pq.tabs || []).includes(t.id);
     });
@@ -207,6 +216,12 @@ function Dashboard() {
       navigate('/login');
     }
   }, [navigate]);
+
+  useEffect(() => {
+    if (user && visibleTabs.length > 0 && !visibleTabs.some(t => t.id === activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [visibleTabs, activeTab, user]);
 
   const handleLogout = () => {
     localStorage.removeItem('auth_session');

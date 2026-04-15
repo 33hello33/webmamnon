@@ -426,12 +426,14 @@ function Login() {
                      style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, color: loginMode === 'login' || loginMode === 'attendance' ? '#3b82f6' : '#64748b', borderBottom: loginMode === 'login' || loginMode === 'attendance' ? '3px solid #3b82f6' : 'none', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
                      Nhân Viên
                   </button>
-                  <button
-                     type="button"
-                     onClick={() => { setLoginMode('parent'); setMessage({ type: '', text: '' }); }}
-                     style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, color: loginMode === 'parent' ? '#10b981' : '#64748b', borderBottom: loginMode === 'parent' ? '3px solid #10b981' : 'none', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
-                     Phụ Huynh
-                  </button>
+                  {config?.phuhuynh && (
+                     <button
+                        type="button"
+                        onClick={() => { setLoginMode('parent'); setMessage({ type: '', text: '' }); }}
+                        style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, color: loginMode === 'parent' ? '#10b981' : '#64748b', borderBottom: loginMode === 'parent' ? '3px solid #10b981' : 'none', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
+                        Phụ Huynh
+                     </button>
+                  )}
                </div>
             )}
 

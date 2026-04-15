@@ -20,7 +20,12 @@ import {
   Key,
   FileJson,
   RefreshCw,
-  Plus
+  Plus,
+  LayoutDashboard,
+  MessageSquare,
+  BarChart3,
+  Briefcase,
+  Users
 } from 'lucide-react';
 import './ConfigManager.css';
 
