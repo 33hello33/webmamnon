@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import './App.css';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
-import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download } from 'lucide-react';
+import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download, Image, FileText, CalendarX, Clock, Pill, UserPlus, Paperclip, Send } from 'lucide-react';
+import { uploadToGDrive } from './utils/googleDrive';
+import { compressImage } from './utils/imageUtils';
 
 function Login() {
    const [username, setUsername] = useState('');
@@ -27,6 +29,7 @@ function Login() {
    const [chatLoading, setChatLoading] = useState(false);
    const [chatInput, setChatInput] = useState('');
    const [chatDocuments, setChatDocuments] = useState([]);
+   const [uploading, setUploading] = useState(false);
 
    // ----- Attendance Features -----
    const [attendanceUser, setAttendanceUser] = useState(null);
@@ -354,6 +357,88 @@ function Login() {
          }
       }
    }, [navigate]);
+
+   const handleFileUpload = async (e, type) => {
+      const fileInput = e.target.files[0];
+      if (!fileInput || !parentData) return;
+
+      setUploading(true);
+      try {
+         let file = fileInput;
+         if (type === 'image') {
+            try {
+               file = await compressImage(fileInput, 100);
+            } catch (err) {
+               console.error('Compression failed:', err);
+            }
+         }
+
+         let finalUrl = '';
+         if (config.gdrive_enabled) {
+            const gResult = await uploadToGDrive(
+               file,
+               config.gdrive_folder_id?.trim(),
+               config.gdrive_client_id,
+               '', // apiKey
+               config.gdrive_auth_type || 'oauth',
+               config.gdrive_service_json
+            );
+            finalUrl = type === 'image' 
+               ? `https://drive.google.com/thumbnail?id=${gResult.id}&sz=w1000` 
+               : `https://drive.google.com/file/d/${gResult.id}/view`;
+         } else {
+            const fileName = `${parentData.student.mahv}_${Date.now()}_${file.name}`;
+            const folder = type === 'image' ? 'chat-images' : 'chat-files';
+            const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+            if (error) throw error;
+            const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+            finalUrl = publicUrl;
+         }
+
+         const msgPayload = {
+            mahv: parentData.student.mahv,
+            manv: parentData.teacherManv,
+            content: '',
+            image_url: type === 'image' ? finalUrl : null,
+            file_url: type !== 'image' ? finalUrl : null,
+            file_name: file.name,
+            file_mime_type: file.type,
+            description: 'PH'
+         };
+
+         const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
+         if (data) setChatMessages(prev => [...prev, data[0]]);
+
+         const newDoc = {
+            mahv: parentData.student.mahv,
+            name: file.name,
+            category: type === 'image' ? 'Ảnh' : 'Tài liệu',
+            file_url: finalUrl,
+            mime_type: file.type
+         };
+         await supabase.from('documents').insert([newDoc]);
+      } catch (err) {
+         alert('Lỗi: ' + err.message);
+      } finally {
+         setUploading(false);
+      }
+   };
+
+   const sendQuickMessage = async (content) => {
+      if (!parentData) return;
+      const newMessage = {
+         mahv: parentData.student.mahv,
+         manv: parentData.teacherManv,
+         content: content,
+         description: 'PH'
+      };
+      const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
+      if (error) {
+         alert('Lỗi khi gửi thông báo: ' + error.message);
+         return;
+      }
+      if (data) setChatMessages(prev => [...prev, data[0]]);
+   };
 
    useEffect(() => {
       if (!parentData || parentTab !== 'chat-tab') return;
@@ -887,18 +972,57 @@ function Login() {
                                  )}
                               </div>
 
-                              <form onSubmit={handleSendChat} style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px' }}>
-                                 <input
-                                    type="text"
-                                    placeholder="Nhập nội dung trao đổi..."
-                                    value={chatInput}
-                                    onChange={e => setChatInput(e.target.value)}
-                                    style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', background: '#f8fafc', fontSize: '0.9rem' }}
-                                 />
-                                 <button type="submit" disabled={!chatInput.trim()} style={{ background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                    <LogIn size={20} style={{ transform: 'rotate(-90deg)' }} />
-                                 </button>
-                              </form>
+                              <div style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9' }}>
+                                 {/* Quick Actions Toolbar */}
+                                 <div className="quick-actions-bar" style={{ display: 'flex', gap: '8px', marginBottom: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f0fdf4', color: '#16a34a', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #dcfce7', whiteSpace: 'nowrap' }}>
+                                       <Image size={14} /> Hình ảnh
+                                       <input type="file" accept="image/*" hidden onChange={e => handleFileUpload(e, 'image')} disabled={uploading} />
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#eff6ff', color: '#1e40af', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #dbeafe', whiteSpace: 'nowrap' }}>
+                                       <FileText size={14} /> Tài liệu
+                                       <input type="file" hidden onChange={e => handleFileUpload(e, 'file')} disabled={uploading} />
+                                    </label>
+                                    <button
+                                       type="button"
+                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Bé ${parentData.student.tenhv} xin phép nghỉ học hôm nay.`)}
+                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fff1f2', color: '#be123c', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #ffe4e6', whiteSpace: 'nowrap' }}>
+                                       <CalendarX size={14} /> Xin nghỉ
+                                    </button>
+                                    <button
+                                       type="button"
+                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Bé ${parentData.student.tenhv} dặn dò uống thuốc.`)}
+                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f5f3ff', color: '#5b21b6', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #ede9fe', whiteSpace: 'nowrap' }}>
+                                       <Pill size={14} /> Báo thuốc
+                                    </button>
+                                    <button
+                                       type="button"
+                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Vì lý do đột xuất, phụ huynh sẽ đón bé ${parentData.student.tenhv} trễ hơn bình thường.`)}
+                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fffbeb', color: '#92400e', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #fef3c7', whiteSpace: 'nowrap' }}>
+                                       <Clock size={14} /> Đón trễ
+                                    </button>
+                                    <button
+                                       type="button"
+                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Thay đổi người đón cho bé ${parentData.student.tenhv}.`)}
+                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f0f9ff', color: '#0369a1', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #e0f2fe', whiteSpace: 'nowrap' }}>
+                                       <UserPlus size={14} /> Đổi người đón
+                                    </button>
+                                 </div>
+
+                                 <form onSubmit={handleSendChat} style={{ display: 'flex', gap: '10px' }}>
+                                    <input
+                                       type="text"
+                                       placeholder={uploading ? "Đang tải tệp lên..." : "Nhập nội dung trao đổi..."}
+                                       value={chatInput}
+                                       onChange={e => setChatInput(e.target.value)}
+                                       disabled={uploading}
+                                       style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', background: '#f8fafc', fontSize: '0.9rem' }}
+                                    />
+                                    <button type="submit" disabled={!chatInput.trim() || uploading} style={{ background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (chatInput.trim() && !uploading) ? 1 : 0.7 }}>
+                                       {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={20} style={{ transform: 'rotate(-45deg)', marginLeft: '4px' }} />}
+                                    </button>
+                                 </form>
+                              </div>
                            </div>
 
                            {/* Info Sidebar */}
