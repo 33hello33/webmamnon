@@ -34,16 +34,23 @@ code {
 
 /* THEME: MẦM NON (KINDERGARTEN) */
 [data-theme="kindergarten"] {
-  --k-pink: #ff85a1;
-  --k-blue: #70d6ff;
-  --k-yellow: #ffd670;
-  --k-green: #a0e0a3;
-  --k-purple: #bbadff;
-  --k-orange: #ff9770;
-  --k-bg: #fffcf2;
+  --k-blue: #60a5fa;
+  --k-pink: #f472b6;
+  --k-green: #4ade80;
+  --k-yellow: #fbbf24;
+  --k-purple: #a78bfa;
+  --k-bg: #fffbf0;
+  background-color: var(--k-bg) !important;
+  font-family: 'Outfit', 'Inter', sans-serif !important;
+  overflow-x: hidden !important;
+}
+
+[data-theme="kindergarten"] body {
+  overflow-x: hidden !important;
 }
 
 [data-theme="kindergarten"] .dashboard-layout {
+  overflow-x: hidden !important;
   background-color: var(--k-bg) !important;
   background-image: radial-gradient(#ffd67044 1px, transparent 1px) !important;
   background-size: 20px 20px !important;
@@ -468,6 +475,41 @@ code {
   border-radius: 24px !important;
 }
 
+[data-theme="kindergarten"] .active-blue {
+  background: var(--k-blue) !important;
+  color: white !important;
+}
+
+[data-theme="kindergarten"] .active-green {
+  background: var(--k-green) !important;
+  color: white !important;
+}
+
+[data-theme="kindergarten"] .active-purple {
+  background: var(--k-purple) !important;
+  color: white !important;
+}
+
+[data-theme="kindergarten"] .sidebar.mobile-open {
+  display: flex !important;
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 280px !important;
+  z-index: 1100 !important;
+  transform: translateX(0) !important;
+  box-shadow: 20px 0 50px rgba(0,0,0,0.1) !important;
+}
+
+[data-theme="kindergarten"] .mobile-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0,0,0,0.4) !important;
+  backdrop-filter: blur(4px) !important;
+  z-index: 1050 !important;
+}
+
 [data-theme="kindergarten"] .blob {
   display: none !important;
 }
@@ -505,4 +547,251 @@ code {
 [data-theme="kindergarten"] .login-tabs button {
   border-radius: 12px 12px 0 0 !important;
   margin: 0 4px !important;
+}
+
+/* Mobile Responsive Fixes */
+@media (max-width: 768px) {
+  [data-theme="kindergarten"] .login-box {
+    padding: 1.25rem !important;
+    width: 96% !important;
+    border-radius: 25px !important;
+    outline-width: 3px !important;
+    outline-offset: -8px !important;
+  }
+
+  [data-theme="kindergarten"] .login-header h2 {
+    font-size: 1.2rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  [data-theme="kindergarten"] .parent-chat-layout.zalo-mode {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 300px !important;
+    gap: 1.5rem !important;
+    background: #f1f5f9 !important;
+    border-radius: 16px !important;
+    padding: 1rem !important;
+    min-height: 650px !important;
+    max-height: 800px !important;
+  }
+
+  /* Desktop Chat Scroll */
+  [data-theme="kindergarten"] .chat-window-main {
+    height: 700px !important;
+  }
+
+  @media (max-width: 768px) {
+    [data-theme="kindergarten"] .parent-chat-layout.zalo-mode {
+      display: block !important;
+      padding: 0 !important;
+      background: white !important;
+      min-height: auto !important;
+      max-height: none !important;
+    }
+
+    [data-theme="kindergarten"] .chat-window-main {
+      height: 85vh !important;
+      border-radius: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      position: relative !important;
+    }
+
+    [data-theme="kindergarten"] .chat-input-sticky {
+      position: sticky !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      z-index: 100 !important;
+      box-shadow: 0 -5px 15px rgba(0,0,0,0.05) !important;
+      background: white !important;
+      padding: 10px !important;
+      border-top: 1px solid #e2e8f0 !important;
+      margin-top: auto !important;
+    }
+
+    [data-theme="kindergarten"] .chat-info-sidebar {
+      position: fixed !important;
+      top: 0 !important;
+      right: -100% !important;
+      bottom: 0 !important;
+      width: 80% !important;
+      background: #f8fafc !important;
+      z-index: 2000 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      box-shadow: -10px 0 50px rgba(0,0,0,0.15) !important;
+      padding: 1.5rem !important;
+    }
+
+    [data-theme="kindergarten"] .chat-info-sidebar.visible {
+      right: 0 !important;
+    }
+  }
+
+  [data-theme="kindergarten"] .chat-thread-view {
+    height: 450px !important;
+  }
+
+  /* Table to Card Transformation */
+  [data-theme="kindergarten"] .responsive-tr {
+    display: block !important;
+    background: white !important;
+    border: 2px solid #f1f5f9 !important;
+    border-radius: 12px !important;
+    margin-bottom: 0.75rem !important;
+    padding: 0.4rem !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+  }
+
+  [data-theme="kindergarten"] .responsive-tr td {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0.4rem !important;
+    border: none !important;
+    text-align: right !important;
+    font-size: 0.8rem !important;
+  }
+
+  [data-theme="kindergarten"] .responsive-tr td::before {
+    content: attr(data-label) !important;
+    font-weight: 800 !important;
+    color: #94a3b8 !important;
+    text-align: left !important;
+    margin-right: 0.5rem !important;
+    font-size: 0.7rem !important;
+    text-transform: uppercase !important;
+  }
+
+  [data-theme="kindergarten"] .mobile-hidden {
+    display: none !important;
+  }
+
+  [data-theme="kindergarten"] .table-container {
+    overflow-x: hidden !important;
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  [data-theme="kindergarten"] table {
+    min-width: 100% !important;
+  }
+
+  [data-theme="kindergarten"] .sidebar {
+    width: 0 !important;
+    transform: translateX(-100%) !important;
+    display: none !important;
+  }
+
+  /* Shrink Text and Space */
+  [data-theme="kindergarten"] h3 {
+    font-size: 1rem !important;
+    margin-top: 1.25rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  [data-theme="kindergarten"] .glass-card {
+    padding: 0.85rem !important;
+  }
+
+  [data-theme="kindergarten"] .parent-header {
+    padding: 0.75rem !important;
+    border-radius: 12px !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+
+  [data-theme="kindergarten"] .parent-header h2 {
+    font-size: 1rem !important;
+  }
+
+  [data-theme="kindergarten"] .parent-nav-tabs {
+    flex-wrap: wrap !important;
+    overflow-x: hidden !important;
+    gap: 8px !important;
+    padding: 10px 5px !important;
+    border-bottom: none !important;
+    justify-content: center !important;
+  }
+
+  [data-theme="kindergarten"] .parent-nav-tab {
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    text-align: center !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    white-space: nowrap !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 99px !important;
+    background: #f8fafc !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  [data-theme="kindergarten"] .parent-nav-tab.active-blue {
+    background: #3b82f6 !important;
+    color: white !important;
+    border-color: #3b82f6 !important;
+  }
+
+  [data-theme="kindergarten"] .parent-nav-tab.active-green {
+    background: #10b981 !important;
+    color: white !important;
+    border-color: #10b981 !important;
+  }
+
+  [data-theme="kindergarten"] .parent-nav-tab.active-purple {
+    background: #8b5cf6 !important;
+    color: white !important;
+    border-color: #8b5cf6 !important;
+  }
+
+  [data-theme="kindergarten"] .parent-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  [data-theme="kindergarten"] .details-col {
+    border-left: none !important;
+    border-top: 3px dashed var(--k-yellow) !important;
+    padding-top: 1rem !important;
+    width: 100% !important;
+  }
+
+  [data-theme="kindergarten"] .content-header h2 {
+    font-size: 1.2rem !important;
+  }
+
+  [data-theme="kindergarten"] .dashboard-layout {
+    padding: 5px !important;
+  }
+
+  [data-theme="kindergarten"] .attendance-portal-card {
+    flex-direction: column !important;
+    padding: 0.85rem !important;
+    gap: 0.75rem !important;
+  }
+
+  [data-theme="kindergarten"] .quick-actions-bar {
+    padding-bottom: 5px !important;
+    gap: 5px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  [data-theme="kindergarten"] .login-header h2 {
+    font-size: 1.1rem !important;
+  }
+
+  [data-theme="kindergarten"] .submit-btn {
+    height: 45px !important;
+    font-size: 0.9rem !important;
+  }
+
+  [data-theme="kindergarten"] .input-group input {
+    font-size: 0.9rem !important;
+  }
 }

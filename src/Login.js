@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './App.css';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
-import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download, Image, FileText, CalendarX, Clock, Pill, UserPlus, Paperclip, Send } from 'lucide-react';
+import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download, Image, FileText, CalendarX, Clock, Pill, UserPlus, Paperclip, Send, MoreVertical, Trash2 } from 'lucide-react';
 import { uploadToGDrive } from './utils/googleDrive';
 import { compressImage } from './utils/imageUtils';
 
@@ -30,6 +30,7 @@ function Login() {
    const [chatInput, setChatInput] = useState('');
    const [chatDocuments, setChatDocuments] = useState([]);
    const [uploading, setUploading] = useState(false);
+   const [showChatInfo, setShowChatInfo] = useState(false);
 
    // ----- Attendance Features -----
    const [attendanceUser, setAttendanceUser] = useState(null);
@@ -835,7 +836,7 @@ function Login() {
                         <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', color: '#1e293b', fontSize: '1.25rem' }}>📝 Thông tin 10 lần đóng học phí gần nhất được xác nhận tại cơ sở</h3>
                         <div className="table-container" style={{ overflowX: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
-                              <thead>
+                              <thead className="mobile-hidden">
                                  <tr style={{ background: '#f8fafc' }}>
                                     <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Lần đóng (Date)</th>
                                     <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Lớp</th>
@@ -848,14 +849,14 @@ function Login() {
                               </thead>
                               <tbody>
                                  {parentData.invoices.length > 0 ? parentData.invoices.map((inv, idx) => (
-                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                       <td style={{ padding: '1rem' }}>{inv.ngaylap ? new Date(inv.ngaylap).toLocaleDateString('vi-VN') : '-'}</td>
-                                       <td style={{ padding: '1rem', fontWeight: 700, color: '#2563eb' }}>{inv.tenlop || '-'}</td>
-                                       <td style={{ padding: '1rem' }}>{inv.ngaybatdau ? new Date(inv.ngaybatdau).toLocaleDateString('vi-VN') : '-'}</td>
-                                       <td style={{ padding: '1rem' }}>{inv.ngayketthuc ? new Date(inv.ngayketthuc).toLocaleDateString('vi-VN') : '-'}</td>
-                                       <td style={{ padding: '1rem', fontWeight: 600 }}>{inv.tongcong || '0'} đ</td>
-                                       <td style={{ padding: '1rem', fontWeight: 700, color: '#16a34a' }}>{inv.dadong || '0'} đ</td>
-                                       <td style={{ padding: '1rem' }}>{inv.hinhthuc || ''}</td>
+                                    <tr key={idx} className="responsive-tr" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                       <td data-label="Lần đóng" style={{ padding: '1rem' }}>{inv.ngaylap ? new Date(inv.ngaylap).toLocaleDateString('vi-VN') : '--'}</td>
+                                       <td data-label="Lớp" style={{ padding: '1rem', fontWeight: 700, color: '#2563eb' }}>{inv.tenlop || inv.malop || '--'}</td>
+                                       <td data-label="Bắt đầu" style={{ padding: '1rem' }}>{inv.ngaybatdau ? new Date(inv.ngaybatdau).toLocaleDateString('vi-VN') : '--'}</td>
+                                       <td data-label="Kết thúc" style={{ padding: '1rem' }}>{inv.ngayketthuc ? new Date(inv.ngayketthuc).toLocaleDateString('vi-VN') : '--'}</td>
+                                       <td data-label="Tổng phí" style={{ padding: '1rem', fontWeight: 600 }}>{inv.tongcong || '0'} đ</td>
+                                       <td data-label="Đã đóng" style={{ padding: '1rem', fontWeight: 700, color: '#16a34a' }}>{inv.thucnhan || '0'} đ</td>
+                                       <td data-label="Hình thức" style={{ padding: '1rem' }}>{inv.ghichu || '--'}</td>
                                     </tr>
                                  )) : (
                                     <tr><td colSpan="7" style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>Trung tâm chưa xác nhận có xuất phiếu hóa đơn nào cho thẻ học sinh này!</td></tr>
@@ -871,7 +872,7 @@ function Login() {
                         <h3 style={{ marginTop: 0, marginBottom: '1.25rem', color: '#1e293b', fontSize: '1.25rem' }}>⏱ Lịch sử điểm danh (Quét trích xuất: 30 buổi gần nhất)</h3>
                         <div className="table-container" style={{ overflowX: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
-                              <thead>
+                              <thead className="mobile-hidden">
                                  <tr style={{ background: '#f8fafc' }}>
                                     <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Ngày tới trung tâm</th>
                                     <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Khảo sát tình trạng có mặt</th>
@@ -880,9 +881,9 @@ function Login() {
                               </thead>
                               <tbody>
                                  {parentData.attendances.length > 0 ? parentData.attendances.map((att, idx) => (
-                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                       <td style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>{att.ngay ? new Date(att.ngay).toLocaleDateString('vi-VN') : '-'}</td>
-                                       <td style={{ padding: '1rem' }}>
+                                    <tr key={idx} className="responsive-tr" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                       <td data-label="Ngày" style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>{att.ngay ? new Date(att.ngay).toLocaleDateString('vi-VN') : '-'}</td>
+                                       <td data-label="Trạng thái" style={{ padding: '1rem' }}>
                                           <span style={{
                                              background: att.trangthai === 'Có mặt' ? '#dcfce7' : att.trangthai?.includes('Vắng') ? '#fee2e2' : '#fef3c7',
                                              color: att.trangthai === 'Có mặt' ? '#16a34a' : att.trangthai?.includes('Vắng') ? '#dc2626' : '#d97706',
@@ -906,27 +907,23 @@ function Login() {
                   )}
 
                   {parentTab === 'chat-tab' && (
-                     <div id="chat-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        <div className="parent-chat-layout" style={{
-                           display: 'grid',
-                           gridTemplateColumns: 'minmax(0, 1fr) 300px',
-                           gap: '1.5rem',
-                           background: '#f1f5f9',
-                           borderRadius: '16px',
-                           padding: '1rem',
-                           minHeight: '650px',
-                           maxHeight: '800px'
-                        }}>
+                     <div id="chat-tab" className={`parent-tab-content active ${showChatInfo ? 'show-sidebar' : ''}`} style={{ animation: 'contentFadeIn 0.3s ease' }}>
+                        <div className="parent-chat-layout zalo-mode">
                            {/* Chat Window */}
-                           <div style={{ display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                              <div style={{ padding: '0.85rem 1rem', background: 'white', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
-                                    {parentData.teacherInfo?.tennv?.charAt(0) || 'GV'}
+                           <div className="chat-window-main" style={{ display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative' }}>
+                              <div style={{ padding: '0.85rem 1rem', background: 'white', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+                                       {parentData.teacherInfo?.tennv?.charAt(0) || 'GV'}
+                                    </div>
+                                    <div>
+                                       <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{parentData.teacherInfo?.tennv || 'Giáo viên phụ trách'}</h4>
+                                       <span style={{ fontSize: '0.75rem', color: '#10b981' }}>● Đang hoạt động</span>
+                                    </div>
                                  </div>
-                                 <div>
-                                    <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{parentData.teacherInfo?.tennv || 'Giáo viên phụ trách'}</h4>
-                                    <span style={{ fontSize: '0.75rem', color: '#10b981' }}>● Kênh đang kết nối</span>
-                                 </div>
+                                 <button onClick={() => setShowChatInfo(!showChatInfo)} style={{ padding: '8px', borderRadius: '50%', border: 'none', background: showChatInfo ? '#f1f5f9' : 'none', color: '#64748b', cursor: 'pointer' }}>
+                                    <MoreVertical size={20} />
+                                 </button>
                               </div>
 
                               <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', background: '#f8fafc' }}>
@@ -972,7 +969,7 @@ function Login() {
                                  )}
                               </div>
 
-                              <div style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9' }}>
+                              <div className="chat-input-sticky" style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9' }}>
                                  {/* Quick Actions Toolbar */}
                                  <div className="quick-actions-bar" style={{ display: 'flex', gap: '8px', marginBottom: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f0fdf4', color: '#16a34a', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #dcfce7', whiteSpace: 'nowrap' }}>
@@ -1025,8 +1022,15 @@ function Login() {
                               </div>
                            </div>
 
+                           {/* Info Sidebar Overlay */}
+                           {showChatInfo && <div className="mobile-overlay" onClick={() => setShowChatInfo(false)}></div>}
+
                            {/* Info Sidebar */}
-                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+                           <div className={`chat-info-sidebar ${showChatInfo ? 'visible' : ''}`} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }} className="hidden-desktop">
+                                 <h3 style={{ margin: 0 }}>Thông tin</h3>
+                                 <button onClick={() => setShowChatInfo(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '8px' }}><X size={20} /></button>
+                              </div>
                               <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
                                     <AlertCircle size={14} /> Thông tin liên hệ

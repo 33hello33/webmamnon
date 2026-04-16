@@ -232,6 +232,29 @@ function Dashboard() {
     const currentTab = ALL_TABS.find(t => t.id === activeTab);
     return (
       <div className="content-inner animate-fade-in">
+        {/* Mobile Header */}
+        <div className="mobile-header hidden-desktop" style={{
+          padding: '1rem',
+          background: 'white',
+          borderBottom: '1px solid #e2e8f0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100
+        }}>
+          <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)} style={{ background: 'none', border: 'none', color: '#1e293b' }}>
+            <Menu size={24} />
+          </button>
+          <div style={{ fontWeight: 800, color: '#3b82f6', fontSize: '1.1rem' }}>{currentTab?.label || 'Dashboard'}</div>
+          <div className="mobile-user-avatar" onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}>
+             <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#3b82f6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                {user?.tennv?.charAt(0).toUpperCase()}
+             </div>
+          </div>
+        </div>
+
         <div className="content-header hidden-mobile">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             {currentTab?.icon && <currentTab.icon size={24} className="text-primary" />}
