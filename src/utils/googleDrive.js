@@ -2,7 +2,7 @@
  * Google Drive Upload Helper with OAuth 2.0 and Service Account support
  */
 
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const SCOPES = 'https://www.googleapis.com/auth/drive';
 
 export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType = 'oauth', serviceJson = null) => {
   let token = '';
@@ -19,7 +19,7 @@ export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType 
   const metadata = {
     name: file.name,
     mimeType: file.type,
-    parents: folderId ? [folderId] : []
+    parents: (folderId && typeof folderId === 'string' && folderId.trim()) ? [folderId.trim()] : []
   };
 
   const formData = new FormData();
