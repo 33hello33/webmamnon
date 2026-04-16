@@ -267,8 +267,20 @@ const ChatManager = ({ currentUser }) => {
     try {
       let finalUrl = '';
       if (config.gdrive_enabled) {
-        const gResult = await uploadToGDrive(file, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
-        finalUrl = type === 'image' ? `https://drive.google.com/uc?export=view&id=${gResult.id}` : (gResult.webViewLink || gResult.webContentLink);
+        // Upload qua Edge Function để bảo mật thông tin
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+
+        const { data: gResult, error: gError } = await supabase.functions.invoke('super-task', {
+          body: formDataUpload,
+        });
+
+        if (gError) throw new Error('Lỗi upload Drive: ' + gError.message);
+        if (!gResult?.fileId) throw new Error('Không nhận được fileId từ Drive');
+
+        finalUrl = type === 'image' 
+          ? `https://drive.google.com/uc?export=view&id=${gResult.fileId}` 
+          : `https://drive.google.com/file/d/${gResult.fileId}/view`;
       } else {
         const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
         const folder = type === 'image' ? 'chat-images' : 'chat-files';
