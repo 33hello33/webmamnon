@@ -16,10 +16,19 @@ export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType 
   if (!token) throw new Error('Không thể xác thực Google Drive');
 
   // Perform Multipart Upload
+  // Extract ID from URL if necessary
+  let cleanFolderId = folderId;
+  if (typeof folderId === 'string') {
+    cleanFolderId = folderId.trim();
+    // Regex to match Drive folder or file URLs
+    const urlMatch = cleanFolderId.match(/[-\w]{25,}/);
+    if (urlMatch) cleanFolderId = urlMatch[0];
+  }
+
   const metadata = {
     name: file.name,
     mimeType: file.type,
-    parents: (folderId && typeof folderId === 'string' && folderId.trim()) ? [folderId.trim()] : []
+    parents: cleanFolderId ? [cleanFolderId] : []
   };
 
   const formData = new FormData();

@@ -267,10 +267,11 @@ const ChatManager = ({ currentUser }) => {
     try {
       let finalUrl = '';
       if (config.gdrive_enabled) {
+        console.log('Uploading to GDrive with folderId:', config.gdrive_folder_id);
         // Sử dụng helper uploadToGDrive để upload vào đúng folder và đúng phương thức auth
         const gResult = await uploadToGDrive(
           file,
-          config.gdrive_folder_id,
+          config.gdrive_folder_id?.trim(),
           config.gdrive_client_id,
           config.gdrive_api_key,
           config.gdrive_auth_type,
