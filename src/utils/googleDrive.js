@@ -35,7 +35,7 @@ export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType 
   formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   formData.append('file', file);
 
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink', {
+  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink,thumbnailLink', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: formData
@@ -47,15 +47,40 @@ export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType 
       sessionStorage.removeItem('gdrive_service_token');
       return uploadToGDrive(file, folderId, clientId, apiKey, authType, serviceJson);
     }
+    if (response.status === 404) {
+      sessionStorage.removeItem('gdrive_token');
+      sessionStorage.removeItem('gdrive_service_token');
+      throw new Error(`Thư mục Drive (${cleanFolderId}) không tìm thấy hoặc bạn không có quyền truy cập. Vui lòng kết nối lại tài khoản.`);
+    }
     const err = await response.json();
     throw new Error(err.error?.message || 'Lỗi tải lên Google Drive');
   }
 
   const result = await response.json();
+
+  // --- NEW: Set permissions to "anyone with link can read" ---
+  // This is required for <img> tags to work since they don't send Auth headers
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${result.id}/permissions`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        role: 'reader',
+        type: 'anyone'
+      })
+    });
+  } catch (err) {
+    console.warn('Could not set GG Drive permissions:', err);
+  }
+
   return {
     id: result.id,
     webViewLink: result.webViewLink,
-    webContentLink: result.webContentLink
+    webContentLink: result.webContentLink,
+    thumbnailLink: result.thumbnailLink
   };
 };
 
@@ -157,4 +182,41 @@ const signRS256 = async (privateKeyPem, str) => {
 
   const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(str));
   return btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+};
+
+/**
+ * Delete a file from Google Drive
+ */
+export const deleteFromGDrive = async (fileId, clientId, apiKey, authType = 'oauth', serviceJson = null) => {
+  if (!fileId) return false;
+
+  let token = '';
+  if (authType === 'service' && serviceJson) {
+     token = await getServiceAccountToken(serviceJson);
+  } else {
+     token = await getOAuthToken(clientId);
+  }
+
+  if (!token) throw new Error('Không thể xác thực Google Drive để xóa file');
+
+  const resp = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 401) {
+      sessionStorage.removeItem('gdrive_token');
+      sessionStorage.removeItem('gdrive_service_token');
+      // Retry
+      return deleteFromGDrive(fileId, clientId, apiKey, authType, serviceJson);
+    }
+    if (resp.status === 404) return true; // Already deleted
+    
+    const err = await resp.json();
+    console.error('GDrive delete error:', err);
+    throw new Error(err.error?.message || 'Lỗi xóa file trên Google Drive');
+  }
+
+  return true;
 };

@@ -87,7 +87,7 @@ function Dashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(null);
-  const [theme, setTheme] = useState(localStorage.getItem('app_theme') || 'light');
+  const [theme, setTheme] = useState(localStorage.getItem('app_theme') || 'kindergarten');
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [employeesMap, setEmployeesMap] = useState({});

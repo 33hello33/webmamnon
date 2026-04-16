@@ -274,7 +274,7 @@ const ConfigManager = () => {
     localStorage.setItem('gdrive_pending_client_id', client_id);
     const redirect_uri = window.location.origin;
     const scope = 'https://www.googleapis.com/auth/drive';
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account consent`;
     window.location.href = authUrl;
   };
 

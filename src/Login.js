@@ -13,6 +13,11 @@ function Login() {
    const { config } = useConfig();
    const navigate = useNavigate();
 
+   useEffect(() => {
+      const theme = localStorage.getItem('app_theme') || 'kindergarten';
+      document.body.setAttribute('data-theme', theme);
+   }, []);
+
    // ----- Parent Module States -----
    const [loginMode, setLoginMode] = useState('login'); // 'login' | 'parent' | 'attendance'
    const [parentMahv, setParentMahv] = useState('');
@@ -148,12 +153,24 @@ function Login() {
             teacherManv = firstNv?.manv || null;
          }
 
+         // Lấy chi tiết thông tin giáo viên
+         let teacherInfo = null;
+         if (teacherManv) {
+            const { data: nvData } = await supabase
+               .from('tbl_nv')
+               .select('tennv, role, sdt')
+               .eq('manv', teacherManv)
+               .maybeSingle();
+            teacherInfo = nvData;
+         }
+
          setParentData({
             student: stData,
             latestFee: feeData || null,
             invoices: invoices || [],
             attendances: attendances || [],
-            teacherManv: teacherManv
+            teacherManv: teacherManv,
+            teacherInfo: teacherInfo
          });
          setParentTab('fee-tab');
 
@@ -407,13 +424,11 @@ function Login() {
 
    return (
       <div className="app-container">
-         <div className="login-box" style={{
-            maxWidth: parentData || (loginMode === 'attendance' && attendanceUser) ? '900px' : '400px',
-            width: '100%',
+         <div id="login-box-target" className="login-box" style={{
+            maxWidth: parentData || (loginMode === 'attendance' && attendanceUser) ? '1200px' : '400px',
+            width: '95%',
             transition: 'all 0.3s ease',
-            background: parentData || (loginMode === 'attendance' && attendanceUser) ? '#ffffff' : 'rgba(30, 41, 59, 0.7)',
-            color: parentData || (loginMode === 'attendance' && attendanceUser) ? '#0f172a' : '#f8fafc',
-            maxHeight: '90vh',
+            maxHeight: '95vh',
             overflowY: 'auto',
             padding: parentData || (loginMode === 'attendance' && attendanceUser) ? '2rem' : '3rem'
          }}>
@@ -422,15 +437,17 @@ function Login() {
                <div className="login-tabs" style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                   <button
                      type="button"
+                     className={`login-tab-btn ${loginMode === 'login' || loginMode === 'attendance' ? 'active' : ''}`}
                      onClick={() => { setLoginMode('login'); setMessage({ type: '', text: '' }); }}
-                     style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, color: loginMode === 'login' || loginMode === 'attendance' ? '#3b82f6' : '#64748b', borderBottom: loginMode === 'login' || loginMode === 'attendance' ? '3px solid #3b82f6' : 'none', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
+                     style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
                      Nhân Viên
                   </button>
                   {config?.phuhuynh && (
                      <button
                         type="button"
+                        className={`login-tab-btn ${loginMode === 'parent' ? 'active' : ''}`}
                         onClick={() => { setLoginMode('parent'); setMessage({ type: '', text: '' }); }}
-                        style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, color: loginMode === 'parent' ? '#10b981' : '#64748b', borderBottom: loginMode === 'parent' ? '3px solid #10b981' : 'none', cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
+                        style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
                         Phụ Huynh
                      </button>
                   )}
@@ -661,7 +678,7 @@ function Login() {
                   <div className="parent-header">
                      <div className="parent-header-left">
                         <img src={config?.logo || '/logo.png'} alt="Logo" style={{ height: '45px' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                        <h2 style={{ color: '#0f172a', margin: 0 }}>Tra cứu thẻ: <span style={{ color: '#3b82f6', fontWeight: 800 }}>{parentData.student.tenhv}</span></h2>
+                        <h2 style={{ color: '#0f172a', margin: 0 }}>Thông tin bé: <span style={{ color: '#3b82f6', fontWeight: 800 }}>{parentData.student.tenhv}</span></h2>
                      </div>
                      <button onClick={() => setParentData(null)} style={{ padding: '0.6rem 1.25rem', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', transition: '0.2s' }}>Quay lại tìm</button>
                   </div>
@@ -674,7 +691,7 @@ function Login() {
                         Bảng Điểm Danh
                      </div>
                      <div onClick={() => setParentTab('chat-tab')} className={`parent-nav-tab ${parentTab === 'chat-tab' ? 'active-purple' : ''}`}>
-                        Trao Đổi Với Staff
+                        Trao Đổi Với Giáo Viên
                      </div>
                   </div>
 
@@ -807,20 +824,22 @@ function Login() {
                      <div id="chat-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         <div className="parent-chat-layout" style={{
                            display: 'grid',
-                           gridTemplateColumns: 'minmax(0, 1fr) 280px',
+                           gridTemplateColumns: 'minmax(0, 1fr) 300px',
                            gap: '1.5rem',
                            background: '#f1f5f9',
                            borderRadius: '16px',
                            padding: '1rem',
-                           minHeight: '500px',
-                           maxHeight: '600px'
+                           minHeight: '650px',
+                           maxHeight: '800px'
                         }}>
                            {/* Chat Window */}
                            <div style={{ display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                               <div style={{ padding: '0.85rem 1rem', background: 'white', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>SV</div>
+                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+                                    {parentData.teacherInfo?.tennv?.charAt(0) || 'GV'}
+                                 </div>
                                  <div>
-                                    <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{parentData.student.tenhv} - {parentData.student.mahv}</h4>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{parentData.teacherInfo?.tennv || 'Giáo viên phụ trách'}</h4>
                                     <span style={{ fontSize: '0.75rem', color: '#10b981' }}>● Kênh đang kết nối</span>
                                  </div>
                               </div>
@@ -889,9 +908,9 @@ function Login() {
                                     <AlertCircle size={14} /> Thông tin liên hệ
                                  </div>
                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Họ tên:</span> <strong>{parentData.student.tenhv}</strong></div>
-                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>ID Thẻ:</span> {parentData.student.mahv}</div>
-                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Địa chỉ:</span> {parentData.student.diachi || 'Chưa cập nhật'}</div>
+                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Họ tên:</span> <strong>{parentData.teacherInfo?.tennv || 'Quản trị viên'}</strong></div>
+                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Chức danh:</span> {parentData.teacherInfo?.role || 'Phụ trách lớp'}</div>
+                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Điện thoại:</span> {parentData.teacherInfo?.sdt || 'Liên hệ qua chat'}</div>
                                  </div>
                               </div>
 

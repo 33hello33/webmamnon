@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { uploadToGDrive } from '../utils/googleDrive';
+import { uploadToGDrive, deleteFromGDrive } from '../utils/googleDrive';
 import {
   MessageSquare,
   Send,
@@ -12,7 +13,7 @@ import {
   Users,
   Download,
   Trash2,
-  MoreVertical,
+  MoreHorizontal,
   X,
   ChevronLeft,
   RefreshCw,
@@ -25,12 +26,35 @@ import {
   Hash,
   ArrowLeft,
   Clock,
-  LayoutGrid
+  LayoutGrid,
+  Pencil,
+  Pin,
+  Share2
 } from 'lucide-react';
+import { compressImage } from '../utils/imageUtils';
 import './ChatManager.css';
 
 const ChatManager = ({ currentUser }) => {
   const { config } = useConfig();
+
+  const getClassName = (malop) => {
+    if (!malop) return 'Chưa xếp lớp';
+    const cls = classes.find(c => c.malop === malop || c.classid === malop);
+    return cls ? (cls.tenlop || cls.classname || malop) : malop;
+  };
+
+  const getDisplayUrl = (url) => {
+    if (!url) return '';
+    // Sử dụng định dạng thumbnail của Google Drive với sz=w1000 để tránh lỗi ORB của trình duyệt
+    if (url.includes('drive.google.com/')) {
+      let id = '';
+      if (url.includes('id=')) id = url.split('id=')[1]?.split('&')[0];
+      else if (url.includes('/d/')) id = url.split('/d/')[1]?.split('/')[0];
+      
+      if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+    }
+    return url;
+  };
   
   // Views
   const [view, setView] = useState('dashboard'); // 'dashboard' or 'chat'
@@ -58,8 +82,26 @@ const ChatManager = ({ currentUser }) => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [storageTab, setStorageTab] = useState('image'); // 'image' or 'file'
+  const [previewImage, setPreviewImage] = useState(null);
+  const [activeMenu, setActiveMenu] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [pinnedIndex, setPinnedIndex] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState(null);
+  const [selectedForwardStudents, setSelectedForwardStudents] = useState([]);
+  const [forwardSearch, setForwardSearch] = useState('');
   
   const scrollRef = useRef();
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setActiveMenu(null);
+    if (activeMenu) {
+      window.addEventListener('click', handleClickOutside);
+    }
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [activeMenu]);
 
   // ----- Initial Data Fetching -----
   useEffect(() => {
@@ -230,6 +272,21 @@ const ChatManager = ({ currentUser }) => {
         });
         setTimeout(scrollToBottom, 50);
       })
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'hv_messages', 
+        filter: `mahv=eq.${selectedStudent.mahv}` 
+      }, (payload) => {
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+      })
+      .on('postgres_changes', { 
+        event: 'DELETE', 
+        schema: 'public', 
+        table: 'hv_messages'
+      }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+      })
       .subscribe();
 
     return () => {
@@ -244,6 +301,23 @@ const ChatManager = ({ currentUser }) => {
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
     if (!selectedStudent || !inputText.trim()) return;
+
+    if (editingMessage) {
+      const { data, error } = await supabase
+        .from('hv_messages')
+        .update({ content: inputText })
+        .eq('id', editingMessage.id)
+        .select();
+        
+      if (!error && data) {
+        setMessages(prev => prev.map(m => m.id === editingMessage.id ? data[0] : m));
+        setEditingMessage(null);
+        setInputText('');
+      } else {
+        alert('Lỗi khi cập nhật tin nhắn: ' + (error?.message || 'Không xác định'));
+      }
+      return;
+    }
 
     const newMessage = {
       mahv: selectedStudent.mahv,
@@ -265,6 +339,15 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
+      if (type === 'image') {
+        try {
+          const compressed = await compressImage(file, 100);
+          file = compressed;
+        } catch (err) {
+          console.error('Compression failed, using original file:', err);
+        }
+      }
+
       let finalUrl = '';
       if (config.gdrive_enabled) {
         console.log('Uploading to GDrive with folderId:', config.gdrive_folder_id);
@@ -279,7 +362,7 @@ const ChatManager = ({ currentUser }) => {
         );
 
         finalUrl = type === 'image' 
-          ? `https://drive.google.com/uc?export=view&id=${gResult.id}` 
+          ? `https://drive.google.com/thumbnail?id=${gResult.id}&sz=w1000` 
           : `https://drive.google.com/file/d/${gResult.id}/view`;
       } else {
         const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
@@ -303,13 +386,16 @@ const ChatManager = ({ currentUser }) => {
       const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
       if (data) setMessages(prev => [...prev, data[0]]);
 
-      await supabase.from('documents').insert([{
+      const newDoc = {
         mahv: selectedStudent.mahv,
         name: file.name,
         category: type === 'image' ? 'Ảnh' : 'Tài liệu',
         file_url: finalUrl,
         mime_type: file.type
-      }]);
+      };
+
+      const { data: docData } = await supabase.from('documents').insert([newDoc]).select();
+      if (docData) setDocuments(prev => [docData[0], ...prev]);
     } catch (err) {
       alert('Lỗi: ' + err.message);
     } finally {
@@ -322,11 +408,163 @@ const ChatManager = ({ currentUser }) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    if (view === 'dashboard') {
+      await fetchSummaries();
+    } else if (view === 'chat' && selectedStudent) {
+      // Re-fetch messages for current student
+      const { data } = await supabase
+        .from('hv_messages')
+        .select('*')
+        .eq('mahv', selectedStudent.mahv)
+        .order('created_at', { ascending: true });
+      if (data) setMessages(data);
+    }
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
+
   const getInitials = (name) => {
     if (!name) return '??';
     const parts = name.split(' ');
     if (parts.length >= 2) return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     return name.substring(0, 2).toUpperCase();
+  };
+
+  const scrollToMessage = (msgId) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'background-color 0.5s';
+      const originalBg = el.style.backgroundColor;
+      el.style.backgroundColor = 'rgba(16, 185, 129, 0.2)';
+      setTimeout(() => {
+        el.style.backgroundColor = originalBg;
+      }, 2000);
+    }
+  };
+
+  const handleAction = async (action, message) => {
+    setActiveMenu(null);
+    
+    if (action === 'delete') {
+      if (window.confirm('Bạn có muốn xóa tin nhắn này?')) {
+        // 1. Delete from GDrive if applicable
+        if (config.gdrive_enabled && (message.image_url || message.file_url)) {
+          const url = message.image_url || message.file_url;
+          let driveId = '';
+          if (url.includes('id=')) driveId = url.split('id=')[1]?.split('&')[0];
+          else if (url.includes('/d/')) driveId = url.split('/d/')[1]?.split('/')[0];
+          
+          if (driveId) {
+            try {
+              await deleteFromGDrive(
+                driveId,
+                config.gdrive_client_id,
+                config.gdrive_api_key,
+                config.gdrive_auth_type,
+                config.gdrive_service_json
+              );
+              console.log('Deleted file from Drive:', driveId);
+            } catch (err) {
+              console.warn('Could not delete file from Drive:', err);
+            }
+          }
+        } else if (!config.gdrive_enabled && (message.image_url || message.file_url)) {
+          // Delete from Supabase Storage
+          const url = message.image_url || message.file_url;
+          if (url.includes('/storage/v1/object/public/assets/')) {
+            const path = url.split('/assets/')[1];
+            if (path) {
+              try {
+                await supabase.storage.from('assets').remove([path]);
+                console.log('Deleted file from Supabase Storage:', path);
+              } catch (err) {
+                console.warn('Could not delete file from Supabase Storage:', err);
+              }
+            }
+          }
+        }
+
+        // 2. Delete from documents repository table
+        if (message.image_url || message.file_url) {
+          const url = message.image_url || message.file_url;
+          try {
+            await supabase.from('documents').delete().eq('file_url', url);
+            setDocuments(prev => prev.filter(d => d.file_url !== url));
+          } catch (err) {
+            console.warn('Could not delete from documents table:', err);
+          }
+        }
+
+        const { error } = await supabase.from('hv_messages').delete().eq('id', message.id);
+        if (!error) {
+          setMessages(prev => prev.filter(m => m.id !== message.id));
+        } else {
+          alert('Lỗi khi xóa tin nhắn: ' + error.message);
+        }
+      }
+    } else if (action === 'edit') {
+      setEditingMessage(message);
+      setInputText(message.content);
+    } else if (action === 'pin') {
+      const pinnedCount = messages.filter(m => m.is_pinned).length;
+      if (!message.is_pinned && pinnedCount >= 3) {
+        alert('Bạn chỉ có thể ghim tối đa 3 tin nhắn. Vui lòng bỏ ghim tin nhắn cũ trước.');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('hv_messages')
+        .update({ is_pinned: !message.is_pinned })
+        .eq('id', message.id);
+      
+      if (!error) {
+        setMessages(prev => prev.map(m => m.id === message.id ? { ...m, is_pinned: !m.is_pinned } : m));
+      }
+    } else if (action === 'forward') {
+      setForwardingMessage(message);
+      setSelectedForwardStudents([]);
+      setForwardSearch('');
+    }
+  };
+
+  const handleBulkForward = async () => {
+    if (!forwardingMessage || selectedForwardStudents.length === 0) return;
+    
+    setUploading(true);
+    try {
+      const payloads = selectedForwardStudents.map(mahv => ({
+        mahv,
+        manv: currentUser.manv || currentUser.username,
+        content: forwardingMessage.content || '',
+        image_url: forwardingMessage.image_url,
+        file_url: forwardingMessage.file_url,
+        file_name: forwardingMessage.file_name,
+        file_mime_type: forwardingMessage.file_mime_type
+      }));
+
+      const { error } = await supabase.from('hv_messages').insert(payloads);
+      if (error) throw error;
+
+      if (forwardingMessage.image_url || forwardingMessage.file_url) {
+        const docPayloads = selectedForwardStudents.map(mahv => ({
+          mahv,
+          name: forwardingMessage.file_name || 'Forwarded File',
+          category: forwardingMessage.image_url ? 'Ảnh' : 'Tài liệu',
+          file_url: forwardingMessage.image_url || forwardingMessage.file_url,
+          mime_type: forwardingMessage.file_mime_type
+        }));
+        await supabase.from('documents').insert(docPayloads);
+      }
+      
+      alert(`Đã chuyển tiếp tin nhắn thành công tới ${selectedForwardStudents.length} học viên.`);
+      setForwardingMessage(null);
+    } catch (err) {
+      alert('Lỗi khi chuyển tiếp tin nhắn: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   if (view === 'chat' && selectedStudent) {
@@ -347,25 +585,97 @@ const ChatManager = ({ currentUser }) => {
               </div>
             </div>
             <div className="header-right">
-              <button className="icon-btn" onClick={() => fetchSummaries()}><RefreshCw size={20} /></button>
+              <button className={`refresh-btn-modern ${isRefreshing ? 'refreshing' : ''}`} onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw size={18} className={isRefreshing ? 'spin' : ''} />
+                <span>Làm mới</span>
+              </button>
             </div>
           </div>
+
+          {messages.filter(m => m.is_pinned).length > 0 && (() => {
+            const pinned = messages.filter(m => m.is_pinned).reverse(); // Newest first
+            const currentPinned = pinned[pinnedIndex % pinned.length] || pinned[0];
+            return (
+              <div className="pinned-messages-bar" onClick={() => scrollToMessage(currentPinned.id)}>
+                <div className="pinned-bar-content">
+                    <div className="pin-icon-wrapper">
+                      <Pin size={14} fill="currentColor" />
+                    </div>
+                    <div className="pinned-info">
+                      <span className="pinned-title">
+                        Tin nhắn đã ghim {pinned.length > 1 ? `(${ (pinnedIndex % pinned.length) + 1}/${pinned.length})` : ''}
+                      </span>
+                      <span className="pinned-preview">
+                        {currentPinned.content || (currentPinned.image_url ? "Hình ảnh" : "Tệp tin")}
+                      </span>
+                    </div>
+                </div>
+                <div className="pinned-bar-actions">
+                  {pinned.length > 1 && (
+                    <button className="pinned-nav-btn" onClick={(e) => {
+                      e.stopPropagation();
+                      setPinnedIndex((pinnedIndex + 1) % pinned.length);
+                    }}>
+                      Tiếp theo
+                    </button>
+                  )}
+                  <button className="pinned-close-btn" onClick={(e) => {
+                    e.stopPropagation();
+                    handleAction('pin', currentPinned);
+                  }} title="Bỏ ghim">
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="chat-messages scrollable" ref={scrollRef}>
             {loadingMessages ? <div className="loading-center"><Loader2 size={32} className="spinner" /></div> : (
               messages.map((m, idx) => {
                 const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
+                const msgId = m.id || `msg-${idx}-${m.created_at}`;
                 return (
-                  <div key={m.id || idx} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
-                     <div className="message-bubble">
-                        {m.content && <div className="msg-text">{m.content}</div>}
-                        {m.image_url && <div className="msg-image"><img src={m.image_url} alt="" onClick={() => window.open(m.image_url)} /></div>}
-                        {m.file_url && (
-                          <div className="msg-file" onClick={() => window.open(m.file_url)}>
-                            <FileText size={20} /> <span>{m.file_name}</span>
-                          </div>
-                        )}
-                        <div className="msg-time">{formatTime(new Date(m.created_at))}</div>
+                  <div key={msgId} id={`msg-${m.id}`} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
+                     <div className="message-bubble-wrapper">
+                        <div className="message-bubble">
+                           {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
+                           {m.content && <div className="msg-text">{m.content}</div>}
+                           {m.image_url && (
+                             <div className="msg-image">
+                               <img 
+                                 src={getDisplayUrl(m.image_url)} 
+                                 alt={m.file_name} 
+                                 onClick={() => setPreviewImage(m.image_url)}
+                                 referrerPolicy="no-referrer"
+                               />
+                             </div>
+                           )}
+                           {m.file_url && (
+                             <div className="msg-file" onClick={() => window.open(m.file_url)}>
+                               <FileText size={20} /> <span>{m.file_name}</span>
+                             </div>
+                           )}
+                           <div className="msg-time">{formatTime(new Date(m.created_at))}</div>
+                        </div>
+
+                        <div className="message-actions-trigger" onClick={e => e.stopPropagation()}>
+                           <button className="action-btn-more" onClick={() => setActiveMenu(activeMenu === msgId ? null : msgId)}>
+                              <MoreHorizontal size={16} />
+                           </button>
+                           
+                           {activeMenu === msgId && (
+                             <div className="message-dropdown-menu">
+                                <button onClick={() => handleAction('edit', m)}><Pencil size={14} /> Chỉnh sửa</button>
+                                <button onClick={() => handleAction('pin', m)}>
+                                  <Pin size={14} /> {m.is_pinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
+                                </button>
+                                <button onClick={() => handleAction('forward', m)}><Share2 size={14} /> Chuyển tiếp</button>
+                                <div className="dropdown-divider"></div>
+                                <button className="delete-opt" onClick={() => handleAction('delete', m)}><Trash2 size={14} /> Xóa tin nhắn</button>
+                             </div>
+                           )}
+                        </div>
                      </div>
                   </div>
                 );
@@ -374,7 +684,13 @@ const ChatManager = ({ currentUser }) => {
           </div>
 
           <div className="chat-input-area">
-             <form className="chat-input-toolbar" onSubmit={handleSendMessage}>
+              {editingMessage && (
+                <div className="editing-banner">
+                  <span>Đang chỉnh sửa tin nhắn...</span>
+                  <button onClick={() => { setEditingMessage(null); setInputText(''); }}><X size={14} /></button>
+                </div>
+              )}
+              <form className="chat-input-toolbar" onSubmit={handleSendMessage}>
                 <div className="toolbar-left">
                    <label className="toolbar-btn">
                       <ImageIcon size={20} />
@@ -420,18 +736,174 @@ const ChatManager = ({ currentUser }) => {
 
              <div className="details-divider"></div>
 
-             <div className="details-section">
+              <div className="details-section">
                 <h4 className="section-header-title"><File size={18} /> Kho lưu trữ</h4>
                 <div className="storage-tabs-modern">
-                   <button className="storage-tab active">Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})</button>
-                   <button className="storage-tab">File ({documents.filter(d => d.category !== 'Ảnh').length})</button>
+                   <button 
+                     className={`storage-tab ${storageTab === 'image' ? 'active' : ''}`}
+                     onClick={() => setStorageTab('image')}
+                   >
+                     Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})
+                   </button>
+                   <button 
+                     className={`storage-tab ${storageTab === 'file' ? 'active' : ''}`}
+                     onClick={() => setStorageTab('file')}
+                   >
+                     File ({documents.filter(d => d.category !== 'Ảnh').length})
+                   </button>
                 </div>
-                <div className="empty-storage-msg">
-                   Chưa có hình ảnh nào
+                
+                <div className="storage-content-modern scrollable" style={{ maxHeight: '300px', marginTop: '12px' }}>
+                   {storageTab === 'image' ? (
+                     <div className="image-grid-storage">
+                        {documents.filter(d => d.category === 'Ảnh').length > 0 ? (
+                           documents.filter(d => d.category === 'Ảnh').map(img => (
+                             <div key={img.id} className="storage-img-item" onClick={() => setPreviewImage(img.file_url)}>
+                                <img src={getDisplayUrl(img.file_url)} alt={img.name} referrerPolicy="no-referrer" />
+                             </div>
+                           ))
+                        ) : (
+                          <div className="empty-storage-msg">Chưa có hình ảnh nào</div>
+                        )}
+                     </div>
+                   ) : (
+                     <div className="file-list-storage">
+                        {documents.filter(d => d.category !== 'Ảnh').length > 0 ? (
+                           documents.filter(d => d.category !== 'Ảnh').map(f => (
+                             <div key={f.id} className="storage-file-item" onClick={() => window.open(f.file_url)}>
+                                <FileText size={16} />
+                                <span className="file-name-truncated" title={f.name}>{f.name}</span>
+                             </div>
+                           ))
+                        ) : (
+                          <div className="empty-storage-msg">Chưa có file nào</div>
+                        )}
+                     </div>
+                   )}
                 </div>
              </div>
           </div>
         </div>
+        
+        {previewImage && (
+          <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
+             <div className="preview-container" onClick={e => e.stopPropagation()}>
+                <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+                <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
+             </div>
+          </div>
+        )}
+
+        {forwardingMessage && createPortal(
+          <div className="chat-modal-overlay" onClick={() => setForwardingMessage(null)}>
+            <div className="chat-modal forward-modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Chuyển tiếp tin nhắn</h3>
+                <button className="close-btn" onClick={() => setForwardingMessage(null)}><X size={20} /></button>
+              </div>
+              
+              <div className="modal-body">
+                <div className="forward-preview">
+                   <p className="label">Nội dung chuyển tiếp:</p>
+                   <div className="preview-bubble">
+                      {forwardingMessage.content && <p>{forwardingMessage.content}</p>}
+                      {forwardingMessage.image_url && <img src={getDisplayUrl(forwardingMessage.image_url)} alt="" style={{maxHeight: '60px', borderRadius: '4px'}} />}
+                      {forwardingMessage.file_url && <div className="file-tag"><FileText size={14} /> {forwardingMessage.file_name}</div>}
+                   </div>
+                </div>
+
+                <div className="recipient-selector">
+                   <div className="search-recipient">
+                      <Search size={16} />
+                      <input 
+                        type="text" 
+                        placeholder="Tìm kiếm học viên hoặc lớp..." 
+                        value={forwardSearch}
+                        onChange={e => setForwardSearch(e.target.value)}
+                      />
+                   </div>
+
+                   <div className="recipient-list scrollable">
+                      {/* Grouping or providing bulk class actions */}
+                      {students
+                        .filter(s => {
+                          const clsName = getClassName(s.malop);
+                          const matches = s.tenhv?.toLowerCase().includes(forwardSearch.toLowerCase()) || 
+                                          s.mahv?.toLowerCase().includes(forwardSearch.toLowerCase()) ||
+                                          clsName.toLowerCase().includes(forwardSearch.toLowerCase());
+                          return matches;
+                        })
+                        .sort((a,b) => (a.malop === selectedStudent?.malop ? -1 : 1))
+                        .map((s, idx, arr) => {
+                          const prevS = arr[idx - 1];
+                          const showClassHeader = !prevS || prevS.malop !== s.malop;
+                          const clsName = getClassName(s.malop);
+                          
+                          return (
+                            <React.Fragment key={s.mahv}>
+                              {showClassHeader && (
+                                <div className="class-section-header">
+                                   <span>Lớp: {clsName}</span>
+                                   <button 
+                                     className="btn-select-class"
+                                     onClick={() => {
+                                       const members = students.filter(std => std.malop === s.malop).map(std => std.mahv);
+                                       const isAllSelected = members.every(id => selectedForwardStudents.includes(id));
+                                       if (isAllSelected) {
+                                         setSelectedForwardStudents(prev => prev.filter(id => !members.includes(id)));
+                                       } else {
+                                         setSelectedForwardStudents(prev => [...new Set([...prev, ...members])]);
+                                       }
+                                     }}
+                                   >
+                                     {students.filter(std => std.malop === s.malop).every(id => selectedForwardStudents.includes(id.mahv)) ? 'Bỏ chọn cả lớp' : 'Chọn cả lớp'}
+                                   </button>
+                                </div>
+                              )}
+                              <label className={`recipient-item ${selectedForwardStudents.includes(s.mahv) ? 'selected' : ''}`}>
+                                 <input 
+                                   type="checkbox" 
+                                   checked={selectedForwardStudents.includes(s.mahv)} 
+                                   onChange={() => {
+                                     if (selectedForwardStudents.includes(s.mahv)) {
+                                       setSelectedForwardStudents(prev => prev.filter(id => id !== s.mahv));
+                                     } else {
+                                       setSelectedForwardStudents(prev => [...prev, s.mahv]);
+                                     }
+                                   }}
+                                 />
+                                 <div className="r-avatar">{s.tenhv?.charAt(0)}</div>
+                                 <div className="r-info">
+                                    <span className="r-name">{s.tenhv} {s.malop === selectedStudent?.malop && <span className="same-class-tag">Cùng lớp</span>}</span>
+                                    <span className="r-sub">{s.mahv} - {clsName}</span>
+                                 </div>
+                              </label>
+                            </React.Fragment>
+                          );
+                        })
+                      }
+                   </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <div className="selection-count">Đã chọn <strong>{selectedForwardStudents.length}</strong> học viên</div>
+                <div className="footer-btns">
+                   <button className="btn-cancel" onClick={() => setForwardingMessage(null)}>Hủy</button>
+                   <button 
+                     className="btn-forward-submit" 
+                     disabled={selectedForwardStudents.length === 0 || uploading}
+                     onClick={handleBulkForward}
+                   >
+                     {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                     Gửi ngay
+                   </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
       </div>
     );
   }
@@ -564,6 +1036,15 @@ const ChatManager = ({ currentUser }) => {
           </tbody>
         </table>
       </div>
+
+      {previewImage && (
+        <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
+           <div className="preview-container" onClick={e => e.stopPropagation()}>
+              <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+              <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
+           </div>
+        </div>
+      )}
     </div>
   );
 };
