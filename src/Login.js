@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './App.css';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
-import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download, Image, FileText, CalendarX, Clock, Pill, UserPlus, Paperclip, Send, MoreVertical, Trash2 } from 'lucide-react';
+import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download, Image, FileText, CalendarX, Clock, Pill, UserPlus, Paperclip, Send, MoreVertical, Trash2, Phone, ArrowLeft, MoreHorizontal, Bell, MessageSquare, Heart, Activity, UserMinus, CreditCard, Wallet, CalendarCheck, UserCheck, MessageCircle, Newspaper } from 'lucide-react';
 import { uploadToGDrive } from './utils/googleDrive';
 import { compressImage } from './utils/imageUtils';
 
@@ -18,19 +18,49 @@ function Login() {
    useEffect(() => {
       const theme = localStorage.getItem('app_theme') || 'kindergarten';
       document.body.setAttribute('data-theme', theme);
+
+      const savedSession = localStorage.getItem('parent_session');
+      if (savedSession) {
+         try {
+            const session = JSON.parse(savedSession);
+            if (Date.now() < session.expiry) {
+               setParentData(session.data);
+               setParentMahv(session.data.student.mahv);
+               setParentTab('menu');
+            } else {
+               localStorage.removeItem('parent_session');
+            }
+         } catch (e) {
+            localStorage.removeItem('parent_session');
+         }
+      }
    }, []);
 
    // ----- Parent Module States -----
    const [loginMode, setLoginMode] = useState('login'); // 'login' | 'parent' | 'attendance'
    const [parentMahv, setParentMahv] = useState('');
    const [parentData, setParentData] = useState(null);
-   const [parentTab, setParentTab] = useState('fee-tab'); // 'fee-tab' | 'attendance-tab' | 'chat-tab'
+   const [parentTab, setParentTab] = useState('menu'); // 'menu' | 'fee-tab' | 'attendance-tab' | 'chat-tab'
    const [chatMessages, setChatMessages] = useState([]);
    const [chatLoading, setChatLoading] = useState(false);
    const [chatInput, setChatInput] = useState('');
    const [chatDocuments, setChatDocuments] = useState([]);
+   const [parentNotices, setParentNotices] = useState([]);
+   const [parentLessons, setParentLessons] = useState([]);
+   const [noticeTab, setNoticeTab] = useState('notices'); // 'notices', 'menu', 'schedule'
    const [uploading, setUploading] = useState(false);
    const [showChatInfo, setShowChatInfo] = useState(false);
+   const [isParentMenuOpen, setIsParentMenuOpen] = useState(false);
+   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+   const [leaveType, setLeaveType] = useState('today'); // 'today', 'tomorrow', 'custom'
+   const [leaveForm, setLeaveForm] = useState({ from: '', to: '', reason: '' });
+   const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
+   const [pickupForm, setPickupForm] = useState({ name: '', phone: '', relation: '', reason: '' });
+   const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
+   const [medicineForm, setMedicineForm] = useState({ name: '', usage: '' });
+   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+   const [feedbackContent, setFeedbackContent] = useState('');
+   const [feedbackLoading, setFeedbackLoading] = useState(false);
 
    // ----- Attendance Features -----
    const [attendanceUser, setAttendanceUser] = useState(null);
@@ -48,6 +78,97 @@ function Login() {
    const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
    const [changePassLoading, setChangePassLoading] = useState(false);
    const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
+
+    const handleLeaveSubmit = async (e) => {
+       e.preventDefault();
+       let fromDate = leaveForm.from;
+       let toDate = leaveForm.to;
+       
+       if (leaveType === 'today') {
+          fromDate = toDate = new Date().toISOString().split('T')[0];
+       } else if (leaveType === 'tomorrow') {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          fromDate = toDate = tomorrow.toISOString().split('T')[0];
+       }
+
+       if (!fromDate || !toDate || !leaveForm.reason) {
+          alert('Vui lòng nhập đầy đủ thông tin xin nghỉ.');
+          return;
+       }
+       const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDate).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDate).toLocaleDateString('vi-VN')}\n- Lý do: ${leaveForm.reason}`;
+       await sendQuickMessage(msg);
+       setIsLeaveModalOpen(false);
+       setLeaveForm({ from: '', to: '', reason: '' });
+       setLeaveType('today');
+    };
+
+   const handlePickupSubmit = async (e) => {
+      e.preventDefault();
+      if (!pickupForm.name || !pickupForm.phone || !pickupForm.relation || !pickupForm.reason) {
+         alert('Vui lòng nhập đầy đủ thông tin người đón.');
+         return;
+      }
+      const msg = `🔔 THÔNG BÁO ĐỔI NGƯỜI ĐÓN\n- Bé: ${parentData.student.tenhv}\n- Người đón thay: ${pickupForm.name}\n- SĐT: ${pickupForm.phone}\n- Quan hệ: ${pickupForm.relation}\n- Lý do: ${pickupForm.reason}`;
+      await sendQuickMessage(msg);
+      setIsPickupModalOpen(false);
+      setPickupForm({ name: '', phone: '', relation: '', reason: '' });
+   };
+
+   const handleMedicineSubmit = async (e) => {
+      e.preventDefault();
+      if (!medicineForm.name || !medicineForm.usage) {
+         alert('Vui lòng nhập đầy đủ thông tin dặn thuốc.');
+         return;
+      }
+      const msg = `💊 LỜI DẶN THUỐC\n- Bé: ${parentData.student.tenhv}\n- Tên thuốc: ${medicineForm.name}\n- Cách dùng: ${medicineForm.usage}`;
+      await sendQuickMessage(msg);
+      setIsMedicineModalOpen(false);
+      setMedicineForm({ name: '', usage: '' });
+   };
+
+   const handleFeedbackSubmit = async (e) => {
+      e.preventDefault();
+      if (!feedbackContent.trim()) {
+         alert('Vui lòng nhập nội dung góp ý.');
+         return;
+      }
+      setFeedbackLoading(true);
+      try {
+         // Tìm hiệu trưởng hoặc quản lý
+         let targetManv = null;
+         const { data: managers } = await supabase
+            .from('tbl_nv')
+            .select('manv')
+            .or('role.eq.Quản lý,role.eq.Hiệu trưởng')
+            .limit(1);
+         
+         if (managers && managers.length > 0) {
+            targetManv = managers[0].manv;
+         } else {
+            targetManv = parentData.teacherManv; // Fallback to teacher if no manager found
+         }
+
+         const newMessage = {
+            mahv: parentData.student.mahv,
+            manv: targetManv,
+            content: `📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]\nNội dung: ${feedbackContent}`,
+            description: 'PH'
+         };
+
+         const { error } = await supabase.from('hv_messages').insert([newMessage]);
+         if (error) throw error;
+
+         alert('Cảm ơn ý kiến góp ý của quý phụ huynh. Thông tin đã được gửi trực tiếp đến Ban Giám Hiệu.');
+         setIsFeedbackModalOpen(false);
+         setFeedbackContent('');
+      } catch (err) {
+         console.error(err);
+         alert('Có lỗi xảy ra khi gửi góp ý.');
+      } finally {
+         setFeedbackLoading(false);
+      }
+   };
 
    const getWalletsFromConfig = () => {
       if (!config) return [];
@@ -168,15 +289,23 @@ function Login() {
             teacherInfo = nvData;
          }
 
-         setParentData({
-            student: stData,
-            latestFee: feeData || null,
-            invoices: invoices || [],
-            attendances: attendances || [],
-            teacherManv: teacherManv,
-            teacherInfo: teacherInfo
-         });
-         setParentTab('fee-tab');
+         const parentDataObj = {
+             student: stData,
+             latestFee: feeData || null,
+             invoices: invoices || [],
+             attendances: attendances || [],
+             teacherManv: teacherManv,
+             teacherInfo: teacherInfo
+          };
+          setParentData(parentDataObj);
+          
+          // Save session for 1 hour
+          localStorage.setItem('parent_session', JSON.stringify({
+             data: parentDataObj,
+             expiry: Date.now() + (60 * 60 * 1000)
+          }));
+
+          setParentTab('menu');
 
       } catch (err) {
          console.error(err);
@@ -384,8 +513,8 @@ function Login() {
                config.gdrive_auth_type || 'oauth',
                config.gdrive_service_json
             );
-            finalUrl = type === 'image' 
-               ? `https://drive.google.com/thumbnail?id=${gResult.id}&sz=w1000` 
+            finalUrl = type === 'image'
+               ? `https://drive.google.com/thumbnail?id=${gResult.id}&sz=w1000`
                : `https://drive.google.com/file/d/${gResult.id}/view`;
          } else {
             const fileName = `${parentData.student.mahv}_${Date.now()}_${file.name}`;
@@ -464,8 +593,30 @@ function Login() {
          if (data) setChatDocuments(data || []);
       };
 
+      const fetchParentNotices = async () => {
+         const { data } = await supabase
+            .from('tbl_thongbao')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .order('ngaylap', { ascending: false })
+            .limit(10);
+         if (data) setParentNotices(data);
+      };
+
+      const fetchParentLessons = async () => {
+         const { data } = await supabase
+            .from('tbl_noidungday')
+            .select('*')
+            .eq('malop', parentData.student.malop)
+            .order('ngay', { ascending: false })
+            .limit(10);
+         if (data) setParentLessons(data);
+      };
+
       fetchChatMessages();
       fetchChatDocs();
+      fetchParentNotices();
+      fetchParentLessons();
 
       const channel = supabase
          .channel(`parent_chat_${parentData.student.mahv}`)
@@ -514,9 +665,12 @@ function Login() {
             maxWidth: parentData || (loginMode === 'attendance' && attendanceUser) ? '1200px' : '400px',
             width: '95%',
             transition: 'all 0.3s ease',
-            maxHeight: '95vh',
-            overflowY: 'auto',
-            padding: parentData || (loginMode === 'attendance' && attendanceUser) ? '2rem' : '3rem'
+            padding: parentData || (loginMode === 'attendance' && attendanceUser) ? (parentTab === 'chat-tab' ? '1rem' : '2rem') : '3rem',
+            margin: parentTab === 'chat-tab' ? '1rem auto' : '2rem auto',
+            height: parentTab === 'chat-tab' ? 'calc(100vh - 2rem)' : 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: parentTab === 'chat-tab' ? 'hidden' : 'visible'
          }}>
 
             {!parentData && !(loginMode === 'attendance' && attendanceUser) && (
@@ -760,26 +914,213 @@ function Login() {
                   )}
                </div>
             ) : (
-               <div id="parent-dashboard" className="parent-dashboard-container">
-                  <div className="parent-header">
-                     <div className="parent-header-left">
-                        <img src={config?.logo || '/logo.png'} alt="Logo" style={{ height: '45px' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                        <h2 style={{ color: '#0f172a', margin: 0 }}>Thông tin bé: <span style={{ color: '#3b82f6', fontWeight: 800 }}>{parentData.student.tenhv}</span></h2>
-                     </div>
-                     <button onClick={() => setParentData(null)} style={{ padding: '0.6rem 1.25rem', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', transition: '0.2s' }}>Quay lại tìm</button>
-                  </div>
+               <div id="parent-dashboard" className="parent-dashboard-container" style={parentTab === 'chat-tab' ? { display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' } : {}}>
+                   {/* Parent Header with Avatar & Logout */}
+                   <div className="parent-portal-header" style={{ display: 'grid', gridTemplateColumns: 'minmax(40px, 1fr) auto minmax(40px, 1fr)', alignItems: 'center', marginBottom: '20px', padding: '0 5px' }}>
+                      <div className="header-left">
+                         {parentTab !== 'menu' && (
+                            <button 
+                               onClick={() => setParentTab('menu')} 
+                               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '50%', cursor: 'pointer', transition: '0.2s' }}
+                               title="Quay lại Menu"
+                            >
+                               <ArrowLeft size={20} />
+                            </button>
+                         )}
+                      </div>
 
-                  <div className="parent-nav-tabs">
-                     <div onClick={() => setParentTab('fee-tab')} className={`parent-nav-tab ${parentTab === 'fee-tab' ? 'active-blue' : ''}`}>
-                        Xem Thông Báo
+                      <div className="portal-logo" style={{ textAlign: 'center' }}>
+                         <img src={config?.logo || '/logo.png'} alt="Logo" style={{ height: '40px', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                      </div>
+                      
+                      <div className="header-right" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                         <div className="parent-user-section" style={{ position: 'relative' }}>
+                            <div 
+                               className="parent-avatar" 
+                               onClick={() => setIsParentMenuOpen(!isParentMenuOpen)}
+                               style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#3b82f6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', cursor: 'pointer', border: '2px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                               {parentData.student.tenhv?.charAt(0).toUpperCase() || 'P'}
+                            </div>
+                            
+                            {isParentMenuOpen && (
+                               <>
+                                  <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setIsParentMenuOpen(false)}></div>
+                                  <div style={{ position: 'absolute', top: '120%', right: 0, background: 'white', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', minWidth: '160px', zIndex: 101, overflow: 'hidden', animation: 'contentFadeIn 0.2s ease' }}>
+                                     <div style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Học sinh:</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b' }}>{parentData.student.tenhv}</div>
+                                     </div>
+                                     <div style={{ padding: '5px' }}>
+                                        <button 
+                                           onClick={() => {
+                                              setParentData(null);
+                                              localStorage.removeItem('parent_session');
+                                           }}
+                                           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: 'none', background: 'none', borderRadius: '8px', color: '#ef4444', fontWeight: 700, cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontSize: '0.85rem' }}
+                                           onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
+                                           onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                           <LogOut size={16} /> Đăng xuất
+                                        </button>
+                                     </div>
+                                  </div>
+                               </>
+                            )}
+                         </div>
+                      </div>
+                   </div>
+
+
+
+                  {parentTab === 'menu' && (
+                     <div className="parent-vertical-menu fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '1rem 0' }}>
+                        <button onClick={() => setParentTab('notices-tab')} className="menu-item-btn">
+                           <Bell className="menu-icon" /> BẢNG TIN
+                        </button>
+                        <button onClick={() => setParentTab('attendance-tab')} className="menu-item-btn">
+                           <CalendarCheck className="menu-icon" /> ĐIỂM DANH
+                        </button>
+                        <button onClick={() => setParentTab('fee-tab')} className="menu-item-btn">
+                           <CreditCard className="menu-icon" /> HỌC PHÍ
+                        </button>
+                        <button onClick={() => {
+                           setLeaveType('today');
+                           setLeaveForm({ from: '', to: '', reason: '' });
+                           setIsLeaveModalOpen(true);
+                        }} className="menu-item-btn">
+                           <UserMinus className="menu-icon" /> XIN NGHỈ
+                        </button>
+                        <button onClick={() => {
+                           setPickupForm({ name: '', phone: '', relation: '', reason: '' });
+                           setIsPickupModalOpen(true);
+                        }} className="menu-item-btn">
+                           <Users className="menu-icon" /> ĐỔI NGƯỜI ĐÓN
+                        </button>
+                        <button onClick={() => {
+                           setMedicineForm({ name: '', usage: '' });
+                           setIsMedicineModalOpen(true);
+                        }} className="menu-item-btn">
+                           <Pill className="menu-icon" /> DẶN THUỐC
+                        </button>
+                        <button onClick={() => setParentTab('health-tab')} className="menu-item-btn">
+                           <Heart className="menu-icon" /> SỨC KHỎE CỦA CON
+                        </button>
+                        <button onClick={() => setParentTab('chat-tab')} className="menu-item-btn">
+                           <MessageSquare className="menu-icon" /> CHAT VỚI GV
+                        </button>
+                        <button onClick={() => setIsFeedbackModalOpen(true)} className="menu-item-btn">
+                           <MessageCircle className="menu-icon" /> GÓP Ý
+                        </button>
+
+                        <style>{`
+                           .menu-item-btn {
+                              width: 100%;
+                              padding: 1.25rem;
+                              background: white;
+                              border: 1px solid #e2e8f0;
+                              border-radius: 12px;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              gap: 15px;
+                              font-weight: 800;
+                              font-size: 1.1rem;
+                              color: #1e293b;
+                              cursor: pointer;
+                              transition: all 0.2s;
+                              box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+                              text-transform: uppercase;
+                           }
+                           .menu-item-btn:hover {
+                              background: #f8fafc;
+                              border-color: #3b82f6;
+                              color: #3b82f6;
+                              transform: translateY(-2px);
+                              box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+                           }
+                           .menu-icon {
+                              width: 22px;
+                              height: 22px;
+                              color: #3b82f6;
+                           }
+                        `}</style>
                      </div>
-                     <div onClick={() => setParentTab('attendance-tab')} className={`parent-nav-tab ${parentTab === 'attendance-tab' ? 'active-green' : ''}`}>
-                        Bảng Điểm Danh
+                  )}
+
+                  {parentTab === 'notices-tab' && (
+                     <div id="notices-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {/* Section 1: Latest Formal Notices */}
+                        <div className="notices-section">
+                           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#1e293b' }}>
+                              <Bell size={20} className="text-primary" /> Thông báo từ nhà trường
+                           </h3>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {parentNotices.length > 0 ? parentNotices.map((notice, idx) => (
+                                 <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                       <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.ngaylap).toLocaleDateString('vi-VN')}</span>
+                                       <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Thông báo</span>
+                                    </div>
+                                    <div style={{ color: '#1e293b', fontWeight: 600, fontSize: '1rem', marginBottom: '5px' }}>{notice.tieude || 'Thông báo học phí/Phát sinh'}</div>
+                                    <div style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{notice.ghichu}</div>
+                                 </div>
+                              )) : (
+                                 <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Không có thông báo mới.</div>
+                              )}
+                           </div>
+                        </div>
+
+                        {/* Section 2: Teacher Updates (Text, Images, Files) */}
+                        <div className="teacher-updates-section">
+                           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#1e293b' }}>
+                              <Newspaper size={20} style={{ color: '#8b5cf6' }} /> Hoạt động lớp & Tài liệu
+                           </h3>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                              {chatMessages.filter(m => m.description === 'THONG_BAO').length > 0 ? (
+                                 [...chatMessages].filter(m => m.description === 'THONG_BAO').reverse().map((m, idx) => (
+                                    <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
+                                             {parentData.teacherInfo?.tennv?.charAt(0) || 'GV'}
+                                          </div>
+                                          <div>
+                                             <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>{parentData.teacherInfo?.tennv || 'Giáo viên'}</div>
+                                             <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{new Date(m.created_at).toLocaleString('vi-VN')}</div>
+                                          </div>
+                                       </div>
+                                       
+                                       {m.content && <div style={{ fontSize: '0.95rem', color: '#334155', lineHeight: '1.6', marginBottom: '10px' }}>{m.content}</div>}
+                                       
+                                       {m.image_url && (
+                                          <div style={{ borderRadius: '12px', overflow: 'hidden', marginTop: '10px', border: '1px solid #f1f5f9' }}>
+                                             <img src={m.image_url} alt="Shared" style={{ width: '100%', maxHeight: '400px', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(m.image_url, '_blank')} />
+                                          </div>
+                                       )}
+
+                                       {m.file_url && (
+                                          <div 
+                                             onClick={() => window.open(m.file_url, '_blank')}
+                                             style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f8fafc', borderRadius: '12px', marginTop: '10px', cursor: 'pointer', border: '1px solid #e2e8f0', transition: '0.2s' }}
+                                             onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                             onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}>
+                                             <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <FileText size={20} />
+                                             </div>
+                                             <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name || 'Tài liệu'}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Bấm để tải về</div>
+                                             </div>
+                                             <Download size={18} style={{ color: '#94a3b8' }} />
+                                          </div>
+                                       )}
+                                    </div>
+                                 ))
+                              ) : (
+                                 <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Chưa có hoạt động hay tài liệu nào được chia sẻ.</div>
+                              )}
+                           </div>
+                        </div>
                      </div>
-                     <div onClick={() => setParentTab('chat-tab')} className={`parent-nav-tab ${parentTab === 'chat-tab' ? 'active-purple' : ''}`}>
-                        Trao Đổi Với Giáo Viên
-                     </div>
-                  </div>
+                  )}
 
                   {parentTab === 'fee-tab' && (
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
@@ -875,7 +1216,7 @@ function Login() {
                               <thead className="mobile-hidden">
                                  <tr style={{ background: '#f8fafc' }}>
                                     <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Ngày tới trung tâm</th>
-                                    <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Khảo sát tình trạng có mặt</th>
+                                    <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Tình trạng</th>
                                     <th style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', color: '#475569' }}>Lời nhắc (Nếu có/Tùy chọn)</th>
                                  </tr>
                               </thead>
@@ -895,7 +1236,7 @@ function Login() {
                                              {att.trangthai || '-'}
                                           </span>
                                        </td>
-                                       <td style={{ padding: '1rem', color: '#64748b' }}>{att.ghichu || '_'}</td>
+                                       <td data-label="Ghi chú" style={{ padding: '1rem', color: '#64748b' }}>{att.ghichu || '_'}</td>
                                     </tr>
                                  )) : (
                                     <tr><td colSpan="3" style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>Giáo viên chưa cập nhật các phiên điểm danh mới nhất lên Server.</td></tr>
@@ -907,26 +1248,30 @@ function Login() {
                   )}
 
                   {parentTab === 'chat-tab' && (
-                     <div id="chat-tab" className={`parent-tab-content active ${showChatInfo ? 'show-sidebar' : ''}`} style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        <div className="parent-chat-layout zalo-mode">
-                           {/* Chat Window */}
-                           <div className="chat-window-main" style={{ display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative' }}>
-                              <div style={{ padding: '0.85rem 1rem', background: 'white', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#8b5cf6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
-                                       {parentData.teacherInfo?.tennv?.charAt(0) || 'GV'}
+                     <div id="chat-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                        <div className="chat-manager-layout chat-thread-view zalo-mode" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                           <div className="chat-main-col" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                              <div className="chat-main-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                                 <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+
+                                    <div className="header-avatar" style={{ position: 'relative' }}>
+                                       {parentData.teacherInfo?.tennv ? (
+                                          <div className="avatar-placeholder" style={{ background: '#8b5cf6', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>{parentData.teacherInfo.tennv.charAt(0)}</div>
+                                       ) : (
+                                          <div className="avatar-placeholder" style={{ background: '#cbd5e1', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>GV</div>
+                                       )}
                                     </div>
-                                    <div>
-                                       <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{parentData.teacherInfo?.tennv || 'Giáo viên phụ trách'}</h4>
-                                       <span style={{ fontSize: '0.75rem', color: '#10b981' }}>● Đang hoạt động</span>
+                                    <div className="header-info">
+                                       <h4>{parentData.teacherInfo?.tennv || 'Giáo viên phụ trách'}</h4>
+                                       <span className="status-online">Đang hoạt động trao đổi trực tiếp</span>
                                     </div>
                                  </div>
-                                 <button onClick={() => setShowChatInfo(!showChatInfo)} style={{ padding: '8px', borderRadius: '50%', border: 'none', background: showChatInfo ? '#f1f5f9' : 'none', color: '#64748b', cursor: 'pointer' }}>
-                                    <MoreVertical size={20} />
-                                 </button>
+                                 <div className="header-right">
+                                    {/* Removed MoreHorizontal button */}
+                                 </div>
                               </div>
 
-                              <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', background: '#f8fafc' }}>
+                              <div className="chat-messages" style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc' }}>
                                  {chatLoading ? (
                                     <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><Loader2 className="spinner" size={24} /></div>
                                  ) : (
@@ -936,31 +1281,31 @@ function Login() {
                                           const date = new Date(m.created_at).toLocaleDateString('vi-VN');
                                           const prevDate = idx > 0 ? new Date(chatMessages[idx - 1].created_at).toLocaleDateString('vi-VN') : null;
                                           if (date !== prevDate) {
-                                             acc.push(<div key={`date-${idx}`} style={{ textAlign: 'center', margin: '15px 0', position: 'relative' }}>
+                                             acc.push(<div key={`date-${idx}`} style={{ textAlign: 'center', margin: '20px 0', position: 'relative' }}>
                                                 <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#e2e8f0' }}></div>
-                                                <span style={{ position: 'relative', background: '#f8fafc', padding: '0 10px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>{date}</span>
+                                                <span style={{ position: 'relative', background: '#f8fafc', padding: '0 12px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700 }}>{date}</span>
                                              </div>);
                                           }
 
                                           const isMine = m.description === 'PH';
                                           acc.push(
-                                             <div key={m.id || idx} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{
-                                                   padding: '0.6rem 0.9rem',
-                                                   borderRadius: isMine ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                                                   background: isMine ? '#8b5cf6' : 'white',
-                                                   color: isMine ? 'white' : '#1e293b',
-                                                   boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                                                   fontSize: '0.9rem',
-                                                   border: isMine ? 'none' : '1px solid #e2e8f0'
-                                                }}>
-                                                   {m.content && <div>{m.content}</div>}
-                                                   {m.image_url && <img src={m.image_url} alt="img" style={{ maxWidth: '100%', borderRadius: '4px', marginTop: '5px' }} />}
-                                                   {m.file_url && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => window.open(m.file_url, '_blank')}>
-                                                      <LogIn size={14} /> <span style={{ color: 'inherit', textDecoration: 'none' }}>{m.file_name || 'Tài liệu'}</span>
-                                                   </div>}
+                                             <div key={m.id || idx} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
+                                                <div className="message-bubble-wrapper">
+                                                   <div className="message-bubble">
+                                                      {m.content && <div className="msg-text">{m.content}</div>}
+                                                      {m.image_url && (
+                                                         <div className="msg-image shadow-sm" style={{ borderRadius: '8px', overflow: 'hidden', marginTop: '5px' }}>
+                                                            <img src={m.image_url} alt="img" style={{ maxWidth: '100%', cursor: 'pointer' }} onClick={() => window.open(m.image_url, '_blank')} />
+                                                         </div>
+                                                      )}
+                                                      {m.file_url && (
+                                                         <div className="msg-file" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: isMine ? 'rgba(255,255,255,0.1)' : '#f1f5f9', borderRadius: '8px', marginTop: '5px', cursor: 'pointer' }} onClick={() => window.open(m.file_url, '_blank')}>
+                                                            <FileText size={18} /> <span>{m.file_name || 'Tài liệu'}</span>
+                                                         </div>
+                                                      )}
+                                                      <div className="msg-time" style={{ fontSize: '0.65rem', color: isMine ? 'rgba(255,255,255,0.7)' : '#94a3b8', marginTop: '4px', textAlign: 'right' }}>{new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                   </div>
                                                 </div>
-                                                <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '3px', alignSelf: isMine ? 'flex-end' : 'flex-start' }}>{new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                              </div>
                                           );
                                           return acc;
@@ -969,120 +1314,339 @@ function Login() {
                                  )}
                               </div>
 
-                              <div className="chat-input-sticky" style={{ padding: '0.75rem', background: 'white', borderTop: '1px solid #f1f5f9' }}>
-                                 {/* Quick Actions Toolbar */}
-                                 <div className="quick-actions-bar" style={{ display: 'flex', gap: '8px', marginBottom: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f0fdf4', color: '#16a34a', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #dcfce7', whiteSpace: 'nowrap' }}>
-                                       <Image size={14} /> Hình ảnh
-                                       <input type="file" accept="image/*" hidden onChange={e => handleFileUpload(e, 'image')} disabled={uploading} />
-                                    </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#eff6ff', color: '#1e40af', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #dbeafe', whiteSpace: 'nowrap' }}>
-                                       <FileText size={14} /> Tài liệu
-                                       <input type="file" hidden onChange={e => handleFileUpload(e, 'file')} disabled={uploading} />
-                                    </label>
-                                    <button
-                                       type="button"
-                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Bé ${parentData.student.tenhv} xin phép nghỉ học hôm nay.`)}
-                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fff1f2', color: '#be123c', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #ffe4e6', whiteSpace: 'nowrap' }}>
-                                       <CalendarX size={14} /> Xin nghỉ
-                                    </button>
-                                    <button
-                                       type="button"
-                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Bé ${parentData.student.tenhv} dặn dò uống thuốc.`)}
-                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f5f3ff', color: '#5b21b6', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #ede9fe', whiteSpace: 'nowrap' }}>
-                                       <Pill size={14} /> Báo thuốc
-                                    </button>
-                                    <button
-                                       type="button"
-                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Vì lý do đột xuất, phụ huynh sẽ đón bé ${parentData.student.tenhv} trễ hơn bình thường.`)}
-                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#fffbeb', color: '#92400e', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #fef3c7', whiteSpace: 'nowrap' }}>
-                                       <Clock size={14} /> Đón trễ
-                                    </button>
-                                    <button
-                                       type="button"
-                                       onClick={() => sendQuickMessage(`🔔 THÔNG BÁO: Thay đổi người đón cho bé ${parentData.student.tenhv}.`)}
-                                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#f0f9ff', color: '#0369a1', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid #e0f2fe', whiteSpace: 'nowrap' }}>
-                                       <UserPlus size={14} /> Đổi người đón
-                                    </button>
-                                 </div>
-
-                                 <form onSubmit={handleSendChat} style={{ display: 'flex', gap: '10px' }}>
+                              <div className="chat-input-area chat-input-sticky">
+                                 <form className="chat-input-toolbar" onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    <div className="toolbar-left" style={{ display: 'flex', gap: '10px' }}>
+                                       <label style={{ cursor: 'pointer', color: '#64748b' }}>
+                                          <Image size={20} />
+                                          <input type="file" accept="image/*" hidden onChange={e => handleFileUpload(e, 'image')} disabled={uploading} />
+                                       </label>
+                                       <label style={{ cursor: 'pointer', color: '#64748b' }}>
+                                          <Paperclip size={20} />
+                                          <input type="file" hidden onChange={e => handleFileUpload(e, 'file')} disabled={uploading} />
+                                       </label>
+                                    </div>
                                     <input
                                        type="text"
-                                       placeholder={uploading ? "Đang tải tệp lên..." : "Nhập nội dung trao đổi..."}
+                                       placeholder={uploading ? "Đang tải..." : "Nhập nội dung..."}
                                        value={chatInput}
                                        onChange={e => setChatInput(e.target.value)}
                                        disabled={uploading}
-                                       style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', background: '#f8fafc', fontSize: '0.9rem' }}
+                                       style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: '0.9rem' }}
                                     />
-                                    <button type="submit" disabled={!chatInput.trim() || uploading} style={{ background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (chatInput.trim() && !uploading) ? 1 : 0.7 }}>
-                                       {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={20} style={{ transform: 'rotate(-45deg)', marginLeft: '4px' }} />}
+                                    <button type="submit" disabled={!chatInput.trim() || uploading} style={{ background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                       {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                                     </button>
                                  </form>
-                              </div>
-                           </div>
-
-                           {/* Info Sidebar Overlay */}
-                           {showChatInfo && <div className="mobile-overlay" onClick={() => setShowChatInfo(false)}></div>}
-
-                           {/* Info Sidebar */}
-                           <div className={`chat-info-sidebar ${showChatInfo ? 'visible' : ''}`} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }} className="hidden-desktop">
-                                 <h3 style={{ margin: 0 }}>Thông tin</h3>
-                                 <button onClick={() => setShowChatInfo(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '8px' }}><X size={20} /></button>
-                              </div>
-                              <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
-                                    <AlertCircle size={14} /> Thông tin liên hệ
-                                 </div>
-                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Họ tên:</span> <strong>{parentData.teacherInfo?.tennv || 'Quản trị viên'}</strong></div>
-                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Chức danh:</span> {parentData.teacherInfo?.role || 'Phụ trách lớp'}</div>
-                                    <div style={{ fontSize: '0.85rem' }}><span style={{ color: '#94a3b8' }}>Điện thoại:</span> {parentData.teacherInfo?.sdt || 'Liên hệ qua chat'}</div>
-                                 </div>
-                              </div>
-
-                              <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
-                                    <Users size={14} /> Thành viên (2)
-                                 </div>
-                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#dc2626', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>QT</div>
-                                       <div>
-                                          <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>Quản trị viên</div>
-                                          <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Điều hành</div>
-                                       </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>PH</div>
-                                       <div>
-                                          <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>Phụ huynh</div>
-                                          <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Thành viên</div>
-                                       </div>
-                                    </div>
-                                 </div>
-                              </div>
-
-                              <div style={{ background: 'white', borderRadius: '12px', padding: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flex: 1 }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
-                                    <Search size={14} /> Kho tài liệu ({chatDocuments.length})
-                                 </div>
-                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    {chatDocuments.length > 0 ? chatDocuments.slice(0, 4).map(doc => (
-                                       <div key={doc.id} style={{ background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', textAlign: 'center' }} onClick={() => window.open(doc.file_url, '_blank')}>
-                                          <div style={{ height: '45px', background: '#f1f5f9', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
-                                             <AlertCircle size={18} style={{ color: '#94a3b8' }} />
-                                          </div>
-                                          <div style={{ fontSize: '0.6rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
-                                       </div>
-                                    )) : <div style={{ gridColumn: 'span 2', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', padding: '1rem' }}>Chưa có tài liệu</div>}
-                                 </div>
                               </div>
                            </div>
                         </div>
                      </div>
                   )}
+               </div>
+            )}
+
+            {parentTab === 'health-tab' && (
+               <div className="parent-tab-content active fade-in" style={{ paddingBottom: '2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '1.5rem', background: 'white', padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                     <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: '#fff1f2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e11d48' }}>
+                        <Heart size={28} />
+                     </div>
+                     <div>
+                        <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b' }}>Theo Dõi Sức Khỏe</h2>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>Thông tin thể chất và tình trạng sức khỏe của {parentData.student.tenhv}</p>
+                     </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '1.5rem' }}>
+                     <div style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 700, marginBottom: '8px', textTransform: 'uppercase' }}>CÂN NẶNG (Hàng tháng)</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a' }}>
+                           {parentData.student.ghichu?.match(/Cân nặng:\s*([\d.]+kg)/)?.[1] || 'Chưa cập nhật'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 600, marginTop: '4px' }}>Cập nhật lần cuối: Tháng {new Date().getMonth() + 1}</div>
+                     </div>
+                     <div style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 700, marginBottom: '8px', textTransform: 'uppercase' }}>CHIỀU CAO (3 tháng)</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a' }}>
+                           {parentData.student.ghichu?.match(/Chiều cao:\s*([\d.]+cm)/)?.[1] || 'Chưa cập nhật'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, marginTop: '4px' }}>Dự kiến đo lại: Tháng {((new Date().getMonth() + 3) % 12) + 1}</div>
+                     </div>
+                  </div>
+
+                  <div style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
+                     <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}><AlertCircle size={20} /> CẢNH BÁO SỨC KHỎE TẠI TRƯỜNG</h3>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {chatMessages.filter(m => m.mota?.includes('🔔') && (m.mota?.includes('ngã') || m.mota?.includes('sốt') || m.mota?.includes('bệnh'))).length > 0 ? (
+                           chatMessages.filter(m => m.mota?.includes('🔔') && (m.mota?.includes('ngã') || m.mota?.includes('sốt') || m.mota?.includes('bệnh'))).map((m, i) => (
+                              <div key={i} style={{ padding: '12px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', fontSize: '0.9rem', color: '#b91c1c' }}>
+                                 <strong>{new Date(m.created_at).toLocaleDateString('vi-VN')}:</strong> {m.mota}
+                              </div>
+                           ))
+                        ) : (
+                           <div style={{ padding: '2rem', textAlign: 'center', background: '#f8fafc', borderRadius: '12px', color: '#94a3b8' }}>
+                              <CheckCircle2 size={32} style={{ marginBottom: '10px', color: '#22c55e' }} />
+                              <p style={{ margin: 0 }}>Bé chưa có thông báo sức khỏe bất thường nào tại trường.</p>
+                           </div>
+                        )}
+                     </div>
+                  </div>
+
+                  <div style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#7c3aed' }}><Pill size={20} /> QUẢN LÝ THUỐC & LỜI DẶN</h3>
+                        <button 
+                           onClick={() => {
+                              setMedicineForm({ name: '', usage: '' });
+                              setIsMedicineModalOpen(true);
+                           }}
+                           style={{ padding: '6px 12px', borderRadius: '8px', background: '#ede9fe', color: '#7c3aed', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                           Dặn thuốc mới
+                        </button>
+                     </div>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {chatMessages.filter(m => m.mota?.includes('💊 LỜI DẶN THUỐC')).length > 0 ? (
+                           chatMessages.filter(m => m.mota?.includes('💊 LỜI DẶN THUỐC')).slice(0, 5).map((m, i) => (
+                              <div key={i} style={{ padding: '12px', background: '#f5f3ff', border: '1px solid #ede9fe', borderRadius: '12px', fontSize: '0.9rem' }}>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: 800, color: '#5b21b6' }}>{new Date(m.created_at).toLocaleDateString('vi-VN')}</span>
+                                    <span style={{ color: '#64748b', fontSize: '0.8rem' }}>{new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                 </div>
+                                 <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', color: '#1e293b' }}>{m.mota.replace('💊 LỜI DẶN THUỐC\n', '').trim()}</pre>
+                              </div>
+                           ))
+                        ) : (
+                           <p style={{ margin: 0, textAlign: 'center', color: '#94a3b8', padding: '1rem' }}>Chưa có lịch sử dặn thuốc.</p>
+                        )}
+                     </div>
+                  </div>
+               </div>
+            )}
+
+            {/* Leave Request Modal */}
+            {isLeaveModalOpen && (
+               <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+                  <div className="modal-content fade-in" style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                     <div style={{ padding: '1.5rem', background: '#fef2f2', borderBottom: '1px solid #fee2e2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}><UserMinus size={22} /> Xin Nghỉ Học</h3>
+                        <button onClick={() => setIsLeaveModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b' }}><X size={24} /></button>
+                     </div>
+                     <form onSubmit={handleLeaveSubmit} style={{ padding: '2rem' }}>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>CHỌN THỜI GIAN</label>
+                           <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                 type="button" 
+                                 onClick={() => setLeaveType('today')}
+                                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: leaveType === 'today' ? '#e11d48' : '#e2e8f0', background: leaveType === 'today' ? '#fff1f2' : 'white', color: leaveType === 'today' ? '#e11d48' : '#64748b', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
+                                 Hôm nay
+                              </button>
+                              <button 
+                                 type="button" 
+                                 onClick={() => setLeaveType('tomorrow')}
+                                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: leaveType === 'tomorrow' ? '#e11d48' : '#e2e8f0', background: leaveType === 'tomorrow' ? '#fff1f2' : 'white', color: leaveType === 'tomorrow' ? '#e11d48' : '#64748b', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
+                                 Ngày mai
+                              </button>
+                              <button 
+                                 type="button" 
+                                 onClick={() => {
+                                    setLeaveType('custom');
+                                    const today = new Date().toISOString().split('T')[0];
+                                    if(!leaveForm.from) setLeaveForm({...leaveForm, from: today, to: today});
+                                 }}
+                                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: leaveType === 'custom' ? '#e11d48' : '#e2e8f0', background: leaveType === 'custom' ? '#fff1f2' : 'white', color: leaveType === 'custom' ? '#e11d48' : '#64748b', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
+                                 Tùy chọn
+                              </button>
+                           </div>
+                        </div>
+
+                        {leaveType === 'custom' && (
+                           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '1.5rem' }}>
+                              <div>
+                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>TỪ NGÀY</label>
+                                 <input 
+                                    type="date" 
+                                    value={leaveForm.from}
+                                    onChange={e => setLeaveForm({...leaveForm, from: e.target.value})}
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '1rem', outline: 'none' }}
+                                    required 
+                                 />
+                              </div>
+                              <div>
+                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>ĐẾN NGÀY</label>
+                                 <input 
+                                    type="date" 
+                                    value={leaveForm.to}
+                                    onChange={e => setLeaveForm({...leaveForm, to: e.target.value})}
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '1rem', outline: 'none' }}
+                                    required 
+                                 />
+                              </div>
+                           </div>
+                        )}
+
+                        <div style={{ marginBottom: '2rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>LÝ DO NGHỈ</label>
+                           <textarea 
+                              placeholder="Nhập lý do bé nghỉ học..."
+                              value={leaveForm.reason}
+                              onChange={e => setLeaveForm({...leaveForm, reason: e.target.value})}
+                              rows="3"
+                              style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '1rem', outline: 'none', resize: 'none' }}
+                              required
+                           ></textarea>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                           <button type="button" onClick={() => setIsLeaveModalOpen(false)} style={{ flex: 1, padding: '1rem', borderRadius: '12px', background: '#f1f5f9', color: '#475569', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Hủy</button>
+                           <button type="submit" style={{ flex: 2, padding: '1rem', borderRadius: '12px', background: '#e11d48', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(225, 29, 72, 0.3)' }}>Gửi Lời Xin Nghỉ</button>
+                        </div>
+                     </form>
+                  </div>
+               </div>
+            )}
+
+            {/* Pickup Change Modal */}
+            {isPickupModalOpen && (
+               <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+                  <div className="modal-content fade-in" style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                     <div style={{ padding: '1.5rem', background: '#f0fdf4', borderBottom: '1px solid #dcfce7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, color: '#166534', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}><Users size={22} /> Đổi Người Đón Bé</h3>
+                        <button onClick={() => setIsPickupModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#166534' }}><X size={24} /></button>
+                     </div>
+                     <form onSubmit={handlePickupSubmit} style={{ padding: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '1.5rem' }}>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>TÊN NGƯỜI ĐÓN</label>
+                              <input 
+                                 type="text" 
+                                 value={pickupForm.name}
+                                 onChange={e => setPickupForm({...pickupForm, name: e.target.value})}
+                                 style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.95rem', outline: 'none' }}
+                                 placeholder="Họ và tên..."
+                                 required 
+                              />
+                           </div>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>SỐ ĐIỆN THOẠI</label>
+                              <input 
+                                 type="tel" 
+                                 value={pickupForm.phone}
+                                 onChange={e => setPickupForm({...pickupForm, phone: e.target.value})}
+                                 style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.95rem', outline: 'none' }}
+                                 placeholder="Số điện thoại..."
+                                 required 
+                              />
+                           </div>
+                        </div>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>QUAN HỆ (Vd: Ông nội, Cô, Di...)</label>
+                           <input 
+                              type="text" 
+                              value={pickupForm.relation}
+                              onChange={e => setPickupForm({...pickupForm, relation: e.target.value})}
+                              style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.95rem', outline: 'none' }}
+                              placeholder="Mối quan hệ với bé..."
+                              required 
+                           />
+                        </div>
+                        <div style={{ marginBottom: '2rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>LÝ DO ĐỔI NGƯỜI</label>
+                           <textarea 
+                              placeholder="Lý do thay đổi người đón..."
+                              value={pickupForm.reason}
+                              onChange={e => setPickupForm({...pickupForm, reason: e.target.value})}
+                              rows="2"
+                              style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.95rem', outline: 'none', resize: 'none' }}
+                              required
+                           ></textarea>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                           <button type="button" onClick={() => setIsPickupModalOpen(false)} style={{ flex: 1, padding: '1rem', borderRadius: '12px', background: '#f8fafc', color: '#475569', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Hủy</button>
+                           <button type="submit" style={{ flex: 2, padding: '1rem', borderRadius: '12px', background: '#16a34a', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)' }}>Xác Nhận Thay Đổi</button>
+                        </div>
+                     </form>
+                  </div>
+               </div>
+            )}
+
+            {/* Medicine Modal */}
+            {isMedicineModalOpen && (
+               <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+                  <div className="modal-content fade-in" style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                     <div style={{ padding: '1.5rem', background: '#f5f3ff', borderBottom: '1px solid #ede9fe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, color: '#5b21b6', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}><Pill size={22} /> Dặn Thuốc Cho Bé</h3>
+                        <button onClick={() => setIsMedicineModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6' }}><X size={24} /></button>
+                     </div>
+                     <form onSubmit={handleMedicineSubmit} style={{ padding: '2rem' }}>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>TÊN THUỐC</label>
+                           <input 
+                              type="text" 
+                              value={medicineForm.name}
+                              onChange={e => setMedicineForm({...medicineForm, name: e.target.value})}
+                              style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '1rem', outline: 'none' }}
+                              placeholder="Nhập tên các loại thuốc..."
+                              required 
+                           />
+                        </div>
+                        <div style={{ marginBottom: '2rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>CÁCH DÙNG & LIỀU LƯỢNG</label>
+                           <textarea 
+                              placeholder="Ví dụ: Uống 1 viên sau ăn trưa, bôi kem 2 lần/ngày..."
+                              value={medicineForm.usage}
+                              onChange={e => setMedicineForm({...medicineForm, usage: e.target.value})}
+                              rows="4"
+                              style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '1rem', outline: 'none', resize: 'none' }}
+                              required
+                           ></textarea>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                           <button type="button" onClick={() => setIsMedicineModalOpen(false)} style={{ flex: 1, padding: '1rem', borderRadius: '12px', background: '#f8fafc', color: '#475569', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Hủy</button>
+                           <button type="submit" style={{ flex: 2, padding: '1rem', borderRadius: '12px', background: '#7c3aed', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)' }}>Xác Nhận Dặn Thuốc</button>
+                        </div>
+                     </form>
+                  </div>
+               </div>
+            )}
+
+            {/* Feedback Modal */}
+            {isFeedbackModalOpen && (
+               <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+                  <div className="modal-content fade-in" style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                     <div style={{ padding: '1.5rem', background: '#f0f9ff', borderBottom: '1px solid #e0f2fe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, color: '#0369a1', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}><MessageCircle size={22} /> Hòm Thư Góp Ý</h3>
+                        <button onClick={() => setIsFeedbackModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0369a1' }}><X size={24} /></button>
+                     </div>
+                     <form onSubmit={handleFeedbackSubmit} style={{ padding: '2rem' }}>
+                        <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                           <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9', margin: '0 auto 1rem' }}>
+                              <Send size={28} />
+                           </div>
+                           <h4 style={{ margin: '0 0 5px 0', color: '#0f172a' }}>Gửi trực tiếp cho Hiệu trưởng</h4>
+                           <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>Ý kiến của quý phụ huynh giúp chúng tôi cải thiện chất lượng giáo dục tốt hơn.</p>
+                        </div>
+                        <div style={{ marginBottom: '2rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', marginBottom: '8px' }}>NỘI DUNG GÓP Ý</label>
+                           <textarea 
+                              placeholder="Nhập ý kiến đóng góp, phản hồi của quý phụ huynh..."
+                              value={feedbackContent}
+                              onChange={e => setFeedbackContent(e.target.value)}
+                              rows="6"
+                              style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '1rem', outline: 'none', resize: 'none', transition: 'border-color 0.2s' }}
+                              onFocus={e => e.target.style.borderColor = '#0ea5e9'}
+                              onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                              required
+                           ></textarea>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                           <button type="button" onClick={() => setIsFeedbackModalOpen(false)} style={{ flex: 1, padding: '1rem', borderRadius: '12px', background: '#f1f5f9', color: '#475569', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Đóng</button>
+                           <button type="submit" disabled={feedbackLoading} style={{ flex: 2, padding: '1rem', borderRadius: '12px', background: '#0ea5e9', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(14, 165, 233, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                              {feedbackLoading ? <Loader2 size={18} className="spinner" /> : <><Send size={18} /> Gửi Góp Ý</>}
+                           </button>
+                        </div>
+                     </form>
+                  </div>
                </div>
             )}
          </div>

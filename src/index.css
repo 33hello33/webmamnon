@@ -707,7 +707,41 @@ code {
   [data-theme="kindergarten"] .parent-header h2 {
     font-size: 1rem !important;
   }
+/* Parent Notice Board */
+.notice-board-sidebar {
+   box-shadow: -4px 0 15px rgba(0,0,0,0.05);
+}
 
+.notice-tabs button {
+   transition: all 0.2s ease;
+   color: #64748b;
+}
+
+.notice-tabs button:hover {
+   color: #1e293b;
+}
+
+.notice-tabs button.active {
+   color: #8b5cf6;
+   background: white;
+}
+
+.menu-card {
+   transition: transform 0.2s ease;
+}
+
+.menu-card:hover {
+   transform: translateY(-2px);
+}
+
+.fade-in {
+   animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+   from { opacity: 0; transform: translateY(5px); }
+   to { opacity: 1; transform: translateY(0); }
+}
   [data-theme="kindergarten"] .parent-nav-tabs {
     flex-wrap: wrap !important;
     overflow-x: hidden !important;

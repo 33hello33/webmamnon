@@ -29,7 +29,8 @@ import {
   LayoutGrid,
   Pencil,
   Pin,
-  Share2
+  Share2,
+  Bell
 } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
 import './ChatManager.css';
@@ -91,6 +92,9 @@ const ChatManager = ({ currentUser }) => {
   const [forwardingMessage, setForwardingMessage] = useState(null);
   const [selectedForwardStudents, setSelectedForwardStudents] = useState([]);
   const [forwardSearch, setForwardSearch] = useState('');
+  const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState({ content: '', type: 'all', selectedClass: 'Tất cả' });
+  const [announcementFiles, setAnnouncementFiles] = useState({ image: null, file: null });
   
   const scrollRef = useRef();
 
@@ -339,10 +343,11 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
+      let fileToUpload = file;
       if (type === 'image') {
         try {
           const compressed = await compressImage(file, 100);
-          file = compressed;
+          fileToUpload = compressed;
         } catch (err) {
           console.error('Compression failed, using original file:', err);
         }
@@ -350,10 +355,8 @@ const ChatManager = ({ currentUser }) => {
 
       let finalUrl = '';
       if (config.gdrive_enabled) {
-        console.log('Uploading to GDrive with folderId:', config.gdrive_folder_id);
-        // Sử dụng helper uploadToGDrive để upload vào đúng folder và đúng phương thức auth
         const gResult = await uploadToGDrive(
-          file,
+          fileToUpload,
           config.gdrive_folder_id?.trim(),
           config.gdrive_client_id,
           config.gdrive_api_key,
@@ -367,7 +370,7 @@ const ChatManager = ({ currentUser }) => {
       } else {
         const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
         const folder = type === 'image' ? 'chat-images' : 'chat-files';
-        const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+        const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, fileToUpload);
         if (error) throw error;
         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
         finalUrl = publicUrl;
@@ -541,7 +544,8 @@ const ChatManager = ({ currentUser }) => {
         image_url: forwardingMessage.image_url,
         file_url: forwardingMessage.file_url,
         file_name: forwardingMessage.file_name,
-        file_mime_type: forwardingMessage.file_mime_type
+        file_mime_type: forwardingMessage.file_mime_type,
+        description: forwardingMessage.description || null
       }));
 
       const { error } = await supabase.from('hv_messages').insert(payloads);
@@ -562,6 +566,71 @@ const ChatManager = ({ currentUser }) => {
       setForwardingMessage(null);
     } catch (err) {
       alert('Lỗi khi chuyển tiếp tin nhắn: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePostAnnouncement = async () => {
+    if (!announcementForm.content.trim() && !announcementFiles.image && !announcementFiles.file) {
+      alert('Vui lòng nhập nội dung hoặc chọn tệp tin thông báo.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      let imageUrl = null;
+      let fileUrl = null;
+      let fileName = '';
+      let mimeType = '';
+
+      // Handle Uploads
+      if (announcementFiles.image) {
+         const res = await uploadToGDrive(announcementFiles.image, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
+         imageUrl = `https://drive.google.com/thumbnail?id=${res.id}&sz=w1000`;
+         fileName = announcementFiles.image.name;
+         mimeType = announcementFiles.image.type;
+      }
+      if (announcementFiles.file) {
+         const res = await uploadToGDrive(announcementFiles.file, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
+         fileUrl = `https://drive.google.com/file/d/${res.id}/view`;
+         fileName = announcementFiles.file.name;
+         mimeType = announcementFiles.file.type;
+      }
+
+      // Target students
+      let targetStudents = [];
+      if (announcementForm.type === 'all') {
+        targetStudents = students.map(s => s.mahv);
+      } else {
+        targetStudents = students.filter(s => s.malop === announcementForm.selectedClass).map(s => s.mahv);
+      }
+
+      if (targetStudents.length === 0) {
+        alert('Không tìm thấy học viên nào để gửi thông báo.');
+        return;
+      }
+
+      const payloads = targetStudents.map(mahv => ({
+        mahv,
+        manv: currentUser.manv || currentUser.username,
+        content: announcementForm.content,
+        image_url: imageUrl,
+        file_url: fileUrl,
+        file_name: fileName,
+        file_mime_type: mimeType,
+        description: 'THONG_BAO'
+      }));
+
+      const { error } = await supabase.from('hv_messages').insert(payloads);
+      if (error) throw error;
+
+      alert(`Đã đăng bảng tin thành công tới ${targetStudents.length} phụ huynh.`);
+      setIsAnnouncementModalOpen(false);
+      setAnnouncementForm({ content: '', type: 'all', selectedClass: 'Tất cả' });
+      setAnnouncementFiles({ image: null, file: null });
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
     } finally {
       setUploading(false);
     }
@@ -640,6 +709,7 @@ const ChatManager = ({ currentUser }) => {
                      <div className="message-bubble-wrapper">
                         <div className="message-bubble">
                            {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
+                           {m.description === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
                            {m.content && <div className="msg-text">{m.content}</div>}
                            {m.image_url && (
                              <div className="msg-image">
@@ -910,6 +980,17 @@ const ChatManager = ({ currentUser }) => {
 
   return (
     <div className="chat-dashboard animate-fade-in">
+      {/* Dashboard Header with Announcement Trigger */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 5px' }}>
+          <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>Quản lý trao đổi phụ huynh</h2>
+          <button 
+            onClick={() => setIsAnnouncementModalOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)' }}
+          >
+             <Bell size={18} /> Đăng Bảng Tin (Announcement)
+          </button>
+       </div>
+
       {/* Filters Row */}
       <div className="chat-filters-row">
         <div className="filter-group">
@@ -1044,6 +1125,89 @@ const ChatManager = ({ currentUser }) => {
               <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
            </div>
         </div>
+      )}
+
+      {/* Announcement Modal */}
+      {isAnnouncementModalOpen && createPortal(
+        <div className="chat-modal-overlay" onClick={() => setIsAnnouncementModalOpen(false)}>
+          <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
+             <div className="modal-header">
+                <h3><Bell size={20} /> Đăng Thông Báo Bảng Tin</h3>
+                <button className="close-btn" onClick={() => setIsAnnouncementModalOpen(false)}><X size={20} /></button>
+             </div>
+             <div className="modal-body">
+                <div style={{ marginBottom: '20px' }}>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                   <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        className={`mode-btn ${announcementForm.type === 'all' ? 'active' : ''}`}
+                        onClick={() => setAnnouncementForm({...announcementForm, type: 'all'})}
+                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: announcementForm.type === 'all' ? '#ede9fe' : 'white', color: announcementForm.type === 'all' ? '#8b5cf6' : '#64748b', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Tất cả học viên
+                      </button>
+                      <button 
+                        className={`mode-btn ${announcementForm.type === 'class' ? 'active' : ''}`}
+                        onClick={() => setAnnouncementForm({...announcementForm, type: 'class'})}
+                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: announcementForm.type === 'class' ? '#ede9fe' : 'white', color: announcementForm.type === 'class' ? '#8b5cf6' : '#64748b', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Học viên theo lớp
+                      </button>
+                   </div>
+                </div>
+
+                {announcementForm.type === 'class' && (
+                   <div style={{ marginBottom: '20px' }} className="fade-in">
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Chọn lớp:</label>
+                      <select 
+                        className="class-select-styled" 
+                        style={{ width: '100%', padding: '12px' }}
+                        value={announcementForm.selectedClass}
+                        onChange={e => setAnnouncementForm({...announcementForm, selectedClass: e.target.value})}
+                      >
+                        <option value="Tất cả">-- Chọn lớp --</option>
+                        {classes.map(c => <option key={c.malop} value={c.malop}>{c.tenlop}</option>)}
+                      </select>
+                   </div>
+                )}
+
+                <div style={{ marginBottom: '20px' }}>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Nội dung thông báo:</label>
+                   <textarea 
+                     placeholder="Nhập nội dung thông báo nhấn mạnh..."
+                     rows="5"
+                     style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }}
+                     value={announcementForm.content}
+                     onChange={e => setAnnouncementForm({...announcementForm, content: e.target.value})}
+                   />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                   <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><ImageIcon size={16} /> Đính kèm ảnh:</label>
+                      <input type="file" accept="image/*" onChange={e => setAnnouncementFiles({...announcementFiles, image: e.target.files[0]})} />
+                   </div>
+                   <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><File size={16} /> Đính kèm File:</label>
+                      <input type="file" onChange={e => setAnnouncementFiles({...announcementFiles, file: e.target.files[0]})} />
+                   </div>
+                </div>
+             </div>
+             <div className="modal-footer">
+                <button className="btn-cancel" onClick={() => setIsAnnouncementModalOpen(false)}>Hủy bỏ</button>
+                <button 
+                  className="btn-forward-submit" 
+                  style={{ background: '#8b5cf6' }}
+                  disabled={uploading}
+                  onClick={handlePostAnnouncement}
+                >
+                   {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                   Đăng thông báo lên Bảng tin
+                </button>
+             </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

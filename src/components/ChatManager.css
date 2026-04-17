@@ -1251,3 +1251,42 @@
   background: #10b981;
   color: white;
 }
+/* Announcement & Newsfeed Styles */
+.announcement-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mine .announcement-badge {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.announcement-modal {
+  max-width: 600px !important;
+}
+
+.mode-btn {
+  transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+  border-color: #8b5cf6 !important;
+}
+
+.mode-btn.active {
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.btn-forward-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

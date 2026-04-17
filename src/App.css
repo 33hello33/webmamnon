@@ -11,13 +11,13 @@ body {
   background-color: #0f172a;
   color: #f8fafc;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .app-container {
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   min-height: 100vh;
   position: relative;
   z-index: 1;
