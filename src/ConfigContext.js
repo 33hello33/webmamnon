@@ -25,6 +25,10 @@ export const ConfigProvider = ({ children }) => {
           const favicon = document.querySelector('link[rel="icon"]');
           if (favicon) favicon.href = data.logo;
         }
+        if (data.appleicon) {
+          const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+          if (appleIcon) appleIcon.href = data.appleicon;
+        }
       } else {
         // Fallback or initialization
         setConfig({
