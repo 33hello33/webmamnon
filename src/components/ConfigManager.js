@@ -172,6 +172,38 @@ const ConfigManager = () => {
     setFormData({ ...formData, phanquyenrole: pq });
   };
 
+  const handleAppleIconUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.png')) {
+      return setMsg({ type: 'error', text: 'Vui lòng chỉ upload file PNG.' });
+    }
+
+    try {
+      // 1. Upload to assets bucket
+      const fileName = `appleicon_${Date.now()}.png`;
+      const { error } = await supabase.storage.from('assets').upload(fileName, file);
+
+      if (error) {
+        // Alt: base64 if no bucket
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = async () => {
+          setFormData({ ...formData, appleicon: reader.result });
+          setMsg({ type: 'success', text: 'Đã cập nhật Apple Icon (Local Base64).' });
+        };
+        return;
+      }
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(fileName);
+      setFormData({ ...formData, appleicon: publicUrl });
+      setMsg({ type: 'success', text: 'Đã tải lên Apple Icon mới thành công!' });
+    } catch (err) {
+      console.error(err);
+      setMsg({ type: 'error', text: 'Lỗi upload: ' + err.message });
+    }
+  };
   const handleToggleTinhHocPhi = (val) => {
     const thp = { ...formData.tinhhocphi };
     if (!thp.selected) thp.selected = [];
@@ -301,6 +333,8 @@ const ConfigManager = () => {
             <h3>Nhận diện Thương hiệu</h3>
           </div>
           <div className="brand-grid">
+                    <div className="logo-upload-group" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+
             <div className="logo-upload">
               <label>Logo Web (Favicon & Sidebar)</label>
               <div className="logo-preview-box">
@@ -311,6 +345,18 @@ const ConfigManager = () => {
                 </div>
               </div>
               <p className="hint">Chỉ chấp nhận .png | Max 2MB</p>
+                      </div>
+              <div className="logo-upload">
+                <label>Apple Touch Icon</label>
+                <div className="logo-preview-box">
+                  {formData.appleicon ? <img src={formData.appleicon} alt="Preview" /> : <div className="no-img">No Icon</div>}
+                  <div className="upload-overlay">
+                    <Upload size={24} />
+                    <input type="file" accept="image/png" onChange={handleAppleIconUpload} />
+                  </div>
+                </div>
+                <p className="hint">Chỉ chấp nhận .png | Max 2MB</p>
+              </div>
             </div>
             <div className="form-fields">
               <div className="form-group">
