@@ -12,24 +12,132 @@ code {
     monospace;
 }
 
-/* THEME: DARK MODE */
-[data-theme="dark"] {
-  filter: invert(0.92) hue-rotate(180deg);
-  background: #0f172a;
+/* THEME: LIGHT (MẶC ĐỊNH) */
+[data-theme="light"] {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
 }
-/* Re-invert image-like elements and specific colorful icons so they stay normal */
-[data-theme="dark"] img, 
-[data-theme="dark"] .avatar, 
-[data-theme="dark"] .logo-mark,
-[data-theme="dark"] .status-badge,
-[data-theme="dark"] .tuition-chip {
-  filter: invert(1) hue-rotate(180deg);
+
+[data-theme="light"] body {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
 }
-[data-theme="dark"] select.theme-select {
-  filter: invert(1) hue-rotate(180deg); /* Re-invert theme dropdown so it doesn't look completely weird */
-  background: #1e293b !important;
+
+[data-theme="light"] .app-container {
+  background-color: #f8fafc !important;
+}
+
+[data-theme="light"] .login-box {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1) !important;
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .login-header h2 {
+  background: linear-gradient(to right, #1e293b, #475569) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+[data-theme="light"] .login-header p {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .input-group input {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+[data-theme="light"] .input-group input:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+}
+
+[data-theme="light"] .input-icon {
+  color: #94a3b8 !important;
+}
+
+[data-theme="light"] .submit-btn {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3) !important;
   color: white !important;
-  border-color: #334155 !important;
+}
+
+[data-theme="light"] .login-tab-btn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="light"] .login-tab-btn.active {
+  color: #3b82f6 !important;
+  border-bottom: 2px solid #3b82f6 !important;
+}
+
+[data-theme="light"] .blob {
+  opacity: 0.15 !important;
+}
+
+[data-theme="light"] .parent-dashboard-container {
+  background-color: #f8fafc !important;
+}
+
+[data-theme="light"] .menu-item-btn {
+  background: white !important;
+  color: #1e293b !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02) !important;
+}
+
+[data-theme="light"] .menu-item-btn:hover {
+  background: #f1f5f9 !important;
+  border-color: #3b82f6 !important;
+}
+
+[data-theme="light"] .message-bubble-wrapper .message-bubble {
+  background: white !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .message-row.mine .message-bubble {
+  background: #3b82f6 !important;
+  color: white !important;
+  border: none !important;
+}
+
+[data-theme="light"] .chat-input-area {
+  background: white !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+/* THEME: DARK MODE (GLASSMORPHISM) */
+[data-theme="dark"] {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] body {
+  background-color: #0f172a !important;
+}
+
+[data-theme="dark"] .app-container {
+  background-color: #0f172a !important;
+}
+
+[data-theme="dark"] .login-box {
+  background: rgba(30, 41, 59, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .input-group input {
+  background: rgba(15, 23, 42, 0.6) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* THEME: MẦM NON (KINDERGARTEN) */

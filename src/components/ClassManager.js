@@ -668,7 +668,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           const taAmount = parseInt(newItem.tienan || 0);
           const taTier = config?.trutienan ? config.trutienan[String(taAmount)] : null;
           const tru_nghi_val = taTier ? (parseInt(taTier.tru_nghi) || 0) : getTruTienAn(newItem.hocphi);
-          
+
           const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
           newItem.trutienan = newItem.nghiPhep * tru_nghi_val;
 
@@ -728,9 +728,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           tenlop: selectedClass?.tenlop || '',
           manv: 'Hệ thống',
           hocphi: formatTuition(row.hocphi),
-          tienan: row.tienan > 0 ? JSON.stringify({ 
-            days: calculateWorkingDaysInMonth(row.ngaybatdau), 
-            amount: row.tienan 
+          tienan: row.tienan > 0 ? JSON.stringify({
+            days: calculateWorkingDaysInMonth(row.ngaybatdau),
+            amount: row.tienan
           }) : null,
           giamhocphi: formatTuition(row.giamhocphi),
           trutienan: formatTuition(row.trutienan),
@@ -994,25 +994,38 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   // Export Excel
   const handleExportStudents = () => {
     if (classStudents.length === 0) return showMessage('error', 'Lớp này hiện không có học sinh');
-    const cleanStudents = classStudents.map(s => {
 
+    const teacher = teachers.find(t => t.manv === selectedClass?.manv);
+    const teacherName = teacher && teacher.tennv ? teacher.tennv : (selectedClass?.manv || 'Chưa phân công');
+
+    const titleRows = [
+      [`Tên lớp: ${selectedClass?.tenlop || 'Chưa có tên lớp'}`],
+      [`Giáo viên: ${teacherName}`],
+      [`Sĩ số lớp: ${classStudents.length}`],
+      [],
+      ['STT', 'Mã HS', 'Tên Học Sinh', 'SĐT', 'Trạng Thái']
+    ];
+
+    const dataRows = classStudents.map((s, idx) => {
       const latestHd = contracts
         .filter(c => c.mahv === s.mahv)
         .sort((a, b) => new Date(b.ngaylap) - new Date(a.ngaylap))[0];
 
-      return {
-        mahv: s.mahv || '',
-        tenhv: s.tenhv || '',
-        sdt: s.sdt || '',
-        trangthai: s.trangthai || '',
-        ngaybatdau: latestHd?.ngaybatdau || '',
-        ngayketthuc: latestHd?.ngayketthuc || ''
-      };
+      return [
+        idx + 1,
+        s.mahv || '',
+        s.tenhv || '',
+        s.sdt || '',
+        s.trangthai || ''
+      ];
     });
-    const ws = XLSX.utils.json_to_sheet(cleanStudents);
+
+    const finalData = [...titleRows, ...dataRows];
+
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Học Sinh - ${selectedClass?.tenlop || 'Lớp'}`);
-    XLSX.writeFile(wb, `DS_HocSinh_${selectedClass?.malop || 'Lop'}.xlsx`);
+    XLSX.writeFile(wb, `DS_HocSinh_${selectedClass?.tenlop || 'Lop'}.xlsx`);
   };
 
   return (
@@ -1643,8 +1656,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             </td>
                             <td>
                               {config?.trutienan ? (
-                                <select 
-                                  value={String(row.tienan)} 
+                                <select
+                                  value={String(row.tienan)}
                                   onChange={e => handleBatchStudentChange(row.mahv, 'tienAnTier', e.target.value)}
                                   className="td-input"
                                   style={{ width: '100%', border: 'none', background: '#f8fafc', borderRadius: '4px', padding: '4px 8px', fontWeight: 700, color: '#2563eb' }}
