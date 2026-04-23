@@ -267,7 +267,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const handleOpenEditInvoice = (invoice) => {
       setEditInvoiceModal({
          isOpen: true,
-         data: { 
+         data: {
             ...invoice,
             hocphi: pCur(invoice.hocphi),
             giamhocphi: pCur(invoice.giamhocphi),
@@ -790,8 +790,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          headers = ['Mã phiếu', 'Ngày lập', 'Loại', 'Hạng mục', 'Mô tả', 'Số tiền', 'Hình thức', 'Nhân viên'];
          mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv || i.nhanvien]);
       } else if (activeSubTab === 'hoadon') {
-         headers = ['Mã HĐ', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Đã thu', 'Còn nợ'];
-         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.dadong), fCur(i.conno)]);
+         headers = ['Mã HĐ', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.dadong), fCur(i.thukhac), fCur(i.dadong), fCur(i.conno)]);
       } else if (activeSubTab === 'nhapkho') {
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
          mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
@@ -1133,7 +1133,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th>Thời lượng</th>
                               <th>Hình thức</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
-                              <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Thu <SortIcon columnKey="dadong" /></th>
+                              <th className="text-right">Giảm Học Phí</th>
+                              <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Đóng <SortIcon columnKey="dadong" /></th>
+                              <th className="text-right">Phụ thu</th>
                               <th className="text-right">Nợ Cấn Trừ</th>
                               <th className="text-center">Hành động</th>
                            </tr>
@@ -1151,7 +1153,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{r.thoiluong ? `${r.thoiluong}` : '_'}</td>
                                     <td>{r.hinhthuc}</td>
                                     <td className="text-right">{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
                                     <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
+                                    <td className="text-right font-bold" style={{ color: '#6366f1' }}>{pCur(r.thukhac) > 0 ? `+${fCur(r.thukhac)}` : ''}</td>
                                     <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                     <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                        {!deleted ? (
@@ -1191,14 +1195,20 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  </div>
                                  {pCur(r.giamhocphi) > 0 && (
                                     <div className="fm-card-row">
-                                       <span>Giảm trừ:</span>
-                                       <strong className="text-orange-500">-{fCur(r.giamhocphi)} ₫</strong>
+                                       <span>Giảm học phí:</span>
+                                       <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
                                     </div>
                                  )}
                                  <div className="fm-card-row price-row">
-                                    <span>Đã nộp:</span>
+                                    <span>Đã đóng:</span>
                                     <strong className="text-success">{fCur(r.dadong)} ₫</strong>
                                  </div>
+                                 {pCur(r.thukhac) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Phụ thu:</span>
+                                       <strong style={{ color: '#6366f1' }}>+{fCur(r.thukhac)} ₫</strong>
+                                    </div>
+                                 )}
                                  {pCur(r.conno) > 0 && (
                                     <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
                                  )}
@@ -1529,7 +1539,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('phieuchi')} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-thukhac"><Activity size={24} /></div>
                   <div className="fm-stat-info">
-                     <span className="fm-stat-label">Phiếu thu khác</span>
+                     <span className="fm-stat-label">Phụ thu</span>
                      <span className="fm-stat-value text-primary">{fCur(stats.thuKhac)}</span>
                   </div>
                </div>
@@ -2017,7 +2027,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         try {
                            const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
                            if (ta && ta.amount) taS = ta.amount;
-                         } catch (e) { }
+                        } catch (e) { }
                         const rM = pCur(printHoaDon.trutienan);
                         const rT = pCur(printHoaDon.tiennghiphep);
                         const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
@@ -2526,8 +2536,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
                            <input type="text" value={fCur(editInvoiceModal.data.tongcong)} onChange={e => {
-                               const val = pCur(e.target.value);
-                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
+                              const val = pCur(e.target.value);
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
                         </div>
                         <div>

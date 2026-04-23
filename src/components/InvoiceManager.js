@@ -696,11 +696,11 @@ export default function InvoiceManager() {
    const formatCurrency = (val) => {
       if (val === null || val === undefined || val === '') return '';
       if (Object.is(val, -0)) return '-';
-      
+
       const strVal = String(val).replace(/,/g, '');
       const isNeg = strVal.startsWith('-');
       const n = Math.abs(parseInt(strVal, 10) || 0);
-      
+
       const formatted = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
       return (isNeg ? '-' : '') + formatted;
    };

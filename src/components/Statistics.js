@@ -118,11 +118,11 @@ export default function Statistics() {
       const y = date.getFullYear();
       const m = String(date.getMonth() + 1).padStart(2, '0');
       const d = String(date.getDate()).padStart(2, '0');
-      
+
       const now = new Date();
-      const isToday = y === now.getFullYear() && 
-                      date.getMonth() === now.getMonth() && 
-                      date.getDate() === now.getDate();
+      const isToday = y === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate();
 
       if (isEnd && isToday) {
         const hh = String(now.getHours()).padStart(2, '0');
@@ -130,7 +130,7 @@ export default function Statistics() {
         const ss = String(now.getSeconds()).padStart(2, '0');
         return `${y}-${m}-${d}T${hh}:${mm}:${ss}+07:00`;
       }
-      
+
       return `${y}-${m}-${d}T${isEnd ? '23:59:59.999' : '00:00:00.000'}+07:00`;
     };
 
@@ -231,7 +231,7 @@ export default function Statistics() {
   const fetchGrowthCharts = async () => {
     const today = new Date();
     const startDateObj = new Date(today.getFullYear(), today.getMonth() - 11, 1);
-    
+
     // Format YYYY-MM-DD for simpler filtering on timestamp columns
     const startDateSmall = `${startDateObj.getFullYear()}-${String(startDateObj.getMonth() + 1).padStart(2, '0')}-01`;
 
@@ -370,7 +370,7 @@ export default function Statistics() {
   const fetchClassStats = async (start, end) => {
     const fromTS = start || '1970-01-01T00:00:00+07:00';
     const toTS = end || '2999-12-31T23:59:59+07:00';
-    
+
     try {
       const [resHd, resBill, resLop, resLichHocActive] = await Promise.all([
         supabase.from('tbl_hd').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
@@ -378,27 +378,27 @@ export default function Statistics() {
         supabase.from('tbl_lop').select('malop, tenlop'),
         supabase.from('tbl_hv').select('mahv, malop').neq('trangthai', 'Đã Nghỉ')
       ]);
- 
+
       const dataByClass = {};
       const debtByClass = {};
       const staffRevMap = {};
- 
+
       const cleanLabel = (l) => l?.toString().trim().replace(/[\r\n]+/g, '') || 'Khác';
- 
+
       resHd.data?.forEach(item => {
         const l = cleanLabel(item.tenlop);
         if (!dataByClass[l]) dataByClass[l] = { hp: 0, sale: 0 };
         dataByClass[l].hp += parseAmount(item.dadong);
         debtByClass[l] = (debtByClass[l] || 0) + parseAmount(item.conno);
- 
+
         const nv = item.nhanvien || 'Hệ thống';
         staffRevMap[nv] = (staffRevMap[nv] || 0) + parseAmount(item.dadong);
       });
- 
+
       // Ánh xạ mahv -> tenlop đầu tiên tìm thấy (Thay thế tbl_lichhoc_hv bằng tbl_hv)
       const studentToClassMap = {};
       const sisoMap = {};
- 
+
       const classMap = {};
       resLop.data?.forEach(l => classMap[l.malop] = l.tenlop);
 
@@ -410,7 +410,7 @@ export default function Statistics() {
           sisoMap[hv.malop] = (sisoMap[hv.malop] || 0) + 1;
         }
       });
- 
+
       resBill.data?.forEach(item => {
         const foundTenLop = studentToClassMap[item.mahv];
         const l = cleanLabel(foundTenLop);
@@ -447,9 +447,9 @@ export default function Statistics() {
         }]
       });
 
-      const classSiso = resLop.data?.map(l => ({ 
-        label: l.tenlop, 
-        count: sisoMap[l.malop] || 0 
+      const classSiso = resLop.data?.map(l => ({
+        label: l.tenlop,
+        count: sisoMap[l.malop] || 0
       })).filter(l => l.count > 0);
 
       setSiSoTungLopData({
@@ -515,7 +515,7 @@ export default function Statistics() {
           <h2>Phân tích & Thống kê</h2>
           <p>Báo cáo chi tiết hoạt động kinh doanh {activeDateRangeStr}</p>
         </div>
-        
+
         <div className="stat-header-right">
           <div className="filter-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <div className="filter-card">
