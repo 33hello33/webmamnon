@@ -536,6 +536,10 @@ export default function TimesheetManager() {
                               <span style={{ color: '#64748b', fontWeight: 600 }}>Chức vụ:</span>
                               <span style={{ color: '#1e293b', fontWeight: 700 }}>{activeTeacher.role || 'Giáo viên'}</span>
                            </div>
+                           <div style={{ display: 'flex', gap: '5px' }}>
+                              <span style={{ color: '#64748b', fontWeight: 600 }}>STK:</span>
+                              <span style={{ color: '#10b981', fontWeight: 800 }}>{activeTeacher.stk || '-'}</span>
+                           </div>
                         </div>
                      </div>
 
@@ -780,8 +784,9 @@ export default function TimesheetManager() {
                      <div>Kỳ lương: <b>Tháng {globalDate.getMonth() + 1} / {globalDate.getFullYear()}</b></div>
                   </div>
 
-                  <div>
-                     Chức vụ: <b>{activeTeacher.chucvu || 'Giảng Viên'}</b>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Chức vụ: <b>{activeTeacher.role || 'Giảng Viên'}</b></div>
+                     <div>STK: <b style={{ color: '#059669' }}>{activeTeacher.stk || '-'}</b></div>
                   </div>
 
                   {/* BẢNG LƯƠNG */}

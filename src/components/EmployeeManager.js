@@ -8,7 +8,7 @@ import {
 import './EmployeeManager.css';
 
 const INITIAL_FORM = {
-  manv: '', tennv: '', sdt: '', ghichu: '', 
+  manv: '', tennv: '', sdt: '', stk: '', ghichu: '', 
   username: '', password: '', role: 'Giáo viên', trangthai: 'Đang Làm'
 };
 
@@ -145,6 +145,7 @@ export default function EmployeeManager({ currentUser }) {
     (e.tennv && e.tennv.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (e.manv && e.manv.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (e.sdt && e.sdt.includes(searchTerm)) ||
+    (e.stk && e.stk.includes(searchTerm)) ||
     (e.role && e.role.toLowerCase().includes(searchTerm.toLowerCase()))
   ).sort((a, b) => {
     if (a.trangthai === 'Đã Nghỉ' && b.trangthai !== 'Đã Nghỉ') return 1;
@@ -230,6 +231,7 @@ export default function EmployeeManager({ currentUser }) {
                   <th>Tên Nhân Viên</th>
                   <th>Chức Vụ (Role)</th>
                   <th>SĐT</th>
+                  <th>STK (Ngân hàng)</th>
                   <th>Trạng Thái</th>
                   <th>Tài Khoản (User)</th>
                   <th>Mật Khẩu</th>
@@ -259,6 +261,7 @@ export default function EmployeeManager({ currentUser }) {
                         </span>
                       </td>
                       <td>{e.sdt || '-'}</td>
+                      <td>{e.stk || '-'}</td>
                       <td>
                         <span className={`status-badge ${e.trangthai === 'Đang Làm' ? 'active' : 'inactive'}`}>
                           {e.trangthai}
@@ -308,6 +311,9 @@ export default function EmployeeManager({ currentUser }) {
                   <div className="employee-card-body">
                     <div className="info-row">
                       <span><strong>SĐT:</strong> {e.sdt || '-'}</span>
+                      <span><strong>STK:</strong> {e.stk || '-'}</span>
+                    </div>
+                    <div className="info-row">
                       <span className={`status-badge ${e.trangthai === 'Đang Làm' ? 'active' : 'inactive'}`}>
                         {e.trangthai}
                       </span>
@@ -376,7 +382,8 @@ export default function EmployeeManager({ currentUser }) {
                   <input type="text" name="sdt" value={formData.sdt} onChange={handleChange} />
                 </div>
                 <div className="form-group">
-                  {/* Spacer */}
+                  <label>Số Tài Khoản (STK)</label>
+                  <input type="text" name="stk" value={formData.stk} onChange={handleChange} placeholder="Số tài khoản ngân hàng..." />
                 </div>
 
                 <div className="form-group full-width">
