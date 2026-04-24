@@ -232,29 +232,6 @@ function Dashboard() {
     const currentTab = ALL_TABS.find(t => t.id === activeTab);
     return (
       <div className="content-inner animate-fade-in">
-        {/* Mobile Header */}
-        <div className="mobile-header hidden-desktop" style={{
-          padding: '1rem',
-          background: 'white',
-          borderBottom: '1px solid #e2e8f0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100
-        }}>
-          <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)} style={{ background: 'none', border: 'none', color: '#1e293b' }}>
-            <Menu size={24} />
-          </button>
-          <div style={{ fontWeight: 800, color: '#3b82f6', fontSize: '1.1rem' }}>{currentTab?.label || 'Dashboard'}</div>
-          <div className="mobile-user-avatar" onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}>
-             <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#3b82f6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>
-                {user?.tennv?.charAt(0).toUpperCase()}
-             </div>
-          </div>
-        </div>
-
         <div className="content-header hidden-mobile">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             {currentTab?.icon && <currentTab.icon size={24} className="text-primary" />}
@@ -674,10 +651,48 @@ function Dashboard() {
             {ALL_TABS.find(t => t.id === activeTab)?.label}
           </div>
 
-          <div className="user-profile compact">
+          <div className="user-profile compact" onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} style={{ cursor: 'pointer', position: 'relative' }}>
             <div className="avatar">
               {user?.tennv ? user.tennv.charAt(0).toUpperCase() : user?.username?.charAt(0).toUpperCase()}
             </div>
+            {/* Dropdown Menu Mobile */}
+            {isUserMenuOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1050 }} onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); }}></div>
+                <div style={{
+                  position: 'absolute', top: '120%', right: 0, background: 'white', width: '200px',
+                  borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0',
+                  overflow: 'hidden', zIndex: 1100, animation: 'contentFadeIn 0.2s ease'
+                }} onClick={e => e.stopPropagation()}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>{user?.tennv || user?.username}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{user?.role}</div>
+                  </div>
+                  <div style={{ padding: '6px' }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsChangePassOpen(true); setIsUserMenuOpen(false); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+                        border: 'none', background: 'none', borderRadius: '10px', color: '#475569',
+                        cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontWeight: 600, fontSize: '0.85rem'
+                      }}
+                    >
+                      <Key size={16} color="#6366f1" /> Đổi mật khẩu
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+                        border: 'none', background: 'none', borderRadius: '10px', color: '#ef4444',
+                        cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontWeight: 600, fontSize: '0.85rem'
+                      }}
+                    >
+                      <LogOut size={16} /> Đăng xuất
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
         {renderContent()}
