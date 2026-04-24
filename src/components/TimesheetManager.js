@@ -84,7 +84,7 @@ export default function TimesheetManager() {
       try {
          // 1. Get their own classes (as main teacher or TA)
          const { data: allClassesData } = await supabase.from('tbl_lop').select('*');
-         const maxTa = parseInt(process.env.REACT_APP_MAX_TA || '0', 10);
+         const maxTa = parseInt(config?.sonhanvientrogiang || '0', 10);
 
          const ownClasses = (allClassesData || []).filter(c => {
             if (c.manv === teacher.manv) return true;
@@ -462,13 +462,13 @@ export default function TimesheetManager() {
          return;
       }
 
-         setLoading(false);
-         setSuccessModal({
-            isOpen: true,
-            title: 'Hệ thống đang bảo trì',
-            message: 'Chức năng xuất phiếu lương đang được nâng cấp do thay đổi cấu trúc bảng dữ liệu. Vui lòng quay lại sau.'
-         });
-         return;
+      setLoading(false);
+      setSuccessModal({
+         isOpen: true,
+         title: 'Hệ thống đang bảo trì',
+         message: 'Chức năng xuất phiếu lương đang được nâng cấp do thay đổi cấu trúc bảng dữ liệu. Vui lòng quay lại sau.'
+      });
+      return;
    };
 
    return (
@@ -713,18 +713,18 @@ export default function TimesheetManager() {
 
                         <div className="tm-total">
                            <div className="tm-payment-method-select" style={{ marginBottom: '15px' }}>
-                               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Hình thức chi trả:</label>
-                               <select 
-                                 value={paymentMethod} 
+                              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Hình thức chi trả:</label>
+                              <select
+                                 value={paymentMethod}
                                  onChange={(e) => setPaymentMethod(e.target.value)}
                                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', outline: 'none', background: '#fff' }}
-                               >
-                                  {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                                  {walletsConfig.map(w => (
-                                     <option key={w.id} value={w.name}>{w.name}</option>
-                                  ))}
-                               </select>
-                            </div>
+                              >
+                                 {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                 {walletsConfig.map(w => (
+                                    <option key={w.id} value={w.name}>{w.name}</option>
+                                 ))}
+                              </select>
+                           </div>
 
                            <span>Tổng Thanh Toán Ước Tính:</span>
                            <h2 className="text-success" style={{ marginBottom: '10px' }}>{formatCurrency(calculateTotal())} ₫</h2>
