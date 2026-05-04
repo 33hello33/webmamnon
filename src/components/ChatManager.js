@@ -67,7 +67,7 @@ const ChatManager = ({ currentUser }) => {
       setLoading(true);
       try {
         // Fetch Classes
-        const { data: classData } = await supabase.from('tbl_lop').select('*').neq('daxoa', 'Đã Xóa');
+        const { data: classData } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
         if (classData) setClasses(classData);
 
         // Fetch Teachers
@@ -75,7 +75,7 @@ const ChatManager = ({ currentUser }) => {
         if (nvData) setTeachers(nvData);
 
         // Fetch Students
-        const { data: studentData } = await supabase.from('tbl_hv').select('*').neq('trangthai', 'Đã Nghỉ');
+        const { data: studentData } = await supabase.from('tbl_hv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
         if (studentData) setStudents(studentData);
 
         // Fetch Latest Messages

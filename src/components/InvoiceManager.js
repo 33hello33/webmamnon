@@ -213,8 +213,8 @@ export default function InvoiceManager() {
 
    const fetchBaseData = async () => {
       try {
-         const { data: stRaw } = await supabase.from('tbl_hv').select('*').neq('trangthai', 'Đã Nghỉ').order('tenhv', { ascending: true });
-         const { data: cls } = await supabase.from('tbl_lop').select('*').neq('daxoa', 'Đã Xóa');
+         const { data: stRaw } = await supabase.from('tbl_hv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null').order('tenhv', { ascending: true });
+         const { data: cls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
          const { data: emp } = await supabase.from('tbl_nv').select('*');
 
          const st = (stRaw || []).map(s => ({

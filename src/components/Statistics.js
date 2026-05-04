@@ -152,7 +152,7 @@ export default function Statistics() {
       const { count: totalCustomers } = await supabase
         .from('tbl_hv')
         .select('*', { count: 'exact', head: true })
-        .neq('trangthai', 'Đã Nghỉ');
+        .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
 
       // 2. Revenue from tbl_hd & tbl_billhanghoa
       const [resHd, resBill] = await Promise.all([
@@ -198,8 +198,8 @@ export default function Statistics() {
 
     try {
       const [resHd, resBill, resPhieu, resNhap] = await Promise.all([
-        supabase.from('tbl_hd').select('dadong').neq('daxoa', 'Đã Xóa').gte('ngaylap', fromTS).lte('ngaylap', toTS),
-        supabase.from('tbl_billhanghoa').select('dadong').neq('daxoa', 'Đã Xóa').gte('ngaylap', fromTS).lte('ngaylap', toTS),
+        supabase.from('tbl_hd').select('dadong').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
+        supabase.from('tbl_billhanghoa').select('dadong').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_phieuchi').select('chiphi, loaiphieu').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_nhapkho').select('thanhtien').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaynhap', fromTS).lte('ngaynhap', toTS)
       ]);
@@ -241,7 +241,7 @@ export default function Statistics() {
         supabase.from('tbl_billhanghoa').select('ngaylap, dadong').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', startDateSmall).limit(10000),
         supabase.from('tbl_phieuchi').select('ngaylap, chiphi, loaiphieu').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', startDateSmall).limit(10000),
         supabase.from('tbl_nhapkho').select('ngaynhap, thanhtien').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaynhap', startDateSmall).limit(10000),
-        supabase.from('tbl_hv').select('ngaynhaphoc').neq('trangthai', 'Đã Nghỉ').gte('ngaynhaphoc', startDateSmall).limit(10000)
+        supabase.from('tbl_hv').select('ngaynhaphoc').or('trangthai.neq."Đã Nghỉ",trangthai.is.null').gte('ngaynhaphoc', startDateSmall).limit(10000)
       ]);
 
       const monthlyRevenue = {};
@@ -376,7 +376,7 @@ export default function Statistics() {
         supabase.from('tbl_hd').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_billhanghoa').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null').gte('ngaylap', fromTS).lte('ngaylap', toTS),
         supabase.from('tbl_lop').select('malop, tenlop'),
-        supabase.from('tbl_hv').select('mahv, malop').neq('trangthai', 'Đã Nghỉ')
+        supabase.from('tbl_hv').select('mahv, malop').or('trangthai.neq."Đã Nghỉ",trangthai.is.null')
       ]);
  
       const dataByClass = {};

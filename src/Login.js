@@ -117,7 +117,7 @@ function Login() {
             .from('tbl_hd')
             .select('*')
             .eq('mahv', mahv)
-            .neq('daxoa', 'Đã xóa')
+            .or('daxoa.neq."Đã xóa",daxoa.is.null')
             .order('ngaylap', { ascending: false })
             .limit(10);
 
@@ -183,7 +183,7 @@ function Login() {
                // Chế độ Điểm danh
                setAttendanceUser(user);
                setLoginMode('attendance');
-               const { data: allCls } = await supabase.from('tbl_lop').select('*').neq('daxoa', 'Đã Xóa');
+               const { data: allCls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
                if (allCls) {
                   setAttClasses(allCls.filter(c => c.manv === user.manv || c.manv === user.username || c.manv === user.tennv || c.manv === user.id));
                }
@@ -211,7 +211,7 @@ function Login() {
          if (!attSelectedClass) { setAttStudents([]); setAttRecords({}); setLessonContent(''); return; }
 
          // Lấy danh sách mahv từ bảng tbl_hv (Thay thế tbl_lichhoc_hv)
-         const { data: stFound } = await supabase.from('tbl_hv').select('mahv, tenhv').eq('malop', attSelectedClass).neq('trangthai', 'Đã Nghỉ');
+         const { data: stFound } = await supabase.from('tbl_hv').select('mahv, tenhv').eq('malop', attSelectedClass).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
          const studentsFound = stFound || [];
          setAttStudents(studentsFound);
 
