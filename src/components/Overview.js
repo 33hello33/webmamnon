@@ -139,8 +139,8 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
 
   const loadTopMetrics = useCallback(async () => {
     try {
-      const { count: hvCount } = await supabase.from('tbl_hv').select('*', { count: 'exact', head: true }).neq('trangthai', 'Đã Nghỉ');
-      const { count: nvCount } = await supabase.from('tbl_nv').select('*', { count: 'exact', head: true }).neq('trangthai', 'Đã Nghỉ');
+      const { count: hvCount } = await supabase.from('tbl_hv').select('*', { count: 'exact', head: true }).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+      const { count: nvCount } = await supabase.from('tbl_nv').select('*', { count: 'exact', head: true }).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
 
       const { data: lopData, error: lopErr } = await supabase.from('tbl_lop').select('malop, daxoa, tenlop').order('tenlop');
       if (lopErr) throw lopErr;

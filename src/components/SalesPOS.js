@@ -40,7 +40,7 @@ export default function SalesPOS() {
 
    const fetchBaseData = async () => {
       // hv
-      const { data: stRaw } = await supabase.from('tbl_hv').select('*, malop').neq('trangthai', 'Đã Nghỉ').order('tenhv');
+      const { data: stRaw } = await supabase.from('tbl_hv').select('*, malop').or('trangthai.neq."Đã Nghỉ",trangthai.is.null').order('tenhv');
       const st = (stRaw || []).map(s => ({
          ...s,
          malop_list: s.malop ? [s.malop] : []
@@ -50,7 +50,7 @@ export default function SalesPOS() {
       const { data: hh } = await supabase.from('tbl_hanghoa').select('*').order('tenhang');
       setProducts((hh || []).filter(p => !p.daxoa || p.daxoa.toLowerCase() !== 'đã xóa'));
       // lop
-      const { data: cls } = await supabase.from('tbl_lop').select('malop, tenlop').neq('daxoa', 'Đã Xóa');
+      const { data: cls } = await supabase.from('tbl_lop').select('malop, tenlop').or('daxoa.neq."Đã Xóa",daxoa.is.null');
       setClasses(cls || []);
    };
 

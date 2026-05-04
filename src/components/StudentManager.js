@@ -69,7 +69,7 @@ export default function StudentManager({ activeSubTab }) {
       // Attach classes info to student object using malop field
       setStudents(stData || []);
 
-      const { data: clsData, error: clsErr } = await supabase.from('tbl_lop').select('malop, tenlop').neq('daxoa', 'Đã Xóa');
+      const { data: clsData, error: clsErr } = await supabase.from('tbl_lop').select('malop, tenlop').or('daxoa.neq."Đã Xóa",daxoa.is.null');
       if (clsErr) throw clsErr;
       setClasses(clsData || []);
 

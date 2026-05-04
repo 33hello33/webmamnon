@@ -211,7 +211,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     try {
       const { data: lopData, error } = await supabase.from('tbl_lop')
         .select('*')
-        .neq('daxoa', 'Đã Xóa')
+        .or('daxoa.neq."Đã Xóa",daxoa.is.null')
         .order('tenlop');
       if (error) {
         console.warn('Lỗi tải danh sách lớp, có thể bảng chưa được tạo.', error);
