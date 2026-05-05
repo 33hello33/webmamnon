@@ -1689,7 +1689,7 @@ export default function InvoiceManager() {
             </div>
 
             {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
+            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148mm', height: '210mm', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                {/* HEADER */}
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
@@ -1714,7 +1714,7 @@ export default function InvoiceManager() {
                </div>
 
                {/* TITLE */}
-               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                   THÔNG BÁO THU HỌC PHÍ
                </div>
 

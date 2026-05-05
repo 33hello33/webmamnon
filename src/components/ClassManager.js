@@ -1841,9 +1841,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       {/* HIDDEN PRINT TEMPLATES FOR BATCH */}
       {noticesToPrint.length > 0 && (
-        <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: 'auto', overflow: 'visible', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
           {noticesToPrint.map((printHoaDon, idx) => (
-            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
+            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '148mm', height: '210mm', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px', position: 'relative', overflow: 'hidden' }}>
               {/* HEADER */}
               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 {/* LEFT: Logo */}
@@ -1869,7 +1869,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
 
               {/* TITLE */}
-              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                 THÔNG BÁO THU HỌC PHÍ
               </div>
 
