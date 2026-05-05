@@ -48,9 +48,11 @@ const calculateWorkingDaysInMonth = getWorkingDaysInMonth;
 const parseAmount = (val) => {
    if (typeof val === 'number') return val;
    if (!val) return 0;
-   // Loại bỏ tất cả ký tự không phải số và dấu trừ
-   const cleaned = String(val).replace(/[^\d-]/g, '');
-   return parseInt(cleaned, 10) || 0;
+   const str = String(val);
+   const isNeg = str.includes('-');
+   const cleaned = str.replace(/\D/g, '');
+   const num = parseInt(cleaned, 10) || 0;
+   return isNeg ? -num : num;
 };
 
 const calculateThoiluong = (inv) => {
@@ -697,11 +699,12 @@ export default function InvoiceManager() {
       if (val === null || val === undefined || val === '') return '';
       if (Object.is(val, -0)) return '-';
 
-      const strVal = String(val).replace(/,/g, '');
-      const isNeg = strVal.startsWith('-');
-      const n = Math.abs(parseInt(strVal, 10) || 0);
+      const num = typeof val === 'number' ? val : parseInt(String(val).replace(/,/g, ''), 10);
+      if (isNaN(num)) return String(val);
 
-      const formatted = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      const isNeg = num < 0;
+      const absNum = Math.abs(num);
+      const formatted = absNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
       return (isNeg ? '-' : '') + formatted;
    };
 
@@ -1399,7 +1402,10 @@ export default function InvoiceManager() {
                         <div className="im-finance-row grid-4">
                            <div className="im-fi-item">
                               <label>Nợ cũ</label>
-                              <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>{formatCurrency(noCu)} ₫</div>
+                              <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>
+                                 {formatCurrency(noCu)} ₫
+                                 {noCu < 0 && <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>(Tiền dư)</span>}
+                              </div>
                            </div>
                            <div className="im-fi-item">
                               <label>Tiền ăn</label>
