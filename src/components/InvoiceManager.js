@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, insertLog } from '../supabase';
-import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap } from 'lucide-react';
+import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap, Printer } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
@@ -272,7 +272,11 @@ export default function InvoiceManager() {
                   node.style.position = 'static';
                   node.style.opacity = '0.01';
 
-                  if (window.innerWidth <= 991) {
+                  if (downloadingInvoice.isPrinting) {
+                     const printWin = window.open('', '_blank');
+                     printWin.document.write(`<html><head><title>Print Invoice</title><style>@page{size:A5 landscape;margin:0;} body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#fff;} img{width:210mm;height:148mm;object-fit:contain;}</style></head><body><img src="${dataUrl}" onload="window.print();window.close();"/></body></html>`);
+                     printWin.document.close();
+                  } else if (window.innerWidth <= 991) {
                      setPreviewImg(dataUrl);
                   } else {
                      const link = document.createElement('a');
@@ -321,7 +325,11 @@ export default function InvoiceManager() {
                   node.style.position = 'static';
                   node.style.opacity = '0.01';
 
-                  if (window.innerWidth <= 991) {
+                  if (downloadingNotice.isPrinting) {
+                     const printWin = window.open('', '_blank');
+                     printWin.document.write(`<html><head><title>Print Notice</title><style>@page{size:A5 landscape;margin:0;} body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#fff;} img{width:210mm;height:148mm;object-fit:contain;}</style></head><body><img src="${dataUrl}" onload="window.print();window.close();"/></body></html>`);
+                     printWin.document.close();
+                  } else if (window.innerWidth <= 991) {
                      setPreviewImg(dataUrl);
                   } else {
                      const link = document.createElement('a');
@@ -904,7 +912,8 @@ export default function InvoiceManager() {
    const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum + monthlyMealFee - invoiceData.giamHocphi - deductionSum;
    const conLai = tongCong - invoiceData.daDong;
 
-   const handleExportNotice = async () => {
+   const handleExportNotice = async (isPrintingParam = false) => {
+      const isPrinting = isPrintingParam === true; // Strict check to avoid React event objects
       const currentTimePeriod = calculateThoiluong(invoiceData);
       if (currentTimePeriod) {
          const { data: allDocs } = await supabase.from('tbl_hd')
@@ -965,6 +974,7 @@ export default function InvoiceManager() {
          if (error) throw error;
 
          setDownloadingNotice({
+            isPrinting,
             mahd: newMaTB,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
@@ -997,7 +1007,16 @@ export default function InvoiceManager() {
       }
    };
 
-   const handleSaveInvoice = async () => {
+   const handlePrintNotice = async () => {
+      await handleExportNotice(true);
+   };
+
+   const handlePrintInvoice = async () => {
+      await handleSaveInvoice(true);
+   };
+
+   const handleSaveInvoice = async (isPrintingParam = false) => {
+      const isPrinting = isPrintingParam === true; // Strict check 
       setIsSaving(true);
       try {
          const currentTimePeriod = calculateThoiluong(invoiceData);
@@ -1099,6 +1118,7 @@ export default function InvoiceManager() {
          });
 
          setDownloadingInvoice({
+            isPrinting,
             mahd: newMaHD,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
@@ -1517,14 +1537,23 @@ export default function InvoiceManager() {
                            </div>
                         </div>
 
-                        <div className="im-actions" style={{ display: 'flex', gap: '10px' }}>
-                           <button className="im-btn-submit" style={{ background: '#3b82f6', borderColor: '#3b82f6' }} onClick={handleExportNotice}>
+                        <div className="im-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '1.5rem', justifyContent: 'center' }}>
+                           <button className="im-btn-submit" style={{ flex: '1 1 calc(50% - 10px)', minWidth: '160px', padding: '0.8rem 1rem', fontSize: '1.1rem', background: '#3b82f6', borderColor: '#3b82f6' }} onClick={() => handleExportNotice(false)}>
                               <MessageSquare size={18} />
                               Xuất Thông Báo
                            </button>
-                           <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
+                           <button className="im-btn-submit" style={{ flex: '1 1 calc(50% - 10px)', minWidth: '160px', padding: '0.8rem 1rem', fontSize: '1.1rem' }} onClick={() => handleSaveInvoice(false)} disabled={isSaving}>
                               <Receipt size={18} />
-                              {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}
+                              {isSaving ? 'Đang tạo...' : 'Xác Nhận Xuất HĐ'}
+                           </button>
+                           
+                           <button className="im-btn-submit print-btn" style={{ flex: '1 1 calc(50% - 10px)', minWidth: '160px', padding: '0.8rem 1rem', fontSize: '1.1rem', background: '#fff', color: '#3b82f6', border: '1px solid #3b82f6' }} onClick={handlePrintNotice}>
+                              <Printer size={18} />
+                              In Thông Báo
+                           </button>
+                           <button className="im-btn-submit print-btn" style={{ flex: '1 1 calc(50% - 10px)', minWidth: '160px', padding: '0.8rem 1rem', fontSize: '1.1rem', background: '#fff', color: '#10b981', border: '1px solid #10b981' }} onClick={handlePrintInvoice}>
+                              <Printer size={18} />
+                              In Hóa Đơn
                            </button>
                         </div>
                      </div>
@@ -1585,111 +1614,7 @@ export default function InvoiceManager() {
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-               <div style={{ position: 'relative', zIndex: 1 }}>
-                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '180px', textAlign: 'left' }}>
-                        {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
-                        {!config?.logo && <div style={{ height: 20 }}></div>}
-                     </div>
-
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                           {config?.tencongty || 'Tên Công Ty'}
-                        </h2>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     </div>
-
-                     {/* RIGHT: Invoice info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
-                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
-                     </div>
-                  </div>
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     BIÊN LAI THU HỌC PHÍ
-                  </div>
-                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.tenhv}</b></div>
-                        <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.sdt || ""}</b></div>
-                     </div>
-                     <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
-                        <div>Hình thức: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
-                     </div>
-
-                     {/* FEES BREAKDOWN */}
-                     <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                          <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi} đ</b></div>
-                          <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
-                       </div>
-                       <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi} đ</b></div>
-                          <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.nocu || 0} đ</b></div>
-                       </div>
-                     </div>
-
-                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
-                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                           {downloadingInvoice.phuthu.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                 <span>+ {pt.name || 'Phụ thu'}:</span>
-                                 <b>{formatCurrency(pt.amount)} đ</b>
-                              </div>
-                           ))}
-                        </div>
-                     )}
-
-                     {downloadingInvoice?.deductionSum > 0 && (
-                        <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '5px' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Trừ tiền ăn ({downloadingInvoice.studySummary?.nghiPhep || 0} ngày nghỉ phép):</span>
-                              <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn học phí (Nghỉ liên tiếp ≥{downloadingInvoice.studySummary?.threshold || 7} ngày):</span>
-                              <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
-                           </div>
-                        </div>
-                     )}
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginTop: '10px', fontSize: '18pt', background: '#f8fafc' }}>
-                       <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                       <div style={{ color: '#000' }}>{downloadingInvoice?.tongcong} đ</div>
-                     </div>
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14pt", marginTop: '5px' }}>
-                        <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
-                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
-                     </div>
-
-                     <div style={{ marginTop: '10px' }}>
-                        Ghi chú: {downloadingInvoice?.ghichu || ""}
-                     </div>
-                  </div>
-                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>
-                        Facebook: {config?.tencongty} <br />
-                        SĐT/Zalo: {config?.sdtcongty}
-                     </div>
-                     <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br /><br />
-                        <b>{downloadingInvoice?.nhanvien}</b>
-                     </div>
-                  </div>
-                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
-                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
-                  </div>
-               </div>
-            </div>
-
-            {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148mm', height: '210mm', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '210mm', height: '148mm', background: '#fff', padding: '20px 35px', boxSizing: 'border-box', display: 'block', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                {/* HEADER */}
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
@@ -1699,11 +1624,114 @@ export default function InvoiceManager() {
 
                   {/* CENTER: Info */}
                   <div style={{ flex: 1, textAlign: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase' }}>
+                        {config?.tencongty || 'Tên Trường'}
+                     </h3>
+                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
+                  </div>
+
+                  {/* RIGHT: Invoice info */}
+                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                     <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
+                  </div>
+               </div>
+
+               {/* TITLE */}
+               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "16pt", margin: "5px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                  BIÊN LAI THU HỌC PHÍ
+               </div>
+
+               {/* INFO */}
+               <div style={{ fontSize: "12pt", lineHeight: "1.5", color: '#000' }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.tenhv}</b></div>
+                     <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.sdt || ""}</b></div>
+                  </div>
+
+                  <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
+                  <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
+
+                  {/* FEES BREAKDOWN */}
+                  <div style={{ borderTop: '2px solid #000', marginTop: '10px', paddingTop: '8px' }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                       <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi} đ</b></div>
+                       <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                       <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi} đ</b></div>
+                       <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.nocu || 0} đ</b></div>
+                    </div>
+                  </div>
+
+                  {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                     <div style={{ marginTop: '5px', padding: '10px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                        {downloadingInvoice.phuthu.map((pt, i) => (
+                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
+                              <span>+ {pt.name || 'Phụ thu'}:</span>
+                              <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
+                           </div>
+                        ))}
+                     </div>
+                   )}
+
+                  {(downloadingInvoice?.actualMealRefund > 0 || downloadingInvoice?.actualTuitionRefund > 0) && (
+                     <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '10px' }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <div>Trừ tiền ăn ({downloadingInvoice?.studySummary?.nghiPhep || 0} ngày nghỉ phép):</div>
+                          <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <div>Hoàn học phí ({downloadingInvoice?.studySummary?.maxConsecutive || 0} ngày nghỉ liên tiếp):</div>
+                          <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                        </div>
+                     </div>
+                  )}
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2px solid #000', borderBottom: '1.5px solid #000', padding: '6px 0', marginTop: '10px', marginBottom: '10px', fontSize: '14pt', background: '#f8fafc' }}>
+                    <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
+                    <div style={{ color: '#000' }}>{downloadingInvoice?.tongcong} đ</div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14pt", marginBottom: '10px' }}>
+                     <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 950 }}>{downloadingInvoice?.dadong} đ</b></div>
+                     <div>Còn lại: <b style={{ color: '#dc2626', fontWeight: 950 }}>{downloadingInvoice?.conno} đ</b></div>
+                  </div>
+
+                  <div style={{ marginBottom: '10px' }}>
+                     Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.ghichu || ""}</b>
+                  </div>
+                  <div style={{ fontSize: '13pt' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
+
+               </div>
+
+               <div style={{ marginTop: 5, fontSize: "12pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, flex: 1 }}>
+                     (Xác nhận)
+                  </div>
+                  <div style={{ lineHeight: '1.4', textAlign: 'right' }}>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.nhanvien || cashier}</b>
+                  </div>
+               </div>
+            </div>
+
+            {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
+            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '210mm', height: '148mm', background: '#fff', padding: '20px 35px', boxSizing: 'border-box', display: 'block', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+               {/* HEADER */}
+               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* LEFT: Logo */}
+                  <div style={{ width: '180px', textAlign: 'left' }}>
+                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                  </div>
+
+                  {/* CENTER: Info */}
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase' }}>
                         {config?.tencongty || 'E-Skills Academy'}
                      </h3>
-                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
                   </div>
 
                   {/* RIGHT: Invoice info */}
@@ -1714,12 +1742,12 @@ export default function InvoiceManager() {
                </div>
 
                {/* TITLE */}
-               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "16pt", margin: "5px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                   THÔNG BÁO THU HỌC PHÍ
                </div>
 
                {/* INFO */}
-               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
+               <div style={{ fontSize: "12pt", lineHeight: "1.5", color: '#000' }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                      <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tenhv}</b></div>
                      <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
@@ -1729,7 +1757,7 @@ export default function InvoiceManager() {
                   <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
 
                   {/* FEES BREAKDOWN */}
-                  <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
+                  <div style={{ borderTop: '2px solid #000', marginTop: '10px', paddingTop: '8px' }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                        <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi} đ</b></div>
                        <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingNotice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></div>
@@ -1762,7 +1790,7 @@ export default function InvoiceManager() {
                      </div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '15px', fontSize: '18pt', background: '#f8fafc' }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2px solid #000', borderBottom: '1.5px solid #000', padding: '6px 0', marginBottom: '10px', fontSize: '14pt', background: '#f8fafc' }}>
                     <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
                     <div style={{ color: '#000' }}>{downloadingNotice?.tongcong} đ</div>
                   </div>
@@ -1774,15 +1802,12 @@ export default function InvoiceManager() {
 
                </div>
 
-               {/* FOOTER */}
-               <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                  <div style={{ lineHeight: '1.6' }}>
-                     <b style={{ fontWeight: 950, fontSize: '17pt' }}>{config?.tencongty || 'E-Skills Academy'} </b><br />
-                     Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
-                  </div>
-                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+               <div style={{ marginTop: 5, fontSize: "12pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, flex: 1 }}>
                      (Xác nhận)
+                  </div>
+                  <div style={{ lineHeight: '1.4', textAlign: 'right' }}>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
                   </div>
                </div>
             </div>

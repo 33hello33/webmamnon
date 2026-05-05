@@ -187,6 +187,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [batchStudentsData, setBatchStudentsData] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [noticesToPrint, setNoticesToPrint] = useState([]);
+  const [batchMode, setBatchMode] = useState('export'); // 'export' | 'print'
   const [isViewStudentOpen, setIsViewStudentOpen] = useState(false);
   const [viewStudentData, setViewStudentData] = useState(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -749,7 +750,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => prev.filter(item => item.mahv !== mahv));
   };
 
-  const handleConfirmBatchExport = async () => {
+  const handleConfirmBatchExport = async (mode = 'export') => {
+    setBatchMode(mode);
     setIsGenerating(true);
     try {
       const recordsToInsert = [];
@@ -827,6 +829,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (noticesToPrint.length > 0 && !isProcessingRef.current) {
       isProcessingRef.current = true;
       const processPngs = async () => {
+        const collectedUrls = [];
         try {
           // Wait for DOM to fully settle
           await new Promise(r => setTimeout(r, 3500));
@@ -866,39 +869,90 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   backgroundColor: '#ffffff'
                 });
 
-                // Set back to hidden state immediately after capture but keep in DOM
-                node.style.position = 'static';
-                node.style.opacity = '0.01';
-
                 if (dataUrl && dataUrl.length > 2500) {
-                  const link = document.createElement('a');
-                  link.download = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
-                  link.href = dataUrl;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
+                  if (batchMode === 'print') {
+                    collectedUrls.push(dataUrl);
+                  } else {
+                    const link = document.createElement('a');
+                    link.download = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
+                    link.href = dataUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }
                 } else {
                   console.warn(`Empty or tiny dataUrl for index ${i}. Length: ${dataUrl?.length}`);
                   // Immediate retry with simple capture
                   const retryUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
                   if (retryUrl && retryUrl.length > 2500) {
-                    const link = document.createElement('a');
-                    link.download = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}_retry.png`;
-                    link.href = retryUrl;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    if (batchMode === 'print') {
+                      collectedUrls.push(retryUrl);
+                    } else {
+                      const link = document.createElement('a');
+                      link.download = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}_retry.png`;
+                      link.href = retryUrl;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }
                   }
                 }
               } catch (nodeErr) {
                 console.error(`Lỗi capturing node ${i}:`, nodeErr);
               }
 
-              // Pause between downloads
-              await new Promise(r => setTimeout(r, 1800));
+              // Pause between actions
+              await new Promise(r => setTimeout(r, batchMode === 'print' ? 500 : 1800));
             }
           }
-          showMessage('success', 'Đã tải xong hình ảnh thông báo!');
+          if (batchMode === 'print' && collectedUrls.length > 0) {
+            const printWin = window.open('', '_blank');
+            const imagesContent = collectedUrls.map(url => `
+              <div class="print-page">
+                <img src="${url}" />
+              </div>
+            `).join('');
+
+            printWin.document.write(`
+              <html>
+                <head>
+                  <title>In Thông Báo Hàng Loạt - ${selectedClass?.tenlop || ''}</title>
+                  <style>
+                    @page { size: A5 landscape; margin: 0; }
+                    body { margin: 0; padding: 0; background: #fff; }
+                    .print-page {
+                      width: 210mm;
+                      height: 148mm;
+                      page-break-after: always;
+                      display: flex;
+                      justify-content: center;
+                      align-items: center;
+                      overflow: hidden;
+                    }
+                    img {
+                      width: 210mm;
+                      height: 148mm;
+                      object-fit: contain;
+                    }
+                  </style>
+                </head>
+                <body>
+                  ${imagesContent}
+                  <script>
+                    window.onload = () => {
+                      setTimeout(() => {
+                        window.print();
+                        window.close();
+                      }, 1000);
+                    };
+                  </script>
+                </body>
+              </html>
+            `);
+            printWin.document.close();
+          } else if (batchMode === 'export') {
+            showMessage('success', 'Đã tải xong hình ảnh thông báo!');
+          }
         } catch (err) {
           console.error('Lỗi PNG:', err);
           showMessage('error', 'Lỗi khi lưu tệp hình ảnh: ' + err.message);
@@ -912,7 +966,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       processPngs();
     }
-  }, [noticesToPrint, showMessage]);
+  }, [noticesToPrint, showMessage, batchMode, selectedClass]);
 
   // Form Handlers
   const handleOpenAdd = async () => {
@@ -1821,18 +1875,29 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             </div>
 
             <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '15px 25px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
-              <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
-              <button
-                className="btn btn-success"
-                onClick={handleConfirmBatchExport}
-                disabled={isGenerating}
-                style={{
-                  padding: '0 30px', height: '40px', fontWeight: 800, background: '#2563eb', borderColor: '#2563eb',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
-                }}
-              >
-                {isGenerating ? 'Đang xử lý...' : 'Xác Nhận Xuất Tất Cả'}
-              </button>
+               <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
+               <button
+                 className="btn btn-primary"
+                 onClick={() => handleConfirmBatchExport('print')}
+                 disabled={isGenerating}
+                 style={{
+                   padding: '0 30px', height: '40px', fontWeight: 800, background: 'white', color: '#2563eb', borderColor: '#2563eb',
+                   boxShadow: '0 4px 12px rgba(37, 99, 235, 0.1)'
+                 }}
+               >
+                 {isGenerating ? 'Đang xử lý...' : 'In Tất Cả'}
+               </button>
+               <button
+                 className="btn btn-success"
+                 onClick={() => handleConfirmBatchExport('export')}
+                 disabled={isGenerating}
+                 style={{
+                   padding: '0 30px', height: '40px', fontWeight: 800, background: '#2563eb', borderColor: '#2563eb',
+                   boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+                 }}
+               >
+                 {isGenerating ? 'Đang xử lý...' : 'Xuất File Hình Tất Cả'}
+               </button>
             </div>
           </div>
         </div>,
@@ -1843,9 +1908,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {noticesToPrint.length > 0 && (
         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: 'auto', overflow: 'visible', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
           {noticesToPrint.map((printHoaDon, idx) => (
-            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '148mm', height: '210mm', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px', position: 'relative', overflow: 'hidden' }}>
+            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '210mm', height: '148mm', background: '#ffffff', padding: '20px 35px', boxSizing: 'border-box', display: 'block', marginBottom: '50px', position: 'relative', overflow: 'hidden' }}>
               {/* HEADER */}
-              <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="p-header" style={{ marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 {/* LEFT: Logo */}
                 <div style={{ width: '180px', textAlign: 'left' }}>
                   {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
@@ -1854,11 +1919,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                 {/* CENTER: Info */}
                 <div style={{ flex: 1, textAlign: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase' }}>
                     {config?.tencongty || 'E-Skills Academy'}
                   </h3>
-                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+                  <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                  <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
                 </div>
 
                 {/* RIGHT: Invoice info */}
@@ -1869,12 +1934,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
 
               {/* TITLE */}
-              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "16pt", margin: "5px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                 THÔNG BÁO THU HỌC PHÍ
               </div>
 
               {/* INFO */}
-              <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
+              <div style={{ fontSize: "12pt", lineHeight: "1.5", color: '#000' }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <div>Họ và tên: <b style={{ fontWeight: 950 }}>{printHoaDon.tenhv}</b></div>
                   <div>SĐT: <b style={{ fontWeight: 900 }}>{printHoaDon.sdt || ""}</b></div>
@@ -1889,10 +1954,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 </div>
 
                 {/* FEES BREAKDOWN */}
-                <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
+                <div style={{ borderTop: '2px solid #000', marginTop: '10px', paddingTop: '8px' }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                     <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</b></div>
-                    <div>Tiền ăn ({calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{printHoaDon.tienan} đ</b></div>
+                    <div>Tiền ăn ({calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{(() => {
+                      let ta_val = printHoaDon.tienan;
+                      try {
+                        if (typeof ta_val === 'string' && ta_val.startsWith('{')) {
+                          ta_val = JSON.parse(ta_val).amount;
+                        }
+                      } catch (e) {}
+                      return formatTuition(ta_val || 0);
+                    })()} đ</b></div>
                   </div>
                   <div style={{ borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' }}>
                     {Array.isArray(printHoaDon.phuthu) && printHoaDon.phuthu.length > 0 ? (
@@ -1926,7 +1999,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '15px', fontSize: '18pt', background: '#f8fafc' }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2px solid #000', borderBottom: '1.5px solid #000', padding: '6px 0', marginBottom: '10px', fontSize: '14pt', background: '#f8fafc' }}>
                   <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
                   <div style={{ color: '#000' }}>{printHoaDon.tongcong} đ</div>
                 </div>
@@ -1940,15 +2013,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 </div>
               </div>
 
-              {/* FOOTER */}
-              <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                <div style={{ lineHeight: '1.6' }}>
-                  <b style={{ fontWeight: 950, fontSize: '17pt' }}>{config?.tencongty || 'E-Skills Academy'} </b><br />
-                  Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                  Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{printHoaDon.manv || printHoaDon.nhanvien || 'Ban Tuyển Sinh'}</b>
-                </div>
-                <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+              <div style={{ marginTop: 5, fontSize: "12pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+                <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, flex: 1 }}>
                   (Ký tên / Xác nhận)
+                </div>
+                <div style={{ lineHeight: '1.4', textAlign: 'right' }}>
+                  Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{printHoaDon.manv || printHoaDon.nhanvien || 'Ban Tuyển Sinh'}</b>
                 </div>
               </div>
             </div>

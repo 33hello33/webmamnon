@@ -476,9 +476,13 @@
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.im-btn-submit:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+.im-btn-submit.print-btn {
+  background: white !important;
+}
+
+.im-btn-submit.print-btn:hover {
+  background: #f8fafc !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15) !important;
 }
 
 /* TUITION CHIPS */
