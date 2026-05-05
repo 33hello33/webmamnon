@@ -1935,23 +1935,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   Ghi chú: <b style={{ fontWeight: 800 }}>{printHoaDon.ghichu || ""}</b>
                 </div>
 
-                {(() => {
-                  const qrUrl = getQRUrl(printHoaDon, walletsConfig);
-                  if (!qrUrl) return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
-                      <div style={{ fontWeight: '950', fontSize: '14pt' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span></div>
-                    </div>
-                  );
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
-                      <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span></div>
-                      <div style={{ textAlign: 'center' }}>
-                        <img crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
-                        <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
-                      </div>
-                    </div>
-                  );
-                })()}
+                <div style={{ fontSize: '14pt', fontWeight: '950', marginTop: '10px' }}>
+                  Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span>
+                </div>
               </div>
 
               {/* FOOTER */}
