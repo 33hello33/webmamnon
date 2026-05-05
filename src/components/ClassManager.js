@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
+  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText, Plus
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
@@ -482,6 +482,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ngayBatDau: startStr,
         ngayKetThuc: '',
         giamHocphi: 0,
+        phuthu: [],
         ghiChu: ''
       });
 
@@ -553,6 +554,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           ngaybatdau: startStr,
           ngayketthuc: finalKetThuc,
           hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
+          phuthu: [],
+          phuthu: [],
           ghichu: '',
           thoigianbieu: stSchedRaw
         };
@@ -563,6 +566,31 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       showMessage('error', 'Đã xảy ra lỗi khi chuẩn bị thông báo: ' + err.message);
       setIsBatchNoticeOpen(false);
     }
+  };
+
+  const addBatchSurcharge = () => {
+    setBatchNoticeData(prev => ({
+      ...prev,
+      phuthu: [...(prev.phuthu || []), { name: '', amount: 0 }]
+    }));
+  };
+
+  const removeBatchSurcharge = (index) => {
+    setBatchNoticeData(prev => {
+      const newPT = [...(prev.phuthu || [])];
+      newPT.splice(index, 1);
+      return { ...prev, phuthu: newPT };
+    });
+  };
+
+  const updateBatchSurcharge = (index, field, val) => {
+    setBatchNoticeData(prev => {
+      const newPT = [...(prev.phuthu || [])];
+      let cleanVal = val;
+      if (field === 'amount') cleanVal = parseFormattedNumber(val);
+      newPT[index] = { ...newPT[index], [field]: cleanVal };
+      return { ...prev, phuthu: newPT };
+    });
   };
 
   const handleBatchNoticeFieldChange = (field, val) => {
@@ -631,7 +659,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const taCfg_apply = getTienAnConfig(hpNumber);
       const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
       const monthlyMealFee = taCfg_apply.amount;
-      const tc = Math.max(0, hpNumber + monthlyMealFee - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
+      const ptTotal = (batchNoticeData.phuthu || []).reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0);
+      const tc = Math.max(0, hpNumber + monthlyMealFee + (item.nocu || 0) + ptTotal - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
 
       let finalKetThuc = '';
       const activeDays = parseScheduleDays(item.thoigianbieu);
@@ -661,7 +690,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ngayketthuc: finalKetThuc,
         ghichu: batchNoticeData.ghiChu,
         tongcong: tc,
-        sobuoihoc: sobuoi
+        sobuoihoc: sobuoi,
+        phuthu: (batchNoticeData.phuthu || []).map(p => ({ ...p }))
       };
     }));
   };
@@ -670,7 +700,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'tienan', 'giamhocphi', 'trutienan', 'trutiennghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive'].includes(field)) {
+        if (['hocphi', 'tienan', 'giamhocphi', 'phuthu', 'trutienan', 'trutiennghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive', 'nocu'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         let newItem = { ...item, [field]: cleanVal };
@@ -706,7 +736,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const ghp = parseInt(newItem.giamhocphi || 0);
         const tta = parseInt(newItem.trutienan || 0);
         const tth = parseInt(newItem.trutiennghi || 0);
-        newItem.tongcong = Math.max(0, hp + ta - ghp - tta - tth);
+        const nc = parseInt(newItem.nocu || 0);
+        const ptValue = Array.isArray(newItem.phuthu) ? newItem.phuthu.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0) : (parseInt(newItem.phuthu) || 0);
+        newItem.tongcong = Math.max(0, hp + ta + nc + ptValue - ghp - tta - tth);
 
         return newItem;
       }
@@ -755,7 +787,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           giamhocphi: formatTuition(row.giamhocphi),
           trutienan: formatTuition(row.trutienan),
           tiennghiphep: formatTuition(row.trutiennghi),
-          phuthu: null,
+          phuthu: row.phuthu && row.phuthu.length > 0 ? JSON.stringify(row.phuthu) : null,
           tongcong: formatTuition(row.tongcong),
           dadong: '0',
           conno: formatTuition(row.tongcong),
@@ -1520,8 +1552,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               <button className="close-btn" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '8px', color: '#94a3b8' }}><X size={24} /></button>
             </div>
 
-            <div className="modal-body" style={{ flex: 1, overflow: 'hidden', padding: '20px', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fcfdfe' }}>
-
+            <div className="modal-body custom-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '15px 25px', display: 'flex', flexDirection: 'column', gap: '1.2rem', background: '#fcfdfe' }}>
               <div style={{
                 background: '#ffffff',
                 padding: '20px',
@@ -1530,7 +1561,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '20px'
+                gap: '20px',
+                flexShrink: 0
               }}>
                 {/* Dòng 1: Tháng & Hình thức */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '15px' }}>
@@ -1620,18 +1652,53 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     Áp dụng cho cả lớp
                   </button>
                 </div>
+
+                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '15px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Các khoản phụ thu chung</label>
+                    <button onClick={addBatchSurcharge} style={{ padding: '4px 10px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Plus size={14} /> Thêm khoản phụ thu
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '10px' }}>
+                    {(batchNoticeData.phuthu || []).map((pt, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        <input
+                          type="text"
+                          placeholder="Tên khoản..."
+                          value={pt.name}
+                          onChange={e => updateBatchSurcharge(idx, 'name', e.target.value)}
+                          style={{ flex: 1, padding: '6px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.85rem' }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Số tiền..."
+                          value={formatTuition(pt.amount)}
+                          onChange={e => updateBatchSurcharge(idx, 'amount', e.target.value)}
+                          style={{ width: '100px', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '0.85rem', textAlign: 'right', fontWeight: 600 }}
+                        />
+                        <button onClick={() => removeBatchSurcharge(idx)} style={{ padding: '6px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {(!batchNoticeData.phuthu || batchNoticeData.phuthu.length === 0) && (
+                      <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>Chưa có khoản phụ thu chung nào.</div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* PHẦN 3: DANH SÁCH CHI TIẾT */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', flexShrink: 0 }}>
                   <Users size={16} /> Danh sách học sinh ({batchStudentsData.length})
                 </h4>
 
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, border: '1px solid #e2e8f0', borderRadius: '12px', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-                  <div className="inline-table" style={{ flex: 1, width: '100%', overflow: 'auto', minHeight: 0 }}>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'visible', width: 'fit-content', minWidth: '100%' }}>
+                  <div className="inline-table" style={{ width: '100%', overflow: 'visible' }}>
                     <table className="data-table" style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '1500px', width: '100%' }}>
-                      <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                      <thead style={{ position: 'sticky', top: '-15px', background: '#f8fafc', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                         <tr style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           <th style={{ width: '40px', padding: '12px' }}></th>
                           <th style={{ width: '40px', minWidth: '40px' }}>STT</th>
@@ -1641,6 +1708,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '130px', minWidth: '130px' }}>Học phí</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Tiền ăn</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
+                          <th style={{ width: '130px', minWidth: '130px' }}>Phụ Thu</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Nợ Cũ</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Nghỉ Phép</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Liên Tiếp</th>
@@ -1706,8 +1774,20 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
                               />
                             </td>
-                             <td>
-                               <div style={{ position: 'relative' }}>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontWeight: 700, color: '#059669' }}>
+                                  {formatTuition(Array.isArray(row.phuthu) ? row.phuthu.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0) : 0)}
+                                </span>
+                                {Array.isArray(row.phuthu) && row.phuthu.length > 0 && (
+                                  <div style={{ fontSize: '0.7rem', color: '#64748b', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {row.phuthu.map(p => p.name).join(', ')}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ position: 'relative' }}>
                                  <input
                                    type="text"
                                    value={formatTuition(row.nocu)}
@@ -1826,9 +1906,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</b></div>
                     <div>Tiền ăn ({calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{printHoaDon.tienan} đ</b></div>
                   </div>
+                  <div style={{ borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' }}>
+                    {Array.isArray(printHoaDon.phuthu) && printHoaDon.phuthu.length > 0 ? (
+                      printHoaDon.phuthu.map((pt, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: '2px' }}>
+                          <div>+ {pt.name || 'Phụ thu'}: </div>
+                          <b style={{ fontWeight: 900 }}>{formatTuition(pt.amount)} đ</b>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <div>Phụ thu: </div>
+                        <b style={{ fontWeight: 900 }}>0 đ</b>
+                      </div>
+                    )}
+                  </div>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi} đ</b></div>
-                    <div>Nợ cũ: <b style={{ fontWeight: 800 }}>0 đ</b></div>
+                    <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatTuition(printHoaDon.nocu || 0)} đ</b></div>
                   </div>
                 </div>
 
