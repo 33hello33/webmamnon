@@ -45,6 +45,16 @@ const getWorkingDaysInMonth = (dateStr) => {
 
 const calculateWorkingDaysInMonth = getWorkingDaysInMonth;
 
+const parseAmount = (val) => {
+   if (typeof val === 'number') return val;
+   if (!val) return 0;
+   const str = String(val);
+   const isNeg = str.includes('-');
+   const cleaned = str.replace(/\D/g, '');
+   const num = parseInt(cleaned, 10) || 0;
+   return isNeg ? -num : num;
+};
+
 const calculateThoiluong = (inv) => {
    if (!inv.ngayBatDau) return '';
    const SL = parseInt(inv.soLuong) || 1;
@@ -670,7 +680,16 @@ export default function InvoiceManager() {
    const updateSurcharge = (index, field, value) => {
       const newPT = [...invoiceData.phuthu];
       if (field === 'amount') {
-         newPT[index][field] = parseInt(String(value).replace(/,/g, ''), 10) || 0;
+         const valStr = String(value);
+         if (valStr.trim() === '-') {
+            newPT[index][field] = -0;
+         } else {
+            const isNeg = valStr.includes('-');
+            const raw = valStr.replace(/\D/g, '');
+            let num = parseInt(raw, 10) || 0;
+            if (isNeg) num = -num;
+            newPT[index][field] = num;
+         }
       } else {
          newPT[index][field] = value;
       }
@@ -678,23 +697,34 @@ export default function InvoiceManager() {
    };
 
    const formatCurrency = (val) => {
-      if (!val && val !== 0) return '';
-      return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      if (val === null || val === undefined || val === '') return '';
+      if (Object.is(val, -0)) return '-';
+      const num = typeof val === 'number' ? val : parseInt(String(val).replace(/,/g, ''), 10);
+      if (isNaN(num)) return String(val);
+      const isNeg = num < 0;
+      const absNum = Math.abs(num);
+      const formatted = absNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (isNeg ? '-' : '') + formatted;
    };
 
    const handleFinanceInput = (field, e) => {
-      const rawValue = e.target.value.replace(/,/g, '').replace(/\D/g, '');
-      const num = parseInt(rawValue, 10) || 0;
+      const val = e.target.value;
+      if (val.trim() === '-') {
+         setInvoiceData(prev => ({ ...prev, [field]: -0 }));
+         return;
+      }
+      const isNegative = val.includes('-');
+      const rawValue = val.replace(/\D/g, '');
+      let num = parseInt(rawValue, 10) || 0;
+      if (isNegative) num = -num;
       setInvoiceData(prev => {
          let next = { ...prev, [field]: num };
          if (field === 'hocphi') {
             if (prev.soLuong) next.donGia = num / prev.soLuong;
-            // Nếu thay đổi học phí thì tính lại số tiền giảm nếu có phần trăm
             if (prev.discountPercent > 0) {
                next.giamHocphi = Math.round((num * prev.discountPercent) / 100);
             }
          }
-         // Nếu tự nhập tay số tiền giảm thì xóa phần trăm (tránh xung đột)
          if (field === 'giamHocphi') {
             next.discountPercent = 0;
          }
@@ -703,8 +733,16 @@ export default function InvoiceManager() {
    };
 
    const handlePercentDiscount = (e) => {
-      const raw = e.target.value.replace(/[^\d.]/g, '');
-      const pct = parseFloat(raw) || 0;
+      const val = e.target.value;
+      if (val.trim() === '-') {
+         setInvoiceData(prev => ({ ...prev, discountPercent: -0, giamHocphi: 0 }));
+         return;
+      }
+      const isNeg = val.includes('-');
+      const raw = val.replace(/[^\d.]/g, '');
+      let pct = parseFloat(raw) || 0;
+      if (isNeg) pct = -pct;
+
       setInvoiceData(prev => {
          const discountAmt = Math.round((prev.hocphi * pct) / 100);
          return {
@@ -1363,7 +1401,10 @@ export default function InvoiceManager() {
                         <div className="im-finance-row grid-4">
                            <div className="im-fi-item">
                               <label>Nợ cũ</label>
-                              <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>{formatCurrency(noCu)} ₫</div>
+                              <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>
+                                 {formatCurrency(noCu)} ₫
+                                 {noCu < 0 && <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>(Tiền dư)</span>}
+                              </div>
                            </div>
                            <div className="im-fi-item">
                               <label>Tiền ăn</label>

@@ -402,12 +402,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
       })();
 
-      // 1. Fetch latest docs to determine attendance range (previous cycle)
+      // 1. Fetch latest docs to determine attendance range (previous cycle) AND fetch current debt/overpayment
       const studentIds = activeStudents.map(s => s.mahv);
-      const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
+      const [{ data: allHDs }, { data: allTBs }, { data: debtHDs }, { data: debtBills }] = await Promise.all([
         supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
-        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds)
+        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
+        supabase.from('tbl_hd').select('mahv, conno, daxoa').in('mahv', studentIds),
+        supabase.from('tbl_billhanghoa').select('mahv, conno, daxoa, daxacnhan').in('mahv', studentIds)
       ]);
+
+      const parseCur = (v) => {
+        if (!v) return 0;
+        const str = String(v);
+        const isNeg = str.includes('-');
+        const num = parseInt(str.replace(/\D/g, ''), 10) || 0;
+        return isNeg ? -num : num;
+      };
 
       const ensureIsoDate = (dStr) => {
         if (!dStr) return null;
@@ -516,6 +526,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           tuitionRefund = maxConsecutive * trutiennghi_val;
         }
 
+        // Calculate current old debt
+        let nocu = 0;
+        (debtHDs || []).filter(h => h.mahv === s.mahv && (h.daxoa || '').toLowerCase() !== 'đã xóa').forEach(h => {
+          nocu += parseCur(h.conno);
+        });
+        (debtBills || []).filter(b => b.mahv === s.mahv && (b.daxoa || '').toLowerCase() !== 'đã xóa' && (b.daxacnhan === false || parseCur(b.conno) > 0)).forEach(b => {
+          nocu += parseCur(b.conno);
+        });
+
         return {
           mahv: s.mahv,
           tenhv: s.tenhv,
@@ -529,7 +548,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           soNgayNghi,
           trutienan: mealRefund,
           trutiennghi: tuitionRefund,
-          tongcong: Math.max(0, initHocPhi + monthlyMealFee - mealRefund - tuitionRefund),
+          nocu: nocu,
+          tongcong: Math.max(0, initHocPhi + monthlyMealFee + nocu - mealRefund - tuitionRefund),
           ngaybatdau: startStr,
           ngayketthuc: finalKetThuc,
           hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
@@ -611,7 +631,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const taCfg_apply = getTienAnConfig(hpNumber);
       const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
       const monthlyMealFee = taCfg_apply.amount;
-      const tc = Math.max(0, hpNumber + monthlyMealFee - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
+      const tc = Math.max(0, hpNumber + monthlyMealFee + (item.nocu || 0) - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
 
       let finalKetThuc = '';
       const activeDays = parseScheduleDays(item.thoigianbieu);
@@ -650,7 +670,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'tienan', 'giamhocphi', 'trutienan', 'trutiennghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive'].includes(field)) {
+        if (['hocphi', 'tienan', 'giamhocphi', 'trutienan', 'trutiennghi', 'soNgayNghi', 'nghiPhep', 'nghiKP', 'maxConsecutive', 'nocu'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         let newItem = { ...item, [field]: cleanVal };
@@ -686,7 +706,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const ghp = parseInt(newItem.giamhocphi || 0);
         const tta = parseInt(newItem.trutienan || 0);
         const tth = parseInt(newItem.trutiennghi || 0);
-        newItem.tongcong = Math.max(0, hp + ta - ghp - tta - tth);
+        const nc = parseInt(newItem.nocu || 0);
+        newItem.tongcong = Math.max(0, hp + ta + nc - ghp - tta - tth);
 
         return newItem;
       }
@@ -1608,6 +1629,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '130px', minWidth: '130px' }}>Học phí</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Tiền ăn</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
+                          <th style={{ width: '130px', minWidth: '130px' }}>Nợ Cũ</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Nghỉ Phép</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Liên Tiếp</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Không Phép</th>
@@ -1671,6 +1693,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 className="td-input"
                                 style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
                               />
+                            </td>
+                            <td>
+                              <div style={{ position: 'relative' }}>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.nocu)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'nocu', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: row.nocu > 0 ? '#dc2626' : (row.nocu < 0 ? '#16a34a' : 'inherit') }}
+                                />
+                                {row.nocu < 0 && <span style={{ position: 'absolute', right: '4px', top: '-10px', fontSize: '0.6rem', color: '#16a34a', fontWeight: 700 }}>Tiền dư</span>}
+                              </div>
                             </td>
 
                             <td>

@@ -35,11 +35,14 @@ export default function DebtManager() {
   const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
 
   const formatCurrency = (val) => {
-    if (val === 0) return '0';
+    if (val === 0 || val === '0') return '0';
     if (!val) return '';
-    const num = typeof val === 'string' ? parseInt(val.replace(/,/g, ''), 10) : val;
-    if (isNaN(num)) return val;
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const num = typeof val === 'number' ? val : parseInt(String(val).replace(/,/g, ''), 10);
+    if (isNaN(num)) return String(val);
+    const isNeg = num < 0;
+    const absNum = Math.abs(num);
+    const formatted = absNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (isNeg ? '-' : '') + formatted;
   };
 
   const openPaymentModal = (debtItem) => {
@@ -111,7 +114,7 @@ export default function DebtManager() {
     setPaymentError('');
 
     try {
-      const oldDebtVal = parseInt(String(selectedDebt.conno).replace(/,/g, ''), 10) || 0;
+      const oldDebtVal = typeof selectedDebt.conno === 'number' ? selectedDebt.conno : parseInt(String(selectedDebt.conno).replace(/,/g, ''), 10) || 0;
       const newConno = oldDebtVal - payVal;
 
       const tableName = selectedDebt.loai === 'Hóa Đơn' ? 'tbl_hd' : 'tbl_billhanghoa';
@@ -344,15 +347,15 @@ export default function DebtManager() {
             <div className="value">{debtList.length} <span>Phiếu</span></div>
           </div>
         </div>
-        <div className="debt-stat-card danger">
-          <div className="stat-icon-box danger">
+        <div className={`debt-stat-card ${debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0) > 0 ? 'danger' : 'success'}`}>
+          <div className={`stat-icon-box ${debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0) > 0 ? 'danger' : 'success'}`}>
             <BadgeDollarSign size={24} />
           </div>
           <div className="stat-info">
             <label>Tổng Tiền Nợ</label>
             <div className="value">
-              {debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0).toLocaleString()}
-              <span>₫</span>
+              {formatCurrency(debtList.reduce((sum, d) => sum + (parseInt(String(d.conno).replace(/,/g, ''), 10) || 0), 0))}
+              <span> ₫</span>
             </div>
           </div>
         </div>
@@ -405,8 +408,9 @@ export default function DebtManager() {
                         </td>
                         <td className="font-medium">{d.mahd}</td>
                         <td>{d.tenlop}</td>
-                        <td className="text-right font-bold text-danger">
-                          {d.conno.toLocaleString()}
+                        <td className={`text-right font-bold ${parseInt(String(d.conno).replace(/,/g, '')) > 0 ? 'text-danger' : 'text-success'}`}>
+                          {formatCurrency(d.conno)}
+                          {parseInt(String(d.conno).replace(/,/g, '')) < 0 && <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>(Tiền dư)</span>}
                         </td>
                         <td className="text-center">
                           <button
@@ -558,7 +562,10 @@ export default function DebtManager() {
             </div>
             <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: '#64748b' }}>Số tiền nợ:</span>
-              <span style={{ fontWeight: 'bold', color: '#ef4444', fontSize: '1.1rem' }}>{selectedDebt.conno.toLocaleString()} ₫</span>
+              <span style={{ fontWeight: 'bold', color: parseInt(String(selectedDebt.conno).replace(/,/g, '')) > 0 ? '#ef4444' : '#16a34a', fontSize: '1.1rem' }}>
+                {formatCurrency(selectedDebt.conno)} ₫
+                {parseInt(String(selectedDebt.conno).replace(/,/g, '')) < 0 && <span style={{ fontSize: '0.8rem', marginLeft: '4px' }}>(Tiền dư)</span>}
+              </span>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
