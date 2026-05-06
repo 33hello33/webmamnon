@@ -118,8 +118,15 @@ const calculateWorkingDaysInMonth = (dateStr) => {
 
 const calculateConsecutiveLeave = (attendance) => {
   if (!attendance || attendance.length === 0) return [];
-  const excusedLeaveDays = attendance
-    .filter(att => (att.trangthai || '').trim().toLowerCase() === 'nghỉ phép')
+  const normalizeStatus = (s) => (s || '').trim().toLowerCase();
+  // Deduplicate by date, keeping the last status
+  const uniqueDayRecords = Array.from(new Map(attendance.map(r => [r.ngay, r])).values());
+
+  const excusedLeaveDays = uniqueDayRecords
+    .filter(att => {
+      const s = normalizeStatus(att.trangthai);
+      return s.includes('nghỉ phép') && !s.includes('không');
+    })
     .map(att => {
       const d = new Date(att.ngay);
       d.setHours(0, 0, 0, 0);
@@ -182,8 +189,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     hinhThuc: (config && (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name)) ? (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name) : 'Tiền mặt',
     ngayBatDau: new Date().toISOString().split('T')[0],
     ngayKetThuc: '',
-    ghiChu: ''
+    ghiChu: '',
+    statsStart: '',
+    statsEnd: ''
   });
+  const [batchAttendance, setBatchAttendance] = useState([]);
   const [batchStudentsData, setBatchStudentsData] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [noticesToPrint, setNoticesToPrint] = useState([]);
@@ -402,6 +412,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
       })();
 
+      // Default stats range: previous month
+      const dNow = new Date();
+      const prevMonthFirst = new Date(dNow.getFullYear(), dNow.getMonth() - 1, 1);
+      const prevMonthLast = new Date(dNow.getFullYear(), dNow.getMonth(), 0);
+      const toLocalISO = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      const sStatDef = toLocalISO(prevMonthFirst);
+      const eStatDef = toLocalISO(prevMonthLast);
+
       // 1. Fetch latest docs to determine attendance range (previous cycle) AND fetch current debt/overpayment
       const studentIds = activeStudents.map(s => s.mahv);
       const [{ data: allHDs }, { data: allTBs }, { data: debtHDs }, { data: debtBills }] = await Promise.all([
@@ -462,18 +485,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       // 2. Fetch attendance for those ranges
       let attendance = [];
-      const allStarts = Object.values(studentRanges).map(r => r.start);
-      const allEnds = Object.values(studentRanges).map(r => r.end);
+      const allStarts = [...Object.values(studentRanges).map(r => r.start), sStatDef].filter(Boolean);
+      const allEnds = [...Object.values(studentRanges).map(r => r.end), eStatDef].filter(Boolean);
       if (allStarts.length > 0) {
         const minStart = allStarts.reduce((a, b) => a < b ? a : b);
         const maxEnd = allEnds.reduce((a, b) => a > b ? a : b);
-        const { data: attData } = await supabase.from('tbl_diemdanh').select('*').in('mahv', studentIds).gte('ngay', minStart).lte('ngay', maxEnd);
+        const { data: attData } = await supabase.from('tbl_diemdanh').select('*').in('mahv', studentIds).gte('ngay', minStart).lte('ngay', maxEnd).order('id', { ascending: true });
         attendance = attData || [];
       }
 
       const trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
+      setBatchAttendance(attendance || []);
       setBatchNoticeData({
         loaiDong: initLoaiDong,
         soLuong: initLoaiDong === 'Buổi' ? initSoLuong : 1,
@@ -483,7 +507,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ngayKetThuc: '',
         giamHocphi: 0,
         phuthu: [],
-        ghiChu: ''
+        ghiChu: '',
+        statsStart: sStatDef,
+        statsEnd: eStatDef
       });
 
       // Initialize batchStudentsData with per-student end dates
@@ -504,13 +530,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           finalKetThuc = calculateEndDateBySessions(startStr, initSoLuong, activeDays);
         }
 
-        const range = studentRanges[s.mahv];
-        let studentAttendance = [];
-        if (range) {
-          studentAttendance = attendance.filter(a => a.mahv === s.mahv && a.ngay >= range.start && a.ngay <= range.end);
-        }
-        const nghiPhep = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ phép').length;
-        const nghiKP = studentAttendance.filter(a => (a.trangthai || '').trim().toLowerCase() === 'nghỉ không phép').length;
+        const studentAttendance = (attendance || []).filter(a => a.mahv === s.mahv && a.ngay >= sStatDef && a.ngay <= eStatDef);
+
+        const normalizeStatus = (st) => (st || '').trim().toLowerCase();
+        const uniqueDayRecords = Array.from(new Map(studentAttendance.map(r => [r.ngay, r])).values());
+
+        const coMat = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('có mặt')).length;
+        const nghiPhep = uniqueDayRecords.filter(r => {
+          const sStatus = normalizeStatus(r.trangthai);
+          return sStatus.includes('nghỉ phép') && !sStatus.includes('không');
+        }).length;
+        const nghiKP = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
+
         const consecutiveGroups = calculateConsecutiveLeave(studentAttendance);
         const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
         const soNgayNghi = nghiPhep + nghiKP;
@@ -543,6 +574,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           hocphi: initHocPhi,
           tienan: monthlyMealFee,
           giamhocphi: 0,
+          coMat,
           nghiPhep,
           nghiKP,
           maxConsecutive,
@@ -643,6 +675,77 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     current.setDate(1);
     const startStr = current.toISOString().split('T')[0];
     handleBatchNoticeFieldChange('ngayBatDau', startStr);
+
+    // Also update stats range to the month prior to the new start date
+    const prevMonthFirst = new Date(current.getFullYear(), current.getMonth() - 1, 1);
+    const prevMonthLast = new Date(current.getFullYear(), current.getMonth(), 0);
+    const toLocalISO = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    setBatchNoticeData(prev => ({
+      ...prev,
+      statsStart: toLocalISO(prevMonthFirst),
+      statsEnd: toLocalISO(prevMonthLast)
+    }));
+  };
+
+  const handleUpdateStatsRange = async (field, val) => {
+    const newData = { ...batchNoticeData, [field]: val };
+    setBatchNoticeData(newData);
+
+    // Refresh attendance records if requested range is outside current batchAttendance
+    // For simplicity, we just recalculate based on existing batchAttendance if possible, 
+    // but here we should probably re-aggregate batchStudentsData
+    const studentIds = batchStudentsData.map(s => s.mahv);
+    if (studentIds.length === 0) return;
+
+    // Recalculate stats for everyone using the new range
+    setBatchStudentsData(prev => prev.map(item => {
+      const stAttendance = batchAttendance.filter(a => a.mahv === item.mahv && a.ngay >= newData.statsStart && a.ngay <= newData.statsEnd);
+      const normalizeStatus = (st) => (st || '').trim().toLowerCase();
+      const uniqueDayRecords = Array.from(new Map(stAttendance.map(r => [r.ngay, r])).values());
+
+      const coMat = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('có mặt')).length;
+      const nghiPhep = uniqueDayRecords.filter(r => {
+        const sStatus = normalizeStatus(r.trangthai);
+        return sStatus.includes('nghỉ phép') && !sStatus.includes('không');
+      }).length;
+      const nghiKP = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
+
+      const consecutiveGroups = calculateConsecutiveLeave(stAttendance);
+      const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
+      
+      const taCfg = getTienAnConfig(item.hocphi);
+      const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+      
+      const newTruTienAn = nghiPhep * taCfg.tru_nghi;
+      let newTruTuition = 0;
+      const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
+      if (maxConsecutive >= (thresholdCfg.songaynghilientiep || 7)) {
+        newTruTuition = maxConsecutive * trutiennghi_val;
+      }
+
+      const hp = parseInt(item.hocphi || 0);
+      const ta = parseInt(item.tienan || 0);
+      const ghp = parseInt(item.giamhocphi || 0);
+      const nc = parseInt(item.nocu || 0);
+      const ptValue = Array.isArray(item.phuthu) ? item.phuthu.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0) : 0;
+      
+      return {
+        ...item,
+        coMat,
+        nghiPhep,
+        nghiKP,
+        maxConsecutive,
+        soNgayNghi: nghiPhep + nghiKP,
+        trutienan: newTruTienAn,
+        trutiennghi: newTruTuition,
+        tongcong: Math.max(0, hp + ta + nc + ptValue - ghp - newTruTienAn - newTruTuition)
+      };
+    }));
   };
 
   const handleApplyBatchNotice = () => {
@@ -1591,6 +1694,23 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
                   </div>
+
+                  <div className="flex-center" style={{ gap: '10px', background: '#fff7ed', padding: '5px 15px', borderRadius: '12px', border: '1px solid #ffedd5' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#9a3412' }}>HẠN THỐNG KÊ NGHỈ:</span>
+                    <input 
+                      type="date" 
+                      value={batchNoticeData.statsStart} 
+                      onChange={e => handleUpdateStatsRange('statsStart', e.target.value)}
+                      style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
+                    />
+                    <span style={{ color: '#9a3412', fontWeight: 900 }}>→</span>
+                    <input 
+                      type="date" 
+                      value={batchNoticeData.statsEnd} 
+                      onChange={e => handleUpdateStatsRange('statsEnd', e.target.value)}
+                      style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
+                    />
+                  </div>
                 </div>
 
                 {/* Dòng 2: Gói HP | Giảm HP | Ghi chú | Nút (Giống hình ảnh mẫu) */}
@@ -1710,6 +1830,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Phụ Thu</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Nợ Cũ</th>
+                          <th style={{ width: '80px', minWidth: '80px' }}>Có mặt</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Nghỉ Phép</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Liên Tiếp</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Không Phép</th>
@@ -1798,6 +1919,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                  {row.nocu < 0 && <span style={{ position: 'absolute', right: '4px', top: '-10px', fontSize: '0.6rem', color: '#16a34a', fontWeight: 700 }}>Tiền dư</span>}
                                </div>
                              </td>
+                            <td>
+                              <input type="text" value={row.coMat} onChange={e => handleBatchStudentChange(row.mahv, 'coMat', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center', color: '#16a34a' }} />
+                            </td>
                             <td>
                               <input type="text" value={row.nghiPhep} onChange={e => handleBatchStudentChange(row.mahv, 'nghiPhep', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center' }} />
                             </td>
