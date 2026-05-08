@@ -90,7 +90,393 @@ const READ_NUMBER_VN = (number) => {
    return result.charAt(0).toUpperCase() + result.slice(1);
 };
 
+const ConfirmActionModal = ({ isOpen, title, message, actionType, onCancel, onConfirm }) => {
+   const [password, setPassword] = useState('');
+
+   useEffect(() => {
+      if (isOpen) setPassword('');
+   }, [isOpen]);
+
+   if (!isOpen) return null;
+
+   return createPortal(
+      <div className="fm-modal-overlay" style={{ zIndex: 1200 }}>
+         <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '450px', width: '90%', padding: '2rem', borderRadius: '24px', textAlign: 'center', position: 'relative' }}>
+            <button onClick={onCancel} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={24} /></button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+               {actionType && actionType.includes('DELETE') ? (
+                  <div style={{ background: '#fef2f2', padding: '1.5rem', borderRadius: '50%', color: '#ef4444' }}>
+                     <Trash2 size={40} />
+                  </div>
+               ) : (
+                  <div style={{ background: '#dcfce3', padding: '1.5rem', borderRadius: '50%', color: '#22c55e' }}>
+                     <CheckCircle2 size={40} />
+                  </div>
+               )}
+            </div>
+            <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '1rem', color: '#0f172a' }}>
+               {title}
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '2rem', padding: '0 10px' }}>
+               {message}
+            </p>
+
+            {actionType && (
+               <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
+                  <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
+                  <input
+                     type="password"
+                     autoFocus
+                     value={password}
+                     onChange={(e) => setPassword(e.target.value)}
+                     onKeyDown={(e) => e.key === 'Enter' && onConfirm(password)}
+                     placeholder="Mật khẩu của bạn..."
+                     style={{ width: '100%', height: '52px', padding: '0 1rem', borderRadius: '14px', border: '1px solid #e2e8f0', fontSize: '1rem', transition: 'border-color 0.2s' }}
+                  />
+               </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '1.25rem' }}>
+               <button onClick={onCancel} style={{ flex: 1, height: '56px', borderRadius: '16px', background: 'white', border: '1px solid #e2e8f0', color: '#475569', fontSize: '1.1rem', fontWeight: 700, cursor: 'pointer' }}>Quay lại</button>
+               <button onClick={() => onConfirm(password)} style={{ flex: 1, height: '56px', borderRadius: '16px', background: '#22c55e', border: 'none', color: 'white', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.4)' }}>Đồng ý</button>
+            </div>
+         </div>
+      </div>,
+      document.body
+   );
+};
+
+const EditInvoiceModal = ({ isOpen, data, walletsConfig, onClose, onSave }) => {
+   const [localData, setLocalData] = React.useState(null);
+
+   React.useEffect(() => {
+      if (data) setLocalData(JSON.parse(JSON.stringify(data)));
+   }, [data]);
+
+   if (!isOpen || !localData) return null;
+
+   return createPortal(
+      <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
+         <div className="fm-modal animate-slide-up" style={{ maxWidth: '600px', background: '#fff', borderRadius: '20px', width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+               <h3 style={{ margin: 0, fontSize: '1.20rem', fontWeight: 800, color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {localData.mahd}</h3>
+               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+            </div>
+            <form style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }} onSubmit={(e) => { e.preventDefault(); onSave(localData); }}>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày lập HĐ</label>
+                     <input type="date" value={localData.ngaylap ? localData.ngaylap.split('T')[0] : ''} onChange={e => setLocalData(p => ({ ...p, ngaylap: e.target.value + 'T' + (p.ngaylap?.split('T')[1] || '00:00:00') }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Thời lượng / Tháng</label>
+                     <input type="text" value={localData.thoiluong || ''} onChange={e => setLocalData(p => ({ ...p, thoiluong: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} placeholder="VD: Tháng 10/2023" />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Số buổi học</label>
+                     <input type="text" value={localData.sobuoihoc || ''} onChange={e => setLocalData(p => ({ ...p, sobuoihoc: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày bắt đầu</label>
+                     <input type="date" value={localData.ngaybatdau || ''} onChange={e => setLocalData(p => ({ ...p, ngaybatdau: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày kết thúc</label>
+                     <input type="date" value={localData.ngayketthuc || ''} onChange={e => setLocalData(p => ({ ...p, ngayketthuc: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  </div>
+               </div>
+
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
+                     <input type="text" value={fCur(localData.hocphi)} onChange={e => {
+                        const val = pCur(e.target.value);
+                        const old = pCur(localData.hocphi);
+                        const diff = val - old;
+                        const newTong = pCur(localData.tongcong) + diff;
+                        setLocalData(p => ({ ...p, hocphi: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ học phí (đ)</label>
+                     <input type="text" value={fCur(localData.giamhocphi)} onChange={e => {
+                        const val = pCur(e.target.value);
+                        const old = pCur(localData.giamhocphi);
+                        const diff = val - old;
+                        const newTong = pCur(localData.tongcong) - diff;
+                        setLocalData(p => ({ ...p, giamhocphi: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#dc2626' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền ăn (đ)</label>
+                     <input type="text" value={fCur(localData.trutienan)} onChange={e => {
+                        const val = pCur(e.target.value);
+                        const old = pCur(localData.trutienan);
+                        const diff = val - old;
+                        const newTong = pCur(localData.tongcong) - diff;
+                        setLocalData(p => ({ ...p, trutienan: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ HP nghỉ (đ)</label>
+                     <input type="text" value={fCur(localData.tiennghiphep)} onChange={e => {
+                        const val = pCur(e.target.value);
+                        const old = pCur(localData.tiennghiphep);
+                        const diff = val - old;
+                        const newTong = pCur(localData.tongcong) - diff;
+                        setLocalData(p => ({ ...p, tiennghiphep: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                  </div>
+               </div>
+
+               <div style={{ marginBottom: '1rem', padding: '1rem', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>Tiền ăn</label>
+                  {(() => {
+                     let ta = { amount: 0, days: 0 };
+                     try {
+                        ta = typeof localData.tienan === 'string' ? JSON.parse(localData.tienan) : (localData.tienan || { amount: 0, days: 0 });
+                     } catch (e) { }
+                     return (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                           <div>
+                              <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số tiền (đ)</label>
+                              <input type="text" value={fCur(ta.amount)} onChange={e => {
+                                 const val = pCur(e.target.value);
+                                 const old = pCur(ta.amount);
+                                 const diff = val - old;
+                                 const newTa = { ...ta, amount: val };
+                                 const newTong = pCur(localData.tongcong) + diff;
+                                 setLocalData(p => ({ ...p, tienan: newTa, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                              }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
+                           </div>
+                           <div>
+                              <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số ngày</label>
+                              <input type="number" value={ta.days || 0} onChange={e => {
+                                 const val = parseInt(e.target.value, 10) || 0;
+                                 const newTa = { ...ta, days: val };
+                                 setLocalData(p => ({ ...p, tienan: newTa }));
+                              }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
+                           </div>
+                        </div>
+                     );
+                  })()}
+               </div>
+
+               <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f3ff', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#5b21b6' }}>Phụ thu</label>
+                  {(() => {
+                     let pts = [];
+                     try {
+                        pts = typeof localData.phuthu === 'string' ? JSON.parse(localData.phuthu) : (Array.isArray(localData.phuthu) ? localData.phuthu : []);
+                     } catch (e) { }
+                     return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                           {pts.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
+                                 <input type="text" value={pt.name} onChange={e => {
+                                    const newPts = [...pts];
+                                    newPts[i].name = e.target.value;
+                                    setLocalData(p => ({ ...p, phuthu: newPts }));
+                                 }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Tên phụ thu" />
+                                 <input type="text" value={fCur(pt.amount)} onChange={e => {
+                                    const oldPtVal = pts[i].amount || 0;
+                                    const newPtVal = pCur(e.target.value);
+                                    const diff = newPtVal - oldPtVal;
+                                    const newPts = [...pts];
+                                    newPts[i].amount = newPtVal;
+                                    const newTong = pCur(localData.tongcong) + diff;
+                                    setLocalData(p => ({ ...p, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                                 }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Số tiền" />
+                                 <button type="button" onClick={() => {
+                                    const deletedVal = pts[i].amount || 0;
+                                    const newPts = pts.filter((_, idx) => idx !== i);
+                                    const newTong = pCur(localData.tongcong) - deletedVal;
+                                    setLocalData(p => ({ ...p, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
+                                 }} style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '0.4rem' }}><X size={14} /></button>
+                              </div>
+                           ))}
+                           <button type="button" onClick={() => {
+                              const newPts = [...pts, { name: '', amount: 0 }];
+                              setLocalData(p => ({ ...p, phuthu: newPts }));
+                           }} style={{ background: '#fff', border: '1px dashed #7c3aed', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#7c3aed', fontWeight: 600 }}>+ Thêm phụ thu</button>
+                        </div>
+                     );
+                  })()}
+               </div>
+
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #ffedd5' }}>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
+                     <input type="text" value={fCur(localData.tongcong)} onChange={e => {
+                        const val = pCur(e.target.value);
+                        setLocalData(p => ({ ...p, tongcong: val, conno: val - pCur(p.dadong) }));
+                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#059669' }}>Đã nộp (đ)</label>
+                     <input type="text" value={fCur(localData.dadong)} onChange={e => {
+                        const val = pCur(e.target.value);
+                        setLocalData(p => ({ ...p, dadong: val, conno: pCur(p.tongcong) - val }));
+                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #059669', fontWeight: 700, color: '#059669' }} />
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#dc2626' }}>Còn nợ (đ)</label>
+                     <input disabled type="text" value={fCur(localData.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff', fontWeight: 700, color: '#dc2626' }} />
+                  </div>
+               </div>
+
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
+                     <select value={localData.hinhthuc} onChange={e => setLocalData(p => ({ ...p, hinhthuc: e.target.value }))} style={{ width: '100%', height: '42px', padding: '0 0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                        {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
+                     </select>
+                  </div>
+                  <div>
+                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
+                     <textarea value={localData.ghichu} onChange={e => setLocalData(p => ({ ...p, ghichu: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
+                  </div>
+               </div>
+
+               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
+                  <button type="button" onClick={onClose} style={{ flex: 1, padding: '0.85rem', borderRadius: '12px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer', color: '#64748b' }}>Hủy bỏ</button>
+                  <button type="submit" style={{ flex: 2, padding: '0.85rem', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.4)', fontSize: '1.05rem' }}>Lưu Thay Đổi</button>
+               </div>
+            </form>
+         </div>
+      </div>,
+      document.body
+   );
+};
+
+const EditBillModal = ({ isOpen, data, walletsConfig, onClose, onSave }) => {
+   const [localData, setLocalData] = React.useState(null);
+
+   React.useEffect(() => {
+      if (data) setLocalData(JSON.parse(JSON.stringify(data)));
+   }, [data]);
+
+   if (!isOpen || !localData) return null;
+
+   return createPortal(
+      <div className="fm-modal-overlay">
+         <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '540px', width: '95%', maxHeight: '90vh', borderRadius: '20px', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+               <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Bill Bán Hàng {localData.mabill}</h3>
+               <button type="button" className="tm-btn-icon" onClick={onClose} style={{ color: '#94a3b8' }}><X size={24} /></button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); onSave(localData); }} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+               <div className="fm-modal-body" style={{ padding: '1.5rem', overflowY: 'auto', background: '#fff', flex: 1 }}>
+                  <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '1rem', marginBottom: '1.5rem' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <span style={{ fontWeight: 700, color: '#334155' }}>Danh sách sản phẩm</span>
+                        <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{localData.items.length} mục</span>
+                     </div>
+
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {localData.items.map((item, idx) => (
+                           <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', position: 'relative' }}>
+                              <button type="button" onClick={() => {
+                                 const newItems = localData.items.filter((_, i) => i !== idx);
+                                 const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                 const finalTotal = subtotal - pCur(localData.chietkhau);
+                                 setLocalData(p => ({ ...p, items: newItems, tongcong: finalTotal, conno: finalTotal - p.dadong }));
+                              }} style={{ position: 'absolute', top: '8px', right: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
+
+                              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', paddingRight: '20px' }}>
+                                 {item.mahang ? `${item.mahang}|` : ''}{item.tenhang}{item.dvt ? `|${item.dvt}` : ''}
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+                                 <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>SL</label>
+                                    <input type="number" value={item.qty} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
+                                       const val = parseInt(e.target.value, 10) || 0;
+                                       const newItems = [...localData.items];
+                                       newItems[idx].qty = val;
+                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                       const finalTotal = subtotal - pCur(localData.chietkhau);
+                                       setLocalData(p => ({ ...p, items: newItems, tongcong: finalTotal, conno: finalTotal - p.dadong }));
+                                    }} />
+                                 </div>
+                                 <div style={{ flex: 1.5 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Đơn giá (đ)</label>
+                                    <input type="text" value={fCur(item.giaban)} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
+                                       const val = pCur(e.target.value);
+                                       const newItems = [...localData.items];
+                                       newItems[idx].giaban = val;
+                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                       const finalTotal = subtotal - pCur(localData.chietkhau);
+                                       setLocalData(p => ({ ...p, items: newItems, tongcong: finalTotal, conno: finalTotal - p.dadong }));
+                                    }} />
+                                 </div>
+                                 <div style={{ flex: 1, textAlign: 'right' }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Thành tiền</label>
+                                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0ea5e9' }}>{fCur(item.qty * item.giaban)}</div>
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                        <button type="button" onClick={() => {
+                           const newItems = [...localData.items, { mahang: '', tenhang: 'Sản phẩm mới', dvt: 'Cái', qty: 1, giaban: 0 }];
+                           setLocalData(p => ({ ...p, items: newItems }));
+                        }} style={{ width: '100%', padding: '10px', background: '#fff', border: '1px dashed #e2e8f0', borderRadius: '12px', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }}>+ Thêm sản phẩm</button>
+                     </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Chiết khấu (đ)</label>
+                        <input type="text" value={fCur(localData.chietkhau)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} onChange={e => {
+                           const val = pCur(e.target.value);
+                           const subtotal = localData.items.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                           const finalTotal = subtotal - val;
+                           setLocalData(p => ({ ...p, chietkhau: val, tongcong: finalTotal, conno: finalTotal - p.dadong }));
+                        }} />
+                     </div>
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#16a34a', marginBottom: '0.5rem' }}>Tổng cộng (đ)</label>
+                        <input type="text" disabled value={fCur(localData.tongcong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} />
+                     </div>
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>Đã thanh toán (đ)</label>
+                        <input type="text" value={fCur(localData.dadong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #3b82f6', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} onChange={e => {
+                           const val = pCur(e.target.value);
+                           setLocalData(p => ({ ...p, dadong: val, conno: p.tongcong - val }));
+                        }} />
+                     </div>
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>Còn nợ (đ)</label>
+                        <input type="text" disabled value={fCur(localData.conno)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '1rem', fontWeight: 700, color: '#ef4444' }} />
+                     </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
+                        <select value={localData.hinhthuc} onChange={e => setLocalData(p => ({ ...p, hinhthuc: e.target.value }))} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '1rem' }}>
+                           {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
+                        </select>
+                     </div>
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú</label>
+                        <textarea value={localData.ghichu} onChange={e => setLocalData(p => ({ ...p, ghichu: e.target.value }))} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', minHeight: '80px', resize: 'none' }} />
+                     </div>
+                  </div>
+               </div>
+               <div className="fm-modal-footer" style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '1rem', flexShrink: 0 }}>
+                  <button type="button" onClick={onClose} style={{ flex: 1, height: '48px', borderRadius: '12px', background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}>Hủy bỏ</button>
+                  <button type="submit" style={{ flex: 1.5, height: '48px', borderRadius: '12px', background: '#3b82f6', border: 'none', color: '#fff', fontSize: '1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.4)' }}>Lưu Thay Đổi</button>
+               </div>
+            </form>
+         </div>
+      </div>,
+      document.body
+   );
+};
+
 export default function FinanceManager({ activeSubTab, setActiveSubTab, currentUser }) {
+
    const { config } = useConfig();
    const walletsConfig = useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '' },
@@ -132,7 +518,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [printHoaDon, setPrintHoaDon] = useState(null);
    const [printBill, setPrintBill] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
-   const [deletePassword, setDeletePassword] = useState('');
    const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
    const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
 
@@ -281,9 +666,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const handleSaveEditInvoice = (e) => {
-      e.preventDefault();
-      setDeletePassword('');
+   const handleSaveEditInvoice = (updatedData) => {
+      setEditInvoiceModal(p => ({ ...p, data: updatedData }));
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận sửa hóa đơn',
@@ -319,9 +703,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const handleSaveEditBill = (e) => {
-      e.preventDefault();
-      setDeletePassword('');
+   const handleSaveEditBill = (updatedData) => {
+      setEditBillModal(p => ({ ...p, data: updatedData }));
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận sửa bill',
@@ -330,12 +713,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const executeConfirmAction = async () => {
+   const executeConfirmAction = async (submittedPassword) => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
       if (confirmDialog.actionType === 'DELETE') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (deletePassword !== auth.user?.password) {
+         if (submittedPassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
             return;
          }
@@ -350,7 +733,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
       } else if (confirmDialog.actionType === 'EDIT_BILL') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (deletePassword !== auth.user?.password) {
+         if (submittedPassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
             return;
          }
@@ -387,13 +770,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             insertLog(detailDesc);
             alert('Cập nhật bill hàng thành công!');
             setEditBillModal({ isOpen: false, data: null, password: '' });
-            setDeletePassword('');
             fetchData();
             fetchBalances();
          }
       } else if (confirmDialog.actionType === 'CONFIRM_CANDOI') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (deletePassword !== auth.user?.password) {
+         if (submittedPassword !== auth.user?.password) {
             alert('Mật khẩu của bạn không đúng, vui lòng thử lại!');
             return;
          }
@@ -448,7 +830,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
       } else if (confirmDialog.actionType === 'EDIT_HOADON') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (deletePassword !== auth.user?.password) {
+         if (submittedPassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
             return;
          }
@@ -482,7 +864,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             const detailDesc = `[SỬA HÓA ĐƠN] Mã: ${r.mahd} | Tổng: ${fCur(r.tongcong)} | Học sinh: ${hvMap[r.mahv]?.tenhv || '_'}`;
             insertLog(detailDesc);
             setEditInvoiceModal({ isOpen: false, data: null, password: '' });
-            setDeletePassword('');
             fetchData();
             fetchBalances();
             alert("Cập nhật hóa đơn thành công!");
@@ -617,7 +998,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleSaveCanDoi = (e) => {
       e.preventDefault();
-      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận cân đối dòng tiền',
@@ -945,7 +1325,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    };
 
    const handleDelete = (idField, idVal, table) => {
-      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận xoá bản ghi',
@@ -2311,364 +2690,30 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {confirmDialog.isOpen && document.body && createPortal(
-            <div className="fm-modal-overlay" style={{ zIndex: 2000 }}>
-               <div className="fm-modal-content animate-slide-up" style={{ backgroundColor: 'white', maxWidth: '440px', borderRadius: '32px', padding: '2.5rem', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                     {confirmDialog.actionType === 'DELETE' ? (
-                        <div style={{ background: '#fee2e2', padding: '1.5rem', borderRadius: '50%', color: '#ef4444' }}>
-                           <Trash2 size={40} />
-                        </div>
-                     ) : (
-                        <div style={{ background: '#dcfce3', padding: '1.5rem', borderRadius: '50%', color: '#22c55e' }}>
-                           <CheckCircle2 size={40} />
-                        </div>
-                     )}
-                  </div>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '1rem', color: '#0f172a' }}>
-                     {confirmDialog.title}
-                  </h3>
-                  <p style={{ color: '#64748b', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '2rem', padding: '0 10px' }}>
-                     {confirmDialog.message}
-                  </p>
+         <ConfirmActionModal
+            isOpen={confirmDialog.isOpen}
+            title={confirmDialog.title}
+            message={confirmDialog.message}
+            actionType={confirmDialog.actionType}
+            onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+            onConfirm={executeConfirmAction}
+         />
 
-                  {confirmDialog.actionType && (
-                     <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
-                        <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
-                        <input
-                           type="password"
-                           autoFocus
-                           value={deletePassword}
-                           onChange={(e) => setDeletePassword(e.target.value)}
-                           onKeyDown={(e) => e.key === 'Enter' && executeConfirmAction()}
-                           placeholder="Mật khẩu của bạn..."
-                           style={{ width: '100%', height: '52px', padding: '0 1rem', borderRadius: '14px', border: '1px solid #e2e8f0', fontSize: '1rem', transition: 'border-color 0.2s' }}
-                        />
-                     </div>
-                  )}
+         <EditInvoiceModal
+            isOpen={editInvoiceModal.isOpen}
+            data={editInvoiceModal.data}
+            walletsConfig={walletsConfig}
+            onClose={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })}
+            onSave={handleSaveEditInvoice}
+         />
 
-                  <div style={{ display: 'flex', gap: '1.25rem' }}>
-                     <button onClick={() => { setConfirmDialog({ ...confirmDialog, isOpen: false }); setDeletePassword(''); }} style={{ flex: 1, height: '56px', borderRadius: '16px', background: 'white', border: '1px solid #e2e8f0', color: '#475569', fontSize: '1.1rem', fontWeight: 700, cursor: 'pointer' }}>Quay lại</button>
-                     <button onClick={() => executeConfirmAction()} style={{ flex: 1, height: '56px', borderRadius: '16px', background: '#22c55e', border: 'none', color: 'white', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.4)' }}>Đồng ý</button>
-                  </div>
-               </div>
-            </div>,
-            document.body
-         )}
-
-         {editInvoiceModal.isOpen && editInvoiceModal.data && document.body && createPortal(
-            <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
-               <div className="fm-modal animate-slide-up" style={{ maxWidth: '600px', background: '#fff', borderRadius: '20px', width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                     <h3 style={{ margin: 0, fontSize: '1.20rem', fontWeight: 800, color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {editInvoiceModal.data.mahd}</h3>
-                     <button onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
-                  </div>
-                  <form style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }} onSubmit={handleSaveEditInvoice}>
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={{ gridColumn: '1 / -1' }}>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày lập HĐ</label>
-                           <input type="date" value={editInvoiceModal.data.ngaylap ? editInvoiceModal.data.ngaylap.split('T')[0] : ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngaylap: e.target.value + 'T' + (p.data.ngaylap?.split('T')[1] || '00:00:00') } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Thời lượng / Tháng</label>
-                           <input type="text" value={editInvoiceModal.data.thoiluong || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, thoiluong: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} placeholder="VD: Tháng 10/2023" />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Số buổi học</label>
-                           <input type="number" value={editInvoiceModal.data.sobuoihoc || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, sobuoihoc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày bắt đầu</label>
-                           <input type="date" value={editInvoiceModal.data.ngaybatdau || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngaybatdau: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày kết thúc</label>
-                           <input type="date" value={editInvoiceModal.data.ngayketthuc || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngayketthuc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                        </div>
-                     </div>
-
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.hocphi)} onChange={e => {
-                              const val = pCur(e.target.value);
-                              const old = pCur(editInvoiceModal.data.hocphi);
-                              const diff = val - old;
-                              const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ học phí (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.giamhocphi)} onChange={e => {
-                              const val = pCur(e.target.value);
-                              const old = pCur(editInvoiceModal.data.giamhocphi);
-                              const diff = val - old;
-                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, giamhocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#dc2626' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền ăn (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.trutienan)} onChange={e => {
-                              const val = pCur(e.target.value);
-                              const old = pCur(editInvoiceModal.data.trutienan);
-                              const diff = val - old;
-                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, trutienan: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ HP nghỉ (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.tiennghiphep)} onChange={e => {
-                              const val = pCur(e.target.value);
-                              const old = pCur(editInvoiceModal.data.tiennghiphep);
-                              const diff = val - old;
-                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tiennghiphep: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                        </div>
-                     </div>
-
-                     <div style={{ marginBottom: '1rem', padding: '1rem', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>Tiền ăn</label>
-                        {(() => {
-                           let ta = { amount: 0, days: 0 };
-                           try {
-                              ta = typeof editInvoiceModal.data.tienan === 'string' ? JSON.parse(editInvoiceModal.data.tienan) : (editInvoiceModal.data.tienan || { amount: 0, days: 0 });
-                           } catch (e) { }
-                           return (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số tiền (đ)</label>
-                                    <input type="text" value={fCur(ta.amount)} onChange={e => {
-                                       const val = pCur(e.target.value);
-                                       const old = pCur(ta.amount);
-                                       const diff = val - old;
-                                       const newTa = { ...ta, amount: val };
-                                       const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
-                                       setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tienan: newTa, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                                    }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
-                                 </div>
-                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số ngày</label>
-                                    <input type="number" value={ta.days || 0} onChange={e => {
-                                       const val = parseInt(e.target.value, 10) || 0;
-                                       const newTa = { ...ta, days: val };
-                                       setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tienan: newTa } }));
-                                    }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
-                                 </div>
-                              </div>
-                           );
-                        })()}
-                     </div>
-
-                     <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f3ff', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#5b21b6' }}>Phụ thu</label>
-                        {(() => {
-                           let pts = [];
-                           try {
-                              pts = typeof editInvoiceModal.data.phuthu === 'string' ? JSON.parse(editInvoiceModal.data.phuthu) : (Array.isArray(editInvoiceModal.data.phuthu) ? editInvoiceModal.data.phuthu : []);
-                           } catch (e) { }
-                           return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                 {pts.map((pt, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
-                                       <input type="text" value={pt.name} onChange={e => {
-                                          const newPts = [...pts];
-                                          newPts[i].name = e.target.value;
-                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
-                                       }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Tên phụ thu" />
-                                       <input type="text" value={fCur(pt.amount)} onChange={e => {
-                                          const oldPtVal = pts[i].amount || 0;
-                                          const newPtVal = pCur(e.target.value);
-                                          const diff = newPtVal - oldPtVal;
-                                          const newPts = [...pts];
-                                          newPts[i].amount = newPtVal;
-                                          const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
-                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                                       }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Số tiền" />
-                                       <button type="button" onClick={() => {
-                                          const deletedVal = pts[i].amount || 0;
-                                          const newPts = pts.filter((_, idx) => idx !== i);
-                                          const newTong = pCur(editInvoiceModal.data.tongcong) - deletedVal;
-                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
-                                       }} style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '0.4rem' }}><X size={14} /></button>
-                                    </div>
-                                 ))}
-                                 <button type="button" onClick={() => {
-                                    const newPts = [...pts, { name: '', amount: 0 }];
-                                    setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
-                                 }} style={{ background: '#fff', border: '1px dashed #7c3aed', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#7c3aed', fontWeight: 600 }}>+ Thêm phụ thu</button>
-                              </div>
-                           );
-                        })()}
-                     </div>
-
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #ffedd5' }}>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.tongcong)} onChange={e => {
-                              const val = pCur(e.target.value);
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#059669' }}>Đã nộp (đ)</label>
-                           <input type="text" value={fCur(editInvoiceModal.data.dadong)} onChange={e => {
-                              const val = pCur(e.target.value);
-                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: pCur(p.data.tongcong) - val } }));
-                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #059669', fontWeight: 700, color: '#059669' }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#dc2626' }}>Còn nợ (đ)</label>
-                           <input disabled type="text" value={fCur(editInvoiceModal.data.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff', fontWeight: 700, color: '#dc2626' }} />
-                        </div>
-                     </div>
-
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
-                           <select value={editInvoiceModal.data.hinhthuc} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} style={{ width: '100%', height: '42px', padding: '0 0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
-                              {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
-                           </select>
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
-                           <textarea value={editInvoiceModal.data.ghichu} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
-                        </div>
-                     </div>
-
-                     <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
-                        <button type="button" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, padding: '0.85rem', borderRadius: '12px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer', color: '#64748b' }}>Hủy bỏ</button>
-                        <button type="submit" style={{ flex: 2, padding: '0.85rem', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.4)', fontSize: '1.05rem' }}>Lưu Thay Đổi</button>
-                     </div>
-                  </form>
-               </div>
-            </div>,
-            document.body
-         )}
-
-         {editBillModal.isOpen && createPortal(
-            <div className="fm-modal-overlay">
-               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '540px', width: '95%', maxHeight: '90vh', borderRadius: '20px', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
-                  <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Bill Bán Hàng {editBillModal.data?.mabill}</h3>
-                     <button type="button" className="tm-btn-icon" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })} style={{ color: '#94a3b8' }}><X size={24} /></button>
-                  </div>
-                  <form onSubmit={handleSaveEditBill} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                     <div className="fm-modal-body" style={{ padding: '1.5rem', overflowY: 'auto', background: '#fff', flex: 1 }}>
-                        {/* Product List Card */}
-                        <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '1rem', marginBottom: '1.5rem' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                              <span style={{ fontWeight: 700, color: '#334155' }}>Danh sách sản phẩm</span>
-                              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{editBillModal.data.items.length} mục</span>
-                           </div>
-
-                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                              {editBillModal.data.items.map((item, idx) => (
-                                 <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', position: 'relative' }}>
-                                    <button type="button" onClick={() => {
-                                       const newItems = editBillModal.data.items.filter((_, i) => i !== idx);
-                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                       const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
-                                       setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                                    }} style={{ position: 'absolute', top: '8px', right: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
-
-                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', paddingRight: '20px' }}>
-                                       {item.mahang ? `${item.mahang}|` : ''}{item.tenhang}{item.dvt ? `|${item.dvt}` : ''}
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-                                       <div style={{ flex: 1 }}>
-                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>SL (-)</label>
-                                          <input type="number" value={item.qty} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
-                                             const val = parseInt(e.target.value, 10) || 0;
-                                             const newItems = [...editBillModal.data.items];
-                                             newItems[idx].qty = val;
-                                             const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                             const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
-                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                                          }} />
-                                       </div>
-                                       <div style={{ flex: 1.5 }}>
-                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Đơn giá (đ)</label>
-                                          <input type="text" value={fCur(item.giaban)} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
-                                             const val = pCur(e.target.value);
-                                             const newItems = [...editBillModal.data.items];
-                                             newItems[idx].giaban = val;
-                                             const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                             const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
-                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                                          }} />
-                                       </div>
-                                       <div style={{ flex: 1, textAlign: 'right' }}>
-                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Thành tiền</label>
-                                          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0ea5e9' }}>{fCur(item.qty * item.giaban)}</div>
-                                       </div>
-                                    </div>
-                                 </div>
-                              ))}
-                              <button type="button" onClick={() => {
-                                 const newItems = [...editBillModal.data.items, { mahang: '', tenhang: 'Sản phẩm mới', dvt: 'Cái', qty: 1, giaban: 0 }];
-                                 setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems } }));
-                              }} style={{ width: '100%', padding: '10px', background: '#fff', border: '1px dashed #e2e8f0', borderRadius: '12px', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }}>+ Thêm sản phẩm</button>
-                           </div>
-                        </div>
-
-                        {/* Financial Grid */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Chiết khấu (đ)</label>
-                              <input type="text" value={fCur(editBillModal.data.chietkhau)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} onChange={e => {
-                                 const val = pCur(e.target.value);
-                                 const subtotal = editBillModal.data.items.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                 const finalTotal = subtotal - val;
-                                 setEditBillModal(p => ({ ...p, data: { ...p.data, chietkhau: val, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
-                              }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#16a34a', marginBottom: '0.5rem' }}>Tổng cộng (đ)</label>
-                              <input type="text" disabled value={fCur(editBillModal.data.tongcong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>Đã thanh toán (đ)</label>
-                              <input type="text" value={fCur(editBillModal.data.dadong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #3b82f6', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} onChange={e => {
-                                 const val = pCur(e.target.value);
-                                 setEditBillModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: p.data.tongcong - val } }));
-                              }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>Còn nợ (đ)</label>
-                              <input type="text" disabled value={fCur(editBillModal.data.conno)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '1rem', fontWeight: 700, color: '#ef4444' }} />
-                           </div>
-                        </div>
-
-                        {/* Form Group for Payment & Notes */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
-                              <select style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', background: '#fff' }} value={editBillModal.data.hinhthuc} onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))}>
-                                 {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
-                              </select>
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú bill</label>
-                              <textarea style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.95rem', resize: 'none' }} value={editBillModal.data.ghichu} onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} placeholder="Nhập ghi chú cho bill..." />
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="fm-modal-footer" style={{ padding: '1.5rem', display: 'flex', gap: '1rem', background: '#fff', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-                        <button type="button" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, height: '52px', background: '#f1f5f9', border: 'none', borderRadius: '12px', color: '#475569', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Bỏ qua</button>
-                        <button type="submit" style={{ flex: 2, height: '52px', background: '#10b981', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>Cập Nhật Bill</button>
-                     </div>
-                  </form>
-               </div>
-            </div>,
-            document.body
-         )}
-
+         <EditBillModal
+            isOpen={editBillModal.isOpen}
+            data={editBillModal.data}
+            walletsConfig={walletsConfig}
+            onClose={() => setEditBillModal({ isOpen: false, data: null, password: '' })}
+            onSave={handleSaveEditBill}
+         />
 
       </div>
    );
