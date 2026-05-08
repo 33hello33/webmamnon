@@ -24,6 +24,23 @@ const fCur = (val) => {
    const parsed = parseInt(sVal, 10);
    return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
+const calcTotal = (val) => {
+   if (!val) return 0;
+   if (typeof val === 'number') return val;
+   if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+         try {
+            const arr = JSON.parse(val);
+            if (Array.isArray(arr)) return arr.reduce((sum, item) => sum + (pCur(item.amount) || 0), 0);
+            if (typeof arr === 'object' && arr !== null) return pCur(arr.amount) || 0;
+         } catch (e) { }
+      }
+      return pCur(val) || 0;
+   }
+   if (Array.isArray(val)) return val.reduce((sum, item) => sum + (pCur(item.amount) || 0), 0);
+   return pCur(val) || 0;
+};
 const isDeleted = (item) => {
    if (!item) return false;
    if (typeof item.daxoa === 'string') return item.daxoa?.toLowerCase() === 'đã xóa';
@@ -1506,14 +1523,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <tr>
                               <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã HĐ <SortIcon columnKey="mahd" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
-                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học sinh <SortIcon columnKey="mahv" /></th>
-                              <th>Tên lớp</th>
-                              <th>Người lập</th>
-                              <th>Thời lượng</th>
-                              <th>Hình thức</th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Học sinh <SortIcon columnKey="mahv" /></th>
+                              <th>Lớp</th>
+                              <th className="text-right">Học phí</th>
+                              <th className="text-right">Giảm</th>
+                              <th className="text-right">Phụ thu</th>
+                              <th className="text-right">Trừ ăn</th>
+                              <th className="text-right">Trừ nghỉ</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
                               <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Thu <SortIcon columnKey="dadong" /></th>
-                              <th className="text-right">Nợ Cấn Trừ</th>
+                              <th className="text-right">Còn nợ</th>
                               <th className="text-center">Hành động</th>
                            </tr>
                         </thead>
@@ -1526,12 +1545,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{formatDate(r.ngaylap)}</td>
                                     <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
                                     <td>{r.tenlop}</td>
-                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
-                                    <td>{r.thoiluong ? `${r.thoiluong}` : '_'}</td>
-                                    <td>{r.hinhthuc}</td>
-                                    <td className="text-right">{fCur(r.tongcong)}</td>
+                                    <td className="text-right">{fCur(r.hocphi)}</td>
+                                    <td className="text-right text-orange-600">-{fCur(r.giamhocphi)}</td>
+                                    <td className="text-right text-blue-600">{fCur(calcTotal(r.phuthu))}</td>
+                                    <td className="text-right text-red-600">-{fCur(r.trutienan)}</td>
+                                    <td className="text-right text-red-600">-{fCur(r.tiennghiphep)}</td>
+                                    <td className="text-right font-bold">{fCur(r.tongcong)}</td>
                                     <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
-                                    <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
+                                    <td className="text-right font-bold text-danger">{pCur(r.conno) > 0 ? fCur(r.conno) : ''}</td>
                                     <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                        {!deleted ? (
                                           <>
@@ -1564,16 +1585,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
                                  <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
                                  <div className="fm-card-row"><span>Kết thúc:</span> <span>{r.ngayketthuc || '_'}</span></div>
-                                 <div className="fm-card-row">
+                                 <div className="fm-card-row"><span>Học phí:</span> <strong className="text-slate-700">{fCur(r.hocphi)} ₫</strong></div>
+                                 {pCur(r.giamhocphi) > 0 && <div className="fm-card-row"><span>Giảm:</span> <strong className="text-orange-500">-{fCur(r.giamhocphi)} ₫</strong></div>}
+                                 {calcTotal(r.phuthu) > 0 && <div className="fm-card-row"><span>Phụ thu:</span> <strong className="text-blue-500">+{fCur(calcTotal(r.phuthu))} ₫</strong></div>}
+                                 {pCur(r.trutienan) > 0 && <div className="fm-card-row"><span>Trừ ăn:</span> <strong className="text-red-500">-{fCur(r.trutienan)} ₫</strong></div>}
+                                 {pCur(r.tiennghiphep) > 0 && <div className="fm-card-row"><span>Trừ nghỉ:</span> <strong className="text-red-500">-{fCur(r.tiennghiphep)} ₫</strong></div>}
+                                 <div className="fm-card-row price-row" style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #e2e8f0' }}>
                                     <span>Tổng cộng:</span>
-                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                                    <strong className="text-slate-900">{fCur(r.tongcong)} ₫</strong>
                                  </div>
-                                 {pCur(r.giamhocphi) > 0 && (
-                                    <div className="fm-card-row">
-                                       <span>Giảm trừ:</span>
-                                       <strong className="text-orange-500">-{fCur(r.giamhocphi)} ₫</strong>
-                                    </div>
-                                 )}
                                  <div className="fm-card-row price-row">
                                     <span>Đã nộp:</span>
                                     <strong className="text-success">{fCur(r.dadong)} ₫</strong>

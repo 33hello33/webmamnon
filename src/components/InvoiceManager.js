@@ -1089,7 +1089,7 @@ export default function InvoiceManager() {
                setWarningModal({
                   isOpen: true,
                   title: 'Cảnh Báo Đóng Trùng Học Phí',
-                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
+                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối thu học phí. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
                });
                setIsSaving(false);
                return;
@@ -1209,7 +1209,7 @@ export default function InvoiceManager() {
          // daDong will auto-reset via useEffect when calculateOldDebt updates noCu/tongCong
       } catch (err) {
          console.error(err);
-         showMessage('error', 'Lỗi xuất hóa đơn: ' + err.message);
+         showMessage('error', 'Lỗi khi thu học phí: ' + err.message);
       } finally {
          setIsSaving(false);
       }

@@ -45,7 +45,7 @@ const ALL_TABS = [
     icon: Wallet,
     subTabs: [
       { id: 'phieuchi', label: 'QL phiếu thu/chi' },
-      { id: 'hoadon', label: 'QL hóa đơn' },
+      { id: 'hoadon', label: 'QL phiếu thu HP' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
     ]
@@ -62,7 +62,7 @@ const ALL_TABS = [
       { id: 'leave_list', label: 'Danh sách nghỉ' }
     ]
   },
-  { id: 'invoices', label: 'Xuất hóa đơn', icon: Receipt },
+  { id: 'invoices', label: 'Thu học phí', icon: Receipt },
   {
     id: 'sales',
     label: 'Bán hàng',
@@ -101,7 +101,7 @@ function Dashboard() {
 
   const getVisibleTabs = () => {
     if (!user) return [];
-    
+
     // First apply global config flags
     let filtered = ALL_TABS;
     if (config) {
@@ -322,11 +322,11 @@ function Dashboard() {
                                   let actionLabel = actionType.includes('nhập mới') ? 'Đã thêm' : (actionType.includes('sửa') ? 'Đã cập nhật' : (actionType.includes('xóa') ? 'Đã xóa' : actionType));
                                   let tableLabel = tableNames[table] || table;
                                   let res = `${actionLabel} ${tableLabel.toLowerCase()}`;
-                                  
+
                                   // Add detail if available in our new format
                                   const detailMatch = m.match(/\| Chi tiết: (.*?)(?: \||$|\()/);
                                   if (detailMatch) res += `: ${detailMatch[1]}`;
-                                  
+
                                   return res;
                                 }
                                 return m;

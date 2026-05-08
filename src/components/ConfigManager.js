@@ -39,7 +39,7 @@ const TAB_OPTIONS = [
   { id: 'statistics', label: 'Thống kê' },
   { id: 'chat', label: 'Phụ huynh' },
   { id: 'finances', label: 'Quản lý thu chi' },
-  { id: 'invoices', label: 'Xuất hóa đơn' },
+  { id: 'invoices', label: 'Thu học phí' },
   { id: 'sales', label: 'Bán hàng' },
   { id: 'timesheet', label: 'Chấm công' },
   { id: 'employees', label: 'Nhân viên' },
@@ -333,19 +333,19 @@ const ConfigManager = () => {
             <h3>Nhận diện Thương hiệu</h3>
           </div>
           <div className="brand-grid">
-                    <div className="logo-upload-group" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+            <div className="logo-upload-group" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
 
-            <div className="logo-upload">
-              <label>Logo Web (Favicon & Sidebar)</label>
-              <div className="logo-preview-box">
-                {formData.logo ? <img src={formData.logo} alt="Preview" /> : <div className="no-img">No Logo</div>}
-                <div className="upload-overlay">
-                  <Upload size={24} />
-                  <input type="file" accept="image/png" onChange={handleLogoUpload} />
+              <div className="logo-upload">
+                <label>Logo Web (Favicon & Sidebar)</label>
+                <div className="logo-preview-box">
+                  {formData.logo ? <img src={formData.logo} alt="Preview" /> : <div className="no-img">No Logo</div>}
+                  <div className="upload-overlay">
+                    <Upload size={24} />
+                    <input type="file" accept="image/png" onChange={handleLogoUpload} />
+                  </div>
                 </div>
+                <p className="hint">Chỉ chấp nhận .png | Max 2MB</p>
               </div>
-              <p className="hint">Chỉ chấp nhận .png | Max 2MB</p>
-                      </div>
               <div className="logo-upload">
                 <label>Apple Touch Icon</label>
                 <div className="logo-preview-box">
