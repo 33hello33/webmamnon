@@ -1031,7 +1031,7 @@ export default function InvoiceManager() {
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
             mahv: selectedStudent.mahv,
-            sdt: selectedStudent.sdt,
+            sdt: (selectedStudent.sdt || '').replace(/-/g, ''),
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -1176,7 +1176,7 @@ export default function InvoiceManager() {
             mahd: newMaHD,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
-            sdt: selectedStudent.sdt,
+            sdt: (selectedStudent.sdt || '').replace(/-/g, ''),
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -1271,7 +1271,7 @@ export default function InvoiceManager() {
                               <div className="im-card-name">
                                  {st.tenhv}
                               </div>
-                              <div className="im-card-sub">SDT: {st.sdt || 'Trống'}</div>
+                              <div className="im-card-sub">SDT: {(st.sdt || '').replace(/-/g, '')}</div>
                               <div className="im-card-sub">Lớp: {clsName}</div>
                            </div>
                         );
@@ -1325,7 +1325,7 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-field-hz">
                               <label>SĐT:</label>
-                              <div className="val-text text-bold">{selectedStudent.sdt || 'Chưa cung cấp'}</div>
+                              <div className="val-text text-bold">{(selectedStudent.sdt || '').replace(/-/g, '')}</div>
                            </div>
                         </div>
                      </div>
