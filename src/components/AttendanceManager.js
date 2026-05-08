@@ -79,23 +79,41 @@ export default function AttendanceManager({ students, showMessage }) {
   // Fetch student marking data if in marking mode
   useEffect(() => {
     const loadMarkingData = async () => {
-      if (!markingMode || !selectedId || viewMode !== 'class') { setAttStudents([]); setAttRecords({}); return; }
+      if (!markingMode || !selectedId) { setAttStudents([]); setAttRecords({}); return; }
       setLoading(true);
       try {
-        // Lấy tất cả học sinh có mã lớp tương ứng (không lọc trạng thái ở đây)
-        const cluster = students.filter(s => {
-          const smalop = (s.malop || '').toString().trim().toLowerCase();
-          const selId = (selectedId || '').toString().trim().toLowerCase();
-          let matches = (smalop === selId);
-          if (!matches && s.malop_list) {
-            if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
-            else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+        let cluster = [];
+        let targetMaLop = selectedId;
+
+        if (viewMode === 'class') {
+          cluster = students.filter(s => {
+            const smalop = (s.malop || '').toString().trim().toLowerCase();
+            const selId = (selectedId || '').toString().trim().toLowerCase();
+            let matches = (smalop === selId);
+            if (!matches && s.malop_list) {
+              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+            }
+            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+          });
+        } else {
+          const st = students.find(s => s.mahv === selectedId);
+          if (st) {
+            cluster = [st];
+            targetMaLop = st.malop || (Array.isArray(st.malop_list) ? st.malop_list[0] : st.malop_list);
           }
-          return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
-        });
+        }
         setAttStudents(cluster);
 
-        const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', selectedId).eq('ngay', attDate);
+        let query = supabase.from('tbl_diemdanh').select('*').eq('ngay', attDate);
+        if (viewMode === 'class') {
+          query = query.eq('malop', selectedId);
+        } else {
+          query = query.eq('mahv', selectedId);
+          if (targetMaLop) query = query.eq('malop', targetMaLop);
+        }
+
+        const { data: rec } = await query;
         const rMap = {};
         cluster.forEach(student => {
           const existing = (rec || []).find(r => r.mahv === student.mahv);
@@ -107,8 +125,12 @@ export default function AttendanceManager({ students, showMessage }) {
         });
         setAttRecords(rMap);
         // Load lesson content
-        const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
-        setLessonContent(nd ? nd.noidungday : '');
+        if (targetMaLop) {
+          const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', targetMaLop).eq('ngay', attDate).maybeSingle();
+          setLessonContent(nd ? nd.noidungday : '');
+        } else {
+          setLessonContent('');
+        }
       } catch (err) { console.error(err); }
       setLoading(false);
     };
@@ -120,14 +142,22 @@ export default function AttendanceManager({ students, showMessage }) {
   };
 
   const handleSaveAttendance = async () => {
-    if (!selectedId) return showMessage('error', 'Chưa chọn lớp!');
+    if (!selectedId) return showMessage('error', viewMode === 'class' ? 'Chưa chọn lớp!' : 'Chưa chọn học sinh!');
     setLoading(true);
     try {
+      let targetMaLopFinal = selectedId;
       for (const st of attStudents) {
         const rec = attRecords[st.mahv];
         if (!rec || !rec.trangthai) continue;
+
+        let currentMaLop = selectedId;
+        if (viewMode === 'student') {
+          currentMaLop = st.malop || (Array.isArray(st.malop_list) ? st.malop_list[0] : st.malop_list) || 'CHUA_XEP_LOP';
+          targetMaLopFinal = currentMaLop;
+        }
+
         const payload = {
-          mahv: st.mahv, malop: selectedId, ngay: attDate,
+          mahv: st.mahv, malop: currentMaLop, ngay: attDate,
           trangthai: rec.trangthai, ghichu: rec.ghichu || '',
           manv: currentUser?.manv || currentUser?.username || 'admin'
         };
@@ -135,19 +165,28 @@ export default function AttendanceManager({ students, showMessage }) {
         else await supabase.from('tbl_diemdanh').insert([payload]);
       }
       // Save lesson content
-      const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
-      if (exists) await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-      else await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
+      if (targetMaLopFinal) {
+        const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', targetMaLopFinal).eq('ngay', attDate).maybeSingle();
+        if (exists) await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
+        else await supabase.from('tbl_noidungday').insert([{ malop: targetMaLopFinal, ngay: attDate, noidungday: lessonContent }]);
+      }
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
-      const className = classes.find(c => c.malop === selectedId)?.tenlop || selectedId;
-      const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
+      const displayName = viewMode === 'class'
+        ? (classes.find(c => c.malop === selectedId)?.tenlop || selectedId)
+        : (students.find(s => s.mahv === selectedId)?.tenhv || selectedId);
+
+      const logDesc = `[ĐIỂM DANH] ${viewMode === 'class' ? 'Lớp' : 'HS'}: ${displayName} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
       insertLog(logDesc);
       // Update the report data too
-      const { data: fresh } = await supabase.from('tbl_diemdanh').select('*').eq('malop', selectedId).gte('ngay', attDate).lte('ngay', attDate);
+      const { data: fresh } = await supabase.from('tbl_diemdanh')
+        .select('*')
+        .eq(viewMode === 'class' ? 'malop' : 'mahv', selectedId)
+        .eq('ngay', attDate);
+
       if (fresh) {
         setAttendanceRecords(prev => {
-          const filtered = prev.filter(r => !(r.malop === selectedId && r.ngay === attDate));
+          const filtered = prev.filter(r => !(r.ngay === attDate && (viewMode === 'class' ? r.malop === selectedId : r.mahv === selectedId)));
           return [...filtered, ...fresh];
         });
       }
@@ -564,8 +603,11 @@ export default function AttendanceManager({ students, showMessage }) {
                         <span style={{ color: '#1e293b', fontWeight: 700 }}>
                           {(() => {
                             const std = students.find(s => s.mahv === selectedId);
-                            if (!std?.malop_list || std.malop_list.length === 0) return 'Chưa xếp lớp';
-                            return std.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+                            let list = [];
+                            if (std?.malop) list.push(std.malop);
+                            if (Array.isArray(std?.malop_list)) list = [...new Set([...list, ...std.malop_list])];
+                            if (list.length === 0) return 'Chưa xếp lớp';
+                            return list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
                           })()}
                         </span>
                       </div>
@@ -664,7 +706,7 @@ export default function AttendanceManager({ students, showMessage }) {
                       }) : (
                         <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b', background: '#f8fafc', borderRadius: '12px', border: '2px dashed #e2e8f0' }}>
                           <BookOpen size={30} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-                          <p>Vui lòng chọn lớp để bắt đầu chấm công</p>
+                          <p>{viewMode === 'class' ? 'Vui lòng chọn lớp để bắt đầu chấm công' : 'Không tìm thấy thông tin học sinh để chấm công'}</p>
                         </div>
                       )}
                     </div>
