@@ -1007,49 +1007,52 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           }
           if (batchMode === 'print' && collectedUrls.length > 0) {
             const printWin = window.open('', '_blank');
-            const imagesContent = collectedUrls.map(url => `
-              <div class="print-page">
-                <img src="${url}" />
-              </div>
-            `).join('');
+            if (printWin) {
+              const imagesContent = collectedUrls.map(url => `
+                <div class="print-page">
+                  <img src="${url}" />
+                </div>
+              `).join('');
 
-            printWin.document.write(`
-              <html>
-                <head>
-                  <title>In Thông Báo Hàng Loạt - ${selectedClass?.tenlop || ''}</title>
-                  <style>
-                    @page { size: A5 landscape; margin: 0; }
-                    body { margin: 0; padding: 0; background: #fff; }
-                    .print-page {
-                      width: 210mm;
-                      height: 148mm;
-                      page-break-after: always;
-                      display: flex;
-                      justify-content: center;
-                      align-items: center;
-                      overflow: hidden;
-                    }
-                    img {
-                      width: 210mm;
-                      height: 148mm;
-                      object-fit: contain;
-                    }
-                  </style>
-                </head>
-                <body>
-                  ${imagesContent}
-                  <script>
-                    window.onload = () => {
-                      setTimeout(() => {
-                        window.print();
-                        window.close();
-                      }, 1000);
-                    };
-                  </script>
-                </body>
-              </html>
-            `);
-            printWin.document.close();
+              printWin.document.write(`
+                <html>
+                  <head>
+                    <title>In Thông Báo Hàng Loạt - ${selectedClass?.tenlop || ''}</title>
+                    <style>
+                      @page { size: A5 landscape; margin: 0; }
+                      body { margin: 0; padding: 0; background: #fff; }
+                      .print-page {
+                        width: 210mm;
+                        height: 148mm;
+                        page-break-after: always;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        overflow: hidden;
+                      }
+                      img {
+                        width: 210mm;
+                        height: 148mm;
+                        object-fit: contain;
+                      }
+                    </style>
+                  </head>
+                  <body>
+                    ${imagesContent}
+                    <script>
+                      window.onload = function() {
+                        setTimeout(function() {
+                          window.focus();
+                          window.print();
+                          window.close();
+                        }, 1000);
+                      };
+                    </script>
+                  </body>
+                </html>
+              `);
+              printWin.document.close();
+            }
           } else if (batchMode === 'export') {
             showMessage('success', 'Đã tải xong hình ảnh thông báo!');
           }

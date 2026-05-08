@@ -274,8 +274,33 @@ export default function InvoiceManager() {
 
                   if (downloadingInvoice.isPrinting) {
                      const printWin = window.open('', '_blank');
-                     printWin.document.write(`<html><head><title>Print Invoice</title><style>@page{size:A5 landscape;margin:0;} body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#fff;} img{width:210mm;height:148mm;object-fit:contain;}</style></head><body><img src="${dataUrl}" onload="window.print();window.close();"/></body></html>`);
-                     printWin.document.close();
+                     if (printWin) {
+                        printWin.document.write(`
+                           <html>
+                              <head>
+                                 <title>Print Invoice</title>
+                                 <style>
+                                    @page { size: A5 landscape; margin: 0; }
+                                    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
+                                    img { width: 210mm; height: 148mm; object-fit: contain; }
+                                 </style>
+                              </head>
+                              <body>
+                                 <img src="${dataUrl}" />
+                                 <script>
+                                    window.onload = function() {
+                                       setTimeout(function() {
+                                          window.focus();
+                                          window.print();
+                                          window.close();
+                                       }, 500);
+                                    };
+                                 </script>
+                              </body>
+                           </html>
+                        `);
+                        printWin.document.close();
+                     }
                   } else if (window.innerWidth <= 991) {
                      setPreviewImg(dataUrl);
                   } else {
@@ -327,8 +352,33 @@ export default function InvoiceManager() {
 
                   if (downloadingNotice.isPrinting) {
                      const printWin = window.open('', '_blank');
-                     printWin.document.write(`<html><head><title>Print Notice</title><style>@page{size:A5 landscape;margin:0;} body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#fff;} img{width:210mm;height:148mm;object-fit:contain;}</style></head><body><img src="${dataUrl}" onload="window.print();window.close();"/></body></html>`);
-                     printWin.document.close();
+                     if (printWin) {
+                        printWin.document.write(`
+                           <html>
+                              <head>
+                                 <title>Print Notice</title>
+                                 <style>
+                                    @page { size: A5 landscape; margin: 0; }
+                                    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
+                                    img { width: 210mm; height: 148mm; object-fit: contain; }
+                                 </style>
+                              </head>
+                              <body>
+                                 <img src="${dataUrl}" />
+                                 <script>
+                                    window.onload = function() {
+                                       setTimeout(function() {
+                                          window.focus();
+                                          window.print();
+                                          window.close();
+                                       }, 500);
+                                    };
+                                 </script>
+                              </body>
+                           </html>
+                        `);
+                        printWin.document.close();
+                     }
                   } else if (window.innerWidth <= 991) {
                      setPreviewImg(dataUrl);
                   } else {
@@ -956,6 +1006,8 @@ export default function InvoiceManager() {
          manv: auth.user?.manv || auth.user?.username || '',
          hocphi: formatCurrency(invoiceData.hocphi),
          giamhocphi: formatCurrency(invoiceData.giamHocphi),
+         trutienan: formatCurrency(actualMealRefund),
+         tiennghiphep: formatCurrency(actualTuitionRefund),
          tongcong: formatCurrency(tongCong),
          dadong: '0',
          conno: formatCurrency(tongCong),
@@ -1068,6 +1120,8 @@ export default function InvoiceManager() {
             manv: auth.user?.manv || auth.user?.username || '',
             hocphi: formatCurrency(invoiceData.hocphi),
             giamhocphi: formatCurrency(invoiceData.giamHocphi),
+            trutienan: formatCurrency(actualMealRefund),
+            tiennghiphep: formatCurrency(actualTuitionRefund),
             tongcong: formatCurrency(tongCong),
             dadong: formatCurrency(invoiceData.daDong),
             conno: formatCurrency(conLai),
@@ -1087,7 +1141,7 @@ export default function InvoiceManager() {
 
          // Nếu hóa đơn có tính nợ cũ, sau khi lưu thành công phải cập nhật các hóa đơn/bill cũ của học sinh về nợ = 0
          // vì nợ đó đã được gộp (rollup) vào hóa đơn mới này.
-         if (noCu > 0) {
+         if (noCu !== 0) {
             try {
                // Cập nhật nợ cũ trong tbl_hd (trừ hóa đơn vừa tạo)
                await supabase.from('tbl_hd')
@@ -1166,6 +1220,25 @@ export default function InvoiceManager() {
       (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
    );
 
+   const groupedStudents = filteredStudents.reduce((acc, st) => {
+      const className = st.malop_list && st.malop_list.length > 0
+         ? (classes.find(c => c.malop === st.malop_list[0])?.tenlop || 'Lớp khác')
+         : 'Chưa xếp lớp';
+      if (!acc[className]) acc[className] = [];
+      acc[className].push(st);
+      return acc;
+   }, {});
+
+   Object.keys(groupedStudents).forEach(cls => {
+      groupedStudents[cls].sort((a, b) => (a.tenhv || '').localeCompare(b.tenhv || '', 'vi'));
+   });
+
+   const sortedClasses = Object.keys(groupedStudents).sort((a, b) => {
+      if (a === 'Chưa xếp lớp') return 1;
+      if (b === 'Chưa xếp lớp') return -1;
+      return a.localeCompare(b, 'vi');
+   });
+
    // Auto fill daDong in InvoiceManager: Default to full payment
    useEffect(() => {
       setInvoiceData(prev => ({ ...prev, daDong: tongCong }));
@@ -1186,20 +1259,25 @@ export default function InvoiceManager() {
                />
             </div>
             <div className="im-student-list">
-               {filteredStudents.length > 0 ? filteredStudents.map(st => {
-                  const isActive = selectedStudent?.mahv === st.mahv;
-                  return (
-                     <div key={st.mahv} className={`im-student-card ${isActive ? 'active' : ''}`} onClick={() => handleSelectStudent(st)}>
-                        <div className="im-card-name">
-                           {st.tenhv}
-                        </div>
-                        <div className="im-card-sub">SDT: {st.sdt || 'SĐT: Trống'}</div>
-                        <div className="im-card-sub">Lớp: {st.malop_list && st.malop_list.length > 0
-                           ? st.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ')
-                           : 'Chưa xếp lớp'}</div>
+               {sortedClasses.length > 0 ? sortedClasses.map(clsName => (
+                  <React.Fragment key={clsName}>
+                     <div className="im-group-header">
+                        <BookOpen size={14} /> {clsName} ({groupedStudents[clsName].length})
                      </div>
-                  );
-               }) : (
+                     {groupedStudents[clsName].map(st => {
+                        const isActive = selectedStudent?.mahv === st.mahv;
+                        return (
+                           <div key={st.mahv} className={`im-student-card ${isActive ? 'active' : ''}`} onClick={() => handleSelectStudent(st)}>
+                              <div className="im-card-name">
+                                 {st.tenhv}
+                              </div>
+                              <div className="im-card-sub">SDT: {st.sdt || 'Trống'}</div>
+                              <div className="im-card-sub">Lớp: {clsName}</div>
+                           </div>
+                        );
+                     })}
+                  </React.Fragment>
+               )) : (
                   <div className="im-s-empty">Không tìm thấy học sinh hiển thị.</div>
                )}
             </div>

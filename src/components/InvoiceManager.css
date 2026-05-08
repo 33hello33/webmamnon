@@ -44,6 +44,28 @@
   gap: 0.5rem;
 }
 
+.im-group-header {
+  padding: 0.75rem 1rem 0.25rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: -12px;
+  z-index: 5;
+  margin: 0 -0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-top: 0.5rem;
+}
+
+.im-group-header:first-child {
+  margin-top: 0;
+}
+
 .im-student-card {
   padding: 1rem 1.25rem;
   border-radius: 10px;
