@@ -630,28 +630,79 @@
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: hidden !important;
   }
 
   /* Define A5 Print Canvas */
   @page {
-    size: A5 landscape;
+    size: A4 landscape;
     margin: 0;
   }
 
   .print-a5-receipt {
-    display: block !important;
+    display: flex !important;
     visibility: visible !important;
     position: static !important;
     top: auto;
     left: auto;
     z-index: auto;
+    width: 297mm;
+    height: 209mm;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    page-break-after: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .receipt-copy {
+    width: 148.5mm;
+    height: 209mm;
+    padding: 1mm 2mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: white;
+    border-right: 1px dashed #ccc;
+  }
+
+  .receipt-copy:last-child {
+    border-right: none;
   }
 
   .print-a5-receipt * {
     visibility: visible !important;
+    line-height: 1.2 !important;
+    color: #000 !important;
   }
+}
+
+.receipt-copy h3 {
+  font-size: 11pt !important;
+  margin: 0;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.receipt-copy p, .receipt-copy div, .receipt-copy td, .receipt-copy th {
+  font-size: 12.5pt !important;
+}
+
+.receipt-copy .p-header {
+  margin-bottom: 8px !important;
+}
+
+.receipt-copy .p-signatures {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+
+.receipt-copy .p-row {
+  font-size: 12.5pt !important;
+  margin-bottom: 8px !important;
+}
+
+.receipt-copy .p-label {
+  min-width: 90px !important;
 }
 
 .p-header {
@@ -687,7 +738,7 @@
 
   .p-title-area {
     text-align: center;
-    margin-bottom: 5px;
+    margin-bottom: 12px;
   }
 
   .p-title-area h2 {

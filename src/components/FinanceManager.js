@@ -267,7 +267,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const handleOpenEditInvoice = (invoice) => {
       setEditInvoiceModal({
          isOpen: true,
-         data: { 
+         data: {
             ...invoice,
             hocphi: pCur(invoice.hocphi),
             giamhocphi: pCur(invoice.giamhocphi),
@@ -1881,15 +1881,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   {/* INFO */}
                   <div style={{ fontSize: "13pt", lineHeight: "1.8" }}>
-
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Họ và tên: <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b></div>
                         <div>Kỳ lương: <b>Tháng {printLuong.luongthang || ((new Date(printLuong.ngaylap).getMonth() + 1).toString().padStart(2, '0') + '/' + new Date(printLuong.ngaylap).getFullYear())}</b></div>
                      </div>
-
-                     <div>
-                        Chức vụ: <b>Giảng Viên / Trợ Giảng</b>
-                     </div>
+                     <div>Chức vụ: <b>Giảng Viên / Trợ Giảng</b></div>
 
                      {/* BẢNG LƯƠNG */}
                      <div style={{ marginTop: '15px', marginBottom: '15px' }}>
@@ -1899,9 +1895,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid black', fontSize: '12pt' }}>
                                  <thead>
                                     <tr>
-                                       {dt.headers.map((h, i) => {
-                                          return <th key={i} style={{ border: '1px solid black', padding: '5px', textAlign: i === 0 ? 'left' : 'center' }}>{h}</th>
-                                       })}
+                                       {dt.headers.map((h, i) => (
+                                          <th key={i} style={{ border: '1px solid black', padding: '5px', textAlign: i === 0 ? 'left' : 'center' }}>{h}</th>
+                                       ))}
                                     </tr>
                                  </thead>
                                  <tbody>
@@ -1925,14 +1921,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         })()}
                      </div>
 
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div style={{ flex: 1 }}></div>
-                     </div>
-
                      <div style={{ display: "flex", justifyContent: "space-between", margin: '15px 0' }}>
                         <div style={{ fontWeight: "bold" }}>TỔNG THỰC NHẬN: <span style={{ fontSize: '15pt' }}>{fCur(printLuong.tongcong)} ₫</span></div>
                      </div>
-
                      <div style={{ fontSize: '11pt', borderTop: '1px dashed #ccc', paddingTop: '10px' }}>
                         Ghi chú: {printLuong.ghichu || '........................................................................'}
                      </div>
@@ -1940,7 +1931,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   {/* FOOTER */}
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-
                      <div>
                         <b>Ngày ..... tháng ..... Năm 20 .....</b> <br /><br />
                         <div style={{ textAlign: "center" }}>
@@ -1948,13 +1938,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            (Ký và ghi rõ họ tên)<br /><br /><br /><br />
                         </div>
                      </div>
-
                      <div style={{ textAlign: "center" }}>
                         <br /><br />
                         Người nhận tiền <br />(Ký và ghi rõ họ tên)<br /><br /><br /><br />
                         <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b>
                      </div>
-
                   </div>
                </div>
             </div>,
@@ -1963,248 +1951,243 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
          {printHoaDon && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '20px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-               <div style={{ position: 'relative', zIndex: 1 }}>
-                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '180px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '120px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                     </div>
-
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                           {config?.tencongty || 'Tên Công Ty'}
-                        </h2>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     </div>
-
-                     {/* RIGHT: Invoice info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
-                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
-                     </div>
-                  </div>
-
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "18pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     BIÊN LAI THU HỌC PHÍ
-                  </div>
-
-                  <div style={{ fontSize: "12pt", lineHeight: "1.5", margin: '10px 0' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
-                        <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
-                     </div>
-                     <div>Khóa học: <b>{printHoaDon.tenlop}</b></div>
-                     <div>
-                        Tháng đóng học phí/Thời lượng: <b>{printHoaDon.thoiluong || "..."}</b>
-                     </div>
-                     <div style={{ marginTop: '5px' }}>
-                        Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>
-                     </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '10px 0' }} />
-
-                     {(() => {
-                        const hocV = pCur(printHoaDon.hocphi);
-                        const giamV = pCur(printHoaDon.giamhocphi);
-                        const tongV = pCur(printHoaDon.tongcong);
-                        let ptS = 0;
-                        try {
-                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
-                           if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
-                        } catch (e) { }
-                        let taS = 0;
-                        try {
-                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
-                           if (ta && ta.amount) taS = ta.amount;
-                         } catch (e) { }
-                        const rM = pCur(printHoaDon.trutienan);
-                        const rT = pCur(printHoaDon.tiennghiphep);
-                        const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
-                        return (
-                           <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
-                              <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
-                              <div>Nợ cũ: <b>{fCur(calcNocu)} đ</b></div>
-                           </div>
-                        );
-                     })()}
-
-                     {printHoaDon.tienan && (() => {
-                        try {
-                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
-                           if (ta && ta.amount > 0) {
-                              return (
-                                 <div style={{ marginTop: '5px', fontSize: '11pt', color: '#3b82f6', fontWeight: 800 }}>
-                                    + Tiền ăn ({ta.days} ngày): {fCur(ta.amount)} đ
-                                 </div>
-                              );
-                           }
-                        } catch (e) { }
-                        return null;
-                     })()}
-
-                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
-                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
-                           {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
-                           {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
+            <div className="print-a5-receipt">
+               {[1, 2].map(copyNum => (
+                  <div key={copyNum} className="receipt-copy">
+                     <div className="p-header">
+                        <div style={{ width: '80px' }}>
+                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                         </div>
-                     )}
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Công Ty'}</h3>
+                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                        </div>
+                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                           <div style={{ fontWeight: 800 }}>Mã HĐ: {printHoaDon.mahd}</div>
+                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</div>
+                        </div>
+                     </div>
 
-                     {printHoaDon.phuthu && (() => {
-                        try {
-                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
-                           if (Array.isArray(pts) && pts.length > 0) {
+                     <div className="p-title-area">
+                        <h2 style={{ fontSize: '14pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
+                     </div>
+
+                     <div className="p-content">
+                        <div className="p-row">
+                           <span className="p-label">Họa viên:</span>
+                           <span className="p-value" style={{ fontSize: '11pt' }}>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</span>
+                           <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                           <span className="p-value">{printHoaDon.tenlop}</span>
+                        </div>
+                        <div className="p-row">
+                           <span className="p-label">SĐT:</span>
+                           <span className="p-value">{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</span>
+                           <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                           <span className="p-value">{printHoaDon.thoiluong}</span>
+                        </div>
+
+                        <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                           {(() => {
+                              const hocV = pCur(printHoaDon.hocphi);
+                              const giamV = pCur(printHoaDon.giamhocphi);
+                              const tongV = pCur(printHoaDon.tongcong);
+                              let ptS = 0;
+                              try {
+                                 const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                                 if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
+                              } catch (e) { }
+                              let taS = 0;
+                              try {
+                                 const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                                 if (ta && ta.amount) taS = ta.amount;
+                              } catch (e) { }
+                              const rM = pCur(printHoaDon.trutienan);
+                              const rT = pCur(printHoaDon.tiennghiphep);
+                              const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
                               return (
-                                 <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                                    {pts.map((pt, i) => (
-                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                          <span>+ {pt.name || 'Phụ thu'}:</span>
-                                          <b>{fCur(pt.amount)} đ</b>
-                                       </div>
-                                    ))}
+                                 <div className="p-row">
+                                    <span style={{ flex: 1 }}>- Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></span>
+                                    <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{fCur(calcNocu)} đ</b></span>
                                  </div>
                               );
-                           }
-                        } catch (e) { }
-                        return null;
-                     })()}
+                           })()}
+                           <div className="p-row">
+                              <span style={{ flex: 1 }}>- Ưu đãi: <b>{fCur(printHoaDon.giamhocphi)} đ</b></span>
+                              {printHoaDon.tienan && (() => {
+                                 try {
+                                    const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                                    if (ta && ta.amount > 0) return <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{fCur(ta.amount)} đ</b></span>;
+                                 } catch (e) { } return null;
+                              })()}
+                           </div>
+                           {printHoaDon.phuthu && (() => {
+                              try {
+                                 const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                                 if (Array.isArray(pts) && pts.length > 0) {
+                                    return (
+                                       <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                          {pts.map((pt, i) => (
+                                             <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                                <span>+ {pt.name || 'Phụ thu'}:</span>
+                                                <span style={{ marginLeft: 'auto' }}><b>{fCur(pt.amount)} đ</b></span>
+                                             </div>
+                                          ))}
+                                       </div>
+                                    );
+                                 }
+                              } catch (e) { } return null;
+                           })()}
+                           {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
+                              <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                 <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                    {pCur(printHoaDon.trutienan) > 0 && <span>Trừ ăn: <b>-{fCur(printHoaDon.trutienan)} đ</b></span>}
+                                    {pCur(printHoaDon.tiennghiphep) > 0 && <span style={{ marginLeft: 'auto' }}>Trừ HP nghỉ: <b>-{fCur(printHoaDon.tiennghiphep)} đ</b></span>}
+                                 </div>
+                              </div>
+                           )}
+                        </div>
 
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
-                        <div>Tổng cộng: <b>{fCur(printHoaDon.tongcong)} đ</b></div>
-                        <div>Đã đóng: <b style={{ color: '#059669' }}>{fCur(printHoaDon.dadong)} đ</b></div>
-                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{fCur(printHoaDon.conno)} đ</b></div>
+                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
+                           <span style={{ fontWeight: 900, fontSize: '10pt' }}>TỔNG CỘNG:</span>
+                           <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{fCur(printHoaDon.tongcong)} đ</span>
+                        </div>
+
+                        <div className="p-row" style={{ marginTop: '4px' }}>
+                           <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
+                           <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
+                        </div>
+
+                        <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                           <span>HÌNH THỨC:</span>
+                           <span className="p-value">{printHoaDon.hinhthuc}</span>
+                        </div>
+                        {printHoaDon.ghichu && (
+                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                              <span>Ghi chú: {printHoaDon.ghichu}</span>
+                           </div>
+                        )}
                      </div>
 
-                     <div style={{ marginTop: '10px' }}>
-                        Ghi chú: {printHoaDon.ghichu || ""}
+                     <div className="p-signatures">
+                        <div className="sig-box">
+                           <h4>Người nộp tiền</h4>
+                           <p>(Ký, họ tên)</p>
+                        </div>
+                        <div className="sig-box">
+                           <h4>Người lập phiếu</h4>
+                           <p>(Ký, họ tên)</p>
+                           <div className="sig-name">{printHoaDon.nhanvien}</div>
+                        </div>
                      </div>
                   </div>
-
-                  {/* FOOTER */}
-                  <div style={{ marginTop: 20, fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>
-                        Facebook: {config?.tencongty} <br />
-                        SĐT/Zalo: {config?.sdtcongty}
-                     </div>
-                     <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br /><br />
-                        <b>{printHoaDon.nhanvien}</b>
-                     </div>
-                  </div>
-
-                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
-                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
-                  </div>
-               </div>
+               ))}
             </div>,
             document.body
          )}
 
+
          {/* PRINT TEMPLATE - PHIẾU BILL HÀNG POS */}
          {printBill && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
-               <div style={{ position: 'relative', zIndex: 1 }}>
-                  {/* HEADER */}
-                  <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '180px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+            <div className="print-a5-receipt">
+               {[1, 2].map(copyNum => (
+                  <div key={copyNum} className="receipt-copy">
+                     <div className="p-header">
+                        <div style={{ width: '80px' }}>
+                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                        </div>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Công Ty'}</h3>
+                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                        </div>
+                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                           <div style={{ fontWeight: 800 }}>Mã Bill: {printBill.mabill}</div>
+                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{new Date(printBill.ngaylap).toLocaleDateString("vi-VN")}</div>
+                        </div>
                      </div>
 
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                           {config?.tencongty || 'Tên Công Ty'}
-                        </h3>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+                     <div className="p-title-area">
+                        <h2 style={{ fontSize: '15pt' }}>BIÊN LAI BÁN HÀNG</h2>
                      </div>
 
-                     {/* RIGHT: Info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>Mã Bill: <b style={{ fontWeight: 950 }}>{printBill.mabill}</b></div>
-                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printBill.ngaylap).toLocaleDateString("vi-VN")}</span></div>
-                     </div>
-                  </div>
+                     <div className="p-content">
+                        <div className="p-row" style={{ marginBottom: '8px' }}>
+                           <span className="p-label">Họ tên:</span>
+                           <span className="p-value" style={{ fontSize: '11pt' }}>{printBill.tenhv}</span>
+                           <span className="p-label" style={{ minWidth: '40px' }}>SĐT:</span>
+                           <span className="p-value">{printBill.sdt || ""}</span>
+                        </div>
 
-                  {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     BIÊN LAI BÁN HÀNG
-                  </div>
-
-                  {/* INFO */}
-                  <div style={{ fontSize: "13pt", lineHeight: "1.8" }}>
-
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Họ và tên: <b>{printBill.tenhv}</b></div>
-                        <div>SĐT: <b>{printBill.sdt || ""}</b></div>
-                     </div>
-
-                     <div className="p-content" style={{ padding: '0' }}>
-                        {(() => {
-                           const dt = parseNoidung(printBill.hanghoa);
-                           return (
-                              <table className="p-luong-table">
-                                 <thead>
-                                    <tr>
-                                       {dt.headers.map((h, i) => {
-                                          const lower = (h || '').toLowerCase();
-                                          const isMoney = lower.includes('lương') || lower.includes('tiền') || lower.includes('đơn giá') || lower.includes('tổng');
-                                          const isCenter = lower.includes('số');
-                                          return <th key={i} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''}>{h}</th>
-                                       })}
-                                    </tr>
-                                 </thead>
-                                 <tbody>
-                                    {dt.rows.map((row, rIdx) => (
-                                       <tr key={rIdx}>
-                                          {row.map((cell, cIdx) => {
-                                             const h = dt.headers[cIdx];
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                           {(() => {
+                              const dt = parseNoidung(printBill.hanghoa);
+                              return (
+                                 <table className="p-luong-table">
+                                    <thead>
+                                       <tr>
+                                          {dt.headers.map((h, i) => {
                                              const lower = (h || '').toLowerCase();
-                                             const isMoney = lower.includes('đơn giá') || lower.includes('thành tiền');
-                                             const isCenter = lower.includes('số') || lower.includes('dvt');
-                                             return (
-                                                <td key={cIdx} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''}>
-                                                   {isMoney && cell ? fCur(cell) : cell}
-                                                </td>
-                                             );
+                                             const isMoney = lower.includes('lương') || lower.includes('tiền') || lower.includes('đơn giá') || lower.includes('tổng') || lower.includes('tiền');
+                                             const isCenter = lower.includes('số');
+                                             return <th key={i} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''} style={{ fontSize: '8pt' }}>{h}</th>
                                           })}
                                        </tr>
-                                    ))}
-                                 </tbody>
-                              </table>
-                           );
-                        })()
-                        }
-                     </div>
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
-                        <div>CK giảm: {fCur(printBill.chietkhau)}</div>
-                        <div>Tổng cộng: {fCur(printBill.tongcong)}</div>
-                        <div>Đã đóng: {fCur(printBill.dadong)}</div>
-                        <div>Còn lại: {fCur(printBill.conno)}</div>
+                                    </thead>
+                                    <tbody>
+                                       {dt.rows.map((row, rIdx) => (
+                                          <tr key={rIdx}>
+                                             {row.map((cell, cIdx) => {
+                                                const h = dt.headers[cIdx];
+                                                const lower = (h || '').toLowerCase();
+                                                const isMoney = lower.includes('đơn giá') || lower.includes('thành tiền') || lower.includes('giá') || lower.includes('tiền');
+                                                const isCenter = lower.includes('số') || lower.includes('dvt');
+                                                return (
+                                                   <td key={cIdx} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''} style={{ fontSize: '8.5pt', padding: '3px 5px' }}>
+                                                      {isMoney && cell ? fCur(cell) : cell}
+                                                   </td>
+                                                );
+                                             })}
+                                          </tr>
+                                       ))}
+                                    </tbody>
+                                 </table>
+                              );
+                           })()
+                           }
+                        </div>
+
+                        <div style={{ marginTop: '8px', borderTop: '2px solid #000', paddingTop: '5px' }}>
+                           <div className="p-row">
+                              <span>CK giảm: <b>{fCur(printBill.chietkhau)} đ</b></span>
+                              <span style={{ marginLeft: 'auto' }}>Tổng cộng: <b>{fCur(printBill.tongcong)} đ</b></span>
+                           </div>
+                           <div className="p-row">
+                              <span>Đã đóng: <b style={{ color: '#059669 !important' }}>{fCur(printBill.dadong)} đ</b></span>
+                              <span style={{ marginLeft: 'auto' }}>Còn lại: <b style={{ color: '#dc2626 !important' }}>{fCur(printBill.conno)} đ</b></span>
+                           </div>
+                        </div>
+
+                        {printBill.ghichu && (
+                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic', marginTop: '4px' }}>
+                              <span>Ghi chú: {printBill.ghichu}</span>
+                           </div>
+                        )}
                      </div>
 
-                     <div>
-                        Ghi chú: {printBill.ghichu || ""}
+                     <div className="p-signatures">
+                        <div className="sig-box">
+                           <h4>Người nộp tiền</h4>
+                           <p>(Ký, họ tên)</p>
+                        </div>
+                        <div className="sig-box">
+                           <h4>Người lập phiếu</h4>
+                           <p>(Ký, họ tên)</p>
+                           <div className="sig-name">{printBill.nhanvien}</div>
+                        </div>
                      </div>
                   </div>
-
-                  {/* FOOTER */}
-                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-
-                     <div>
-                        {config?.tencongty || 'Tên Công Ty'} <br />
-                        SĐT/Zalo: {config?.sdtcongty}
-                     </div>
-
-                     <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br /><br />
-                        <b>{printBill.nhanvien}</b>
-                     </div>
-
-                  </div>
-               </div>
+               ))}
             </div>,
             document.body
          )}
@@ -2526,8 +2509,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>
                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
                            <input type="text" value={fCur(editInvoiceModal.data.tongcong)} onChange={e => {
-                               const val = pCur(e.target.value);
-                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
+                              const val = pCur(e.target.value);
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
                         </div>
                         <div>

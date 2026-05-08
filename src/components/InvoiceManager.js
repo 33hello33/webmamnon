@@ -280,9 +280,9 @@ export default function InvoiceManager() {
                               <head>
                                  <title>Print Invoice</title>
                                  <style>
-                                    @page { size: A5 landscape; margin: 0; }
+                                    @page { size: A4 landscape; margin: 0; }
                                     body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
-                                    img { width: 210mm; height: 148mm; object-fit: contain; }
+                                    img { width: 297mm; height: 210mm; object-fit: contain; }
                                  </style>
                               </head>
                               <body>
@@ -358,9 +358,9 @@ export default function InvoiceManager() {
                               <head>
                                  <title>Print Notice</title>
                                  <style>
-                                    @page { size: A5 landscape; margin: 0; }
+                                    @page { size: A4 landscape; margin: 0; }
                                     body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
-                                    img { width: 210mm; height: 148mm; object-fit: contain; }
+                                    img { width: 297mm; height: 210mm; object-fit: contain; }
                                  </style>
                               </head>
                               <body>
@@ -904,29 +904,29 @@ export default function InvoiceManager() {
 
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
-    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-    const { getTruTienAn } = useConfig();
-    const trutienan_config = config?.trutienan || {};
-    
-    // Tìm tier được chọn hoặc tự động (chọn tier có key gần nhất với hocphi nếu tự động, hoặc lấy tier đầu tiên)
-    let activeTier = null;
-    if (invoiceData.selectedTienAnTier) {
-       activeTier = invoiceData.selectedTienAnTier;
-    } else if (trutienan_config && typeof trutienan_config === 'object') {
-       // Tự động tìm mức phù hợp hoặc lấy mức đầu tiên làm mặc định
-       const keys = Object.keys(trutienan_config);
-       if (keys.length > 0) {
-          // Thử tìm mức trùng khớp với hocphi (mặc định cũ) hoặc lấy mức đầu tiên
-          const matchKey = keys.find(k => parseInt(k) === invoiceData.hocphi) || keys[0];
-          activeTier = { 
-             amount: parseInt(matchKey), 
-             tru_nghi: trutienan_config[matchKey].tru_nghi 
-          };
-       }
-    }
+   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
+   const { getTruTienAn } = useConfig();
+   const trutienan_config = config?.trutienan || {};
 
-    const trutienan_val = activeTier ? activeTier.tru_nghi : 0;
-    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+   // Tìm tier được chọn hoặc tự động (chọn tier có key gần nhất với hocphi nếu tự động, hoặc lấy tier đầu tiên)
+   let activeTier = null;
+   if (invoiceData.selectedTienAnTier) {
+      activeTier = invoiceData.selectedTienAnTier;
+   } else if (trutienan_config && typeof trutienan_config === 'object') {
+      // Tự động tìm mức phù hợp hoặc lấy mức đầu tiên làm mặc định
+      const keys = Object.keys(trutienan_config);
+      if (keys.length > 0) {
+         // Thử tìm mức trùng khớp với hocphi (mặc định cũ) hoặc lấy mức đầu tiên
+         const matchKey = keys.find(k => parseInt(k) === invoiceData.hocphi) || keys[0];
+         activeTier = {
+            amount: parseInt(matchKey),
+            tru_nghi: trutienan_config[matchKey].tru_nghi
+         };
+      }
+   }
+
+   const trutienan_val = activeTier ? activeTier.tru_nghi : 0;
+   const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
    let tuitionRefund = 0;
@@ -1508,7 +1508,7 @@ export default function InvoiceManager() {
                               <label>Tiền ăn</label>
                               <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
                                  {config?.trutienan && (
-                                    <select 
+                                    <select
                                        style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', fontWeight: 700, color: '#2563eb', background: '#f8fafc' }}
                                        value={invoiceData.selectedTienAnTier ? Object.entries(config.trutienan).find(([k, v]) => v.tru_nghi === invoiceData.selectedTienAnTier.tru_nghi)?.[0] : ''}
                                        onChange={(e) => {
@@ -1624,7 +1624,7 @@ export default function InvoiceManager() {
                               <Receipt size={18} />
                               {isSaving ? 'Đang tạo...' : 'Xác Nhận Xuất HĐ'}
                            </button>
-                           
+
                            <button className="im-btn-submit print-btn" style={{ flex: '1 1 calc(50% - 10px)', minWidth: '160px', padding: '0.8rem 1rem', fontSize: '1.1rem', background: '#fff', color: '#3b82f6', border: '1px solid #3b82f6' }} onClick={handlePrintNotice}>
                               <Printer size={18} />
                               In Thông Báo
@@ -1692,202 +1692,209 @@ export default function InvoiceManager() {
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '210mm', height: '148mm', background: '#fff', padding: '20px 35px', boxSizing: 'border-box', display: 'block', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               {/* HEADER */}
-               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* LEFT: Logo */}
-                  <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                  </div>
+            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+               {[1, 2].map(copyNum => (
+                  <div key={copyNum} className="receipt-copy">
+                     {/* HEADER */}
+                     <div className="p-header">
+                        <div style={{ width: '80px' }}>
+                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                        </div>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                        </div>
+                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                           <div style={{ fontWeight: 800 }}>Mã HĐ: {downloadingInvoice?.mahd}</div>
+                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
+                        </div>
+                     </div>
 
-                  {/* CENTER: Info */}
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        {config?.tencongty || 'Tên Trường'}
-                     </h3>
-                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
-                  </div>
+                     <div className="p-title-area">
+                        <h2 style={{ fontSize: '15pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
+                     </div>
 
-                  {/* RIGHT: Invoice info */}
-                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                     <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
-                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
-                  </div>
-               </div>
+                     <div className="p-content">
+                        <div className="p-row">
+                           <span className="p-label">Học viên:</span>
+                           <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingInvoice?.tenhv}</span>
+                           <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                           <span className="p-value">{downloadingInvoice?.tenlop}</span>
+                        </div>
+                        <div className="p-row">
+                           <span className="p-label">SĐT liên hệ:</span>
+                           <span className="p-value">{downloadingInvoice?.sdt || ""}</span>
+                           <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                           <span className="p-value">{downloadingInvoice?.thoiluong}</span>
+                        </div>
 
-               {/* TITLE */}
-               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "16pt", margin: "5px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                  BIÊN LAI THU HỌC PHÍ
-               </div>
-
-               {/* INFO */}
-               <div style={{ fontSize: "12pt", lineHeight: "1.5", color: '#000' }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.tenhv}</b></div>
-                     <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.sdt || ""}</b></div>
-                  </div>
-
-                  <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
-                  <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
-
-                  {/* FEES BREAKDOWN */}
-                  <div style={{ borderTop: '2px solid #000', marginTop: '10px', paddingTop: '8px' }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                       <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi} đ</b></div>
-                       <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                       <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi} đ</b></div>
-                       <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.nocu || 0} đ</b></div>
-                    </div>
-                  </div>
-
-                  {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
-                     <div style={{ marginTop: '5px', padding: '10px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                        {downloadingInvoice.phuthu.map((pt, i) => (
-                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>+ {pt.name || 'Phụ thu'}:</span>
-                              <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
+                        <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                           <div className="p-row">
+                              <span style={{ flex: 1 }}>- Học phí: <b>{downloadingInvoice?.hocphi} đ</b></span>
+                              <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></span>
                            </div>
-                        ))}
-                     </div>
-                   )}
+                           <div className="p-row">
+                              <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingInvoice?.giamhocphi} đ</b></span>
+                              <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{downloadingInvoice?.nocu || 0} đ</b></span>
+                           </div>
 
-                  {(downloadingInvoice?.actualMealRefund > 0 || downloadingInvoice?.actualTuitionRefund > 0) && (
-                     <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '10px' }}>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <div>Trừ tiền ăn ({downloadingInvoice?.studySummary?.nghiPhep || 0} ngày nghỉ phép):</div>
-                          <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                           {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                              <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                 {downloadingInvoice.phuthu.map((pt, i) => (
+                                    <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                       <span>+ {pt.name || 'Phụ thu'}:</span>
+                                       <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
+                                    </div>
+                                 ))}
+                              </div>
+                           )}
+
+                           {(downloadingInvoice?.actualMealRefund > 0 || downloadingInvoice?.actualTuitionRefund > 0) && (
+                              <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                 <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                    <span>Trừ ăn ({downloadingInvoice?.studySummary?.nghiPhep || 0} n): <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b></span>
+                                    <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b></span>
+                                 </div>
+                              </div>
+                           )}
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <div>Hoàn học phí ({downloadingInvoice?.studySummary?.maxConsecutive || 0} ngày nghỉ liên tiếp):</div>
-                          <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+
+                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
+                           <span style={{ fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
+                           <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
+                        </div>
+
+                        <div className="p-row" style={{ marginTop: '4px' }}>
+                           <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{downloadingInvoice?.dadong} đ</span></span>
+                           <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{downloadingInvoice?.conno} đ</span></span>
+                        </div>
+
+                        <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                           <span>HÌNH THỨC:</span>
+                           <span className="p-value">{downloadingInvoice?.hinhthuc}</span>
+                        </div>
+                        {downloadingInvoice?.ghichu && (
+                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                              <span>Ghi chú: {downloadingInvoice.ghichu}</span>
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="p-signatures">
+                        <div className="sig-box">
+                           <h4>Người nộp tiền</h4>
+                           <p>(Ký, họ tên)</p>
+                        </div>
+                        <div className="sig-box">
+                           <h4>Người lập phiếu</h4>
+                           <p>(Ký, họ tên)</p>
+                           <div className="sig-name">{downloadingInvoice?.nhanvien || cashier}</div>
                         </div>
                      </div>
-                  )}
-
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2px solid #000', borderBottom: '1.5px solid #000', padding: '6px 0', marginTop: '10px', marginBottom: '10px', fontSize: '14pt', background: '#f8fafc' }}>
-                    <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                    <div style={{ color: '#000' }}>{downloadingInvoice?.tongcong} đ</div>
                   </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14pt", marginBottom: '10px' }}>
-                     <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 950 }}>{downloadingInvoice?.dadong} đ</b></div>
-                     <div>Còn lại: <b style={{ color: '#dc2626', fontWeight: 950 }}>{downloadingInvoice?.conno} đ</b></div>
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                     Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.ghichu || ""}</b>
-                  </div>
-                  <div style={{ fontSize: '13pt' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
-
-               </div>
-
-               <div style={{ marginTop: 5, fontSize: "12pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, flex: 1 }}>
-                     (Xác nhận)
-                  </div>
-                  <div style={{ lineHeight: '1.4', textAlign: 'right' }}>
-                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.nhanvien || cashier}</b>
-                  </div>
-               </div>
+               ))}
             </div>
 
             {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '210mm', height: '148mm', background: '#fff', padding: '20px 35px', boxSizing: 'border-box', display: 'block', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               {/* HEADER */}
-               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* LEFT: Logo */}
-                  <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                  </div>
+            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+               {[1, 2].map(copyNum => (
+                  <div key={copyNum} className="receipt-copy">
+                     {/* HEADER */}
+                     <div className="p-header">
+                        <div style={{ width: '80px' }}>
+                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                        </div>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                        </div>
+                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                           <div style={{ fontWeight: 800 }}>Mã TB: {downloadingNotice?.mahd}</div>
+                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
+                        </div>
+                     </div>
 
-                  {/* CENTER: Info */}
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        {config?.tencongty || 'E-Skills Academy'}
-                     </h3>
-                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
-                  </div>
+                     <div className="p-title-area">
+                        <h2 style={{ fontSize: '15pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
+                     </div>
 
-                  {/* RIGHT: Invoice info */}
-                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                     <div>Mã TB: <b style={{ fontWeight: 950 }}>{downloadingNotice?.mahd}</b></div>
-                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
-                  </div>
-               </div>
+                     <div className="p-content">
+                        <div className="p-row">
+                           <span className="p-label">Họ tên:</span>
+                           <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingNotice?.tenhv}</span>
+                           <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                           <span className="p-value">{downloadingNotice?.tenlop}</span>
+                        </div>
+                        <div className="p-row">
+                           <span className="p-label">SĐT liên hệ:</span>
+                           <span className="p-value">{downloadingNotice?.sdt || ""}</span>
+                           <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                           <span className="p-value">{downloadingNotice?.thoiluong}</span>
+                        </div>
 
-               {/* TITLE */}
-               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "16pt", margin: "5px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                  THÔNG BÁO THU HỌC PHÍ
-               </div>
-
-               {/* INFO */}
-               <div style={{ fontSize: "12pt", lineHeight: "1.5", color: '#000' }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tenhv}</b></div>
-                     <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
-                  </div>
-
-                  <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
-                  <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
-
-                  {/* FEES BREAKDOWN */}
-                  <div style={{ borderTop: '2px solid #000', marginTop: '10px', paddingTop: '8px' }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                       <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi} đ</b></div>
-                       <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingNotice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></div>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                       <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi} đ</b></div>
-                       <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatCurrency(noCu)} đ</b></div>
-                    </div>
-                  </div>
-
-                  {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
-                     <div style={{ marginTop: '5px', padding: '10px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                        {downloadingNotice.phuthu.map((pt, i) => (
-                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>+ {pt.name || 'Phụ thu'}:</span>
-                              <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
+                        <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                           <div className="p-row">
+                              <span style={{ flex: 1 }}>- Học phí: <b>{downloadingNotice?.hocphi} đ</b></span>
+                              <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></span>
                            </div>
-                        ))}
+                           <div className="p-row">
+                              <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingNotice?.giamhocphi} đ</b></span>
+                              <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{formatCurrency(noCu)} đ</b></span>
+                           </div>
+
+                           {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                              <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                 {downloadingNotice.phuthu.map((pt, i) => (
+                                    <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                       <span>+ {pt.name || 'Phụ thu'}:</span>
+                                       <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
+                                    </div>
+                                 ))}
+                              </div>
+                           )}
+
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span>Trừ ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} n): <b>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b></span>
+                                 <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#000', color: '#fff !important', borderRadius: '4px' }}>
+                           <span style={{ color: '#fff !important', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
+                           <span style={{ marginLeft: 'auto', color: '#fff !important', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
+                        </div>
+
+                        <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
+                           <span>HÌNH THỨC:</span>
+                           <span className="p-value">{downloadingNotice?.hinhthuc}</span>
+                        </div>
+                        {downloadingNotice?.ghichu && (
+                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                              <span>Ghi chú: {downloadingNotice.ghichu}</span>
+                           </div>
+                        )}
+                        <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
+                           * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
+                        </div>
                      </div>
-                   )}
 
-                  <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '10px' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                       <div>Trừ tiền ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} ngày nghỉ phép):</div>
-                       <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b>
+                     <div className="p-signatures">
+                        <div className="sig-box">
+                           <h4>Người nộp tiền</h4>
+                           <p>(Ký, họ tên)</p>
+                        </div>
+                        <div className="sig-box">
+                           <h4>Nhà trường</h4>
+                           <p>(Ký, đóng dấu)</p>
+                           <div className="sig-name">{cashier}</div>
+                        </div>
                      </div>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                       <div>Hoàn học phí ({downloadingNotice?.studySummary?.maxConsecutive || 0} ngày nghỉ liên tiếp):</div>
-                       <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b>
-                     </div>
                   </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2px solid #000', borderBottom: '1.5px solid #000', padding: '6px 0', marginBottom: '10px', fontSize: '14pt', background: '#f8fafc' }}>
-                    <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                    <div style={{ color: '#000' }}>{downloadingNotice?.tongcong} đ</div>
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                     Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu || ""}</b>
-                  </div>
-                  <div style={{ fontSize: '14pt' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hinhthuc || "..."}</b></div>
-
-               </div>
-
-               <div style={{ marginTop: 5, fontSize: "12pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, flex: 1 }}>
-                     (Xác nhận)
-                  </div>
-                  <div style={{ lineHeight: '1.4', textAlign: 'right' }}>
-                     Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
-                  </div>
-               </div>
+               ))}
             </div>
          </div>
 
