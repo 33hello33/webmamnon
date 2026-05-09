@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, insertLog } from '../supabase';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import {
   Users, User, Search, Download, Calendar, Filter, X, CheckSquare, Save, Loader2, BookOpen
 } from 'lucide-react';
@@ -419,33 +419,114 @@ export default function AttendanceManager({ students, showMessage }) {
   const listItems = getListItems();
 
   const handleExport = () => {
-    if (aggregatedData.length === 0) return showMessage('error', 'Không có dữ liệu điểm danh để xuất');
-    const ws = XLSX.utils.json_to_sheet(aggregatedData.map((d, index) => {
-      const rowData = {
-        "STT": index + 1,
-        "Mã HS": d.mahv,
-        "Tên HS": d.tenhv,
-        "Tổng Kết (CM/P/KP)": `${d.coMat}/${d.nghiPhep}/${d.khongPhep}`
-      };
+    if (aggregatedData.length === 0) {
+      return showMessage('error', 'Không có dữ liệu điểm danh để xuất');
+    }
+
+    const data = [];
+
+    // Header
+    const headers = [
+      "STT",
+      "Mã HS",
+      "Tên HS",
+      "Tổng Kết (CM/P/KP)",
+      ...uniqueDates.map(date =>
+        new Date(date).toLocaleDateString('vi-VN')
+      )
+    ];
+
+    data.push(headers);
+
+    // Rows
+    aggregatedData.forEach((d, index) => {
+      const row = [
+        index + 1,
+        d.mahv,
+        d.tenhv,
+        `${d.coMat}/${d.nghiPhep}/${d.khongPhep}`
+      ];
 
       uniqueDates.forEach(date => {
-        const formattedDate = new Date(date).toLocaleDateString('vi-VN');
         const st = d.dailyRecords[date];
-        let strSt = '-';
+        let val = '-';
+
         if (st) {
           const s = st.toLowerCase().trim();
-          if (s.includes('có mặt')) strSt = 'CM';
-          else if (s.includes('nghỉ phép') && !s.includes('không')) strSt = 'P';
-          else if (s.includes('không phép')) strSt = 'K';
-          else strSt = st;
+
+          if (s.includes('có mặt')) val = 'CM';
+          else if (s.includes('nghỉ phép') && !s.includes('không')) val = 'P';
+          else if (s.includes('không phép')) val = 'KP';
         }
-        rowData[formattedDate] = strSt;
+
+        row.push(val);
       });
-      return rowData;
-    }));
+
+      data.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Style header
+    headers.forEach((_, colIndex) => {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+
+      if (!ws[cellRef]) return;
+
+      ws[cellRef].s = {
+        font: {
+          bold: true,
+          color: { rgb: "FFFFFF" }
+        },
+        fill: {
+          fgColor: { rgb: "4F46E5" }
+        },
+        alignment: {
+          horizontal: "center",
+          vertical: "center"
+        }
+      };
+    });
+
+    // Style attendance cells
+    for (let r = 1; r < data.length; r++) {
+      for (let c = 4; c < headers.length; c++) {
+
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+
+        if (!ws[cellRef]) continue;
+
+        const val = ws[cellRef].v;
+
+        let color = "000000";
+
+        if (val === '+') color = "16A34A"; // xanh
+        else if (val === 'P') color = "D97706"; // cam
+        else if (val === 'KP') color = "DC2626"; // đỏ
+
+        ws[cellRef].s = {
+          font: {
+            bold: true,
+            color: { rgb: color }
+          },
+          alignment: {
+            horizontal: "center"
+          }
+        };
+      }
+    }
+
+    // Auto width
+    ws['!cols'] = headers.map(() => ({ wch: 14 }));
+
     const wb = XLSX.utils.book_new();
+
     XLSX.utils.book_append_sheet(wb, ws, "DiemDanh");
-    XLSX.writeFile(wb, `ThongKe_DiemDanh_${selectedId || 'BaoCao'}.xlsx`);
+
+    XLSX.writeFile(
+      wb,
+      `ThongKe_DiemDanh_${selectedId || 'BaoCao'}.xlsx`
+    );
   };
 
   const renderStatus = (status, remark) => {
