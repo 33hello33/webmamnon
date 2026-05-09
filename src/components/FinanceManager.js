@@ -797,14 +797,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
          mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
       } else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') {
-         headers = ['Mã Bill', 'Ngày bán', 'Khách hàng', 'Sản phẩm', 'Chiết khấu', 'Tổng thu', 'Lợi nhuận', 'Hình thức', 'Người bán'];
+         headers = ['Mã Bill', 'Ngày bán', 'Khách hàng', 'Sản phẩm', 'Chiết khấu', 'Tổng thu', 'Đã đóng', 'Còn nợ', 'Lợi nhuận', 'Hình thức', 'Người bán'];
          mappedData = data.map(i => {
             let spSummary = i.hanghoa || '';
             if (spSummary.includes('Tên Hàng')) {
                const parsed = parseNoidung(spSummary);
                spSummary = parsed.rows.map(r => `${r[1]} (x${r[3]})`).join('; ');
             }
-            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
+            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.dadong || i.tongcong), fCur(i.conno || 0), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
          });
       } else {
          alert('Chưa hỗ trợ xuất cho tab này'); return;
@@ -1330,6 +1330,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th>Danh Mục Sp</th>
                               <th>Chiết Khấu</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Thu <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right">Đã Đóng</th>
+                              <th className="text-right">Còn Nợ</th>
                               <th className="text-right">Biên Lợi Nhuận</th>
                               <th>Hình thức</th>
                               <th>Người Bán</th>
@@ -1345,10 +1347,19 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{formatDate(r.ngaylap)}</td>
                                     <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
                                     <td className="fm-desc" style={{ maxWidth: '220px' }}>
-                                       {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\\r\\n|\\n|\\r/).filter(Boolean).length - 1} Loại SP (Bấm in để xem)` : r.hanghoa}
+                                       {(function() {
+                                          if (!r.hanghoa) return '';
+                                          if (r.hanghoa.includes('Tên Hàng')) {
+                                             const parsed = parseNoidung(r.hanghoa);
+                                             return parsed.rows.map(row => `${row[1]} (x${row[3]})`).join('; ');
+                                          }
+                                          return r.hanghoa;
+                                       })()}
                                     </td>
                                     <td>{fCur(r.chietkhau)}</td>
                                     <td className="text-right font-bold text-success">+{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold text-success">{fCur(r.dadong || r.tongcong)}</td>
+                                    <td className="text-right font-bold text-danger">{fCur(r.conno || 0) !== '0' ? fCur(r.conno || 0) : ''}</td>
                                     <td className="text-right font-bold text-primary">{fCur(r.loinhuan)}</td>
                                     <td>{r.hinhthuc}</td>
                                     <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
@@ -1389,9 +1400,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {(function () {
                                           if (!r.hanghoa) return '0 loại SP';
                                           if (!r.hanghoa.includes('Tên Hàng')) return r.hanghoa;
-                                          // Split by real newline and carriage return
-                                          const rows = r.hanghoa.split(/\r?\n/).filter(line => line.trim() !== "");
-                                          return `${rows.length > 0 ? rows.length - 1 : 0} loại SP`;
+                                          const parsed = parseNoidung(r.hanghoa);
+                                          return parsed.rows.map(row => `${row[1]} (x${row[3]})`).join('; ');
                                        })()}
                                     </span>
                                  </div>
@@ -1399,6 +1409,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <span>Tổng thu:</span>
                                     <strong className="text-success">+{fCur(r.tongcong)} ₫</strong>
                                  </div>
+                                 <div className="fm-card-row">
+                                    <span>Đã đóng:</span>
+                                    <strong className="text-success">+{fCur(r.dadong || r.tongcong)} ₫</strong>
+                                 </div>
+                                 {pCur(r.conno || 0) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Còn nợ:</span>
+                                       <strong className="text-danger">{fCur(r.conno || 0)} ₫</strong>
+                                    </div>
+                                 )}
                                  <div className="fm-card-actions">
                                     {!deleted ? (
                                        <>
