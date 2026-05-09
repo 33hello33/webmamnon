@@ -39,6 +39,7 @@ export default function AttendanceManager({ students, showMessage }) {
   const [attStudents, setAttStudents] = useState([]);
   const [attRecords, setAttRecords] = useState({});
   const [lessonContent, setLessonContent] = useState('');
+  const [markingClassId, setMarkingClassId] = useState(null);
 
   const [todayAttendance, setTodayAttendance] = useState([]);
   const today = new Date().toISOString().split('T')[0];
@@ -79,23 +80,32 @@ export default function AttendanceManager({ students, showMessage }) {
   // Fetch student marking data if in marking mode
   useEffect(() => {
     const loadMarkingData = async () => {
-      if (!markingMode || !selectedId || viewMode !== 'class') { setAttStudents([]); setAttRecords({}); return; }
+      if (!markingMode || !selectedId) { setAttStudents([]); setAttRecords({}); return; }
+      
+      const targetMalop = viewMode === 'class' ? selectedId : markingClassId;
+      if (!targetMalop) { setAttStudents([]); setAttRecords({}); return; }
+
       setLoading(true);
       try {
-        // Lấy tất cả học sinh có mã lớp tương ứng (không lọc trạng thái ở đây)
-        const cluster = students.filter(s => {
-          const smalop = (s.malop || '').toString().trim().toLowerCase();
-          const selId = (selectedId || '').toString().trim().toLowerCase();
-          let matches = (smalop === selId);
-          if (!matches && s.malop_list) {
-            if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
-            else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
-          }
-          return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
-        });
+        let cluster = [];
+        if (viewMode === 'class') {
+          cluster = students.filter(s => {
+            const smalop = (s.malop || '').toString().trim().toLowerCase();
+            const selId = (selectedId || '').toString().trim().toLowerCase();
+            let matches = (smalop === selId);
+            if (!matches && s.malop_list) {
+              if (Array.isArray(s.malop_list)) matches = s.malop_list.some(m => (m || '').toString().trim().toLowerCase() === selId);
+              else if (typeof s.malop_list === 'string') matches = s.malop_list.toLowerCase().includes(selId);
+            }
+            return matches && (s.trangthai || '').trim().toLowerCase() !== 'đã nghỉ';
+          });
+        } else {
+          const std = students.find(s => s.mahv === selectedId);
+          if (std) cluster = [std];
+        }
         setAttStudents(cluster);
 
-        const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', selectedId).eq('ngay', attDate);
+        const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', targetMalop).eq('ngay', attDate);
         const rMap = {};
         cluster.forEach(student => {
           const existing = (rec || []).find(r => r.mahv === student.mahv);
@@ -107,27 +117,28 @@ export default function AttendanceManager({ students, showMessage }) {
         });
         setAttRecords(rMap);
         // Load lesson content
-        const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
+        const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', targetMalop).eq('ngay', attDate).maybeSingle();
         setLessonContent(nd ? nd.noidungday : '');
       } catch (err) { console.error(err); }
       setLoading(false);
     };
     loadMarkingData();
-  }, [markingMode, selectedId, attDate, viewMode, students]);
+  }, [markingMode, selectedId, attDate, viewMode, students, markingClassId]);
 
   const handleUpdateMarkRecord = (mahv, field, value) => {
     setAttRecords(prev => ({ ...prev, [mahv]: { ...(prev[mahv] || {}), [field]: value } }));
   };
 
   const handleSaveAttendance = async () => {
-    if (!selectedId) return showMessage('error', 'Chưa chọn lớp!');
+    const targetMalop = viewMode === 'class' ? selectedId : markingClassId;
+    if (!targetMalop) return showMessage('error', 'Chưa chọn lớp!');
     setLoading(true);
     try {
       for (const st of attStudents) {
         const rec = attRecords[st.mahv];
         if (!rec || !rec.trangthai) continue;
         const payload = {
-          mahv: st.mahv, malop: selectedId, ngay: attDate,
+          mahv: st.mahv, malop: targetMalop, ngay: attDate,
           trangthai: rec.trangthai, ghichu: rec.ghichu || '',
           manv: currentUser?.manv || currentUser?.username || 'admin'
         };
@@ -135,19 +146,19 @@ export default function AttendanceManager({ students, showMessage }) {
         else await supabase.from('tbl_diemdanh').insert([payload]);
       }
       // Save lesson content
-      const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', selectedId).eq('ngay', attDate).maybeSingle();
+      const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', targetMalop).eq('ngay', attDate).maybeSingle();
       if (exists) await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-      else await supabase.from('tbl_noidungday').insert([{ malop: selectedId, ngay: attDate, noidungday: lessonContent }]);
+      else await supabase.from('tbl_noidungday').insert([{ malop: targetMalop, ngay: attDate, noidungday: lessonContent }]);
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
-      const className = classes.find(c => c.malop === selectedId)?.tenlop || selectedId;
+      const className = classes.find(c => c.malop === targetMalop)?.tenlop || targetMalop;
       const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
       insertLog(logDesc);
       // Update the report data too
-      const { data: fresh } = await supabase.from('tbl_diemdanh').select('*').eq('malop', selectedId).gte('ngay', attDate).lte('ngay', attDate);
+      const { data: fresh } = await supabase.from('tbl_diemdanh').select('*').eq('malop', targetMalop).gte('ngay', attDate).lte('ngay', attDate);
       if (fresh) {
         setAttendanceRecords(prev => {
-          const filtered = prev.filter(r => !(r.malop === selectedId && r.ngay === attDate));
+          const filtered = prev.filter(r => !(r.malop === targetMalop && r.ngay === attDate));
           return [...filtered, ...fresh];
         });
       }
@@ -159,7 +170,29 @@ export default function AttendanceManager({ students, showMessage }) {
   useEffect(() => {
     setSelectedId(null);
     setSearchTerm('');
+    setMarkingMode(false);
+    setMarkingClassId(null);
   }, [viewMode]);
+
+  // Sync markingClassId
+  useEffect(() => {
+    if (viewMode === 'class') {
+      setMarkingClassId(selectedId);
+    } else if (viewMode === 'student' && selectedId) {
+      const std = students.find(s => s.mahv === selectedId);
+      if (std) {
+        let list = [];
+        if (std.malop) list.push(std.malop);
+        if (Array.isArray(std.malop_list)) list = [...new Set([...list, ...std.malop_list])];
+        
+        if (list.length === 1) {
+          if (markingClassId !== list[0]) setMarkingClassId(list[0]);
+        } else if (list.length > 1 && !markingClassId) {
+          setMarkingClassId(list[0]);
+        }
+      }
+    }
+  }, [selectedId, viewMode, students, markingClassId]);
 
   // Fetch attendance from tbl_diemdanh
   useEffect(() => {
@@ -616,9 +649,36 @@ export default function AttendanceManager({ students, showMessage }) {
                   <div className="marking-portal animate-fade-in" style={{ padding: '0.5rem' }}>
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                       <div style={{ flex: 1, minWidth: '150px' }}>
-                        <label className="portal-att-label">Ngày Chấm Công</label>
+                        <label className="portal-att-label">Ngày Điểm Danh</label>
                         <input type="date" value={attDate} onChange={e => setAttDate(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px' }} />
                       </div>
+                      {viewMode === 'student' && (() => {
+                        const std = students.find(s => s.mahv === selectedId);
+                        let list = [];
+                        if (std?.malop) list.push(std.malop);
+                        if (Array.isArray(std?.malop_list)) list = [...new Set([...list, ...std.malop_list])];
+                        
+                        if (list.length > 1) {
+                          return (
+                            <div style={{ flex: 1, minWidth: '180px' }}>
+                              <label className="portal-att-label">Chọn Lớp Để Điểm Danh</label>
+                              <select 
+                                value={markingClassId || ''} 
+                                onChange={e => setMarkingClassId(e.target.value)}
+                                style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px' }}
+                              >
+                                <option value="">-- Chọn lớp --</option>
+                                {list.map(ml => (
+                                  <option key={ml} value={ml}>
+                                    {classes.find(c => c.malop === ml)?.tenlop || ml}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       <div style={{ flex: 2, minWidth: '200px' }}>
                         <label className="portal-att-label">Nội dung dạy buổi hôm nay</label>
                         <textarea placeholder="Kiến thức cũ, phần mới, bài tập..." value={lessonContent} onChange={e => setLessonContent(e.target.value)} rows="1" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px', resize: 'vertical' }} />
@@ -664,7 +724,7 @@ export default function AttendanceManager({ students, showMessage }) {
                       }) : (
                         <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b', background: '#f8fafc', borderRadius: '12px', border: '2px dashed #e2e8f0' }}>
                           <BookOpen size={30} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-                          <p>Vui lòng chọn lớp để bắt đầu chấm công</p>
+                          <p>Vui lòng chọn {viewMode === 'class' ? 'lớp' : 'học sinh'} để bắt đầu điểm danh</p>
                         </div>
                       )}
                     </div>
