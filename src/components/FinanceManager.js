@@ -286,7 +286,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
-         title: 'Xác nhận sửa hóa đơn',
+         title: 'Xác nhận sửa phiếu thu HP',
          message: 'Mọi thay đổi về số tiền sẽ ảnh hưởng đến báo cáo tài chính và công nợ của học sinh. Bạn có chắc chắn muốn cập nhật không?',
          actionType: 'EDIT_HOADON'
       });
@@ -479,7 +479,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          if (error) {
             alert("Lỗi khi cập nhật hóa đơn: " + error.message);
          } else {
-            const detailDesc = `[SỬA HÓA ĐƠN] Mã: ${r.mahd} | Tổng: ${fCur(r.tongcong)} | Học sinh: ${hvMap[r.mahv]?.tenhv || '_'}`;
+            const detailDesc = `[SỬA PHIẾU THU HP] Mã: ${r.mahd} | Tổng: ${fCur(r.tongcong)} | Học sinh: ${hvMap[r.mahv]?.tenhv || '_'}`;
             insertLog(detailDesc);
             setEditInvoiceModal({ isOpen: false, data: null, password: '' });
             setDeletePassword('');
@@ -790,7 +790,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          headers = ['Mã phiếu', 'Ngày lập', 'Loại', 'Hạng mục', 'Mô tả', 'Số tiền', 'Hình thức', 'Nhân viên'];
          mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv || i.nhanvien]);
       } else if (activeSubTab === 'hoadon') {
-         headers = ['Mã HĐ', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
+         headers = ['Số phiếu', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
          mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.dadong), fCur(i.thukhac), fCur(i.dadong), fCur(i.conno)]);
       } else if (activeSubTab === 'nhapkho') {
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
@@ -1125,7 +1125,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <table className="fm-table">
                         <thead>
                            <tr>
-                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã HĐ <SortIcon columnKey="mahd" /></th>
+                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Số phiếu <SortIcon columnKey="mahd" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
                               <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học sinh <SortIcon columnKey="mahv" /></th>
                               <th>Tên lớp</th>
@@ -1161,8 +1161,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {!deleted ? (
                                           <>
                                              <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
-                                             <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
-                                             <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
+                                             <button title="Sửa phiếu thu" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
+                                             <button title="Hủy phiếu thu" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
                                           </>
                                        ) : (
                                           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
@@ -1539,7 +1539,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('phieuchi')} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-thukhac"><Activity size={24} /></div>
                   <div className="fm-stat-info">
-                     <span className="fm-stat-label">Phụ thu</span>
+                     <span className="fm-stat-label">Thu khác</span>
                      <span className="fm-stat-value text-primary">{fCur(stats.thuKhac)}</span>
                   </div>
                </div>

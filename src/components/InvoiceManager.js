@@ -1198,7 +1198,7 @@ export default function InvoiceManager() {
                <div className="im-empty animate-fade-in">
                   <Receipt size={64} className="text-muted" style={{ opacity: 0.3 }} />
                   <h3>Chưa Chọn Học Sinh</h3>
-                  <p>Vui lòng nhấp vào một học sinh từ danh sách bên trái để tạo hóa đơn thanh toán.</p>
+                  <p>Vui lòng nhấp vào một học sinh từ danh sách bên trái để thực hiện thu học phí.</p>
                </div>
             ) : (
                <div className="invoice-details animate-fade-in">
@@ -1525,7 +1525,7 @@ export default function InvoiceManager() {
                            </button>
                            <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
                               <Receipt size={18} />
-                              {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}
+                              {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Thu Học Phí'}
                            </button>
                         </div>
                      </div>
@@ -1605,12 +1605,12 @@ export default function InvoiceManager() {
 
                      {/* RIGHT: Invoice info */}
                      <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                        <div>Số phiếu: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
                         <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
                      </div>
                   </div>
                   <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     BIÊN LAI THU HỌC PHÍ
+                     PHIẾU THU HỌC PHÍ
                   </div>
                   <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
@@ -1684,7 +1684,7 @@ export default function InvoiceManager() {
                      </div>
                   </div>
                   <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
-                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
+                     Lưu ý: Phiếu thu này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
                   </div>
                </div>
             </div>
@@ -1812,7 +1812,7 @@ export default function InvoiceManager() {
                <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
                   <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
                   <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>
-                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN
+                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ BIÊN LAI
                   </p>
                   <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
                   <div style={{ marginTop: '15px', textAlign: 'center' }}>

@@ -45,7 +45,7 @@ const ALL_TABS = [
     icon: Wallet,
     subTabs: [
       { id: 'phieuchi', label: 'QL phiếu thu/chi' },
-      { id: 'hoadon', label: 'QL hóa đơn' },
+      { id: 'hoadon', label: 'QL phiếu thu HP' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
     ]
@@ -62,7 +62,7 @@ const ALL_TABS = [
       { id: 'leave_list', label: 'Danh sách nghỉ' }
     ]
   },
-  { id: 'invoices', label: 'Xuất hóa đơn', icon: Receipt },
+  { id: 'invoices', label: 'Thu học phí', icon: Receipt },
   {
     id: 'sales',
     label: 'Bán hàng',
@@ -302,7 +302,7 @@ function Dashboard() {
                                 const tableNames = {
                                   'tbl_hanghoa': 'Sản phẩm/Hàng hóa',
                                   'tbl_billhanghoa': 'Hóa đơn bán hàng',
-                                  'tbl_hd': 'Hóa đơn học phí',
+                                  'tbl_hd': 'Phiếu thu HP',
                                   'tbl_nv': 'Nhân viên',
                                   'tbl_hv': 'Học viên',
                                   'tbl_lop': 'Lớp học',

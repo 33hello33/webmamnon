@@ -117,8 +117,8 @@ export default function DebtManager() {
       const oldDebtVal = typeof selectedDebt.conno === 'number' ? selectedDebt.conno : parseInt(String(selectedDebt.conno).replace(/,/g, ''), 10) || 0;
       const newConno = oldDebtVal - payVal;
 
-      const tableName = selectedDebt.loai === 'Hóa Đơn' ? 'tbl_hd' : 'tbl_billhanghoa';
-      const idField = selectedDebt.loai === 'Hóa Đơn' ? 'mahd' : 'mabill';
+      const tableName = selectedDebt.loai === 'Học Phí' ? 'tbl_hd' : 'tbl_billhanghoa';
+      const idField = selectedDebt.loai === 'Học Phí' ? 'mahd' : 'mabill';
 
       const { error: updateErr } = await supabase.from(tableName)
         .update({ conno: '0' })
@@ -250,7 +250,7 @@ export default function DebtManager() {
               tenhv: std.tenhv || 'Không rõ',
               conno: hd.conno,
               tenlop: hd.tenlop || '',
-              loai: 'Hóa Đơn',
+              loai: 'Học Phí',
               mahd: hd.mahd
             });
           }
@@ -440,7 +440,7 @@ export default function DebtManager() {
                         <span className="student-name">{d.tenhv}</span>
                         <span className="student-id">#{d.mahv}</span>
                       </div>
-                      <span className={`status-badge ${d.loai === 'Hóa Đơn' ? 'success' : 'primary'}`}>
+                      <span className={`status-badge ${d.loai === 'Học Phí' ? 'success' : 'primary'}`}>
                         {d.loai}
                       </span>
                     </div>
@@ -556,7 +556,7 @@ export default function DebtManager() {
               <span style={{ fontWeight: 'bold' }}>{selectedDebt.tenlop}</span>
             </div>
             <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748b' }}>Mã HĐ nợ:</span>
+              <span style={{ color: '#64748b' }}>Số phiếu nợ:</span>
               <span style={{ fontWeight: 'bold', color: '#ef4444' }}>{selectedDebt.mahd}</span>
             </div>
             <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
@@ -648,7 +648,7 @@ export default function DebtManager() {
                 <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
               </div>
               <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingPayment?.mahd}</b></div>
+                <div>Số phiếu: <b style={{ fontWeight: 950 }}>{downloadingPayment?.mahd}</b></div>
                 <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingPayment ? new Date(downloadingPayment.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
               </div>
             </div>
@@ -704,7 +704,7 @@ export default function DebtManager() {
           <div className="modal-content animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
             <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
             <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>
-              NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN
+              NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ BIÊN LAI
             </p>
             <img src={previewImg} alt="Preview Receipt" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px' }} />
             <div style={{ marginTop: '15px', textAlign: 'center' }}>

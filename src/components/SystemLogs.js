@@ -20,7 +20,7 @@ export default function SystemLogs() {
   const tableNames = {
     'tbl_hanghoa': 'Sản phẩm/Kho',
     'tbl_billhanghoa': 'Đơn hàng POS',
-    'tbl_hd': 'Hóa đơn học phí',
+    'tbl_hd': 'Phiếu thu học phí',
     'tbl_nv': 'Nhân viên',
     'tbl_hv': 'Học viên',
     'tbl_lop': 'Lớp học',
