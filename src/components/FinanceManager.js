@@ -106,6 +106,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
    const [activeDateRangeStr, setActiveDateRangeStr] = useState('');
    const [hinhThucFilter, setHinhThucFilter] = useState('');
+   const [loaiPhieuFilter, setLoaiPhieuFilter] = useState('');
    const [stats, setStats] = useState({
       phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0
    });
@@ -991,6 +992,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          });
       }
 
+      if (activeSubTab === 'phieuchi' && loaiPhieuFilter) {
+         filteredData = filteredData.filter(item => {
+            const lp = item.loaiphieu || 'Chi';
+            return lp === loaiPhieuFilter;
+         });
+      }
+
       if (sortConfig.key) {
          filteredData.sort((a, b) => {
             const isDelA = isDeleted(a);
@@ -1456,6 +1464,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         {activeDateRangeStr}
                      </span>
                   )}
+                  {activeSubTab === 'phieuchi' && (
+                     <div className="fm-loaiphieu-filter">
+                        <select value={loaiPhieuFilter} onChange={e => setLoaiPhieuFilter(e.target.value)} style={{ padding: '0.45rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                           <option value="">Tất cả loại phiếu</option>
+                           <option value="Chi">Phiếu chi</option>
+                           <option value="Thu">Thu khác</option>
+                        </select>
+                     </div>
+                  )}
                   <div className="fm-hinhthuc-filter">
                      <select value={hinhThucFilter} onChange={e => setHinhThucFilter(e.target.value)} style={{ padding: '0.45rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                         <option value="">Tất cả hình thức</option>
@@ -1508,35 +1525,35 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             )}
 
             <div className="fm-stats-grid">
-               <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('phieuchi')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuchi'); setLoaiPhieuFilter('Chi'); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-chi"><TrendingDown size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Phiếu chi</span>
                      <span className="fm-stat-value text-danger">{fCur(stats.phieuChi)}</span>
                   </div>
                </div>
-               <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('nhapkho')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('nhapkho'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-nhap"><Package size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Nhập kho</span>
                      <span className="fm-stat-value" style={{ color: '#ec4899' }}>{fCur(stats.nhapKho)}</span>
                   </div>
                </div>
-               <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('hoadon')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('hoadon'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-hocphi"><GraduationCap size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu học phí</span>
                      <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
                   </div>
                </div>
-               <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('billhang')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('billhang'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-banhang"><ShoppingCart size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu bán hàng</span>
                      <span className="fm-stat-value" style={{ color: '#14b8a6' }}>{fCur(stats.thuBanHang)}</span>
                   </div>
                </div>
-               <div className="fm-stat-card" onClick={() => setActiveSubTab && setActiveSubTab('phieuchi')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuchi'); setLoaiPhieuFilter('Thu'); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-thukhac"><Activity size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu khác</span>
