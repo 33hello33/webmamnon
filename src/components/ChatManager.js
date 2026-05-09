@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { uploadToGDrive, deleteFromGDrive } from '../utils/googleDrive';
+import { uploadToR2, deleteFromR2 } from '../utils/cloudflareR2';
 import {
   MessageSquare,
   Send,
@@ -421,19 +421,15 @@ const ChatManager = ({ currentUser }) => {
       }
 
       let finalUrl = '';
-      if (config.gdrive_enabled) {
-        const gResult = await uploadToGDrive(
+      if (config.r2_enabled) {
+        finalUrl = await uploadToR2(
           fileToUpload,
-          config.gdrive_folder_id?.trim(),
-          config.gdrive_client_id,
-          config.gdrive_api_key,
-          config.gdrive_auth_type,
-          config.gdrive_service_json
+          config.r2_endpoint,
+          config.r2_access_key_id,
+          config.r2_secret_access_key,
+          config.r2_bucket_name,
+          config.r2_public_url
         );
-
-        finalUrl = type === 'image' 
-          ? `https://drive.google.com/thumbnail?id=${gResult.id}&sz=w1000` 
-          : `https://drive.google.com/file/d/${gResult.id}/view`;
       } else {
         const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
         const folder = type === 'image' ? 'chat-images' : 'chat-files';
@@ -519,28 +515,23 @@ const ChatManager = ({ currentUser }) => {
     
     if (action === 'delete') {
       if (window.confirm('Bạn có muốn xóa tin nhắn này?')) {
-        // 1. Delete from GDrive if applicable
-        if (config.gdrive_enabled && (message.image_url || message.file_url)) {
+        // 1. Delete from R2 if applicable
+        if (config.r2_enabled && (message.image_url || message.file_url)) {
           const url = message.image_url || message.file_url;
-          let driveId = '';
-          if (url.includes('id=')) driveId = url.split('id=')[1]?.split('&')[0];
-          else if (url.includes('/d/')) driveId = url.split('/d/')[1]?.split('/')[0];
-          
-          if (driveId) {
-            try {
-              await deleteFromGDrive(
-                driveId,
-                config.gdrive_client_id,
-                config.gdrive_api_key,
-                config.gdrive_auth_type,
-                config.gdrive_service_json
-              );
-              console.log('Deleted file from Drive:', driveId);
-            } catch (err) {
-              console.warn('Could not delete file from Drive:', err);
-            }
+          try {
+            await deleteFromR2(
+              url,
+              config.r2_endpoint,
+              config.r2_access_key_id,
+              config.r2_secret_access_key,
+              config.r2_bucket_name,
+              config.r2_public_url
+            );
+            console.log('Deleted file from R2:', url);
+          } catch (err) {
+            console.warn('Could not delete file from R2:', err);
           }
-        } else if (!config.gdrive_enabled && (message.image_url || message.file_url)) {
+        } else if (!config.r2_enabled && (message.image_url || message.file_url)) {
           // Delete from Supabase Storage
           const url = message.image_url || message.file_url;
           if (url.includes('/storage/v1/object/public/assets/')) {
@@ -653,14 +644,12 @@ const ChatManager = ({ currentUser }) => {
 
       // Handle Uploads
       if (announcementFiles.image) {
-         const res = await uploadToGDrive(announcementFiles.image, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
-         imageUrl = `https://drive.google.com/thumbnail?id=${res.id}&sz=w1000`;
+         imageUrl = await uploadToR2(announcementFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
          fileName = announcementFiles.image.name;
          mimeType = announcementFiles.image.type;
       }
       if (announcementFiles.file) {
-         const res = await uploadToGDrive(announcementFiles.file, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
-         fileUrl = `https://drive.google.com/file/d/${res.id}/view`;
+         fileUrl = await uploadToR2(announcementFiles.file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
          fileName = announcementFiles.file.name;
          mimeType = announcementFiles.file.type;
       }

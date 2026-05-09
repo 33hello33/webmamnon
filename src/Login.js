@@ -5,7 +5,7 @@ import './components/ParentPremiumUI.css';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
 import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download, Image, FileText, CalendarX, Clock, Pill, UserPlus, Paperclip, Send, MoreVertical, Trash2, Phone, ArrowLeft, MoreHorizontal, Bell, MessageSquare, Heart, Activity, UserMinus, CreditCard, Wallet, CalendarCheck, UserCheck, MessageCircle, Newspaper, Utensils, QrCode, Settings, Home, FileStack } from 'lucide-react';
-import { uploadToGDrive } from './utils/googleDrive';
+import { uploadToR2 } from './utils/cloudflareR2';
 import { compressImage } from './utils/imageUtils';
 
 function Login() {
@@ -506,18 +506,15 @@ function Login() {
          }
 
          let finalUrl = '';
-         if (config.gdrive_enabled) {
-            const gResult = await uploadToGDrive(
+         if (config.r2_enabled) {
+            finalUrl = await uploadToR2(
                file,
-               config.gdrive_folder_id?.trim(),
-               config.gdrive_client_id,
-               '', // apiKey
-               config.gdrive_auth_type || 'oauth',
-               config.gdrive_service_json
+               config.r2_endpoint,
+               config.r2_access_key_id,
+               config.r2_secret_access_key,
+               config.r2_bucket_name,
+               config.r2_public_url
             );
-            finalUrl = type === 'image'
-               ? `https://drive.google.com/thumbnail?id=${gResult.id}&sz=w1000`
-               : `https://drive.google.com/file/d/${gResult.id}/view`;
          } else {
             const fileName = `${parentData.student.mahv}_${Date.now()}_${file.name}`;
             const folder = type === 'image' ? 'chat-images' : 'chat-files';

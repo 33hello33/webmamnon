@@ -84,39 +84,7 @@ const ConfigManager = () => {
     }
   }, [config]);
 
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    if (code) {
-      handleExchangeCode(code);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
 
-  const handleExchangeCode = async (code) => {
-    const savedClientId = localStorage.getItem('gdrive_pending_client_id');
-    if (!savedClientId) return;
-
-    setLoading(true);
-    setMsg({ type: 'info', text: 'Đang xác thực với Google...' });
-    try {
-      const { data, error } = await supabase.functions.invoke('super-task', {
-        body: { 
-          action: 'exchange-code',
-          code,
-          client_id: savedClientId,
-          redirect_uri: window.location.origin
-        }
-      });
-      if (error) throw error;
-      setMsg({ type: 'success', text: 'Kết nối Google Drive thành công! Refresh Token đã được lưu an toàn.' });
-      localStorage.removeItem('gdrive_pending_client_id');
-    } catch (err) {
-      setMsg({ type: 'error', text: 'Lỗi xác thực Google: ' + err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (!formData) return <div className="loading-state"><Loader2 className="spinner" /> Đang tải cấu hình...</div>;
 
@@ -144,19 +112,7 @@ const ConfigManager = () => {
 
       if (error) throw error;
 
-      // Sync folder ID to function logic if needed
-      if (payload.gdrive_enabled) {
-        try {
-          await supabase.functions.invoke('super-task', {
-            body: {
-              action: 'sync-config',
-              FOLDER_ID: payload.gdrive_folder_id
-            }
-          });
-        } catch (syncErr) {
-          console.warn('Sync failed:', syncErr);
-        }
-      }
+
 
       setMsg({ type: 'success', text: 'Đã lưu cấu hình hệ thống thành công!' });
       insertLog(`[CẤU HÌNH] Cập nhật tham số hệ thống`);
@@ -266,17 +222,7 @@ const ConfigManager = () => {
     setFormData({ ...formData, trutienan: newTiers });
   };
 
-  const connectGoogle = () => {
-    const client_id = formData.gdrive_client_id;
-    if (!client_id) {
-      return setMsg({ type: 'error', text: 'Vui lòng nhập Client ID (Web Application) trước.' });
-    }
-    localStorage.setItem('gdrive_pending_client_id', client_id);
-    const redirect_uri = window.location.origin;
-    const scope = 'https://www.googleapis.com/auth/drive';
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account consent`;
-    window.location.href = authUrl;
-  };
+
 
   const renderTruTienAnModal = () => {
     if (!isTruTienAnModalOpen) return null;
@@ -417,70 +363,84 @@ const ConfigManager = () => {
           </div>
         </section>
 
-        {/* Row 2.5: Google Drive Config */}
+        {/* Row 2.5: Cloudflare R2 Config */}
         <section className="config-section">
           <div className="section-title">
             <Cloud size={20} />
-            <h3>Cloud Storage (Google Drive)</h3>
-            <div className="status-badge" style={{ marginLeft: 'auto', background: formData.gdrive_enabled ? '#dcfce7' : '#f3f4f6', color: formData.gdrive_enabled ? '#166534' : '#6b7280', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
-              {formData.gdrive_enabled ? 'Đã kích hoạt' : 'Chưa kích hoạt'}
+            <h3>Cloud Storage (Cloudflare R2)</h3>
+            <div className="status-badge" style={{ marginLeft: 'auto', background: formData.r2_enabled ? '#dcfce7' : '#f3f4f6', color: formData.r2_enabled ? '#166534' : '#6b7280', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+              {formData.r2_enabled ? 'Đã kích hoạt' : 'Chưa kích hoạt'}
             </div>
           </div>
           <div className="gdrive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '10px 15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ padding: '8px', background: formData.gdrive_enabled ? '#dcfce7' : '#f1f5f9', borderRadius: '6px', color: formData.gdrive_enabled ? '#16a34a' : '#64748b' }}>
+                  <div style={{ padding: '8px', background: formData.r2_enabled ? '#dcfce7' : '#f1f5f9', borderRadius: '6px', color: formData.r2_enabled ? '#16a34a' : '#64748b' }}>
                     <Cloud size={20} />
                   </div>
                   <div>
-                    <span style={{ fontWeight: 600, display: 'block' }}>Kích hoạt lưu trữ Google Drive</span>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>Tải hình ảnh, tệp tin trực tiếp lên Drive thay vì Supabase</span>
+                    <span style={{ fontWeight: 600, display: 'block' }}>Kích hoạt lưu trữ Cloudflare R2</span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Tải hình ảnh, tệp tin trực tiếp lên R2 tương thích S3 thay vì Supabase</span>
                   </div>
                 </div>
                 <input
                   type="checkbox"
-                  checked={formData.gdrive_enabled}
-                  onChange={e => setFormData({ ...formData, gdrive_enabled: e.target.checked })}
+                  checked={formData.r2_enabled}
+                  onChange={e => setFormData({ ...formData, r2_enabled: e.target.checked })}
                   style={{ width: '20px', height: '20px', cursor: 'pointer' }}
                 />
               </label>
             </div>
 
-            {formData.gdrive_enabled && (
+            {formData.r2_enabled && (
               <>
-                <div className="form-group">
-                  <label>Client ID (OAuth 2.0)</label>
-                  <input
-                    type="text"
-                    value={formData.gdrive_client_id || ''}
-                    onChange={e => setFormData({ ...formData, gdrive_client_id: e.target.value })}
-                    placeholder="VD: 12345-abc.apps.googleusercontent.com"
-                  />
-                </div>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <button
-                    type="button"
-                    className="btn-test-gdrive"
-                    onClick={connectGoogle}
-                    style={{ padding: '10px 20px', borderRadius: '8px', background: '#2563eb', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <Key size={16} /> Đăng nhập & Kết nối Google
-                  </button>
-                  <p className="hint" style={{ marginTop: '5px' }}>
-                    * Nhấn nút để cấp quyền truy cập vào Drive của bạn. Chỉ cần thực hiện một lần.
-                  </p>
-                </div>
-                <div className="form-group">
-                  <label>Folder ID Thống nhất (Giao diện chung)</label>
+                  <label>R2 Endpoint URL</label>
                   <input
                     type="text"
-                    value={formData.gdrive_folder_id || ''}
-                    onChange={e => setFormData({ ...formData, gdrive_folder_id: e.target.value })}
-                    placeholder="ID từ URL thư mục..."
+                    value={formData.r2_endpoint || ''}
+                    onChange={e => setFormData({ ...formData, r2_endpoint: e.target.value })}
+                    placeholder="VD: https://<account_id>.r2.cloudflarestorage.com"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Access Key ID</label>
+                  <input
+                    type="text"
+                    value={formData.r2_access_key_id || ''}
+                    onChange={e => setFormData({ ...formData, r2_access_key_id: e.target.value })}
+                    placeholder="Nhập Access Key ID"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Secret Access Key</label>
+                  <input
+                    type="password"
+                    value={formData.r2_secret_access_key || ''}
+                    onChange={e => setFormData({ ...formData, r2_secret_access_key: e.target.value })}
+                    placeholder="Nhập Secret Access Key"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Bucket Name</label>
+                  <input
+                    type="text"
+                    value={formData.r2_bucket_name || ''}
+                    onChange={e => setFormData({ ...formData, r2_bucket_name: e.target.value })}
+                    placeholder="VD: my-storage-bucket"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Public URL Mặc định (Custom Domain)</label>
+                  <input
+                    type="text"
+                    value={formData.r2_public_url || ''}
+                    onChange={e => setFormData({ ...formData, r2_public_url: e.target.value })}
+                    placeholder="VD: https://media.example.com"
                   />
                   <p className="hint" style={{ marginTop: '5px' }}>
-                    ⚠️ Đừng quên thiết lập thư mục này ở chế độ <strong>Công khai (View)</strong> để phụ huynh có thể xem.
+                    * Link kết nối tới domain truy cập công khai của Bucket.
                   </p>
                 </div>
               </>

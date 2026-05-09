@@ -48,12 +48,12 @@ export const ConfigProvider = ({ children }) => {
               'Nhân viên VP': { full: false, tabs: ['overview', 'finances', 'students'] },
               'Giáo viên': { full: false, tabs: ['students', 'timesheet'] }
            },
-           gdrive_enabled: false,
-           gdrive_auth_type: 'oauth',
-           gdrive_client_id: '',
-           gdrive_api_key: '',
-           gdrive_folder_id: '',
-           gdrive_service_json: null
+           r2_enabled: false,
+           r2_endpoint: '',
+           r2_access_key_id: '',
+           r2_secret_access_key: '',
+           r2_bucket_name: '',
+           r2_public_url: ''
         });
       }
     } catch (err) {
