@@ -75,6 +75,7 @@ const ChatManager = ({ currentUser }) => {
     start: new Date().toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
+  const [statFilter, setStatFilter] = useState('ALL'); // 'ALL', 'XIN_NGHI', 'BAO_THUOC', 'GUI_TIN_NHAN', 'DOI_NGUOI', 'VE_TRE'
   
   // Chat State
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -175,7 +176,7 @@ const ChatManager = ({ currentUser }) => {
   }, [dateFilter, view, customRange]);
 
   // ----- Table Data Computation -----
-  const parentSummaries = useMemo(() => {
+  const baseSummaries = useMemo(() => {
     // 1. Group latest message per student
     const studentLatestMap = {};
     latestMessages.forEach(m => {
@@ -214,24 +215,37 @@ const ChatManager = ({ currentUser }) => {
       const matchesClass = classFilter === 'Tất cả' || s.malop === classFilter;
       
       return matchesSearch && matchesClass;
+    });
+  }, [students, classes, teachers, latestMessages, searchParent, classFilter]);
+
+  const parentSummaries = useMemo(() => {
+    return baseSummaries.filter(s => {
+      let matchesStat = true;
+      if (statFilter === 'XIN_NGHI') matchesStat = s.notifType === 'XIN NGHỈ';
+      else if (statFilter === 'BAO_THUOC') matchesStat = s.notifType === 'BÁO THUỐC';
+      else if (statFilter === 'DOI_NGUOI') matchesStat = s.notifType === 'ĐỔI NGƯỜI ĐÓN';
+      else if (statFilter === 'VE_TRE') matchesStat = s.notifType === 'XIN VỀ TRỄ';
+      else if (statFilter === 'GUI_TIN_NHAN') matchesStat = !!s.lastMsg;
+
+      return matchesStat;
     }).sort((a, b) => {
       // Sort by newest message first
       if (!a.lastTime) return 1;
       if (!b.lastTime) return -1;
       return b.lastTime - a.lastTime;
     });
-  }, [students, classes, teachers, latestMessages, searchParent, classFilter]);
+  }, [baseSummaries, statFilter]);
 
   // Quick Report Counts
   const reports = useMemo(() => {
     return {
-      xinNghi: latestMessages.filter(m => (m.content || '').toLowerCase().includes('nghỉ')).length,
-      baoThuoc: latestMessages.filter(m => (m.content || '').toLowerCase().includes('thuốc')).length,
-      doiNguoi: latestMessages.filter(m => (m.content || '').toLowerCase().includes('đổi người')).length,
-      guiTinNhan: latestMessages.length,
-      veTre: latestMessages.filter(m => (m.content || '').toLowerCase().includes('muộn') || (m.content || '').toLowerCase().includes('trễ')).length,
+      xinNghi: baseSummaries.filter(s => s.notifType === 'XIN NGHỈ').length,
+      baoThuoc: baseSummaries.filter(s => s.notifType === 'BÁO THUỐC').length,
+      doiNguoi: baseSummaries.filter(s => s.notifType === 'ĐỔI NGƯỜI ĐÓN').length,
+      guiTinNhan: baseSummaries.filter(s => !!s.lastMsg).length,
+      veTre: baseSummaries.filter(s => s.notifType === 'XIN VỀ TRỄ').length,
     };
-  }, [latestMessages]);
+  }, [baseSummaries]);
 
   // ----- Chat Logic -----
   useEffect(() => {
@@ -1058,23 +1072,43 @@ const ChatManager = ({ currentUser }) => {
 
       {/* Quick Reports Section */}
       <div className="quick-reports-container">
-        <div className="report-card xin-nghi">
+        <div 
+          className="report-card xin-nghi"
+          onClick={() => setStatFilter(statFilter === 'XIN_NGHI' ? 'ALL' : 'XIN_NGHI')}
+          style={{ cursor: 'pointer', outline: statFilter === 'XIN_NGHI' ? '3px solid #8b5cf6' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'XIN_NGHI' ? 0.6 : 1 }}
+        >
           <span className="report-label">Xin nghỉ</span>
           <span className="report-value">{String(reports.xinNghi).padStart(2, '0')}</span>
         </div>
-        <div className="report-card bao-thuoc">
+        <div 
+          className="report-card bao-thuoc"
+          onClick={() => setStatFilter(statFilter === 'BAO_THUOC' ? 'ALL' : 'BAO_THUOC')}
+          style={{ cursor: 'pointer', outline: statFilter === 'BAO_THUOC' ? '3px solid #10b981' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'BAO_THUOC' ? 0.6 : 1 }}
+        >
           <span className="report-label">Báo thuốc</span>
           <span className="report-value">{String(reports.baoThuoc).padStart(2, '0')}</span>
         </div>
-        <div className="report-card gui-tin-nhan">
+        <div 
+          className="report-card gui-tin-nhan"
+          onClick={() => setStatFilter(statFilter === 'GUI_TIN_NHAN' ? 'ALL' : 'GUI_TIN_NHAN')}
+          style={{ cursor: 'pointer', outline: statFilter === 'GUI_TIN_NHAN' ? '3px solid #3b82f6' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'GUI_TIN_NHAN' ? 0.6 : 1 }}
+        >
           <span className="report-label">Gửi tin nhắn</span>
           <span className="report-value">{String(reports.guiTinNhan).padStart(2, '0')}</span>
         </div>
-        <div className="report-card doi-nguoi">
+        <div 
+          className="report-card doi-nguoi"
+          onClick={() => setStatFilter(statFilter === 'DOI_NGUOI' ? 'ALL' : 'DOI_NGUOI')}
+          style={{ cursor: 'pointer', outline: statFilter === 'DOI_NGUOI' ? '3px solid #f59e0b' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'DOI_NGUOI' ? 0.6 : 1 }}
+        >
           <span className="report-label">Báo đổi người đón trẻ</span>
           <span className="report-value">{String(reports.doiNguoi).padStart(2, '0')}</span>
         </div>
-        <div className="report-card ve-tre">
+        <div 
+          className="report-card ve-tre"
+          onClick={() => setStatFilter(statFilter === 'VE_TRE' ? 'ALL' : 'VE_TRE')}
+          style={{ cursor: 'pointer', outline: statFilter === 'VE_TRE' ? '3px solid #ef4444' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'VE_TRE' ? 0.6 : 1 }}
+        >
           <span className="report-label">Xin về trễ</span>
           <span className="report-value">{String(reports.veTre).padStart(2, '0')}</span>
         </div>
