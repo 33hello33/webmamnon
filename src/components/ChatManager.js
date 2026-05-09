@@ -66,6 +66,7 @@ const ChatManager = ({ currentUser }) => {
   const [students, setStudents] = useState([]);
   const [latestMessages, setLatestMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState({});
   
   // Filters
   const [searchParent, setSearchParent] = useState('');
@@ -127,6 +128,9 @@ const ChatManager = ({ currentUser }) => {
 
         // Fetch Latest Messages
         await fetchSummaries();
+        
+        // Fetch Unreads
+        await fetchUnreads();
       } catch (err) {
         console.error('Error fetching chat dashboard data:', err);
       } finally {
@@ -134,7 +138,35 @@ const ChatManager = ({ currentUser }) => {
       }
     };
     fetchData();
+
+    // Subscribe to unread count changes
+    const badgeChannel = supabase.channel('chat_manager_badger')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages' }, () => {
+        fetchUnreads();
+        fetchSummaries(); // Also refresh standard latest messages
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(badgeChannel);
   }, []);
+
+  const fetchUnreads = async () => {
+    const { data } = await supabase
+      .from('hv_messages')
+      .select('mahv, manv, description')
+      .is('is_read', false);
+
+    if (data) {
+      const counts = {};
+      data.forEach(d => {
+         const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+         if (!isTeacher) {
+           counts[d.mahv] = (counts[d.mahv] || 0) + 1;
+         }
+      });
+      setUnreadCounts(counts);
+    }
+  };
 
   const fetchSummaries = async () => {
     // Determine time range based on dateFilter
@@ -250,6 +282,27 @@ const ChatManager = ({ currentUser }) => {
   // ----- Chat Logic -----
   useEffect(() => {
     if (!selectedStudent || view !== 'chat') return;
+
+    // Mark as read when opening chat
+    const markAsRead = async () => {
+      // Optimistic UI update
+      setUnreadCounts(prev => {
+        const next = { ...prev };
+        delete next[selectedStudent.mahv];
+        return next;
+      });
+
+      try {
+        await supabase
+          .from('hv_messages')
+          .update({ is_read: true })
+          .eq('mahv', selectedStudent.mahv)
+          .or('is_read.is.null,is_read.eq.false');
+      } catch (err) {
+        console.error('Update read status error:', err);
+      }
+    };
+    markAsRead();
 
     const fetchMessages = async () => {
       setLoadingMessages(true);
@@ -1134,7 +1187,14 @@ const ChatManager = ({ currentUser }) => {
               <tr><td colSpan="6" className="no-results">Không tìm thấy thông tin phù hợp</td></tr>
             ) : parentSummaries.map(s => (
               <tr key={s.mahv} onClick={() => { setSelectedStudent(s); setView('chat'); }}>
-                <td className="student-name-cell">{s.tenhv}</td>
+                <td className="student-name-cell">
+                  {s.tenhv}
+                  {unreadCounts[s.mahv] > 0 && (
+                    <span style={{ marginLeft: '10px', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
+                      +{unreadCounts[s.mahv]}
+                    </span>
+                  )}
+                </td>
                 <td className="phone-cell">{s.sdtba || s.sdtme || s.mahv}</td>
                 <td>{s.className}</td>
                 <td>{s.teacherName}</td>

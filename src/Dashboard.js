@@ -98,6 +98,7 @@ function Dashboard() {
   const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [changePassLoading, setChangePassLoading] = useState(false);
   const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   const getVisibleTabs = () => {
     if (!user) return [];
@@ -178,6 +179,39 @@ function Dashboard() {
           });
         })
         .subscribe();
+    }
+
+    // Fetch unread messages count globally for sidebar
+    const fetchUnreadChatCount = async () => {
+      const { data } = await supabase
+        .from('hv_messages')
+        .select('manv, description')
+        .is('is_read', false);
+        
+      if (data) {
+        let count = 0;
+        data.forEach(d => {
+          const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+          if (!isTeacher) count++;
+        });
+        setUnreadChatCount(count);
+      }
+    };
+    
+    if (user) {
+      fetchUnreadChatCount();
+      
+      const chatChannel = supabase.channel('global_chat_unread')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages' }, () => {
+          fetchUnreadChatCount();
+        })
+        .subscribe();
+        
+      return () => {
+        window.removeEventListener('app_log_inserted', handleLog);
+        if (channel) supabase.removeChannel(channel);
+        supabase.removeChannel(chatChannel);
+      };
     }
 
     return () => {
@@ -551,6 +585,11 @@ function Dashboard() {
                   >
                     <Icon size={20} className="nav-icon" />
                     {!collapsed && <span className="nav-label">{tab.label}</span>}
+                    {!collapsed && tab.id === 'chat' && unreadChatCount > 0 && (
+                      <div style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
+                        +{unreadChatCount}
+                      </div>
+                    )}
                   </button>
 
                   {/* Render SubTabs */}
