@@ -195,6 +195,11 @@ function Dashboard() {
           if (!isTeacher) count++;
         });
         setUnreadChatCount(count);
+
+        if ('setAppBadge' in navigator) {
+          if (count > 0) navigator.setAppBadge(count).catch(console.error);
+          else navigator.clearAppBadge().catch(console.error);
+        }
       }
     };
     

@@ -62,6 +62,7 @@ function Login() {
    const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
    const [feedbackContent, setFeedbackContent] = useState('');
    const [feedbackLoading, setFeedbackLoading] = useState(false);
+   const [unreadChatCount, setUnreadChatCount] = useState(0);
 
    // ----- Attendance Features -----
    const [attendanceUser, setAttendanceUser] = useState(null);
@@ -635,8 +636,70 @@ function Login() {
          })
          .subscribe();
 
-      return () => { supabase.removeChannel(channel); };
+      // ----- Thêm logic Đếm số lượt tin nhắn chưa đọc từ GV -----
+      const fetchUnreads = async () => {
+         const { data } = await supabase
+            .from('hv_messages')
+            .select('manv, description')
+            .eq('mahv', parentData.student.mahv)
+            .is('is_read', false);
+
+         if (data) {
+            let count = 0;
+            data.forEach(d => {
+               const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+               if (isTeacher) count++;
+            });
+            setUnreadChatCount(count);
+            
+            // Cập nhật badge trên icon màn hình chính (iOS 16.4+ / Android)
+            if ('setAppBadge' in navigator) {
+               if (count > 0) navigator.setAppBadge(count).catch(console.error);
+               else navigator.clearAppBadge().catch(console.error);
+            }
+         }
+      };
+      
+      const unreadChan = supabase.channel(`parent_unread_${parentData.student.mahv}`)
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, () => {
+            fetchUnreads();
+         }).subscribe();
+         
+      fetchUnreads();
+      // -------------------------------------------------------------
+
+      return () => { 
+         supabase.removeChannel(channel); 
+         supabase.removeChannel(unreadChan);
+      };
    }, [parentData, parentTab]);
+
+   useEffect(() => {
+      // Khi phụ huynh vào đọc tin nhắn, đánh dấu toàn bộ tin do GV gửi (có tồn tại manv) là đã đọc.
+      if (parentTab === 'chat-tab' && parentData) {
+         const markAsRead = async () => {
+            setUnreadChatCount(0); // optimistic UI
+            if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
+            
+            const { data: toUpdate } = await supabase
+               .from('hv_messages')
+               .select('id, manv, description')
+               .eq('mahv', parentData.student.mahv)
+               .is('is_read', false);
+               
+            if (toUpdate) {
+               const ids = toUpdate
+                  .filter(d => Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH'))
+                  .map(d => d.id);
+                  
+               if (ids.length > 0) {
+                  await supabase.from('hv_messages').update({ is_read: true }).in('id', ids);
+               }
+            }
+         };
+         markAsRead();
+      }
+   }, [parentTab, parentData]);
 
    const handleSendChat = async (e) => {
       e.preventDefault();
@@ -993,8 +1056,9 @@ function Login() {
                                  <span className="premium-service-label">Hồ sơ<br />sức khỏe</span>
                               </div>
                               <div className="premium-service-item" onClick={() => setParentTab('chat-tab')}>
-                                 <div className="premium-service-icon-wrapper" style={{ color: '#3b82f6' }}>
+                                 <div className="premium-service-icon-wrapper" style={{ color: '#3b82f6', position: 'relative' }}>
                                     <MessageSquare size={24} />
+                                    {unreadChatCount > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>+{unreadChatCount}</span>}
                                  </div>
                                  <span className="premium-service-label">Dịch vụ<br />liên lạc</span>
                               </div>
