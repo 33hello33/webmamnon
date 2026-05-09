@@ -209,6 +209,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   // Lesson Content
   const [isNoidungModalOpen, setIsNoidungModalOpen] = useState(false);
   const [noidungFilter, setNoidungFilter] = useState('this_month');
+  const [noidungCustomStart, setNoidungCustomStart] = useState('');
+  const [noidungCustomEnd, setNoidungCustomEnd] = useState('');
   const [noidungList, setNoidungList] = useState([]);
   const [noidungLoading, setNoidungLoading] = useState(false);
 
@@ -280,15 +282,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         startD = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
         const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
         endD = lastDay.toISOString().split('T')[0];
+      } else if (filter === 'custom') {
+        startD = noidungCustomStart;
+        endD = noidungCustomEnd;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('tbl_noidungday')
         .select('*')
-        .eq('malop', selectedClassId)
-        .gte('ngay', startD)
-        .lte('ngay', endD)
-        .order('ngay', { ascending: false });
+        .eq('malop', selectedClassId);
+
+      if (filter !== 'all_time') {
+        if (startD) query = query.gte('ngay', startD);
+        if (endD) query = query.lte('ngay', endD);
+      }
+
+      const { data, error } = await query.order('ngay', { ascending: false });
 
       if (error) throw error;
       setNoidungList(data || []);
@@ -298,7 +307,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     } finally {
       setNoidungLoading(false);
     }
-  }, [selectedClassId]);
+  }, [selectedClassId, noidungCustomStart, noidungCustomEnd, showMessage]);
 
   useEffect(() => {
     if (isNoidungModalOpen) {
@@ -2124,17 +2133,28 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             </div>
 
             <div className="modal-body" style={{ padding: '20px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'white', padding: '12px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <label style={{ fontWeight: 600, color: '#334155' }}>Khoảng thời gian:</label>
-                <select
-                  value={noidungFilter}
-                  onChange={(e) => setNoidungFilter(e.target.value)}
-                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', minWidth: '150px' }}
-                >
-                  <option value="this_week">Trong tuần này</option>
-                  <option value="this_month">Trong tháng này</option>
-                  <option value="last_month">Trong tháng trước</option>
-                </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '1.5rem', background: 'white', padding: '12px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontWeight: 600, color: '#334155' }}>Khoảng thời gian:</label>
+                  <select
+                    value={noidungFilter}
+                    onChange={(e) => setNoidungFilter(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', minWidth: '200px' }}
+                  >
+                    <option value="this_week">Trong tuần này</option>
+                    <option value="this_month">Trong tháng này</option>
+                    <option value="last_month">Trong tháng trước</option>
+                    <option value="all_time">Toàn bộ thời gian</option>
+                    <option value="custom">Tùy chọn ngày...</option>
+                  </select>
+                </div>
+                {noidungFilter === 'custom' && (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end', borderTop: '1px dashed #e2e8f0', paddingTop: '10px' }}>
+                    <input type="date" value={noidungCustomStart} onChange={e => setNoidungCustomStart(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    <span style={{ color: '#64748b' }}>-</span>
+                    <input type="date" value={noidungCustomEnd} onChange={e => setNoidungCustomEnd(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                  </div>
+                )}
               </div>
 
               {noidungLoading ? (
