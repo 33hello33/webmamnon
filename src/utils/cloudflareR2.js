@@ -17,10 +17,13 @@ export const uploadToR2 = async (file, endpoint, accessKeyId, secretAccessKey, b
   const fileExtension = file.name.split('.').pop() || 'tmp';
   const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExtension}`;
   
+  // Convert File/Blob to Uint8Array to avoid stream compatibility issues in browser
+  const arrayBuffer = await file.arrayBuffer();
+  
   const uploadParams = {
     Bucket: bucketName,
     Key: fileName,
-    Body: file,
+    Body: new Uint8Array(arrayBuffer),
     ContentType: file.type,
     // Note: Cloudflare R2 does not support ACLs, so do not set ACL: 'public-read'
   };
