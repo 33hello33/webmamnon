@@ -70,7 +70,7 @@ window.fetch = async (...args) => {
             'tbl_log', 'tbl_hv', 'tbl_nv', 'tbl_hanghoa', 'tbl_lop',
             'tbl_ghichu', 'tbl_hd', 'tbl_nhapkho', 'tbl_thongbao',
             'tbl_config', 'tbl_phieuchi', 'tbl_billhanghoa',
-            'tbl_diemdanh', 'tbl_noidungday'
+            'tbl_diemdanh', 'tbl_noidungday', 'hv_messages', 'documents'
          ];
          if (!manualLoggedTables.includes(table)) {
             let action = '';

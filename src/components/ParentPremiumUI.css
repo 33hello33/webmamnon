@@ -310,6 +310,18 @@
     animation: slideIn 0.3s ease-out;
 }
 
+.premium-tab-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    animation: slideIn 0.3s ease-out;
+}
+
+.premium-tab-content-wrapper {
+    flex: 1;
+    overflow-y: auto;
+}
+
 @keyframes slideIn {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
@@ -494,5 +506,24 @@
     
     .parent-premium-mobile {
         padding-bottom: 40px;
+    }
+
+    .premium-tab-container {
+        max-width: 800px;
+        width: 95%;
+        margin: 0 auto;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        border-radius: 24px;
+        overflow: hidden;
+        background: white;
+    }
+
+    .premium-tab-pane-header {
+        padding: 30px 40px;
+        border-bottom: 1px solid #f2f2f7;
+    }
+
+    .premium-tab-content-wrapper {
+        padding: 40px;
     }
 }

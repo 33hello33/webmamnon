@@ -132,6 +132,9 @@ function Dashboard() {
 
   useEffect(() => {
     const handleLog = (e) => {
+      const mota = e.detail?.mota || '';
+      if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
+      
       const newLog = { ...e.detail, isLocal: true };
       setLogs(prev => {
         // Avoid local duplicate if id matches something later, wait simple push
@@ -156,9 +159,13 @@ function Dashboard() {
         }
       });
 
-      // Fetch initial 30 logs
+      // Fetch initial 30 logs (excluding noisy actions)
       supabase.from('tbl_log')
         .select('*')
+        .not('mota', 'ilike', '%tbl_diemdanh%')
+        .not('mota', 'ilike', '%ĐIỂM DANH%')
+        .not('mota', 'ilike', '%hv_messages%')
+        .not('mota', 'ilike', '%documents%')
         .order('created_at', { ascending: false })
         .limit(30)
         .then(({ data }) => {
@@ -170,6 +177,9 @@ function Dashboard() {
       // Listen to global changes across devices
       channel = supabase.channel('realtime_logs')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_log' }, (payload) => {
+          const mota = payload.new?.mota || '';
+          if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
+
           setLogs(prev => {
             const exists = prev.some(l => l.id === payload.new.id);
             if (exists) return prev;

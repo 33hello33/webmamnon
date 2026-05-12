@@ -151,9 +151,8 @@ export default function AttendanceManager({ students, showMessage }) {
       else await supabase.from('tbl_noidungday').insert([{ malop: targetMalop, ngay: attDate, noidungday: lessonContent }]);
 
       showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
-      const className = classes.find(c => c.malop === targetMalop)?.tenlop || targetMalop;
-      const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
-      insertLog(logDesc);
+      // const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
+      // insertLog(logDesc);
       // Update the report data too
       const { data: fresh } = await supabase.from('tbl_diemdanh').select('*').eq('malop', targetMalop).gte('ngay', attDate).lte('ngay', attDate);
       if (fresh) {

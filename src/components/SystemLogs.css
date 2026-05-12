@@ -136,16 +136,17 @@
   background: white;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   flex: 1;
 }
 
 .logs-table {
   width: 100%;
+  min-width: 1000px;
   border-collapse: collapse;
   font-size: 0.875rem;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .logs-table th {
@@ -167,18 +168,33 @@
   background: #f8fafc;
 }
 
-.time-cell {
+.cell-content {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.cell-content-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 250px;
+}
+
+.time-cell {
   color: #64748b;
   font-feature-settings: "tnum";
 }
 
+.col-time { min-width: 170px; }
+.col-user { min-width: 160px; }
+.col-action { min-width: 120px; }
+.col-target { min-width: 120px; }
+.col-detail { width: 100%; min-width: 300px; }
+
 .user-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  color: #1e293b;
 }
 
 .user-avatar {
@@ -207,14 +223,13 @@
 }
 
 .action-badge.thêm, .action-badge.mới, .action-badge.phiếu, .action-badge.nhập { background: #dcfce7; color: #166534; }
-.action-badge.cập, .action-badge.sửa, .action-badge.điểm, .action-badge.cân { background: #e0f2fe; color: #075985; }
+.action-badge.cập, .action-badge.sửa, .action-badge.điểm, .action-badge.cân, .action-badge.quản { background: #e0f2fe; color: #075985; }
 .action-badge.xóa { background: #fee2e2; color: #991b1b; }
 .action-badge.lỗi { background: #ffedd5; color: #9a3412; }
+.action-badge.chuyển, .action-badge.thông { background: #f5f3ff; color: #5b21b6; }
+.action-badge.nhân, .action-badge.hs { background: #eff6ff; color: #1e40af; }
 
 .target-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   color: #64748b;
 }
 

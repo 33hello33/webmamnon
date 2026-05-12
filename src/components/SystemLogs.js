@@ -19,19 +19,25 @@ export default function SystemLogs() {
 
   const tableNames = {
     'tbl_hanghoa': 'Sản phẩm/Kho',
-    'tbl_billhanghoa': 'Đơn hàng POS',
-    'tbl_hd': 'Phiếu thu học phí',
+    'tbl_billhanghoa': 'Hóa đơn POS',
+    'tbl_hd': 'Học phí',
     'tbl_nv': 'Nhân viên',
     'tbl_hv': 'Học viên',
     'tbl_lop': 'Lớp học',
     'tbl_diemdanh': 'Điểm danh',
     'tbl_thu': 'Phiếu thu',
     'tbl_chi': 'Phiếu chi',
-    'tbl_thongbao': 'Thông báo',
+    'tbl_phieuchi': 'Phiếu chi',
+    'tbl_thongbao': 'Thông báo HP',
     'tbl_task': 'Công việc',
     'tbl_chamcong': 'Chấm công',
     'tbl_luong': 'Phiếu lương',
-    'tbl_log': 'Hệ thống'
+    'tbl_log': 'Hệ thống',
+    'tbl_config': 'Cấu hình',
+    'tbl_ghichu': 'Ghi chú',
+    'tbl_nhapkho': 'Nhập kho',
+    'tbl_noidungday': 'Nội dung dạy',
+    'tbl_chamconggv': 'Chấm công GV'
   };
 
   useEffect(() => {
@@ -49,7 +55,11 @@ export default function SystemLogs() {
     try {
       let query = supabase
         .from('tbl_log')
-        .select('*, tbl_nv(tennv, username)', { count: 'exact' });
+        .select('*, tbl_nv(tennv, username)', { count: 'exact' })
+        .not('mota', 'ilike', '%tbl_diemdanh%')
+        .not('mota', 'ilike', '%ĐIỂM DANH%')
+        .not('mota', 'ilike', '%hv_messages%')
+        .not('mota', 'ilike', '%documents%');
 
       if (userFilter) {
         query = query.eq('manv', userFilter);
@@ -127,30 +137,35 @@ export default function SystemLogs() {
          const tablePart = parts[0].replace('Bảng:', '').trim();
          target = tableNames[tablePart] || tablePart;
          details = parts.slice(1).join('|').replace('Chi tiết:', '').trim();
-      } else if (action.includes('PHIẾU') || action.includes('CÂN ĐỐI')) {
-         target = 'Tài chính';
-      } else if (action.includes('NHẬP KHO') || action.includes('KHO HÀNG') || action.includes('XÓA KHO')) {
-         target = 'Sản phẩm/Kho';
-      } else if (action.includes('XUẤT HĐ') || action.includes('BÁO PHÍ') || action.includes('PHIẾU THU') || action.includes('PHIẾU CHI')) {
-         target = 'Học phí/Tài chính';
-      } else if (action.includes('ĐIỂM DANH') || action.includes('XUẤT THÔNG BÁO')) {
-         target = 'Học tập';
-      } else if (action.includes('BÁN HÀNG')) {
-         target = 'Đơn hàng POS';
-      } else if (action.includes('NHÂN SỰ')) {
-         target = 'Nhân sự';
-      } else if (action.includes('HS') || action.includes('HỌC SINH')) {
-         target = 'Học viên';
-      } else if (action.includes('LỚP') || action.includes('CHUYỂN LỚP')) {
-         target = 'Lớp học';
-      } else if (action.includes('CÔNG VIỆC')) {
-         target = 'Công việc';
-      } else if (action.includes('CẤU HÌNH')) {
-         target = 'Cấu hình';
+      } else {
+         // Infer target from action string
+         const a = action.toUpperCase();
+         if (a.includes('PHIẾU') || a.includes('CÂN ĐỐI') || a.includes('THU') || a.includes('CHI')) {
+            target = 'Tài chính';
+         } else if (a.includes('NHẬP KHO') || a.includes('KHO HÀNG') || a.includes('XÓA KHO') || a.includes('SẢN PHẨM')) {
+            target = 'Sản phẩm/Kho';
+         } else if (a.includes('XUẤT HĐ') || a.includes('BÁO PHÍ') || a.includes('HỌC PHÍ')) {
+            target = 'Học phí';
+         } else if (a.includes('ĐIỂM DANH') || a.includes('THÔNG BÁO')) {
+            target = 'Học tập';
+         } else if (a.includes('BÁN HÀNG') || a.includes('POS')) {
+            target = 'Đơn hàng POS';
+         } else if (a.includes('NHÂN SỰ') || a.includes('NHÂN VIÊN') || a.includes('NV')) {
+            target = 'Nhân sự';
+         } else if (a.includes('HS') || a.includes('HỌC SINH') || a.includes('HỌC VIÊN') || a.includes('HỘI VIÊN')) {
+            target = 'Học viên';
+         } else if (a.includes('LỚP') || a.includes('CHUYỂN LỚP') || a.includes('QUẢN LÝ LỚP')) {
+            target = 'Lớp học';
+         } else if (a.includes('CÔNG VIỆC') || a.includes('GIAO VIỆC')) {
+            target = 'Công việc';
+         } else if (a.includes('CẤU HÌNH') || a.includes('THAM SỐ')) {
+            target = 'Cấu hình';
+         }
+         details = content;
       }
 
       return {
-        action,
+        action: action.replace('[', '').replace(']', ''),
         target,
         details,
         isError: action.includes('LỖI')
@@ -233,11 +248,11 @@ export default function SystemLogs() {
         <table className="logs-table">
           <thead>
             <tr>
-              <th width="180">Thời gian</th>
-              <th width="180">Người thực hiện</th>
-              <th width="150">Hành động</th>
-              <th width="150">Đối tượng</th>
-              <th>Chi tiết thao tác</th>
+              <th className="col-time">Thời gian</th>
+              <th className="col-user">Người thực hiện</th>
+              <th className="col-action">Hành động</th>
+              <th className="col-target">Đối tượng</th>
+              <th className="col-detail">Chi tiết thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -259,32 +274,42 @@ export default function SystemLogs() {
                 return (
                   <tr key={log.id} className={info.isError ? 'row-error' : ''}>
                     <td className="time-cell">
-                      <Calendar size={12} />
-                      {new Date(log.created_at).toLocaleString('vi-VN')}
+                      <div className="cell-content">
+                        <Calendar size={12} />
+                        <span>{new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                      </div>
                     </td>
                     <td className="user-cell">
-                      <div className="user-avatar">{userName.charAt(0).toUpperCase()}</div>
-                      <span>{userName}</span>
+                      <div className="cell-content">
+                        <div className="user-avatar">{userName.charAt(0).toUpperCase()}</div>
+                        <span>{userName}</span>
+                      </div>
                     </td>
-                    <td>
-                      <div className={`action-badge ${info.action.toLowerCase()}`}>
-                        {getActionIcon(info.action)}
-                        {info.action}
+                    <td className="action-cell">
+                      <div className="cell-content">
+                        <div className={`action-badge ${info.action.split(' ')[0].toLowerCase()}`}>
+                          {getActionIcon(info.action)}
+                          {info.action}
+                        </div>
                       </div>
                     </td>
                     <td className="target-cell">
-                      <Tag size={12} />
-                      {info.target}
+                      <div className="cell-content">
+                        <Tag size={12} />
+                        <span>{info.target}</span>
+                      </div>
                     </td>
                     <td className="detail-cell">
-                      {info.details && <span className="item-name">{info.details}</span>}
-                      {info.changes && (
-                        <div className="changes-tag">
-                          <Info size={10} />
-                          {info.changes}
-                        </div>
-                      )}
-                      {!info.details && !info.changes && <span className="text-muted">{log.mota}</span>}
+                      <div className="cell-content-block">
+                        {info.details && <span className="item-name">{info.details}</span>}
+                        {info.changes && (
+                          <div className="changes-tag">
+                            <Info size={10} />
+                            {info.changes}
+                          </div>
+                        )}
+                        {!info.details && !info.changes && <span className="text-muted">{log.mota}</span>}
+                      </div>
                     </td>
                   </tr>
                 );
