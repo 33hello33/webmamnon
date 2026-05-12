@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera
+  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart, Activity
 } from 'lucide-react';
 import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
@@ -54,6 +54,11 @@ export default function StudentManager({ activeSubTab }) {
   const [isTransferClassOpen, setIsTransferClassOpen] = useState(false);
   const [transferClassId, setTransferClassId] = useState('');
 
+  // Health History Modal State
+  const [isHealthOpen, setIsHealthOpen] = useState(false);
+  const [healthHistory, setHealthHistory] = useState([]);
+  const [healthLoading, setHealthLoading] = useState(false);
+
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -102,6 +107,26 @@ export default function StudentManager({ activeSubTab }) {
       setFormData({ ...INITIAL_FORM, ...student });
       setIsEditMode(true);
       setIsFormOpen(true);
+    }
+  };
+
+  const handleOpenHealth = async () => {
+    if (!selectedStudentId) return showMessage('error', 'Vui lòng chọn một học sinh để xem hồ sơ sức khỏe');
+    setIsHealthOpen(true);
+    setHealthLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('suckhoedinhky')
+        .select('*')
+        .eq('mahv', selectedStudentId)
+        .order('ngay', { ascending: false });
+      if (error) throw error;
+      setHealthHistory(data || []);
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'Lỗi tải hồ sơ sức khỏe');
+    } finally {
+      setHealthLoading(false);
     }
   };
 
@@ -531,6 +556,7 @@ export default function StudentManager({ activeSubTab }) {
             <div className="action-grid-v2">
               <button className="grid-btn primary" onClick={handleOpenAdd}><UserPlus size={16} /><small>Thêm</small></button>
               <button className="grid-btn info" onClick={handleOpenEdit}><Edit size={16} /><small>Sửa</small></button>
+              <button className="grid-btn" onClick={handleOpenHealth} style={{ background: '#fdf2f8', color: '#db2777', borderColor: '#fbcfe8' }}><Heart size={16} /><small>Sức khỏe</small></button>
               <button className="grid-btn danger" onClick={handleDeleteTrigger}><Trash2 size={16} /><small>Xóa</small></button>
               <button className="grid-btn success" onClick={handleRestore} style={{ background: '#ecfdf5', color: '#059669', borderColor: '#d1fae5' }}><RefreshCw size={16} /><small>Khôi phục</small></button>
 
@@ -1023,6 +1049,64 @@ Mối liên hệ với bé :
             <span>Đóng</span>
           </button>
         </div>
+      )}
+      {/* Health History Modal */}
+      {isHealthOpen && createPortal(
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px', width: '95%', borderRadius: '20px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #f1f5f9', padding: '1.25rem' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+                <Heart size={24} color="#db2777" fill="#fdf2f8" /> Hồ sơ sức khỏe định kỳ
+              </h3>
+              <button className="close-btn" onClick={() => setIsHealthOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body" style={{ padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
+              {healthLoading ? (
+                <div style={{ textAlign: 'center', padding: '2rem' }}>
+                  <RefreshCw className="spinner" size={32} color="#db2777" />
+                  <p style={{ marginTop: '1rem', color: '#64748b' }}>Đang tải hồ sơ...</p>
+                </div>
+              ) : (
+                <>
+                  <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '16px', marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+                      {students.find(s => s.mahv === selectedStudentId)?.tenhv}
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: '0.85rem' }}>Mã HS: {selectedStudentId}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <h4 style={{ margin: '0 0 5px 0', fontSize: '0.9rem', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch sử theo dõi</h4>
+                    {healthHistory.length > 0 ? healthHistory.map((h, idx) => (
+                      <div key={idx} style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '100px 1fr 1fr', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ textAlign: 'center', borderRight: '1px solid #f1f5f9', paddingRight: '10px' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>Tháng {new Date(h.ngay).getMonth() + 1}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{new Date(h.ngay).getFullYear()}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chiều cao</div>
+                          <div style={{ fontWeight: 700, color: '#2563eb' }}>{h.chieucao} cm</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Cân nặng</div>
+                          <div style={{ fontWeight: 700, color: '#16a34a' }}>{h.cannang} kg</div>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                        Chưa có lịch sử sức khỏe.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer" style={{ padding: '1.25rem', borderTop: '1px solid #f1f5f9', textAlign: 'right' }}>
+              <button className="btn btn-secondary" onClick={() => setIsHealthOpen(false)} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px' }}>Đóng</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

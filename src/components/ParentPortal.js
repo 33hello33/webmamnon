@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper } from 'lucide-react';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight } from 'lucide-react';
 
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
@@ -13,7 +13,6 @@ function ParentPortal({ parentData, setParentData }) {
    const [chatInput, setChatInput] = useState('');
    const [chatDocuments, setChatDocuments] = useState([]);
    const [parentNotices, setParentNotices] = useState([]);
-   const [parentLessons, setParentLessons] = useState([]);
    const [uploading, setUploading] = useState(false);
    const [showChatInfo, setShowChatInfo] = useState(false);
    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -27,6 +26,12 @@ function ParentPortal({ parentData, setParentData }) {
    const [feedbackContent, setFeedbackContent] = useState('');
    const [feedbackLoading, setFeedbackLoading] = useState(false);
    const [unreadChatCount, setUnreadChatCount] = useState(0);
+   const [previewImage, setPreviewImage] = useState(null);
+   const [calendarDate, setCalendarDate] = useState(new Date());
+   const [monthlyAttendance, setMonthlyAttendance] = useState([]);
+   const [calendarLoading, setCalendarLoading] = useState(false);
+   const [healthHistory, setHealthHistory] = useState([]);
+   const [healthLoading, setHealthLoading] = useState(false);
 
    const sendQuickMessage = async (content) => {
       if (!parentData) return;
@@ -45,28 +50,79 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const handleLeaveSubmit = async (e) => {
-      e.preventDefault();
-      let fromDate = leaveForm.from;
-      let toDate = leaveForm.to;
+       e.preventDefault();
+       let fromDateStr = leaveForm.from;
+       let toDateStr = leaveForm.to;
 
-      if (leaveType === 'today') {
-         fromDate = toDate = new Date().toISOString().split('T')[0];
-      } else if (leaveType === 'tomorrow') {
-         const tomorrow = new Date();
-         tomorrow.setDate(tomorrow.getDate() + 1);
-         fromDate = toDate = tomorrow.toISOString().split('T')[0];
-      }
+       const today = new Date();
+       const todayStr = today.toISOString().split('T')[0];
 
-      if (!fromDate || !toDate || !leaveForm.reason) {
-         alert('Vui lòng nhập đầy đủ thông tin xin nghỉ.');
-         return;
-      }
-      const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDate).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDate).toLocaleDateString('vi-VN')}\n- Lý do: ${leaveForm.reason}`;
-      await sendQuickMessage(msg);
-      setIsLeaveModalOpen(false);
-      setLeaveForm({ from: '', to: '', reason: '' });
-      setLeaveType('today');
-   };
+       if (leaveType === 'today') {
+          fromDateStr = toDateStr = todayStr;
+       } else if (leaveType === 'tomorrow') {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          fromDateStr = toDateStr = tomorrow.toISOString().split('T')[0];
+       }
+
+       if (!fromDateStr || !toDateStr || !leaveForm.reason) {
+          alert('Vui lòng nhập đầy đủ thông tin xin nghỉ.');
+          return;
+       }
+
+       const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDateStr).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDateStr).toLocaleDateString('vi-VN')}\n- Lý do: ${leaveForm.reason}`;
+       await sendQuickMessage(msg);
+
+       // Insert into tbl_diemdanh
+       try {
+          const start = new Date(fromDateStr);
+          const end = new Date(toDateStr);
+          const configTimeStr = config?.xinnghitruocmaygio || '08:00';
+          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
+          const cfgTimeTotal = cfgHour * 60 + cfgMin;
+
+          let current = new Date(start);
+          while (current <= end) {
+             const currDateStr = current.toISOString().split('T')[0];
+             let trangthai = 'Nghỉ phép';
+
+             if (currDateStr === todayStr) {
+                const now = new Date();
+                const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
+                if (currentTimeTotal > cfgTimeTotal) {
+                   trangthai = 'Nghỉ không phép';
+                }
+             } else if (currDateStr < todayStr) {
+                trangthai = 'Nghỉ không phép';
+             }
+
+             const payload = {
+                mahv: parentData.student.mahv,
+                malop: parentData.student.malop,
+                ngay: currDateStr,
+                trangthai: trangthai,
+                ghichu: leaveForm.reason,
+                manv: parentData.teacherManv || 'parent'
+             };
+
+             // Check if record exists
+             const { data: existing } = await supabase.from('tbl_diemdanh').select('id').eq('mahv', payload.mahv).eq('ngay', payload.ngay).maybeSingle();
+             if (existing) {
+                await supabase.from('tbl_diemdanh').update(payload).eq('id', existing.id);
+             } else {
+                await supabase.from('tbl_diemdanh').insert([payload]);
+             }
+
+             current.setDate(current.getDate() + 1);
+          }
+       } catch (err) {
+          console.error('Lỗi khi cập nhật điểm danh:', err);
+       }
+
+       setIsLeaveModalOpen(false);
+       setLeaveForm({ from: '', to: '', reason: '' });
+       setLeaveType('today');
+    };
 
    const handlePickupSubmit = async (e) => {
       e.preventDefault();
@@ -136,7 +192,7 @@ function ParentPortal({ parentData, setParentData }) {
       return wallets;
    };
    const wallets = getWalletsFromConfig();
-   
+
    const getQRUrl = () => {
       const fee = parentData?.latestFee;
       if (!fee) return '';
@@ -156,8 +212,49 @@ function ParentPortal({ parentData, setParentData }) {
       return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
    };
 
+   const tuitionStatus = (() => {
+      const latestNotify = parentData?.latestFee;
+      const latestInv = parentData?.invoices?.[0];
+      
+      if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true };
+      
+      const notifyTime = latestNotify ? new Date(latestNotify.ngaylap).getTime() : 0;
+      const invTime = latestInv ? new Date(latestInv.ngaylap).getTime() : 0;
+      
+      if (notifyTime > invTime) {
+         const monthText = latestNotify.thang || formatMonthYear(latestNotify.ngaylap);
+         return { 
+            text: `Cần thanh toán Học phí tháng ${monthText}`, 
+            isPaid: false 
+         };
+      } else {
+         return { 
+            text: 'Học phí đã thanh toán', 
+            isPaid: true 
+         };
+      }
+   })();
+
+   const fetchHealthHistory = async () => {
+      if (!parentData) return;
+      setHealthLoading(true);
+      try {
+         const { data, error } = await supabase
+            .from('suckhoedinhky')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .order('ngay', { ascending: false });
+         if (error) throw error;
+         setHealthHistory(data || []);
+      } catch (err) {
+         console.error('Error fetching health history:', err);
+      } finally {
+         setHealthLoading(false);
+      }
+   };
+
    useEffect(() => {
-      if (!parentData || parentTab !== 'chat-tab') return;
+      if (!parentData || (parentTab !== 'chat-tab' && parentTab !== 'notices-tab' && parentTab !== 'attendance-tab' && parentTab !== 'health-tab' && parentTab !== 'menu-tab')) return;
       const fetchChatMessages = async () => {
          setChatLoading(true);
          const { data } = await supabase.from('hv_messages').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: true });
@@ -169,15 +266,40 @@ function ParentPortal({ parentData, setParentData }) {
          if (data) setChatDocuments(data || []);
       };
       const fetchParentNotices = async () => {
-         const { data } = await supabase.from('tbl_thongbao').select('*').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(10);
-         if (data) setParentNotices(data);
-      };
-      const fetchParentLessons = async () => {
-         const { data } = await supabase.from('tbl_noidungday').select('*').eq('malop', parentData.student.malop).order('ngay', { ascending: false }).limit(10);
-         if (data) setParentLessons(data);
+         const { data: generalNotices } = await supabase.from('tbl_thongbao').select('*').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(10);
+         const { data: classAnnouncements } = await supabase.from('class_announcements').select('*').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(10);
+
+         const combined = [
+            ...(generalNotices || []).map(n => ({ ...n, type: 'general', date: n.ngaylap, title: n.tieude, content: n.ghichu })),
+            ...(classAnnouncements || []).map(n => ({ ...n, type: 'class', date: n.created_at, title: n.title, content: n.content, image_url: n.image_url, file_url: n.file_url, file_name: n.file_name }))
+         ].sort((a, b) => {
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            return dateB - dateA;
+         });
+
+         setParentNotices(combined);
       };
 
-      fetchChatMessages(); fetchChatDocs(); fetchParentNotices(); fetchParentLessons();
+      const fetchMonthlyAttendance = async () => {
+         if (!parentData) return;
+         setCalendarLoading(true);
+         const year = calendarDate.getFullYear();
+         const month = calendarDate.getMonth();
+         const startDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+         const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
+
+         try {
+            const { data } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', parentData.student.mahv).gte('ngay', startDay).lte('ngay', endDay);
+            setMonthlyAttendance(data || []);
+         } catch (err) { console.error(err); }
+         finally { setCalendarLoading(false); }
+      };
+
+      if (parentTab === 'chat-tab') { fetchChatMessages(); fetchChatDocs(); }
+      if (parentTab === 'notices-tab' || parentTab === 'menu-tab') fetchParentNotices();
+      if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
+      if (parentTab === 'health-tab') fetchHealthHistory();
 
       const channel = supabase.channel(`parent_chat_${parentData.student.mahv}`)
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => {
@@ -203,14 +325,17 @@ function ParentPortal({ parentData, setParentData }) {
             }
          }
       };
-      
+
       const unreadChan = supabase.channel(`parent_unread_${parentData.student.mahv}`)
          .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, () => { fetchUnreads(); }).subscribe();
-         
+
       fetchUnreads();
 
-      return () => { supabase.removeChannel(channel); supabase.removeChannel(unreadChan); };
-   }, [parentData, parentTab]);
+      return () => {
+         if (channel) supabase.removeChannel(channel);
+         supabase.removeChannel(unreadChan);
+      };
+   }, [parentData, parentTab, calendarDate]);
 
    useEffect(() => {
       if (parentTab === 'chat-tab' && parentData) {
@@ -320,10 +445,10 @@ function ParentPortal({ parentData, setParentData }) {
                         </div>
                      </div>
                      <div className="premium-card" onClick={() => setParentTab('fee-tab')}>
-                        <div className="premium-card-icon" style={{ color: '#16a34a', background: '#f0fdf4' }}><CreditCard size={20} /></div>
+                        <div className="premium-card-icon" style={{ color: tuitionStatus.isPaid ? '#16a34a' : '#ef4444', background: tuitionStatus.isPaid ? '#f0fdf4' : '#fef2f2' }}><CreditCard size={20} /></div>
                         <div className="premium-card-content">
                            <span className="premium-card-label">Học phí</span>
-                           <span className="premium-card-title">Thanh toán</span>
+                           <span className="premium-card-title" style={{ fontSize: '0.85rem' }}>{tuitionStatus.text}</span>
                         </div>
                      </div>
                   </div>
@@ -361,7 +486,7 @@ function ParentPortal({ parentData, setParentData }) {
                            <MessageSquare size={24} />
                            {unreadChatCount > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>+{unreadChatCount}</span>}
                         </div>
-                        <span className="premium-service-label">Dịch vụ<br />liên lạc</span>
+                        <span className="premium-service-label">Liên lạc GV</span>
                      </div>
                   </div>
 
@@ -378,7 +503,7 @@ function ParentPortal({ parentData, setParentData }) {
                         <div className="premium-utility-icon-wrapper" style={{ color: '#f59e0b' }}><Users size={24} /></div>
                         <span className="premium-utility-label">Đổi người đón</span>
                      </div>
-                     <div className="premium-utility-item" onClick={() => alert('Chức năng đang phát triển')}>
+                     <div className="premium-utility-item" onClick={() => setParentTab('menu-tab')}>
                         <div className="premium-utility-icon-wrapper" style={{ color: '#10b981' }}><Utensils size={24} /></div>
                         <span className="premium-utility-label">Thực đơn</span>
                      </div>
@@ -413,7 +538,8 @@ function ParentPortal({ parentData, setParentData }) {
                         parentTab === 'attendance-tab' ? 'Điểm danh' :
                            parentTab === 'fee-tab' ? 'Học phí' :
                               parentTab === 'health-tab' ? 'Sức khỏe' :
-                                 parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
+                                 parentTab === 'menu-tab' ? 'Thực đơn' :
+                                    parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
                   </h2>
                </div>
 
@@ -428,53 +554,148 @@ function ParentPortal({ parentData, setParentData }) {
                               {parentNotices.length > 0 ? parentNotices.map((notice, idx) => (
                                  <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                       <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.ngaylap).toLocaleDateString('vi-VN')}</span>
-                                       <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Thông báo</span>
+                                       <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.date).toLocaleDateString('vi-VN')}</span>
+                                       <span style={{ fontSize: '0.75rem', background: notice.type === 'class' ? '#f5f3ff' : '#eff6ff', color: notice.type === 'class' ? '#8b5cf6' : '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                                          {notice.type === 'class' ? 'Bảng tin lớp' : 'Thông báo'}
+                                       </span>
                                     </div>
-                                    <div style={{ color: '#1e293b', fontWeight: 600, fontSize: '1rem', marginBottom: '5px' }}>{notice.tieude || 'Thông báo học phí/Phát sinh'}</div>
-                                    <div style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{notice.ghichu}</div>
+                                    <div style={{ color: '#1e293b', fontWeight: 600, fontSize: '1rem', marginBottom: '5px' }}>{notice.title || (notice.type === 'class' ? 'Thông báo từ lớp' : 'Thông báo học phí/Phát sinh')}</div>
+                                    <div style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{notice.content}</div>
+
+                                    {notice.image_url && (
+                                       <div
+                                          style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', cursor: 'zoom-in', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+                                          onClick={() => setPreviewImage(notice.image_url)}
+                                       >
+                                          <img src={notice.image_url} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} />
+                                       </div>
+                                    )}
+
+                                    {notice.file_url && (
+                                       <a href={notice.file_url} target="_blank" rel="noreferrer" style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: '#f8fafc', borderRadius: '8px', textDecoration: 'none', color: '#475569', fontSize: '0.85rem', border: '1px solid #e2e8f0' }}>
+                                          <FileText size={16} />
+                                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{notice.file_name || 'Xem tệp đính kèm'}</span>
+                                          <Download size={16} />
+                                       </a>
+                                    )}
                                  </div>
                               )) : (
                                  <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Không có thông báo mới.</div>
                               )}
                            </div>
                         </div>
-
-                        <div className="lessons-section">
-                           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#1e293b' }}>
-                              <Newspaper size={20} style={{ color: '#ec4899' }} /> Nhật ký lớp học ({parentData.student.tenlop})
-                           </h3>
-                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {parentLessons.length > 0 ? parentLessons.map((lesson, idx) => (
-                                 <div key={idx} style={{ background: '#fffef2', padding: '15px', borderRadius: '12px', border: '1px solid #fef3c7', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                       <span style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 700 }}>{new Date(lesson.ngay).toLocaleDateString('vi-VN')}</span>
-                                    </div>
-                                    <div style={{ color: '#1e293b', fontSize: '0.95rem', lineHeight: '1.6' }}>{lesson.noidungday}</div>
-                                 </div>
-                              )) : (
-                                 <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Chưa có nội dung nhật ký lớp học.</div>
-                              )}
-                           </div>
-                        </div>
                      </div>
                   )}
 
+                   {parentTab === 'menu-tab' && (
+                      <div id="menu-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                         <div className="notices-section">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#166534' }}>
+                               <Utensils size={20} /> Thực đơn hàng ngày
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                               {parentNotices.filter(n => n.title === 'THỰC ĐƠN').length > 0 ? parentNotices.filter(n => n.title === 'THỰC ĐƠN').map((menu, idx) => (
+                                  <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                     <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0fdf4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: 800, color: '#166534' }}>Thực đơn mới</span>
+                                        <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600 }}>{new Date(menu.date).toLocaleDateString('vi-VN')}</span>
+                                     </div>
+                                     <div style={{ padding: '15px' }}>
+                                        <p style={{ margin: '0 0 10px 0', color: '#475569', fontSize: '0.95rem' }}>{menu.content}</p>
+                                        {menu.image_url && (
+                                           <div 
+                                              style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
+                                              onClick={() => setPreviewImage(menu.image_url)}
+                                           >
+                                              <img src={menu.image_url} alt="menu" style={{ width: '100%', display: 'block' }} />
+                                           </div>
+                                        )}
+                                     </div>
+                                  </div>
+                               )) : (
+                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                                     <Utensils size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
+                                     <p>Hiện chưa có thực đơn mới nào được cập nhật.</p>
+                                  </div>
+                               )}
+                            </div>
+                         </div>
+                      </div>
+                   )}
+
                   {parentTab === 'attendance-tab' && (
                      <div id="attendance-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                           {parentData.attendances.map((att, idx) => (
-                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                                 <div>
-                                    <div style={{ fontWeight: 600, color: '#1e293b' }}>{new Date(att.ngay).toLocaleDateString('vi-VN')}</div>
-                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{att.ghichu || 'Không có ghi chú'}</div>
-                                 </div>
-                                 <div style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, background: att.trangthai === 'Có mặt' ? '#f0fdf4' : att.trangthai === 'Nghỉ phép' ? '#fffbeb' : '#fef2f2', color: att.trangthai === 'Có mặt' ? '#16a34a' : att.trangthai === 'Nghỉ phép' ? '#d97706' : '#dc2626' }}>
-                                    {att.trangthai}
-                                 </div>
+                        <div style={{ background: 'white', borderRadius: '20px', padding: '15px', border: '1px solid #e2e8f0' }}>
+                           <div className="calendar-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                              <button style={{ padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#64748b', cursor: 'pointer' }} onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}><ChevronLeft size={18} /></button>
+                              <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Tháng {calendarDate.getMonth() + 1} - {calendarDate.getFullYear()}</h4>
+                              <button style={{ padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#64748b', cursor: 'pointer' }} onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}><ChevronRight size={18} /></button>
+                           </div>
+
+                           <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                 {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
+                                    <div key={d} style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: '#64748b', fontSize: '0.75rem' }}>{d}</div>
+                                 ))}
                               </div>
-                           ))}
-                           {parentData.attendances.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Chưa có dữ liệu điểm danh.</div>}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', position: 'relative' }}>
+                                 {(() => {
+                                    const year = calendarDate.getFullYear();
+                                    const month = calendarDate.getMonth();
+                                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                    const firstDay = new Date(year, month, 1).getDay();
+                                    const startIdx = firstDay === 0 ? 6 : firstDay - 1;
+                                    const cells = [];
+
+                                    for (let i = 0; i < startIdx; i++) {
+                                       cells.push(<div key={`b-${i}`} style={{ height: '70px', background: '#f8fafc', borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }} />);
+                                    }
+
+                                    for (let d = 1; d <= daysInMonth; d++) {
+                                       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                                       const rec = monthlyAttendance.find(a => a.ngay === dateStr);
+                                       let bg = 'white';
+                                       let color = '#94a3b8';
+                                       if (rec) {
+                                          const s = (rec.trangthai || '').toLowerCase();
+                                          if (s === 'có mặt') { bg = '#f0fdf4'; color = '#16a34a'; }
+                                          else if (s === 'nghỉ phép') { bg = '#fffbeb'; color = '#d97706'; }
+                                          else if (s === 'nghỉ không phép') { bg = '#fef2f2'; color = '#dc2626'; }
+                                       }
+
+                                       cells.push(
+                                          <div key={d} style={{ height: '70px', padding: '4px', background: bg, borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                                             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: color }}>{d}</div>
+                                             {rec && (
+                                                <>
+                                                   <div style={{ fontSize: '0.65rem', fontWeight: 800, color: color, lineHeight: 1 }}>{rec.trangthai.split(' ')[0]}</div>
+                                                   {rec.ghichu && <div style={{ fontSize: '0.6rem', color: '#64748b', lineHeight: 1.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.ghichu}</div>}
+                                                </>
+                                             )}
+                                          </div>
+                                       );
+                                    }
+                                    return cells;
+                                 })()}
+                                 {calendarLoading && (
+                                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
+                                       <Loader2 size={24} className="spinner" />
+                                    </div>
+                                 )}
+                              </div>
+                           </div>
+
+                           <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                 <div style={{ width: '10px', height: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '2px' }}></div> Có mặt: {monthlyAttendance.filter(a => a.trangthai === 'Có mặt').length}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                 <div style={{ width: '10px', height: '10px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '2px' }}></div> Nghỉ phép: {monthlyAttendance.filter(a => a.trangthai === 'Nghỉ phép').length}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                 <div style={{ width: '10px', height: '10px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '2px' }}></div> Nghỉ KP: {monthlyAttendance.filter(a => a.trangthai === 'Nghỉ không phép').length}
+                              </div>
+                           </div>
                         </div>
                      </div>
                   )}
@@ -482,7 +703,7 @@ function ParentPortal({ parentData, setParentData }) {
                   {parentTab === 'fee-tab' && (
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         {parentData.latestFee ? (
-                           <div className="fee-card-premium" style={{ background: 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
+                           <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                                  <div>
                                     <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>Học phí tháng {formatMonthYear(parentData.latestFee.ngaylap)}</div>
@@ -493,14 +714,16 @@ function ParentPortal({ parentData, setParentData }) {
                                  </div>
                               </div>
                               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                 <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{parentData.latestFee.status || 'Chờ thanh toán'}</span></div>
+                              <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
+                              {!tuitionStatus.isPaid && (
                                  <button onClick={() => {
                                     const qr = getQRUrl();
                                     if (qr) window.open(qr, '_blank');
                                     else alert('Không tìm thấy thông tin chuyển khoản cấu hình.');
                                  }} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Thanh toán ngay</button>
-                              </div>
+                              )}
                            </div>
+                        </div>
                         ) : (
                            <div className="fee-card-empty" style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', padding: '30px', borderRadius: '20px', textAlign: 'center', color: '#94a3b8', marginBottom: '20px' }}>
                               <Wallet size={32} style={{ marginBottom: '10px', opacity: 0.5 }} />
@@ -531,39 +754,84 @@ function ParentPortal({ parentData, setParentData }) {
                      </div>
                   )}
 
-                  {parentTab === 'health-tab' && (
-                     <div id="health-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0' }}>
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', borderBottom: '1px solid #f1f5f9', paddingBottom: '15px' }}>
-                              <div style={{ width: '50px', height: '50px', background: '#fef2f2', color: '#ef4444', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                 <Heart size={28} />
-                              </div>
-                              <div>
-                                 <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Cân nặng & Chiều cao</div>
-                                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: '#1e293b' }}>Sức khỏe định kỳ</div>
-                              </div>
-                           </div>
-                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', textAlign: 'center' }}>
-                                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '5px' }}>Chiều cao</div>
-                                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#3b82f6' }}>{parentData.student.chieucao || '--'} <span style={{ fontSize: '0.85rem' }}>cm</span></div>
-                              </div>
-                              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', textAlign: 'center' }}>
-                                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '5px' }}>Cân nặng</div>
-                                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981' }}>{parentData.student.cannang || '--'} <span style={{ fontSize: '0.85rem' }}>kg</span></div>
-                              </div>
-                           </div>
-                           <div style={{ marginTop: '20px', padding: '15px', background: '#eff6ff', borderRadius: '12px', border: '1px solid #dbeafe' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2563eb', fontWeight: 700, marginBottom: '5px', fontSize: '0.9rem' }}>
-                                 <Activity size={16} /> Nhận xét sức khỏe:
-                              </div>
-                              <div style={{ fontSize: '0.9rem', color: '#1e293b', lineHeight: 1.5 }}>
-                                 {parentData.student.ghichusuckhoe || 'Chưa có cập nhật mới về sức khỏe của bé.'}
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                  )}
+                   {parentTab === 'health-tab' && (
+                      <div id="health-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
+                         <div style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px' }}>
+                               <div style={{ width: '56px', height: '56px', background: '#fff1f2', color: '#e11d48', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(225, 29, 72, 0.15)' }}>
+                                  <Heart size={32} />
+                               </div>
+                               <div>
+                                  <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>Cân nặng & Chiều cao</div>
+                                  <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#0f172a' }}>Hồ Sơ Sức Khỏe</div>
+                               </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+                               <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', padding: '20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #bfdbfe' }}>
+                                  <div style={{ fontSize: '0.85rem', color: '#1e40af', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Activity size={16} /> Chiều cao</div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1e3a8a' }}>{healthHistory[0]?.chieucao || parentData.student.chieucao || '--'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>cm</span></div>
+                               </div>
+                               <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', padding: '20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                                  <div style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Activity size={16} /> Cân nặng</div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#14532d' }}>{healthHistory[0]?.cannang || parentData.student.cannang || '--'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>kg</span></div>
+                               </div>
+                            </div>
+
+                            <div style={{ padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontWeight: 800, marginBottom: '10px', fontSize: '0.95rem' }}>
+                                  <FileText size={18} className="text-primary" /> Nhận xét từ giáo viên:
+                               </div>
+                               <div style={{ fontSize: '1rem', color: '#334155', lineHeight: 1.6, fontStyle: parentData.student.ghichusuckhoe ? 'normal' : 'italic' }}>
+                                  {parentData.student.ghichusuckhoe || parentData.student.tinhtrangsk || 'Hiện tại chưa có nhận xét mới về tình trạng sức khỏe của bé.'}
+                                </div>
+                            </div>
+                         </div>
+
+                         <div style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                               <CalendarCheck size={20} className="text-primary" /> Lịch sử theo dõi hàng tháng
+                            </h3>
+                            
+                            {healthLoading ? (
+                               <div style={{ display: 'flex', justifyContent: 'center', padding: '30px' }}><Loader2 size={30} className="spinner text-primary" /></div>
+                            ) : healthHistory.length > 0 ? (
+                               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                  {healthHistory.map((record, idx) => {
+                                     const date = new Date(record.ngay);
+                                     return (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                                           <div style={{ minWidth: '60px', textAlign: 'center', borderRight: '2px solid #e2e8f0', paddingRight: '15px' }}>
+                                              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Tháng</div>
+                                              <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>{date.getMonth() + 1}</div>
+                                              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8' }}>{date.getFullYear()}</div>
+                                           </div>
+                                           <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                              <div>
+                                                 <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Chiều cao</span>
+                                                 <strong style={{ fontSize: '1rem', color: '#3b82f6' }}>{record.chieucao} cm</strong>
+                                              </div>
+                                              <div>
+                                                 <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Cân nặng</span>
+                                                 <strong style={{ fontSize: '1rem', color: '#10b981' }}>{record.cannang} kg</strong>
+                                              </div>
+                                           </div>
+                                           <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                              {date.toLocaleDateString('vi-VN')}
+                                           </div>
+                                        </div>
+                                     );
+                                  })}
+                               </div>
+                            ) : (
+                               <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
+                                  <Activity size={32} style={{ marginBottom: '10px', opacity: 0.5 }} />
+                                  <p style={{ margin: 0 }}>Chưa có dữ liệu lịch sử sức khỏe.</p>
+                               </div>
+                            )}
+                         </div>
+                      </div>
+                   )}
 
                   {parentTab === 'chat-tab' && (
                      <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', background: '#f8fafc', borderRadius: '0 0 24px 24px' }}>
@@ -608,8 +876,11 @@ function ParentPortal({ parentData, setParentData }) {
                                           </div>
                                        )}
                                        {m.image_url && (
-                                          <div style={{ marginTop: '5px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%' }}>
-                                             <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px' }} />
+                                          <div
+                                             style={{ marginTop: '5px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', cursor: 'zoom-in' }}
+                                             onClick={() => setPreviewImage(m.image_url)}
+                                          >
+                                             <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} />
                                           </div>
                                        )}
                                        {m.file_url && (
@@ -770,6 +1041,21 @@ function ParentPortal({ parentData, setParentData }) {
                      </button>
                   </form>
                </div>
+            </div>
+         )}
+         {/* Image Preview Overlay */}
+         {previewImage && (
+            <div
+               style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+               onClick={() => setPreviewImage(null)}
+            >
+               <button
+                  onClick={() => setPreviewImage(null)}
+                  style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+               >
+                  <X size={24} />
+               </button>
+               <img src={previewImage} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} />
             </div>
          )}
       </div>

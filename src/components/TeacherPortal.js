@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare } from 'lucide-react';
+import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart } from 'lucide-react';
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
@@ -26,7 +26,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
    
    // ----- Teacher Chat States -----
-   const [attTab, setAttTab] = useState('attendance'); // 'attendance' | 'chat'
+   const [attTab, setAttTab] = useState('attendance'); // 'attendance' | 'chat' | 'health'
    const [attChatSelectedStudent, setAttChatSelectedStudent] = useState(null);
    const [attUnreadCounts, setAttUnreadCounts] = useState({});
    const [attLatestMessages, setAttLatestMessages] = useState([]);
@@ -52,9 +52,27 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       const loadData = async () => {
          if (!attSelectedClass) { setAttStudents([]); setAttRecords({}); setLessonContent(''); return; }
 
-         // Lấy danh sách mahv từ bảng tbl_hv
-         const { data: stFound } = await supabase.from('tbl_hv').select('mahv, tenhv').eq('malop', attSelectedClass).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
-         const studentsFound = stFound || [];
+         // Lấy danh sách học sinh từ bảng tbl_hv
+         const { data: stFound, error: stError } = await supabase.from('tbl_hv').select('*').eq('malop', attSelectedClass);
+         if (stError) console.error('Error fetching students:', stError);
+         
+         // Lọc bỏ học sinh đã nghỉ ở phía client để tránh lỗi cú pháp truy vấn
+         const studentsFound = (stFound || []).filter(s => s.trangthai !== 'Đã Nghỉ');
+         
+         // Lấy thông tin sức khỏe mới nhất từ suckhoedinhky
+         if (studentsFound.length > 0) {
+            const stIds = studentsFound.map(s => s.mahv);
+            const { data: healthData } = await supabase.from('suckhoedinhky').select('*').in('mahv', stIds).order('ngay', { ascending: false });
+            if (healthData) {
+               studentsFound.forEach(s => {
+                  const latest = healthData.find(h => h.mahv === s.mahv);
+                  if (latest) {
+                     s.chieucao = latest.chieucao;
+                     s.cannang = latest.cannang;
+                  }
+               });
+            }
+         }
          setAttStudents(studentsFound);
 
          const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', attSelectedClass).eq('ngay', attDate);
@@ -108,6 +126,35 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
       setLoading(false);
    };
+
+    const handleSaveHealth = async () => {
+       if (!attSelectedClass) return window.alert('Chưa chọn lớp!');
+       setLoading(true);
+       try {
+          const today = new Date().toISOString();
+          for (const st of attStudents) {
+             // 1. Lưu vào bảng lịch sử sức khỏe định kỳ
+             const healthPayload = {
+                mahv: st.mahv,
+                chieucao: st.chieucao || '',
+                cannang: st.cannang || '',
+                ngay: today
+             };
+             await supabase.from('suckhoedinhky').insert([healthPayload]);
+
+             // 2. Cập nhật nhận xét vào bảng học viên (tinhtrangsk)
+             const hvPayload = {};
+             if (st.hasOwnProperty('ghichusuckhoe')) hvPayload.ghichusuckhoe = st.ghichusuckhoe;
+             else if (st.hasOwnProperty('tinhtrangsk')) hvPayload.tinhtrangsk = st.ghichusuckhoe || st.tinhtrangsk;
+
+             if (Object.keys(hvPayload).length > 0) {
+                await supabase.from('tbl_hv').update(hvPayload).eq('mahv', st.mahv);
+             }
+          }
+          window.alert('Lưu thông tin sức khỏe thành công!');
+       } catch (err) { console.error(err); window.alert('Lỗi lưu sức khỏe: ' + err.message); }
+       setLoading(false);
+    };
 
    const handleChangePassword = async (e) => {
       e.preventDefault();
@@ -383,6 +430,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   </span>
                )}
             </button>
+            <button onClick={() => setAttTab('health')} style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', fontWeight: 700, cursor: 'pointer', background: attTab === 'health' ? 'white' : 'transparent', color: attTab === 'health' ? '#ec4899' : '#64748b', boxShadow: attTab === 'health' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: '0.2s' }}>
+               <Heart size={18} /> Sức khỏe
+            </button>
          </div>
 
          {/* Change Password Modal */}
@@ -508,6 +558,59 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                )}
             </div>
          )}
+          {attTab === 'health' && (
+             <div className="health-tab-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+                <div style={{ marginBottom: '1.5rem' }}>
+                   <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#334155' }}>Chọn Lớp</label>
+                   <select value={attSelectedClass} onChange={e => setAttSelectedClass(e.target.value)} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+                      <option value="">-- {attClasses.length > 0 ? 'Chọn Lớp' : 'Không có lớp phân công'} --</option>
+                      {attClasses.map(c => <option key={c.malop} value={c.malop}>{c.tenlop || c.malop}</option>)}
+                   </select>
+                </div>
+
+                {attSelectedClass && (
+                   <>
+                      <div className="attendance-portal-list">
+                         {attStudents.length > 0 ? attStudents.map(st => (
+                            <div key={st.mahv} className="attendance-portal-card" style={{ borderLeft: '4px solid #ec4899', padding: '1.2rem' }}>
+                               <div style={{ marginBottom: '12px' }}>
+                                  <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{st.tenhv}</strong>
+                                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>{st.mahv}</div>
+                               </div>
+                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '12px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                     <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Chiều cao (cm)</label>
+                                     <input type="number" value={st.chieucao || ''} onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? { ...s, chieucao: e.target.value } : s))} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }} />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                     <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Cân nặng (kg)</label>
+                                     <input type="number" step="0.1" value={st.cannang || ''} onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? { ...s, cannang: e.target.value } : s))} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }} />
+                                  </div>
+                               </div>
+                               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Nhận xét sức khỏe</label>
+                                  <textarea 
+                                     placeholder="Nhận xét tình trạng sức khỏe của bé..." 
+                                     value={st.hasOwnProperty('ghichusuckhoe') ? (st.ghichusuckhoe || '') : (st.tinhtrangsk || '')} 
+                                     onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? (s.hasOwnProperty('ghichusuckhoe') ? { ...s, ghichusuckhoe: e.target.value } : { ...s, tinhtrangsk: e.target.value }) : s))} 
+                                     rows="2" 
+                                     style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', resize: 'vertical', fontSize: '0.9rem', fontFamily: 'inherit' }} 
+                                  />
+                               </div>
+                            </div>
+                         )) : (
+                            <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>Lớp không có học sinh.</div>
+                         )}
+                      </div>
+                      {attStudents.length > 0 && (
+                         <button onClick={handleSaveHealth} disabled={loading} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)' }}>
+                            {loading ? <Loader2 size={20} className="spinner" /> : 'Lưu Thông Tin Sức Khỏe'}
+                         </button>
+                      )}
+                   </>
+                )}
+             </div>
+          )}
 
          {attTab === 'chat' && (
             <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: '600px' }}>

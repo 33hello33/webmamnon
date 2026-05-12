@@ -30,7 +30,9 @@ import {
   Pencil,
   Pin,
   Share2,
-  Bell
+  Bell,
+  Utensils,
+  Upload
 } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
 import './ChatManager.css';
@@ -95,8 +97,12 @@ const ChatManager = ({ currentUser }) => {
   const [selectedForwardStudents, setSelectedForwardStudents] = useState([]);
   const [forwardSearch, setForwardSearch] = useState('');
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
-  const [announcementForm, setAnnouncementForm] = useState({ content: '', type: 'all', selectedClass: 'Tất cả' });
+  const [announcementForm, setAnnouncementForm] = useState({ content: '', type: 'all', selectedClasses: [] });
   const [announcementFiles, setAnnouncementFiles] = useState({ image: null, file: null });
+
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [menuFiles, setMenuFiles] = useState({ image: null });
+  const [menuForm, setMenuForm] = useState({ type: 'all', selectedClasses: [] });
   
   const scrollRef = useRef();
 
@@ -635,6 +641,11 @@ const ChatManager = ({ currentUser }) => {
       return;
     }
 
+    if (announcementForm.type === 'class' && announcementForm.selectedClasses.length === 0) {
+      alert('Vui lòng chọn ít nhất một lớp để đăng bảng tin.');
+      return;
+    }
+
     setUploading(true);
     try {
       let imageUrl = null;
@@ -654,39 +665,88 @@ const ChatManager = ({ currentUser }) => {
          mimeType = announcementFiles.file.type;
       }
 
-      // Target students
-      let targetStudents = [];
+      // Target classes
+      let targetClasses = [];
       if (announcementForm.type === 'all') {
-        targetStudents = students.map(s => s.mahv);
+        targetClasses = classes.map(c => c.malop);
       } else {
-        targetStudents = students.filter(s => s.malop === announcementForm.selectedClass).map(s => s.mahv);
+        targetClasses = announcementForm.selectedClasses;
       }
 
-      if (targetStudents.length === 0) {
-        alert('Không tìm thấy học viên nào để gửi thông báo.');
+      if (targetClasses.length === 0) {
+        alert('Không tìm thấy lớp nào để đăng thông báo.');
         return;
       }
 
-      const payloads = targetStudents.map(mahv => ({
-        mahv,
+      const payloads = targetClasses.map(malop => ({
+        malop,
         manv: currentUser.manv || currentUser.username,
         content: announcementForm.content,
         image_url: imageUrl,
         file_url: fileUrl,
         file_name: fileName,
-        file_mime_type: mimeType,
-        description: 'THONG_BAO'
+        file_mime_type: mimeType
       }));
 
-      const { error } = await supabase.from('hv_messages').insert(payloads);
+      const { error } = await supabase.from('class_announcements').insert(payloads);
       if (error) throw error;
 
-      alert(`Đã đăng bảng tin thành công tới ${targetStudents.length} phụ huynh.`);
+      alert(`Đã đăng bảng tin thành công tới ${targetClasses.length} lớp học.`);
       setIsAnnouncementModalOpen(false);
-      setAnnouncementForm({ content: '', type: 'all', selectedClass: 'Tất cả' });
+      setAnnouncementForm({ content: '', type: 'all', selectedClasses: [] });
       setAnnouncementFiles({ image: null, file: null });
     } catch (err) {
       alert('Lỗi: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePostMenu = async () => {
+    if (!menuFiles.image) {
+      alert('Vui lòng chọn hình ảnh thực đơn.');
+      return;
+    }
+
+    if (menuForm.type === 'class' && menuForm.selectedClasses.length === 0) {
+      alert('Vui lòng chọn ít nhất một lớp để gửi thực đơn.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 1. Upload Image
+      const imageUrl = await uploadToR2(menuFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+
+      // 2. Target classes
+      let targetClasses = [];
+      if (menuForm.type === 'all') {
+        targetClasses = classes.map(c => c.malop);
+      } else {
+        targetClasses = menuForm.selectedClasses;
+      }
+
+      if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
+
+      // 3. Insert into class_announcements
+      const payloads = targetClasses.map(malop => ({
+        malop,
+        manv: currentUser.manv || currentUser.username,
+        title: 'THỰC ĐƠN',
+        content: 'Thực đơn hàng tuần / hàng ngày',
+        image_url: imageUrl,
+        file_name: menuFiles.image.name,
+        file_mime_type: menuFiles.image.type
+      }));
+
+      const { error } = await supabase.from('class_announcements').insert(payloads);
+      if (error) throw error;
+
+      alert(`Đã gửi thực đơn thành công tới ${targetClasses.length} lớp.`);
+      setIsMenuModalOpen(false);
+      setMenuFiles({ image: null });
+    } catch (err) {
+      alert('Lỗi khi gửi thực đơn: ' + err.message);
     } finally {
       setUploading(false);
     }
@@ -1039,12 +1099,20 @@ const ChatManager = ({ currentUser }) => {
       {/* Dashboard Header with Announcement Trigger */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 5px' }}>
           <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>Quản lý trao đổi phụ huynh</h2>
-          <button 
-            onClick={() => setIsAnnouncementModalOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)' }}
-          >
-             <Bell size={18} /> Đăng Bảng Tin (Announcement)
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={() => setIsMenuModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
+            >
+               <Utensils size={18} /> Gửi Thực Đơn
+            </button>
+            <button 
+              onClick={() => setIsAnnouncementModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)' }}
+            >
+               <Bell size={18} /> Đăng Bảng Tin (Announcement)
+            </button>
+          </div>
        </div>
 
       {/* Filters Row */}
@@ -1225,32 +1293,63 @@ const ChatManager = ({ currentUser }) => {
                       <button 
                         className={`mode-btn ${announcementForm.type === 'all' ? 'active' : ''}`}
                         onClick={() => setAnnouncementForm({...announcementForm, type: 'all'})}
-                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: announcementForm.type === 'all' ? '#ede9fe' : 'white', color: announcementForm.type === 'all' ? '#8b5cf6' : '#64748b', fontWeight: 700, cursor: 'pointer' }}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: announcementForm.type === 'all' ? '2px solid #8b5cf6' : '1px solid #e2e8f0', 
+                          background: announcementForm.type === 'all' ? '#f5f3ff' : 'white', 
+                          color: announcementForm.type === 'all' ? '#8b5cf6' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
                       >
-                        Tất cả học viên
+                        Gửi tất cả các lớp
                       </button>
                       <button 
                         className={`mode-btn ${announcementForm.type === 'class' ? 'active' : ''}`}
                         onClick={() => setAnnouncementForm({...announcementForm, type: 'class'})}
-                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: announcementForm.type === 'class' ? '#ede9fe' : 'white', color: announcementForm.type === 'class' ? '#8b5cf6' : '#64748b', fontWeight: 700, cursor: 'pointer' }}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: announcementForm.type === 'class' ? '2px solid #8b5cf6' : '1px solid #e2e8f0', 
+                          background: announcementForm.type === 'class' ? '#f5f3ff' : 'white', 
+                          color: announcementForm.type === 'class' ? '#8b5cf6' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
                       >
-                        Học viên theo lớp
+                        Chọn từng lớp riêng
                       </button>
                    </div>
                 </div>
 
                 {announcementForm.type === 'class' && (
-                   <div style={{ marginBottom: '20px' }} className="fade-in">
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Chọn lớp:</label>
-                      <select 
-                        className="class-select-styled" 
-                        style={{ width: '100%', padding: '12px' }}
-                        value={announcementForm.selectedClass}
-                        onChange={e => setAnnouncementForm({...announcementForm, selectedClass: e.target.value})}
-                      >
-                        <option value="Tất cả">-- Chọn lớp --</option>
-                        {classes.map(c => <option key={c.malop} value={c.malop}>{c.tenlop}</option>)}
-                      </select>
+                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }} className="fade-in">
+                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        {classes.map(c => (
+                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={announcementForm.selectedClasses.includes(c.malop)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setAnnouncementForm(prev => {
+                                  const list = checked 
+                                    ? [...prev.selectedClasses, c.malop]
+                                    : prev.selectedClasses.filter(id => id !== c.malop);
+                                  return { ...prev, selectedClasses: list };
+                                });
+                              }}
+                            />
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                          </label>
+                        ))}
+                      </div>
                    </div>
                 )}
 
@@ -1268,11 +1367,47 @@ const ChatManager = ({ currentUser }) => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                    <div>
                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><ImageIcon size={16} /> Đính kèm ảnh:</label>
-                      <input type="file" accept="image/*" onChange={e => setAnnouncementFiles({...announcementFiles, image: e.target.files[0]})} />
+                      <label style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '8px', 
+                        padding: '12px', 
+                        borderRadius: '10px', 
+                        border: '2px dashed #e2e8f0', 
+                        background: '#f8fafc', 
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        overflow: 'hidden'
+                      }} onMouseOver={e => e.currentTarget.style.borderColor = '#8b5cf6'} onMouseOut={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                        <ImageIcon size={18} style={{ color: '#8b5cf6' }} />
+                        <span style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                           {announcementFiles.image ? announcementFiles.image.name : 'Chọn ảnh thông báo...'}
+                        </span>
+                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setAnnouncementFiles({...announcementFiles, image: e.target.files[0]})} />
+                      </label>
                    </div>
                    <div>
                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><File size={16} /> Đính kèm File:</label>
-                      <input type="file" onChange={e => setAnnouncementFiles({...announcementFiles, file: e.target.files[0]})} />
+                      <label style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '8px', 
+                        padding: '12px', 
+                        borderRadius: '10px', 
+                        border: '2px dashed #e2e8f0', 
+                        background: '#f8fafc', 
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        overflow: 'hidden'
+                      }} onMouseOver={e => e.currentTarget.style.borderColor = '#8b5cf6'} onMouseOut={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                        <Paperclip size={18} style={{ color: '#8b5cf6' }} />
+                        <span style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                           {announcementFiles.file ? announcementFiles.file.name : 'Chọn tệp đính kèm...'}
+                        </span>
+                        <input type="file" style={{ display: 'none' }} onChange={e => setAnnouncementFiles({...announcementFiles, file: e.target.files[0]})} />
+                      </label>
                    </div>
                 </div>
              </div>
@@ -1286,6 +1421,127 @@ const ChatManager = ({ currentUser }) => {
                 >
                    {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                    Đăng thông báo lên Bảng tin
+                </button>
+             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* Menu Modal */}
+      {isMenuModalOpen && createPortal(
+        <div className="chat-modal-overlay" onClick={() => setIsMenuModalOpen(false)}>
+          <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
+             <div className="modal-header">
+                <h3><Utensils size={20} /> Gửi Thực Đơn Cho Phụ Huynh</h3>
+                <button className="close-btn" onClick={() => setIsMenuModalOpen(false)}><X size={20} /></button>
+             </div>
+             <div className="modal-body">
+                <div style={{ marginBottom: '20px' }}>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                   <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        className={`mode-btn ${menuForm.type === 'all' ? 'active' : ''}`}
+                        onClick={() => setMenuForm({...menuForm, type: 'all'})}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: menuForm.type === 'all' ? '2px solid #10b981' : '1px solid #e2e8f0', 
+                          background: menuForm.type === 'all' ? '#f0fdf4' : 'white', 
+                          color: menuForm.type === 'all' ? '#10b981' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Gửi tất cả các lớp
+                      </button>
+                      <button 
+                        className={`mode-btn ${menuForm.type === 'class' ? 'active' : ''}`}
+                        onClick={() => setMenuForm({...menuForm, type: 'class'})}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: menuForm.type === 'class' ? '2px solid #10b981' : '1px solid #e2e8f0', 
+                          background: menuForm.type === 'class' ? '#f0fdf4' : 'white', 
+                          color: menuForm.type === 'class' ? '#10b981' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Chọn từng lớp riêng
+                      </button>
+                   </div>
+                </div>
+
+                {menuForm.type === 'class' && (
+                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        {classes.map(c => (
+                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={menuForm.selectedClasses.includes(c.malop)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setMenuForm(prev => {
+                                  const list = checked 
+                                    ? [...prev.selectedClasses, c.malop]
+                                    : prev.selectedClasses.filter(id => id !== c.malop);
+                                  return { ...prev, selectedClasses: list };
+                                });
+                              }}
+                            />
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                          </label>
+                        ))}
+                      </div>
+                   </div>
+                )}
+
+                <div>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh thực đơn:</label>
+                   <label style={{ 
+                     display: 'flex', 
+                     flexDirection: 'column',
+                     alignItems: 'center', 
+                     justifyContent: 'center', 
+                     gap: '12px', 
+                     padding: '30px', 
+                     borderRadius: '16px', 
+                     border: '2px dashed #10b981', 
+                     background: '#f0fdf4', 
+                     cursor: 'pointer',
+                     transition: 'all 0.2s'
+                   }}>
+                     {menuFiles.image ? (
+                        <div style={{ textAlign: 'center' }}>
+                           <ImageIcon size={40} style={{ color: '#10b981', marginBottom: '10px' }} />
+                           <div style={{ fontWeight: 700, color: '#065f46' }}>{menuFiles.image.name}</div>
+                           <div style={{ fontSize: '0.8rem', color: '#059669' }}>Nhấn để thay đổi ảnh</div>
+                        </div>
+                     ) : (
+                        <>
+                           <Upload size={40} style={{ color: '#10b981' }} />
+                           <span style={{ fontWeight: 700, color: '#065f46' }}>Chọn hoặc kéo thả ảnh thực đơn vào đây</span>
+                           <span style={{ fontSize: '0.8rem', color: '#059669' }}>Chấp nhận định dạng JPG, PNG, WEBP</span>
+                        </>
+                     )}
+                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setMenuFiles({image: e.target.files[0]})} />
+                   </label>
+                </div>
+             </div>
+             <div className="modal-footer">
+                <button className="btn-cancel" onClick={() => setIsMenuModalOpen(false)}>Hủy bỏ</button>
+                <button 
+                  className="btn-forward-submit" 
+                  style={{ background: '#10b981' }}
+                  disabled={uploading || !menuFiles.image}
+                  onClick={handlePostMenu}
+                >
+                   {uploading ? <Loader2 size={18} className="spinner" /> : <Utensils size={18} />}
+                   Gửi Thực Đơn Cho Phụ Huynh
                 </button>
              </div>
           </div>

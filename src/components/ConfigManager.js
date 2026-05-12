@@ -79,7 +79,8 @@ const ConfigManager = () => {
           songaynghilientiep: 7,
           phantramgiam: 50
         }),
-        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan
+        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
+        xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
       });
     }
   }, [config]);
@@ -620,6 +621,21 @@ const ConfigManager = () => {
                 />
                 <span>Nghỉ không phép</span>
               </label>
+
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
+                <div className="form-group">
+                  <label style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 700 }}>Hạn chót xin nghỉ học (HH:mm)</label>
+                  <input 
+                    type="time" 
+                    value={formData.xinnghitruocmaygio || '08:00'} 
+                    onChange={e => setFormData({ ...formData, xinnghitruocmaygio: e.target.value })}
+                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                  />
+                  <p className="hint" style={{ marginTop: '5px', fontSize: '0.75rem', color: '#64748b' }}>
+                    Sau giờ này, đơn xin nghỉ trong ngày sẽ tự động tính là **Nghỉ không phép**.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
