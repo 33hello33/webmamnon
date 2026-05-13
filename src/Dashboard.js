@@ -91,6 +91,12 @@ function Dashboard() {
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [employeesMap, setEmployeesMap] = useState({});
+   useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   const { config } = useConfig();
   const navigate = useNavigate();
   const [isChangePassOpen, setIsChangePassOpen] = useState(false);
@@ -250,9 +256,20 @@ function Dashboard() {
       fetchUnreadChatCount();
       
       const chatChannel = supabase.channel('global_chat_unread')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages' }, () => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+          const isPH = payload.new.description === 'PH' || (!payload.new.manv);
+          if (isPH) {
+            if (Notification.permission === 'granted') {
+              new Notification('Tin nhắn mới từ phụ huynh', {
+                body: payload.new.content || 'Bạn có một tệp đính kèm mới',
+                icon: '/logo192.png'
+              });
+            }
+          }
           fetchUnreadChatCount();
         })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => fetchUnreadChatCount())
         .subscribe();
         
       return () => {

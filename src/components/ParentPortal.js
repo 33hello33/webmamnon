@@ -33,6 +33,12 @@ function ParentPortal({ parentData, setParentData }) {
    const [healthHistory, setHealthHistory] = useState([]);
    const [healthLoading, setHealthLoading] = useState(false);
 
+   useEffect(() => {
+      if ('Notification' in window && Notification.permission === 'default') {
+         Notification.requestPermission();
+      }
+   }, []);
+
    const sendQuickMessage = async (content) => {
       if (!parentData) return;
       const newMessage = {
@@ -332,8 +338,18 @@ function ParentPortal({ parentData, setParentData }) {
       if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
       if (parentTab === 'health-tab') fetchHealthHistory();
 
+      const showNotification = (title, body) => {
+         if (Notification.permission === 'granted') {
+            new Notification(title, { body, icon: '/logo192.png' });
+         }
+      };
+
       const channel = supabase.channel(`parent_chat_${parentData.student.mahv}`)
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => {
+            const isMe = payload.new.description === 'PH';
+            if (!isMe) {
+               showNotification('Tin nhắn mới từ nhà trường', payload.new.content || 'Bạn có một tệp đính kèm mới');
+            }
             setChatMessages(prev => {
                const exists = prev.some(m => m.id === payload.new.id);
                if (exists) return prev;

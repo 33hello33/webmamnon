@@ -8,6 +8,12 @@ import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Pape
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
    const [loading, setLoading] = useState(false);
+
+   useEffect(() => {
+      if ('Notification' in window && Notification.permission === 'default') {
+         Notification.requestPermission();
+      }
+   }, []);
    
    // ----- Attendance Features -----
    const [attDate, setAttDate] = useState(() => {
@@ -304,11 +310,30 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (attendanceUser) {
          fetchAttUnreads();
          fetchAttSummaries();
-         const channel = supabase.channel('teacher_chat_monitor')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages' }, () => {
-               fetchAttUnreads(); fetchAttSummaries();
-            }).subscribe();
-         return () => supabase.removeChannel(channel);
+          const channel = supabase.channel('teacher_chat_monitor')
+             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+                const isPH = payload.new.description === 'PH' || (!payload.new.manv);
+                if (isPH) {
+                   // Only notify if student is in teacher's classes
+                   if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
+                      if (Notification.permission === 'granted') {
+                         new Notification('Tin nhắn mới từ phụ huynh', { 
+                            body: payload.new.content || 'Bạn có một tệp đính kèm mới',
+                            icon: '/logo192.png'
+                         });
+                      }
+                   }
+                }
+                fetchAttUnreads(); fetchAttSummaries();
+             })
+             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => {
+                fetchAttUnreads(); fetchAttSummaries();
+             })
+             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => {
+                fetchAttUnreads(); fetchAttSummaries();
+             })
+             .subscribe();
+          return () => supabase.removeChannel(channel);
       }
    }, [attendanceUser, attDateFilter]);
 
