@@ -428,11 +428,19 @@ function ParentPortal({ parentData, setParentData }) {
                <div className="premium-sidebar">
                   <div className="premium-header">
                      <div className="premium-header-top">
-                        <div className="premium-avatar-container">
-                           <img src={parentData.student.imgpath || parentData.student.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(parentData.student.tenhv || 'P')}&background=random`} alt="Avatar" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                           <div className="premium-avatar-container">
+                              <img src={parentData.student.imgpath || parentData.student.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(parentData.student.tenhv || 'P')}&background=random`} alt="Avatar" />
+                           </div>
+                           <div className="premium-header-info">
+                              <h1 className="premium-user-name">{parentData.student.tenhv}</h1>
+                              <div className="premium-user-sub">Lớp: {parentData.student.malop || 'Chưa xếp lớp'}</div>
+                              <div className="premium-user-sub">GV: {parentData.teacherInfo?.tennv || 'Chưa cập nhật'}</div>
+                           </div>
                         </div>
-                        <h1 className="premium-user-name">{parentData.student.tenhv}</h1>
-                        <button className="premium-search-btn"><Search size={20} /></button>
+                        <div className="premium-logo-avatar">
+                           <img src={config?.logo || '/logo.png'} alt="Logo" onError={(e) => e.target.src = 'https://ui-avatars.com/api/?name=S&background=random'} />
+                        </div>
                      </div>
                   </div>
 

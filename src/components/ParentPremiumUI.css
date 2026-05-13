@@ -23,16 +23,17 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0;
+    gap: 15px;
 }
 
 .premium-avatar-container {
-    width: 40px;
-    height: 40px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.8);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
 }
 
 .premium-avatar-container img {
@@ -45,27 +46,45 @@
     display: none;
 }
 
+.premium-header-info {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    flex: 1;
+}
+
 .premium-user-name {
-    font-size: 0.95rem;
+    font-size: 1.1rem;
     font-weight: 700;
     margin: 0;
     letter-spacing: 0.2px;
-    text-transform: uppercase;
-    flex: 1;
-    padding: 0 8px;
-    text-align: center;
+    color: white;
 }
 
-.premium-search-btn {
-    width: 32px;
-    height: 32px;
+.premium-user-sub {
+    font-size: 0.8rem;
+    opacity: 0.9;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.premium-logo-avatar {
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+    background: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: none;
-    color: white;
+    flex-shrink: 0;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.premium-logo-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 /* Floating Cards Section */
@@ -375,6 +394,7 @@
     .premium-header-top {
         flex-direction: column;
         gap: 15px;
+        align-items: center;
     }
 
     .premium-avatar-container {
@@ -383,16 +403,20 @@
         border: 4px solid rgba(255, 255, 255, 0.9);
     }
 
-    .premium-user-name {
-        order: 2;
-        font-size: 1.5rem;
-        padding: 0;
+    .premium-header-info {
+        text-align: center;
     }
 
-    .premium-search-btn {
-        position: absolute;
-        top: 20px;
-        right: 20px;
+    .premium-logo-avatar {
+        display: none; /* Hide logo avatar in desktop column to avoid clutter */
+    }
+
+    .premium-user-name {
+        font-size: 1.5rem;
+    }
+
+    .premium-user-sub {
+        font-size: 1rem;
     }
 
     .premium-quick-cards {

@@ -215,27 +215,42 @@ const ChatManager = ({ currentUser }) => {
 
   // ----- Table Data Computation -----
   const baseSummaries = useMemo(() => {
-    // 1. Group latest message per student
-    const studentLatestMap = {};
+    // 1. Group latest message per student and collect types from parent messages
+    const studentDataMap = {};
+    
     latestMessages.forEach(m => {
-      if (!studentLatestMap[m.mahv]) {
-        studentLatestMap[m.mahv] = m;
+      // Track latest message overall for each student (for display)
+      if (!studentDataMap[m.mahv]) {
+        studentDataMap[m.mahv] = { lastMsg: m, types: new Set() };
+      }
+
+      // Extract notification types from parent messages in the period
+      const isPH = m.description === 'PH' || (!m.manv);
+      if (isPH) {
+        const c = (m.content || '').toLowerCase();
+        if (c.includes('nghỉ') || c.includes('nghi ')) studentDataMap[m.mahv].types.add('XIN NGHỈ');
+        if (c.includes('thuốc') || c.includes('thuoc')) studentDataMap[m.mahv].types.add('BÁO THUỐC');
+        if (c.includes('đổi người') || c.includes('doi nguoi')) studentDataMap[m.mahv].types.add('ĐỔI NGƯỜI ĐÓN');
+        if (c.includes('muộn') || c.includes('trễ') || c.includes('muon') || c.includes('tre ')) studentDataMap[m.mahv].types.add('XIN VỀ TRỄ');
       }
     });
 
     // 2. Map students to summaries
     return students.map(s => {
-      const lastMsg = studentLatestMap[s.mahv];
+      const sData = studentDataMap[s.mahv];
+      const lastMsg = sData?.lastMsg;
       const cls = classes.find(c => c.malop === s.malop);
       const teacher = teachers.find(t => t.manv === cls?.manv);
 
-      // Determine notification type from content
+      // Determine display notification type from the latest message (for the table row badge)
       let notifType = 'TIN NHẮN';
-      const content = (lastMsg?.content || '').toLowerCase();
-      if (content.includes('nghỉ')) notifType = 'XIN NGHỈ';
-      else if (content.includes('thuốc')) notifType = 'BÁO THUỐC';
-      else if (content.includes('đổi người')) notifType = 'ĐỔI NGƯỜI ĐÓN';
-      else if (content.includes('muộn') || content.includes('trễ')) notifType = 'XIN VỀ TRỄ';
+      if (lastMsg) {
+        const content = (lastMsg.content || '').toLowerCase();
+        if (content.includes('nghỉ')) notifType = 'XIN NGHỈ';
+        else if (content.includes('thuốc')) notifType = 'BÁO THUỐC';
+        else if (content.includes('đổi người')) notifType = 'ĐỔI NGƯỜI ĐÓN';
+        else if (content.includes('muộn') || content.includes('trễ')) notifType = 'XIN VỀ TRỄ';
+      }
 
       return {
         ...s,
@@ -243,6 +258,7 @@ const ChatManager = ({ currentUser }) => {
         className: cls?.tenlop || s.malop || 'Chưa xếp lớp',
         teacherName: teacher?.tennv || cls?.giaovien || 'Chưa cập nhật',
         notifType: lastMsg ? notifType : null,
+        allTypes: Array.from(sData?.types || []),
         lastTime: lastMsg ? new Date(lastMsg.created_at) : null
       };
     }).filter(s => {
@@ -259,10 +275,10 @@ const ChatManager = ({ currentUser }) => {
   const parentSummaries = useMemo(() => {
     return baseSummaries.filter(s => {
       let matchesStat = true;
-      if (statFilter === 'XIN_NGHI') matchesStat = s.notifType === 'XIN NGHỈ';
-      else if (statFilter === 'BAO_THUOC') matchesStat = s.notifType === 'BÁO THUỐC';
-      else if (statFilter === 'DOI_NGUOI') matchesStat = s.notifType === 'ĐỔI NGƯỜI ĐÓN';
-      else if (statFilter === 'VE_TRE') matchesStat = s.notifType === 'XIN VỀ TRỄ';
+      if (statFilter === 'XIN_NGHI') matchesStat = s.allTypes.includes('XIN NGHỈ');
+      else if (statFilter === 'BAO_THUOC') matchesStat = s.allTypes.includes('BÁO THUỐC');
+      else if (statFilter === 'DOI_NGUOI') matchesStat = s.allTypes.includes('ĐỔI NGƯỜI ĐÓN');
+      else if (statFilter === 'VE_TRE') matchesStat = s.allTypes.includes('XIN VỀ TRỄ');
       else if (statFilter === 'GUI_TIN_NHAN') matchesStat = !!s.lastMsg;
 
       return matchesStat;
@@ -277,11 +293,11 @@ const ChatManager = ({ currentUser }) => {
   // Quick Report Counts
   const reports = useMemo(() => {
     return {
-      xinNghi: baseSummaries.filter(s => s.notifType === 'XIN NGHỈ').length,
-      baoThuoc: baseSummaries.filter(s => s.notifType === 'BÁO THUỐC').length,
-      doiNguoi: baseSummaries.filter(s => s.notifType === 'ĐỔI NGƯỜI ĐÓN').length,
+      xinNghi: baseSummaries.filter(s => s.allTypes.includes('XIN NGHỈ')).length,
+      baoThuoc: baseSummaries.filter(s => s.allTypes.includes('BÁO THUỐC')).length,
+      doiNguoi: baseSummaries.filter(s => s.allTypes.includes('ĐỔI NGƯỜI ĐÓN')).length,
       guiTinNhan: baseSummaries.filter(s => !!s.lastMsg).length,
-      veTre: baseSummaries.filter(s => s.notifType === 'XIN VỀ TRỄ').length,
+      veTre: baseSummaries.filter(s => s.allTypes.includes('XIN VỀ TRỄ')).length,
     };
   }, [baseSummaries]);
 
