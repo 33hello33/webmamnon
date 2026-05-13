@@ -487,3 +487,57 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .config-header, 
+[data-theme="kindergarten"] .config-section,
+[data-theme="kindergarten"] .cat-col {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .section-title {
+  color: #1e293b !important;
+  border-bottom-color: #f1f5f9 !important;
+}
+
+[data-theme="kindergarten"] .h-left h2 {
+  color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .btn-save {
+  background: #f43f5e !important;
+  border-radius: 12px !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.2) !important;
+}
+
+[data-theme="kindergarten"] .form-group input, 
+[data-theme="kindergarten"] .cat-col textarea,
+[data-theme="kindergarten"] .w-body input {
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+[data-theme="kindergarten"] .wallet-card {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+}
+
+[data-theme="kindergarten"] .w-header {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+[data-theme="kindergarten"] .roles-table th {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+[data-theme="kindergarten"] .config-modal {
+  border-radius: 24px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.1) !important;
+}

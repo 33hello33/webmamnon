@@ -89,9 +89,11 @@ function Login() {
          const { data: attendances } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', mahv).order('ngay', { ascending: false }).limit(30);
 
          let teacherManv = null;
-         const { data: classData } = await supabase.from('tbl_lop').select('manv').eq('malop', stData.malop).maybeSingle();
-         if (classData?.manv) {
+         let tenLop = null;
+         const { data: classData } = await supabase.from('tbl_lop').select('manv, tenlop').eq('malop', stData.malop).maybeSingle();
+         if (classData) {
             teacherManv = classData.manv;
+            tenLop = classData.tenlop;
          } else {
             const { data: firstNv } = await supabase.from('tbl_nv').select('manv').limit(1).maybeSingle();
             teacherManv = firstNv?.manv || null;
@@ -104,7 +106,7 @@ function Login() {
          }
 
          const parentDataObj = {
-            student: stData,
+            student: { ...stData, tenlop: tenLop },
             latestFee: feeData || null,
             invoices: invoices || [],
             attendances: attendances || [],

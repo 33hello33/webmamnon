@@ -114,100 +114,95 @@ code {
   border-top: 1px solid #e2e8f0 !important;
 }
 
-/* THEME: DARK MODE (GLASSMORPHISM) */
-[data-theme="dark"] {
-  background-color: #0f172a !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] body {
-  background-color: #0f172a !important;
-}
-
-[data-theme="dark"] .app-container {
-  background-color: #0f172a !important;
-}
-
-[data-theme="dark"] .login-box {
-  background: rgba(30, 41, 59, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .input-group input {
-  background: rgba(15, 23, 42, 0.6) !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
 
 /* THEME: MẦM NON (KINDERGARTEN) */
 [data-theme="kindergarten"] {
-  --k-blue: #60a5fa;
-  --k-pink: #f472b6;
-  --k-green: #4ade80;
-  --k-yellow: #fbbf24;
-  --k-purple: #a78bfa;
-  --k-bg: #fffbf0;
+  --k-blue: #0ea5e9;
+  --k-pink: #f43f5e;
+  --k-green: #10b981;
+  --k-yellow: #f59e0b;
+  --k-purple: #8b5cf6;
+  --k-bg: #f8fafc;
+  --k-accent: #fff1f2;
   background-color: var(--k-bg) !important;
-  font-family: 'Outfit', 'Inter', sans-serif !important;
-  overflow-x: hidden !important;
+  background-image: radial-gradient(#e2e8f0 1px, transparent 1px) !important;
+  background-size: 30px 30px !important;
+  font-family: 'Quicksand', sans-serif !important;
 }
 
 [data-theme="kindergarten"] body {
   overflow-x: hidden !important;
+  background-attachment: fixed !important;
 }
 
 [data-theme="kindergarten"] .dashboard-layout {
   overflow-x: hidden !important;
-  background-color: var(--k-bg) !important;
-  background-image: radial-gradient(#ffd67044 1px, transparent 1px) !important;
-  background-size: 20px 20px !important;
+  background: var(--k-bg-gradient) !important;
+  position: relative;
 }
 
 [data-theme="kindergarten"] .sidebar {
-  background-color: #ffffff !important;
-  border-right: 4px dashed var(--k-yellow) !important;
-  box-shadow: 10px 0 30px rgba(0,0,0,0.03);
+  background: #ffffff !important;
+  border-right: 2px solid #f1f5f9 !important;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.02) !important;
+  position: relative;
+}
+
+[data-theme="kindergarten"] .sidebar-header {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-bottom: 2px solid #f1f5f9 !important;
+  height: 72px !important;
+}
+
+[data-theme="kindergarten"] .logo-text {
+  background: linear-gradient(135deg, var(--k-pink), var(--k-purple)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-weight: 800 !important;
+  font-size: 1.3rem !important;
 }
 
 [data-theme="kindergarten"] .nav-title {
-  color: var(--k-pink) !important;
+  color: #fb7185 !important;
   font-weight: 800 !important;
   letter-spacing: 2px !important;
+  margin-top: 15px !important;
+  font-size: 0.8rem !important;
 }
 
 [data-theme="kindergarten"] .nav-btn {
-  border-radius: 20px !important;
-  margin: 4px 8px !important;
-  border: 2px solid transparent !important;
+  border-radius: 16px !important;
+  margin: 4px 12px !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+  color: #64748b !important;
 }
 
 [data-theme="kindergarten"] .nav-btn:hover {
-  background-color: #fce7f3 !important;
-  border-color: var(--k-pink) !important;
+  background-color: #f1f5f9 !important;
+  color: var(--k-pink) !important;
+  transform: none !important;
 }
 
 [data-theme="kindergarten"] .nav-btn.active {
-  background: linear-gradient(135deg, var(--k-pink), #f43f5e) !important;
-  color: white !important;
-  box-shadow: 0 4px 15px rgba(244, 63, 94, 0.3) !important;
-  border: none !important;
+  background: #fff1f2 !important;
+  color: var(--k-pink) !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 [data-theme="kindergarten"] .nav-btn.active .nav-icon {
-  color: white !important;
-}
-
-[data-theme="kindergarten"] .nav-btn.active::before {
-  display: none !important;
+  color: var(--k-pink) !important;
 }
 
 [data-theme="kindergarten"] .content-header h2 {
-  color: var(--k-pink) !important;
-  font-weight: 950 !important;
-  font-family: 'Quicksand', 'Comic Sans MS', cursive !important;
-  text-shadow: 2px 2px 0px rgba(0,0,0,0.05);
-  font-size: 2rem !important;
+  color: #1e293b !important;
+  -webkit-text-fill-color: initial !important;
+  background: none !important;
+  font-weight: 800 !important;
+  font-size: 1.8rem !important;
+  filter: none !important;
 }
 
 [data-theme="kindergarten"] .user-profile {
@@ -258,12 +253,18 @@ code {
 [data-theme="kindergarten"] .placeholder-card, 
 [data-theme="kindergarten"] .table-container,
 [data-theme="kindergarten"] .card {
-  border: 3px solid #ffffff !important;
-  border-radius: 30px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
   background: #ffffff !important;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.04) !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.03) !important;
+  position: relative;
   overflow: hidden;
 }
+
+[data-theme="kindergarten"] .overview-stats-card:nth-child(4n+1) { background: #eff6ff !important; border-color: #dbeafe !important; }
+[data-theme="kindergarten"] .overview-stats-card:nth-child(4n+2) { background: #fff1f2 !important; border-color: #ffe4e6 !important; }
+[data-theme="kindergarten"] .overview-stats-card:nth-child(4n+3) { background: #f0fdf4 !important; border-color: #dcfce7 !important; }
+[data-theme="kindergarten"] .overview-stats-card:nth-child(4n+4) { background: #fffbeb !important; border-color: #fef3c7 !important; }
 
 [data-theme="kindergarten"] .theme-select {
   border: 2px solid var(--k-pink) !important;
@@ -288,8 +289,8 @@ code {
 [data-theme="kindergarten"] input, 
 [data-theme="kindergarten"] select, 
 [data-theme="kindergarten"] textarea {
-  border-radius: 12px !important;
-  border: 2px solid #e2e8f0 !important;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
 }
 
 [data-theme="kindergarten"] input:focus {
@@ -304,8 +305,12 @@ code {
 [data-theme="kindergarten"] .report-card {
   border-radius: 24px !important;
   border-width: 3px !important;
-  background: white !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fff9f0 100%) !important;
 }
+
+[data-theme="kindergarten"] .report-card:nth-child(3n+1) { background: #fff7ed !important; }
+[data-theme="kindergarten"] .report-card:nth-child(3n+2) { background: #fdf2f8 !important; }
+[data-theme="kindergarten"] .report-card:nth-child(3n+3) { background: #f0fdfa !important; }
 
 [data-theme="kindergarten"] .filter-label {
   color: var(--k-pink) !important;
@@ -481,13 +486,35 @@ code {
 }
 
 [data-theme="kindergarten"] .login-box {
-  background: white !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fffdf0 100%) !important;
   border: 6px solid #fff9e6 !important;
   outline: 4px dashed var(--k-yellow) !important;
   outline-offset: -15px !important;
   border-radius: 50px !important;
   box-shadow: 0 30px 60px rgba(0,0,0,0.1) !important;
   color: #1e293b !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme="kindergarten"] .login-box::before {
+  content: "🎨";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 2rem;
+  opacity: 0.1;
+  transform: rotate(20deg);
+}
+
+[data-theme="kindergarten"] .login-box::after {
+  content: "🧸";
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  font-size: 2rem;
+  opacity: 0.1;
+  transform: rotate(-20deg);
 }
 
 [data-theme="kindergarten"] .login-header h2 {
@@ -936,4 +963,26 @@ code {
   [data-theme="kindergarten"] .input-group input {
     font-size: 0.9rem !important;
   }
+}
+
+[data-theme="kindergarten"] .mobile-top-bar {
+  background: #ffffff !important;
+  height: 64px !important;
+  border-bottom: 2px solid #f1f5f9 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .mobile-top-title {
+  color: #1e293b !important;
+  font-weight: 800 !important;
+  font-family: 'Quicksand', sans-serif !important;
+  font-size: 1.1rem !important;
+  text-transform: none !important;
+}
+
+[data-theme="kindergarten"] .mobile-menu-btn {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+  border-radius: 12px !important;
 }

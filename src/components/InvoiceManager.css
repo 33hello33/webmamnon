@@ -1117,3 +1117,54 @@
     border-bottom: none;
   }
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .im-left-pane, 
+[data-theme="kindergarten"] .im-right-pane {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+  background: #ffffff !important;
+}
+
+[data-theme="kindergarten"] .im-search {
+  background: #ffffff !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  border-radius: 20px 20px 0 0 !important;
+}
+
+[data-theme="kindergarten"] .im-search input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+[data-theme="kindergarten"] .im-student-card.active {
+  background: #fff1f2 !important;
+  border-color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .im-card-name {
+  color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .im-btn-submit {
+  background: #f43f5e !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.2) !important;
+}
+
+[data-theme="kindergarten"] .im-section-title {
+  color: #1e293b !important;
+  border-bottom-color: #f1f5f9 !important;
+}
+
+[data-theme="kindergarten"] .im-finance-row {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+[data-theme="kindergarten"] .im-finance-row.highlight-row {
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}

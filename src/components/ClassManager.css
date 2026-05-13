@@ -613,3 +613,58 @@
 .print-a5-receipt .text-center {
   text-align: center !important;
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .class-list-pane, 
+[data-theme="kindergarten"] .class-details-pane {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .pane-title {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+[data-theme="kindergarten"] .class-item.active {
+  background: #fff1f2 !important;
+  border-left: 4px solid #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .class-item.active .class-icon {
+  background: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .class-header-card {
+  background: #ffffff !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+[data-theme="kindergarten"] .class-id {
+  background: #f43f5e !important;
+  color: white !important;
+  border-radius: 8px !important;
+}
+
+[data-theme="kindergarten"] .info-chip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+}
+
+[data-theme="kindergarten"] .info-chip label {
+  color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .no-selection {
+  background: #ffffff !important;
+}
+
+[data-theme="kindergarten"] .student-card {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  border-radius: 16px !important;
+}

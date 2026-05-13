@@ -1025,3 +1025,71 @@
 .fm-card-list {
   display: none;
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .finance-manager {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  padding: 1rem !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-card {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02) !important;
+  transition: all 0.3s ease !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-card:hover {
+  transform: translateY(-5px);
+  border-color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .fm-toolbar {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+}
+
+[data-theme="kindergarten"] .fm-search {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+}
+
+[data-theme="kindergarten"] .fm-search input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+[data-theme="kindergarten"] .fm-table th {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+  font-family: 'Quicksand', sans-serif !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-label {
+  color: #64748b !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-value {
+  color: #1e293b !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-icon {
+  border-radius: 16px !important;
+}
+
+[data-theme="kindergarten"] .fm-modal-content {
+  border-radius: 24px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.1) !important;
+}
+
+[data-theme="kindergarten"] .fm-modal-header {
+  background: #ffffff !important;
+  color: #1e293b !important;
+}

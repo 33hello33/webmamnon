@@ -161,3 +161,60 @@
   box-shadow: 0 4px 12px rgba(43,147,251,0.25); width: 100%;
 }
 .tm-btn-submit:hover { background: #1d4ed8; transform: translateY(-2px); }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .stat-card {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.02) !important;
+  transition: all 0.3s ease !important;
+}
+
+[data-theme="kindergarten"] .stat-card:hover {
+  transform: translateY(-5px);
+  border-color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .tm-toolbar {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+}
+
+[data-theme="kindergarten"] .tm-search, 
+[data-theme="kindergarten"] .tm-filters {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  background: white !important;
+}
+
+[data-theme="kindergarten"] .tm-search input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+[data-theme="kindergarten"] .tm-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .tm-avatar {
+  background: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .tm-btn-add {
+  background: #f43f5e !important;
+  border-radius: 12px !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.2) !important;
+}
+
+[data-theme="kindergarten"] .tm-modal {
+  border-radius: 24px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.1) !important;
+}

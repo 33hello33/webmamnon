@@ -358,7 +358,6 @@ function Dashboard() {
                 }}
               >
                 <option value="light">☀️ Sáng (Mặc định)</option>
-                <option value="dark">🌙 Tối (Dark)</option>
                 <option value="kindergarten">🎨 Mầm Non</option>
               </select>
             </div>

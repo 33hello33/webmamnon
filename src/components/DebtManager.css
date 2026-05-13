@@ -281,3 +281,52 @@
   font-weight: 800;
   font-size: 1rem;
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .debt-stat-card {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.02) !important;
+  transition: all 0.3s ease !important;
+}
+
+[data-theme="kindergarten"] .debt-stat-card:hover {
+  transform: translateY(-5px);
+  border-color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .debt-stat-card.overdue {
+  border-left: 5px solid #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .debt-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .debt-header {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+[data-theme="kindergarten"] .debt-title h3 {
+  color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .debt-item-card {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .btn-pay {
+  background: #f43f5e !important;
+  border-radius: 12px !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.2) !important;
+}

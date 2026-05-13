@@ -104,6 +104,14 @@ const ChatManager = ({ currentUser }) => {
   const [menuFiles, setMenuFiles] = useState({ image: null });
   const [menuForm, setMenuForm] = useState({ type: 'all', selectedClasses: [] });
   
+  const [isNgoaiKhoaModalOpen, setIsNgoaiKhoaModalOpen] = useState(false);
+  const [ngoaiKhoaFiles, setNgoaiKhoaFiles] = useState({ image: null });
+  const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({ type: 'all', selectedClasses: [] });
+
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyNotices, setHistoryNotices] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
   const scrollRef = useRef();
 
   // Close menu when clicking outside
@@ -772,6 +780,89 @@ const ChatManager = ({ currentUser }) => {
     }
   };
 
+  const handlePostNgoaiKhoa = async () => {
+    if (!ngoaiKhoaFiles.image) {
+      alert('Vui lòng chọn hình ảnh hoạt động ngoại khóa.');
+      return;
+    }
+
+    if (ngoaiKhoaForm.type === 'class' && ngoaiKhoaForm.selectedClasses.length === 0) {
+      alert('Vui lòng chọn ít nhất một lớp để gửi hoạt động.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const imageUrl = await uploadToR2(ngoaiKhoaFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+
+      let targetClasses = [];
+      if (ngoaiKhoaForm.type === 'all') {
+        targetClasses = classes.map(c => c.malop);
+      } else {
+        targetClasses = ngoaiKhoaForm.selectedClasses;
+      }
+
+      if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
+
+      const payloads = targetClasses.map(malop => ({
+        malop,
+        manv: currentUser.manv || currentUser.username,
+        title: 'NGOẠI KHÓA',
+        content: 'Thông tin hoạt động ngoại khóa mới',
+        image_url: imageUrl,
+        file_name: ngoaiKhoaFiles.image.name,
+        file_mime_type: ngoaiKhoaFiles.image.type
+      }));
+
+      const { error } = await supabase.from('class_announcements').insert(payloads);
+      if (error) throw error;
+
+      alert(`Đã gửi hoạt động ngoại khóa thành công tới ${targetClasses.length} lớp.`);
+      setIsNgoaiKhoaModalOpen(false);
+      setNgoaiKhoaFiles({ image: null });
+    } catch (err) {
+      alert('Lỗi khi gửi ngoại khóa: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const fetchHistoryNotices = async () => {
+    setHistoryLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('class_announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (error) throw error;
+      setHistoryNotices(data || []);
+    } catch (err) {
+      console.error('Error fetching history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleRevokeNotice = async (id) => {
+    if (!window.confirm('Bạn có chắc chắn muốn thu hồi (xoá) bản tin này? Phụ huynh sẽ không còn thấy nội dung này nữa.')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('class_announcements')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setHistoryNotices(prev => prev.filter(n => n.id !== id));
+      alert('Đã thu hồi bản tin thành công.');
+    } catch (err) {
+      alert('Lỗi khi thu hồi: ' + err.message);
+    }
+  };
+
   if (view === 'chat' && selectedStudent) {
     return (
       <div className="chat-manager-layout chat-thread-view">
@@ -1116,19 +1207,33 @@ const ChatManager = ({ currentUser }) => {
 
   return (
     <div className="chat-dashboard animate-fade-in">
-      {/* Dashboard Header with Announcement Trigger */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 5px' }}>
-          <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>Quản lý trao đổi phụ huynh</h2>
-          <div style={{ display: 'flex', gap: '10px' }}>
+      <div className="chat-dashboard-header">
+          <h2 className="chat-dashboard-title">Quản lý trao đổi phụ huynh</h2>
+          <div className="chat-header-actions">
             <button 
+              className="chat-action-btn btn-history"
+              onClick={() => {
+                setIsHistoryModalOpen(true);
+                fetchHistoryNotices();
+              }}
+            >
+               <Clock size={18} /> Lịch sử đã đăng
+            </button>
+            <button 
+              className="chat-action-btn btn-menu"
               onClick={() => setIsMenuModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
             >
                <Utensils size={18} /> Gửi Thực Đơn
             </button>
             <button 
+              className="chat-action-btn btn-ngoaikhoa"
+              onClick={() => setIsNgoaiKhoaModalOpen(true)}
+            >
+               <ImageIcon size={18} /> Gửi Ngoại Khóa
+            </button>
+            <button 
+              className="chat-action-btn btn-announcement"
               onClick={() => setIsAnnouncementModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)' }}
             >
                <Bell size={18} /> Đăng Bảng Tin (Announcement)
             </button>
@@ -1249,14 +1354,14 @@ const ChatManager = ({ currentUser }) => {
             onClick={() => setStatFilter(statFilter === 'GOP_Y' ? 'ALL' : 'GOP_Y')}
             style={{ 
               cursor: 'pointer', 
-              background: '#475569', 
+              background: '#f97316', 
               color: 'white',
-              outline: statFilter === 'GOP_Y' ? '3px solid #64748b' : 'none', 
+              outline: statFilter === 'GOP_Y' ? '3px solid #ea580c' : 'none', 
               opacity: statFilter !== 'ALL' && statFilter !== 'GOP_Y' ? 0.6 : 1 
             }}
           >
-            <span className="report-label" style={{ color: '#f8fafc' }}>Thư góp ý</span>
-            <span className="report-value">{String(reports.gopY).padStart(2, '0')}</span>
+            <span className="report-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Góp ý phụ huynh</span>
+            <span className="report-value" style={{ color: 'white' }}>{String(reports.gopY).padStart(2, '0')}</span>
           </div>
         )}
       </div>
@@ -1598,6 +1703,184 @@ const ChatManager = ({ currentUser }) => {
                    {uploading ? <Loader2 size={18} className="spinner" /> : <Utensils size={18} />}
                    Gửi Thực Đơn Cho Phụ Huynh
                 </button>
+             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* Ngoai Khoa Modal */}
+      {isNgoaiKhoaModalOpen && createPortal(
+        <div className="chat-modal-overlay" onClick={() => setIsNgoaiKhoaModalOpen(false)}>
+          <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
+             <div className="modal-header" style={{ background: '#fdf2f8' }}>
+                <h3 style={{ color: '#be185d' }}><ImageIcon size={20} /> Gửi Hoạt Động Ngoại Khóa</h3>
+                <button className="close-btn" onClick={() => setIsNgoaiKhoaModalOpen(false)}><X size={20} /></button>
+             </div>
+             <div className="modal-body">
+                <div style={{ marginBottom: '20px' }}>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                   <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        className={`mode-btn ${ngoaiKhoaForm.type === 'all' ? 'active' : ''}`}
+                        onClick={() => setNgoaiKhoaForm({...ngoaiKhoaForm, type: 'all'})}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: ngoaiKhoaForm.type === 'all' ? '2px solid #ec4899' : '1px solid #e2e8f0', 
+                          background: ngoaiKhoaForm.type === 'all' ? '#fdf2f8' : 'white', 
+                          color: ngoaiKhoaForm.type === 'all' ? '#ec4899' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Gửi tất cả các lớp
+                      </button>
+                      <button 
+                        className={`mode-btn ${ngoaiKhoaForm.type === 'class' ? 'active' : ''}`}
+                        onClick={() => setNgoaiKhoaForm({...ngoaiKhoaForm, type: 'class'})}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: ngoaiKhoaForm.type === 'class' ? '2px solid #ec4899' : '1px solid #e2e8f0', 
+                          background: ngoaiKhoaForm.type === 'class' ? '#fdf2f8' : 'white', 
+                          color: ngoaiKhoaForm.type === 'class' ? '#ec4899' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Chọn từng lớp riêng
+                      </button>
+                   </div>
+                </div>
+
+                {ngoaiKhoaForm.type === 'class' && (
+                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        {classes.map(c => (
+                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={ngoaiKhoaForm.selectedClasses.includes(c.malop)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setNgoaiKhoaForm(prev => {
+                                  const list = checked 
+                                    ? [...prev.selectedClasses, c.malop]
+                                    : prev.selectedClasses.filter(id => id !== c.malop);
+                                  return { ...prev, selectedClasses: list };
+                                });
+                              }}
+                            />
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                          </label>
+                        ))}
+                      </div>
+                   </div>
+                )}
+
+                <div>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh hoạt động ngoại khóa:</label>
+                   <label style={{ 
+                     display: 'flex', 
+                     flexDirection: 'column',
+                     alignItems: 'center', 
+                     justifyContent: 'center', 
+                     gap: '12px', 
+                     padding: '30px', 
+                     borderRadius: '16px', 
+                     border: '2px dashed #ec4899', 
+                     background: '#fdf2f8', 
+                     cursor: 'pointer',
+                     transition: 'all 0.2s'
+                   }}>
+                     {ngoaiKhoaFiles.image ? (
+                        <div style={{ textAlign: 'center' }}>
+                           <ImageIcon size={40} style={{ color: '#ec4899', marginBottom: '10px' }} />
+                           <div style={{ fontWeight: 700, color: '#9d174d' }}>{ngoaiKhoaFiles.image.name}</div>
+                           <div style={{ fontSize: '0.8rem', color: '#be185d' }}>Nhấn để thay đổi ảnh</div>
+                        </div>
+                     ) : (
+                        <>
+                           <Upload size={40} style={{ color: '#ec4899' }} />
+                           <span style={{ fontWeight: 700, color: '#9d174d' }}>Chọn hoặc kéo thả ảnh ngoại khóa vào đây</span>
+                           <span style={{ fontSize: '0.8rem', color: '#be185d' }}>Chấp nhận định dạng JPG, PNG, WEBP</span>
+                        </>
+                     )}
+                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setNgoaiKhoaFiles({image: e.target.files[0]})} />
+                   </label>
+                </div>
+             </div>
+             <div className="modal-footer">
+                <button className="btn-cancel" onClick={() => setIsNgoaiKhoaModalOpen(false)}>Hủy bỏ</button>
+                <button 
+                  className="btn-forward-submit" 
+                  style={{ background: '#ec4899' }}
+                  disabled={uploading || !ngoaiKhoaFiles.image}
+                  onClick={handlePostNgoaiKhoa}
+                >
+                   {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                   Gửi Hoạt Động Cho Phụ Huynh
+                </button>
+             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* History Modal */}
+      {isHistoryModalOpen && createPortal(
+        <div className="chat-modal-overlay" onClick={() => setIsHistoryModalOpen(false)}>
+          <div className="chat-modal announcement-modal" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
+             <div className="modal-header">
+                <h3><Clock size={20} /> Lịch sử Bản tin / Thực đơn / Ngoại khóa</h3>
+                <button className="close-btn" onClick={() => setIsHistoryModalOpen(false)}><X size={20} /></button>
+             </div>
+             <div className="modal-body">
+                {historyLoading ? (
+                  <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="spinner" size={40} /></div>
+                ) : historyNotices.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Chưa có bản tin nào được đăng.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', padding: '5px' }}>
+                    {historyNotices.map(notice => (
+                      <div key={notice.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '15px', position: 'relative' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{ 
+                            fontSize: '0.75rem', 
+                            fontWeight: 700, 
+                            padding: '4px 10px', 
+                            borderRadius: '6px',
+                            background: notice.title === 'THỰC ĐƠN' ? '#f0fdf4' : notice.title === 'NGOẠI KHÓA' ? '#fdf2f8' : '#f5f3ff',
+                            color: notice.title === 'THỰC ĐƠN' ? '#10b981' : notice.title === 'NGOẠI KHÓA' ? '#ec4899' : '#8b5cf6'
+                          }}>
+                            {notice.title}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{new Date(notice.created_at).toLocaleString('vi-VN')}</span>
+                        </div>
+                        <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '5px' }}>Lớp: {getClassName(notice.malop)}</div>
+                        <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '10px' }}>{notice.content}</div>
+                        
+                        {notice.image_url && (
+                          <div style={{ marginBottom: '10px' }}>
+                             <img src={getDisplayUrl(notice.image_url)} alt="preview" style={{ maxHeight: '100px', borderRadius: '8px', cursor: 'zoom-in' }} onClick={() => setPreviewImage(notice.image_url)} />
+                          </div>
+                        )}
+
+                        <button 
+                          onClick={() => handleRevokeNotice(notice.id)}
+                          style={{ position: 'absolute', right: '15px', bottom: '15px', padding: '6px 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                        >
+                          <Trash2 size={14} /> Thu hồi
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+             </div>
+             <div className="modal-footer">
+                <button className="btn-cancel" onClick={() => setIsHistoryModalOpen(false)}>Đóng</button>
              </div>
           </div>
         </div>,

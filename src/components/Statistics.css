@@ -144,3 +144,28 @@
      width: 100% !important;
   }
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .filter-card, 
+[data-theme="kindergarten"] .chart-item {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .stat-header-left h2 {
+  color: #1e293b !important;
+  font-weight: 800 !important;
+}
+
+[data-theme="kindergarten"] .chart-title h3 {
+  color: #f43f5e !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="kindergarten"] .filter-card select, 
+[data-theme="kindergarten"] .custom-date-row input {
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+}

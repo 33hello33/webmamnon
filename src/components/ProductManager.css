@@ -195,3 +195,42 @@
   color: #2563eb;
   background: #eff6ff;
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .pm-toolbar, 
+[data-theme="kindergarten"] .pm-table-wrapper {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .search-box {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+}
+
+[data-theme="kindergarten"] .search-box input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+[data-theme="kindergarten"] .product-card {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .btn-blue {
+  background: #0ea5e9 !important;
+  color: white !important;
+  border-radius: 12px !important;
+}
+
+[data-theme="kindergarten"] .tenhang-val {
+  color: #f43f5e !important;
+  font-weight: 700 !important;
+}

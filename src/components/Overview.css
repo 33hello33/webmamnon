@@ -400,3 +400,43 @@
     grid-column: span 2;
   }
 }
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .o-card, 
+[data-theme="kindergarten"] .f-card, 
+[data-theme="kindergarten"] .wallet-col, 
+[data-theme="kindergarten"] .w-card {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .o-card:hover, 
+[data-theme="kindergarten"] .f-card:hover {
+  transform: translateY(-5px);
+  border-color: #f43f5e !important;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important;
+}
+
+[data-theme="kindergarten"] .o-card.blue { border-left: 4px solid #3b82f6 !important; }
+[data-theme="kindergarten"] .o-card.green { border-left: 4px solid #10b981 !important; }
+[data-theme="kindergarten"] .o-card.purple { border-left: 4px solid #8b5cf6 !important; }
+[data-theme="kindergarten"] .o-card.teal { border-left: 4px solid #14b8a6 !important; }
+
+[data-theme="kindergarten"] .f-card.success { border-left: 6px solid #10b981 !important; }
+[data-theme="kindergarten"] .f-card.danger { border-left: 6px solid #f43f5e !important; }
+[data-theme="kindergarten"] .f-card.warning { border-left: 6px solid #f59e0b !important; }
+
+[data-theme="kindergarten"] .filter-group, 
+[data-theme="kindergarten"] .custom-dates {
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+[data-theme="kindergarten"] .section-title, 
+[data-theme="kindergarten"] .sh-massive-title, 
+[data-theme="kindergarten"] .sh-standard-title {
+  color: #1e293b !important;
+  font-weight: 800 !important;
+}

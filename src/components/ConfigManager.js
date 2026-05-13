@@ -33,7 +33,7 @@ const formatCurrency = (val) => {
   return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
 
-const ROLES = ['Quản lý', 'Nhân viên VP', 'Giáo viên'];
+const ROLES = ['Quản lý', 'Nhân viên VP'];
 const TAB_OPTIONS = [
   { id: 'statistics', label: 'Thống kê' },
   { id: 'chat', label: 'Phụ huynh' },
@@ -64,8 +64,7 @@ const ConfigManager = () => {
         hangmucchi: Array.isArray(config.hangmucchi) ? config.hangmucchi.join('\n') : '',
         phanquyenrole: config.phanquyenrole || {
           'Quản lý': { full: true },
-          'Nhân viên VP': { full: false, tabs: [] },
-          'Giáo viên': { full: false, tabs: [] }
+          'Nhân viên VP': { full: false, tabs: [] }
         },
         tinhhocphi: config.tinhhocphi || {
           available: ['khoa', 'buoi', 'thang'],

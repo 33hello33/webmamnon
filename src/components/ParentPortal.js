@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -32,6 +32,14 @@ function ParentPortal({ parentData, setParentData }) {
    const [calendarLoading, setCalendarLoading] = useState(false);
    const [healthHistory, setHealthHistory] = useState([]);
    const [healthLoading, setHealthLoading] = useState(false);
+   const [ngoaiKhoaLoading, setNgoaiKhoaLoading] = useState(false);
+   const [ngoaiKhoaReg, setNgoaiKhoaReg] = useState(null);
+   const [showDeclineReason, setShowDeclineReason] = useState(false);
+   const [ngoaiKhoaReason, setNgoaiKhoaReason] = useState('');
+   const chatEndRef = useRef(null);
+   const chatContainerRef = useRef(null);
+   const [hasMoreChat, setHasMoreChat] = useState(true);
+   const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
 
    useEffect(() => {
       if ('Notification' in window && Notification.permission === 'default') {
@@ -52,7 +60,57 @@ function ParentPortal({ parentData, setParentData }) {
          alert('Lỗi khi gửi thông báo: ' + error.message);
          return;
       }
-      if (data) setChatMessages(prev => [...prev, data[0]]);
+      if (data) {
+         setChatMessages(prev => [...prev, data[0]]);
+         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+   };
+
+   const fetchChatMessages = async (isLoadMore = false) => {
+      if (!parentData) return;
+      if (isLoadMore) setIsLoadMoreChat(true);
+      else setChatLoading(true);
+
+      const currentCount = isLoadMore ? chatMessages.length : 0;
+      const pageSize = 20;
+
+      const { data, error } = await supabase
+         .from('hv_messages')
+         .select('*')
+         .eq('mahv', parentData.student.mahv)
+         .order('created_at', { ascending: false })
+         .range(currentCount, currentCount + pageSize - 1);
+
+      if (error) {
+         console.error('Error fetching chat:', error);
+      } else if (data) {
+         const reversed = [...data].reverse();
+         if (isLoadMore) {
+            const oldHeight = chatContainerRef.current?.scrollHeight || 0;
+            setChatMessages(prev => [...reversed, ...prev]);
+            if (data.length < pageSize) setHasMoreChat(false);
+            
+            // Maintain scroll position after prepending
+            setTimeout(() => {
+               if (chatContainerRef.current) {
+                  chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight - oldHeight;
+               }
+            }, 0);
+         } else {
+            setChatMessages(reversed);
+            setHasMoreChat(data.length === pageSize);
+            setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+         }
+      }
+
+      if (isLoadMore) setIsLoadMoreChat(false);
+      else setChatLoading(false);
+   };
+
+   const handleChatScroll = (e) => {
+      if (e.target.scrollTop === 0 && hasMoreChat && !chatLoading && !isLoadMoreChat) {
+         fetchChatMessages(true);
+      }
    };
 
    const handleLeaveSubmit = async (e) => {
@@ -260,6 +318,60 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
+   const fetchNgoaiKhoaRegistration = async () => {
+      if (!parentData) return;
+      setNgoaiKhoaLoading(true);
+      try {
+         const { data, error } = await supabase
+            .from('dangkyngoaikhoa')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .order('ngaydangky', { ascending: false })
+            .limit(1);
+         if (error) throw error;
+         if (data && data.length > 0) {
+            setNgoaiKhoaReg(data[0]);
+            setNgoaiKhoaReason(data[0].lydo || '');
+            setShowDeclineReason(!data[0].codangky);
+         } else {
+            setNgoaiKhoaReg(null);
+         }
+      } catch (err) {
+         console.error('Error fetching registration:', err);
+      } finally {
+         setNgoaiKhoaLoading(false);
+      }
+   };
+
+   const handleNgoaiKhoaSubmit = async (codangky) => {
+      if (!parentData) return;
+      if (!codangky && !ngoaiKhoaReason.trim()) {
+         alert('Vui lòng nhập lý do không đăng ký.');
+         return;
+      }
+
+      setNgoaiKhoaLoading(true);
+      try {
+         const payload = {
+            mahv: parentData.student.mahv,
+            codangky: codangky,
+            lydo: codangky ? '' : ngoaiKhoaReason,
+            ngaydangky: new Date().toISOString()
+         };
+
+         const { data, error } = await supabase.from('dangkyngoaikhoa').insert([payload]).select();
+         if (error) throw error;
+         
+         alert(codangky ? 'Đăng ký ngoại khóa thành công!' : 'Đã ghi nhận ý kiến không tham gia của phụ huynh.');
+         if (data) setNgoaiKhoaReg(data[0]);
+      } catch (err) {
+         console.error('Error submitting registration:', err);
+         alert('Có lỗi xảy ra khi gửi đăng ký.');
+      } finally {
+         setNgoaiKhoaLoading(false);
+      }
+   };
+
    const fetchUnreads = async () => {
       if (!parentData) return;
       const { data } = await supabase.from('hv_messages').select('manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
@@ -293,12 +405,6 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // Rest of the tab-specific data fetching
-      const fetchChatMessages = async () => {
-         setChatLoading(true);
-         const { data } = await supabase.from('hv_messages').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: true });
-         if (data) setChatMessages(data);
-         setChatLoading(false);
-      };
       const fetchChatDocs = async () => {
          const { data } = await supabase.from('documents').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: false });
          if (data) setChatDocuments(data || []);
@@ -338,6 +444,10 @@ function ParentPortal({ parentData, setParentData }) {
       if (parentTab === 'notices-tab' || parentTab === 'menu-tab') fetchParentNotices();
       if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
       if (parentTab === 'health-tab') fetchHealthHistory();
+      if (parentTab === 'ngoaikhoa-tab') {
+         fetchParentNotices();
+         fetchNgoaiKhoaRegistration();
+      }
 
       const showNotification = (title, body) => {
          if (Notification.permission === 'granted') {
@@ -354,6 +464,7 @@ function ParentPortal({ parentData, setParentData }) {
             setChatMessages(prev => {
                const exists = prev.some(m => m.id === payload.new.id);
                if (exists) return prev;
+               setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                return [...prev, payload.new];
             });
          }).subscribe();
@@ -379,6 +490,13 @@ function ParentPortal({ parentData, setParentData }) {
       }
    }, [parentTab, parentData]);
 
+   useEffect(() => {
+      if (parentTab === 'chat-tab') {
+         // chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+         // Handled inside fetchChatMessages or new message logic
+      }
+   }, [parentTab]);
+
    const handleSendChat = async (e) => {
       e.preventDefault();
       if (!chatInput.trim() || !parentData) return;
@@ -393,6 +511,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (data) {
          setChatInput('');
          setChatMessages(prev => [...prev, data[0]]);
+         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
    };
 
@@ -461,7 +580,7 @@ function ParentPortal({ parentData, setParentData }) {
                            </div>
                            <div className="premium-header-info">
                               <h1 className="premium-user-name">{parentData.student.tenhv}</h1>
-                              <div className="premium-user-sub">Lớp: {parentData.student.malop || 'Chưa xếp lớp'}</div>
+                              <div className="premium-user-sub">Lớp: {parentData.student.tenlop || parentData.student.malop || 'Chưa xếp lớp'}</div>
                               <div className="premium-user-sub">GV: {parentData.teacherInfo?.tennv || 'Chưa cập nhật'}</div>
                            </div>
                         </div>
@@ -542,7 +661,7 @@ function ParentPortal({ parentData, setParentData }) {
                         <div className="premium-utility-icon-wrapper" style={{ color: '#10b981' }}><Utensils size={24} /></div>
                         <span className="premium-utility-label">Thực đơn</span>
                      </div>
-                     <div className="premium-utility-item" onClick={() => alert('Chức năng đang phát triển')}>
+                     <div className="premium-utility-item" onClick={() => setParentTab('ngoaikhoa-tab')}>
                         <div className="premium-utility-icon-wrapper" style={{ color: '#ec4899' }}><Image size={24} /></div>
                         <span className="premium-utility-label">Ngoại khóa</span>
                      </div>
@@ -574,6 +693,7 @@ function ParentPortal({ parentData, setParentData }) {
                            parentTab === 'fee-tab' ? 'Học phí' :
                               parentTab === 'health-tab' ? 'Sức khỏe' :
                                  parentTab === 'menu-tab' ? 'Thực đơn' :
+                                 parentTab === 'ngoaikhoa-tab' ? 'Ngoại khóa' :
                                     parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
                   </h2>
                </div>
@@ -658,7 +778,99 @@ function ParentPortal({ parentData, setParentData }) {
                       </div>
                    )}
 
-                  {parentTab === 'attendance-tab' && (
+                   {parentTab === 'ngoaikhoa-tab' && (
+                      <div id="ngoaikhoa-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                         <div className="notices-section">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#be185d' }}>
+                               <Image size={20} /> Hoạt động ngoại khóa mới nhất
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                               {parentNotices.filter(n => n.title === 'NGOẠI KHÓA').length > 0 ? (
+                                  parentNotices.filter(n => n.title === 'NGOẠI KHÓA').slice(0, 1).map((item, idx) => (
+                                  <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                     <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#fdf2f8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: 800, color: '#be185d' }}>Thông tin ngoại khóa</span>
+                                        <span style={{ fontSize: '0.8rem', color: '#be185d', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
+                                     </div>
+                                     <div style={{ padding: '15px' }}>
+                                        <p style={{ margin: '0 0 15px 0', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>{item.content}</p>
+                                        {item.image_url && (
+                                           <div 
+                                              style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
+                                              onClick={() => setPreviewImage(item.image_url)}
+                                           >
+                                              <img src={item.image_url} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} />
+                                           </div>
+                                        )}
+
+                                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                                           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                              <button 
+                                                 onClick={() => {
+                                                    setShowDeclineReason(false);
+                                                    handleNgoaiKhoaSubmit(true);
+                                                 }}
+                                                 disabled={ngoaiKhoaLoading}
+                                                 style={{ 
+                                                    flex: 1, padding: '12px', borderRadius: '12px', 
+                                                    background: ngoaiKhoaReg?.codangky === true ? '#16a34a' : 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', 
+                                                    color: 'white', border: 'none', fontWeight: 700, 
+                                                    opacity: ngoaiKhoaLoading ? 0.7 : 1, cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                                 }}
+                                              >
+                                                 {ngoaiKhoaReg?.codangky === true ? 'Đã đăng ký ✓' : 'Đăng ký tham gia'}
+                                              </button>
+                                              <button 
+                                                 onClick={() => setShowDeclineReason(true)}
+                                                 disabled={ngoaiKhoaLoading}
+                                                 style={{ 
+                                                    flex: 1, padding: '12px', borderRadius: '12px', 
+                                                    background: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? '#64748b' : 'white', 
+                                                    color: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? 'white' : '#475569', 
+                                                    border: '1px solid #e2e8f0', fontWeight: 700,
+                                                    cursor: 'pointer'
+                                                 }}
+                                              >
+                                                 {ngoaiKhoaReg?.codangky === false ? 'Đã từ chối' : 'Không đăng ký'}
+                                              </button>
+                                           </div>
+
+                                           {showDeclineReason && (
+                                              <div style={{ animation: 'slideDown 0.3s ease' }}>
+                                                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Lý do không tham gia:</label>
+                                                 <textarea 
+                                                    placeholder="Nhập lý do..." 
+                                                    value={ngoaiKhoaReason} 
+                                                    onChange={e => setNgoaiKhoaReason(e.target.value)}
+                                                    rows="2" 
+                                                    style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none', marginBottom: '10px' }}
+                                                 />
+                                                 <button 
+                                                    onClick={() => handleNgoaiKhoaSubmit(false)}
+                                                    disabled={ngoaiKhoaLoading || !ngoaiKhoaReason.trim()}
+                                                    style={{ width: '100%', padding: '10px', borderRadius: '10px', background: '#475569', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+                                                 >
+                                                    {ngoaiKhoaLoading ? 'Đang gửi...' : 'Gửi lý do từ chối'}
+                                                 </button>
+                                              </div>
+                                           )}
+                                        </div>
+                                     </div>
+                                  </div>
+                                  ))
+                               ) : (
+                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                                     <Image size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
+                                     <p>Hiện chưa có thông tin ngoại khóa mới nào.</p>
+                                  </div>
+                               )}
+                            </div>
+                         </div>
+                      </div>
+                   )}
+
+                   {parentTab === 'attendance-tab' && (
                      <div id="attendance-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         <div style={{ background: 'white', borderRadius: '20px', padding: '15px', border: '1px solid #e2e8f0' }}>
                            <div className="calendar-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -890,7 +1102,10 @@ function ParentPortal({ parentData, setParentData }) {
                            </div>
                         </div>
 
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px', minHeight: '400px' }}>
+                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px', minHeight: '400px' }}>
+                           {isLoadMoreChat && (
+                              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px' }}><Loader2 size={16} className="spinner" /></div>
+                           )}
                            {chatLoading ? (
                               <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
                            ) : chatMessages.length === 0 ? (
@@ -932,6 +1147,7 @@ function ParentPortal({ parentData, setParentData }) {
                                  );
                               })
                            )}
+                           <div ref={chatEndRef} />
                         </div>
 
                         <div style={{ padding: '15px 16px', background: 'white', borderTop: '1px solid #e2e8f0' }}>
