@@ -151,6 +151,48 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       rows: []
    });
 
+   const parseNoidung = (nd) => {
+      if (!nd || typeof nd !== 'string') return { headers: [], rows: [] };
+
+      try {
+         const obj = JSON.parse(nd);
+         if (Array.isArray(obj) && obj.length > 0) {
+            const headers = Object.keys(obj[0]);
+            const rows = obj.map(o => headers.map(h => o[h] || ''));
+            return { headers, rows };
+         }
+         if (Array.isArray(obj) && obj.length === 0) return { headers: [], rows: [] };
+      } catch (e) { }
+
+      const lines = nd.split(/\r\n|\n|\r/).filter(l => l.trim() !== '');
+      if (lines.length === 0) return { headers: [], rows: [] };
+
+      const splitCsvLine = (str) => {
+         const arr = [];
+         let quote = false;
+         let col = '';
+         for (let i = 0; i < str.length; i++) {
+            let c = str[i];
+            if (c === '"' && str[i + 1] === '"') { col += '"'; i++; }
+            else if (c === '"') { quote = !quote; }
+            else if (c === ',' && !quote) { arr.push(col.trim()); col = ''; }
+            else { col += c; }
+         }
+         arr.push(col.trim());
+         return arr;
+      };
+
+      const headers = splitCsvLine(lines[0]);
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+         const cells = splitCsvLine(lines[i]);
+         while (cells.length < headers.length) cells.push("");
+         if (cells.length > headers.length) cells.splice(headers.length);
+         rows.push(cells);
+      }
+      return { headers, rows };
+   };
+
    const fetchBalances = useCallback(async () => {
       const { data } = await supabase.from('tbl_tiendauky').select('*').order('ngaylap', { ascending: false }).limit(1);
 
@@ -342,12 +384,47 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
 
          const { idField, idVal, table } = confirmDialog.payload;
+
+         // NEW: Revert stock if deleting NhapKho or BillHangHoa
+         if (table === 'tbl_nhapkho') {
+            const { data: record } = await supabase.from('tbl_nhapkho').select('mahang, soluong').eq(idField, idVal).single();
+            if (record) {
+               const { data: product } = await supabase.from('tbl_hanghoa').select('soluong').eq('mahang', record.mahang).single();
+               if (product) {
+                  const newQty = (parseInt(product.soluong) || 0) - (parseInt(record.soluong) || 0);
+                  await supabase.from('tbl_hanghoa').update({ soluong: newQty }).eq('mahang', record.mahang);
+               }
+            }
+         } else if (table === 'tbl_billhanghoa') {
+            const { data: record } = await supabase.from('tbl_billhanghoa').select('hanghoa').eq(idField, idVal).single();
+            if (record && record.hanghoa) {
+               const parsed = parseNoidung(record.hanghoa);
+               // headers: [mahang, tenhang, dvt, sl, dg, tt]
+               for (const row of parsed.rows) {
+                  const ma = row[0];
+                  const sl = parseInt(row[3]) || 0;
+                  if (ma && sl > 0) {
+                     const { data: product } = await supabase.from('tbl_hanghoa').select('soluong').eq('mahang', ma).single();
+                     if (product) {
+                        const newQty = (parseInt(product.soluong) || 0) + sl;
+                        await supabase.from('tbl_hanghoa').update({ soluong: newQty }).eq('mahang', ma);
+                     }
+                  }
+               }
+            }
+         }
+
          const { error } = await supabase.from(table).update({ daxoa: 'Đã xóa' }).eq(idField, idVal);
          if (error) alert('Lỗi khi xoá: ' + error.message);
          else {
             const detailDesc = `[XÓA] Bảng: ${table} | Mã: ${idVal}`;
             insertLog(detailDesc);
             fetchData();
+            // Refresh products if needed
+            if (table === 'tbl_nhapkho' || table === 'tbl_billhanghoa') {
+               const { data: hhs } = await supabase.from('tbl_hanghoa').select('*');
+               setProductList((hhs || []).filter(h => h.daxoa !== 'Đã Xóa'));
+            }
          }
       } else if (confirmDialog.actionType === 'EDIT_BILL') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -493,47 +570,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
 
 
-   const parseNoidung = (nd) => {
-      if (!nd || typeof nd !== 'string') return { headers: [], rows: [] };
-
-      try {
-         const obj = JSON.parse(nd);
-         if (Array.isArray(obj) && obj.length > 0) {
-            const headers = Object.keys(obj[0]);
-            const rows = obj.map(o => headers.map(h => o[h] || ''));
-            return { headers, rows };
-         }
-         if (Array.isArray(obj) && obj.length === 0) return { headers: [], rows: [] };
-      } catch (e) { }
-
-      const lines = nd.split(/\r\n|\n|\r/).filter(l => l.trim() !== '');
-      if (lines.length === 0) return { headers: [], rows: [] };
-
-      const splitCsvLine = (str) => {
-         const arr = [];
-         let quote = false;
-         let col = '';
-         for (let i = 0; i < str.length; i++) {
-            let c = str[i];
-            if (c === '"' && str[i + 1] === '"') { col += '"'; i++; }
-            else if (c === '"') { quote = !quote; }
-            else if (c === ',' && !quote) { arr.push(col.trim()); col = ''; }
-            else { col += c; }
-         }
-         arr.push(col.trim());
-         return arr;
-      };
-
-      const headers = splitCsvLine(lines[0]);
-      const rows = [];
-      for (let i = 1; i < lines.length; i++) {
-         const cells = splitCsvLine(lines[i]);
-         while (cells.length < headers.length) cells.push("");
-         if (cells.length > headers.length) cells.splice(headers.length);
-         rows.push(cells);
-      }
-      return { headers, rows };
-   };
 
    useEffect(() => {
       const handleAfterPrint = () => {
