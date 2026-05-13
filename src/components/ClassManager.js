@@ -8,6 +8,19 @@ import {
 
 import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
+
+const dataUrlToBlob = (dataUrl) => {
+  const arr = dataUrl.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+};
 import './ClassManager.css';
 
 const INITIAL_FORM = {
@@ -990,6 +1003,34 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
+
+                  // Auto-send to student chat
+                  try {
+                    const fileName = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
+                    const blob = dataUrlToBlob(dataUrl);
+                    const file = new File([blob], fileName, { type: 'image/png' });
+                    
+                    let imageUrl = '';
+                    if (config?.r2_enabled) {
+                      imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                    } else {
+                      const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${fileName}`;
+                      const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                      if (upErr) throw upErr;
+                      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                      imageUrl = publicUrl;
+                    }
+
+                    const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+                    await supabase.from('hv_messages').insert([{
+                      mahv: noticesToPrint[i].mahv,
+                      manv: auth.user?.manv || auth.user?.username || 'admin',
+                      content: `Gửi phụ huynh Thông báo đóng học phí ${noticesToPrint[i].mahd}`,
+                      image_url: imageUrl
+                    }]);
+                  } catch (sendErr) {
+                    console.error('Auto-send bulk notice error:', sendErr);
+                  }
                 } else {
                   console.warn(`Empty or tiny dataUrl for index ${i}. Length: ${dataUrl?.length}`);
                   // Immediate retry with simple capture
@@ -1001,6 +1042,34 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
+
+                    // Auto-send for retry
+                    try {
+                      const fileName = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
+                      const blob = dataUrlToBlob(retryUrl);
+                      const file = new File([blob], fileName, { type: 'image/png' });
+                      
+                      let imageUrl = '';
+                      if (config?.r2_enabled) {
+                        imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                      } else {
+                        const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${fileName}`;
+                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        if (upErr) throw upErr;
+                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                        imageUrl = publicUrl;
+                      }
+
+                      const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+                      await supabase.from('hv_messages').insert([{
+                        mahv: noticesToPrint[i].mahv,
+                        manv: auth.user?.manv || auth.user?.username || 'admin',
+                        content: `Gửi phụ huynh Thông báo đóng học phí ${noticesToPrint[i].mahd}`,
+                        image_url: imageUrl
+                      }]);
+                    } catch (sendErr) {
+                      console.error('Auto-send bulk notice retry error:', sendErr);
+                    }
                   }
                 }
               } catch (nodeErr) {

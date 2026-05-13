@@ -4,6 +4,19 @@ import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSqua
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
+
+const dataUrlToBlob = (dataUrl) => {
+   const arr = dataUrl.split(',');
+   const mime = arr[0].match(/:(.*?);/)[1];
+   const bstr = atob(arr[1]);
+   let n = bstr.length;
+   const u8arr = new Uint8Array(n);
+   while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+   }
+   return new Blob([u8arr], { type: mime });
+};
 
 
 
@@ -282,6 +295,37 @@ export default function InvoiceManager() {
                      link.click();
                      document.body.removeChild(link);
                   }
+
+                  // Auto-send to student chat
+                  const autoSend = async () => {
+                     try {
+                        const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
+                        const blob = dataUrlToBlob(dataUrl);
+                        const file = new File([blob], fileName, { type: 'image/png' });
+                        
+                        let imageUrl = '';
+                        if (config?.r2_enabled) {
+                           imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                        } else {
+                           const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${fileName}`;
+                           const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                           if (upErr) throw upErr;
+                           const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                           imageUrl = publicUrl;
+                        }
+
+                        await supabase.from('hv_messages').insert([{
+                           mahv: downloadingInvoice.mahv,
+                           manv: auth.user?.manv || auth.user?.username || 'admin',
+                           content: `Gửi phụ huynh Hóa đơn học phí ${downloadingInvoice.mahd}`,
+                           image_url: imageUrl
+                        }]);
+                        console.log('Auto-sent invoice to student chat');
+                     } catch (err) {
+                        console.error('Auto-send invoice error:', err);
+                     }
+                  };
+                  autoSend();
                }
             } catch (err) {
                console.error('Lỗi xuất PNG:', err);
@@ -331,6 +375,37 @@ export default function InvoiceManager() {
                      link.click();
                      document.body.removeChild(link);
                   }
+
+                  // Auto-send to student chat
+                  const autoSend = async () => {
+                     try {
+                        const fileName = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
+                        const blob = dataUrlToBlob(dataUrl);
+                        const file = new File([blob], fileName, { type: 'image/png' });
+                        
+                        let imageUrl = '';
+                        if (config?.r2_enabled) {
+                           imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                        } else {
+                           const path = `chat-images/${downloadingNotice.mahv}_${Date.now()}_${fileName}`;
+                           const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                           if (upErr) throw upErr;
+                           const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                           imageUrl = publicUrl;
+                        }
+
+                        await supabase.from('hv_messages').insert([{
+                           mahv: downloadingNotice.mahv,
+                           manv: auth.user?.manv || auth.user?.username || 'admin',
+                           content: `Gửi phụ huynh Thông báo đóng học phí ${downloadingNotice.mahd}`,
+                           image_url: imageUrl
+                        }]);
+                        console.log('Auto-sent notice to student chat');
+                     } catch (err) {
+                        console.error('Auto-send notice error:', err);
+                     }
+                  };
+                  autoSend();
                }
             } catch (err) {
                console.error('Notice capture error:', err);
