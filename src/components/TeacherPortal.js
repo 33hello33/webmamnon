@@ -205,15 +205,34 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    const fetchAttUnreads = async () => {
-      if (!attendanceUser) return;
-      const { data } = await supabase.from('hv_messages').select('mahv, manv, description').is('is_read', false);
+      if (!attendanceUser || attAllStudents.length === 0) return;
+      
+      const studentIds = attAllStudents.map(s => s.mahv);
+      if (studentIds.length === 0) return;
+
+      const { data } = await supabase
+         .from('hv_messages')
+         .select('mahv, manv, description')
+         .in('mahv', studentIds)
+         .is('is_read', false);
+
       if (data) {
          const counts = {};
+         let totalUnread = 0;
          data.forEach(d => {
-            const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-            if (!isTeacher) counts[d.mahv] = (counts[d.mahv] || 0) + 1;
+            const isPH = d.description === 'PH' || (!d.manv);
+            if (isPH) {
+               counts[d.mahv] = (counts[d.mahv] || 0) + 1;
+               totalUnread++;
+            }
          });
          setAttUnreadCounts(counts);
+
+         // Update App Badge
+         if ('setAppBadge' in navigator) {
+            if (totalUnread > 0) navigator.setAppBadge(totalUnread).catch(console.error);
+            else navigator.clearAppBadge().catch(console.error);
+         }
       }
    };
 
@@ -271,13 +290,15 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
       };
       fetchAllStudentsData();
-      if (attendanceUser && attTab === 'chat') {
-         fetchAttSummaries();
+      if (attendanceUser) {
          fetchAttUnreads();
-         const interval = setInterval(() => { fetchAttSummaries(); fetchAttUnreads(); }, 30000);
-         return () => clearInterval(interval);
+         if (attTab === 'chat') {
+            fetchAttSummaries();
+            const interval = setInterval(() => { fetchAttSummaries(); fetchAttUnreads(); }, 30000);
+            return () => clearInterval(interval);
+         }
       }
-   }, [attendanceUser, attTab, attDateFilter]);
+   }, [attendanceUser, attTab, attDateFilter, attAllStudents]);
 
    useEffect(() => {
       if (attendanceUser) {

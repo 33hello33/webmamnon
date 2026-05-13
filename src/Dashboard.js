@@ -193,16 +193,49 @@ function Dashboard() {
 
     // Fetch unread messages count globally for sidebar
     const fetchUnreadChatCount = async () => {
-      const { data } = await supabase
+      if (!user) return;
+
+      let studentIds = null;
+      if (user.role === 'Giáo viên') {
+        // Fetch teacher's classes first
+        const { data: teacherClasses } = await supabase
+          .from('tbl_lop')
+          .select('malop')
+          .or(`manv.eq.${user.manv},manv.eq.${user.username},manv.eq.${user.tennv}`);
+        
+        if (teacherClasses && teacherClasses.length > 0) {
+          const classIds = teacherClasses.map(c => c.malop);
+          const { data: myStudents } = await supabase
+            .from('tbl_hv')
+            .select('mahv')
+            .in('malop', classIds);
+          if (myStudents) {
+            studentIds = myStudents.map(s => s.mahv);
+          }
+        } else {
+          // Teacher has no classes
+          setUnreadChatCount(0);
+          if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
+          return;
+        }
+      }
+
+      let query = supabase
         .from('hv_messages')
-        .select('manv, description')
+        .select('manv, description, mahv')
         .is('is_read', false);
+      
+      if (studentIds) {
+        query = query.in('mahv', studentIds);
+      }
+        
+      const { data } = await query;
         
       if (data) {
         let count = 0;
         data.forEach(d => {
-          const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-          if (!isTeacher) count++;
+          const isPH = d.description === 'PH' || (!d.manv);
+          if (isPH) count++;
         });
         setUnreadChatCount(count);
 
@@ -273,6 +306,9 @@ function Dashboard() {
   }, [visibleTabs, activeTab, user]);
 
   const handleLogout = () => {
+    if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(console.error);
+    }
     localStorage.removeItem('auth_session');
     navigate('/login');
   };

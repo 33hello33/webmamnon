@@ -253,8 +253,39 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
+   const fetchUnreads = async () => {
+      if (!parentData) return;
+      const { data } = await supabase.from('hv_messages').select('manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
+      if (data) {
+         let count = 0;
+         data.forEach(d => {
+            const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+            if (isTeacher) count++;
+         });
+         setUnreadChatCount(count);
+         if ('setAppBadge' in navigator) {
+            if (count > 0) navigator.setAppBadge(count).catch(console.error);
+            else navigator.clearAppBadge().catch(console.error);
+         }
+      }
+   };
+
    useEffect(() => {
-      if (!parentData || (parentTab !== 'chat-tab' && parentTab !== 'notices-tab' && parentTab !== 'attendance-tab' && parentTab !== 'health-tab' && parentTab !== 'menu-tab')) return;
+      if (!parentData) return;
+
+      const unreadChan = supabase.channel(`parent_unread_${parentData.student.mahv}`)
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, () => { fetchUnreads(); }).subscribe();
+
+      fetchUnreads();
+
+      // If we are on the menu, we only care about unread count for the badge
+      if (parentTab === 'menu') {
+         return () => {
+            supabase.removeChannel(unreadChan);
+         };
+      }
+
+      // Rest of the tab-specific data fetching
       const fetchChatMessages = async () => {
          setChatLoading(true);
          const { data } = await supabase.from('hv_messages').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: true });
@@ -309,27 +340,6 @@ function ParentPortal({ parentData, setParentData }) {
                return [...prev, payload.new];
             });
          }).subscribe();
-
-      const fetchUnreads = async () => {
-         const { data } = await supabase.from('hv_messages').select('manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
-         if (data) {
-            let count = 0;
-            data.forEach(d => {
-               const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-               if (isTeacher) count++;
-            });
-            setUnreadChatCount(count);
-            if ('setAppBadge' in navigator) {
-               if (count > 0) navigator.setAppBadge(count).catch(console.error);
-               else navigator.clearAppBadge().catch(console.error);
-            }
-         }
-      };
-
-      const unreadChan = supabase.channel(`parent_unread_${parentData.student.mahv}`)
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, () => { fetchUnreads(); }).subscribe();
-
-      fetchUnreads();
 
       return () => {
          if (channel) supabase.removeChannel(channel);

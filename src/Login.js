@@ -255,6 +255,9 @@ function Login() {
                   initialClasses={attClasses}
                   initialAllStudents={attAllStudents}
                   onLogout={() => {
+                     if ('clearAppBadge' in navigator) {
+                        navigator.clearAppBadge().catch(console.error);
+                     }
                      setAttendanceUser(null);
                      setPassword('');
                   }}
@@ -263,6 +266,9 @@ function Login() {
                <ParentPortal
                   parentData={parentData}
                   setParentData={(data) => {
+                     if (!data && 'clearAppBadge' in navigator) {
+                        navigator.clearAppBadge().catch(console.error);
+                     }
                      setParentData(data);
                      if (!data) localStorage.removeItem('parent_session');
                   }}
