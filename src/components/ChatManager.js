@@ -232,6 +232,7 @@ const ChatManager = ({ currentUser }) => {
         if (c.includes('thuốc') || c.includes('thuoc')) studentDataMap[m.mahv].types.add('BÁO THUỐC');
         if (c.includes('đổi người') || c.includes('doi nguoi')) studentDataMap[m.mahv].types.add('ĐỔI NGƯỜI ĐÓN');
         if (c.includes('muộn') || c.includes('trễ') || c.includes('muon') || c.includes('tre ')) studentDataMap[m.mahv].types.add('XIN VỀ TRỄ');
+        if (c.includes('góp ý') || c.includes('hòm thư')) studentDataMap[m.mahv].types.add('GÓP Ý');
       }
     });
 
@@ -250,6 +251,7 @@ const ChatManager = ({ currentUser }) => {
         else if (content.includes('thuốc')) notifType = 'BÁO THUỐC';
         else if (content.includes('đổi người')) notifType = 'ĐỔI NGƯỜI ĐÓN';
         else if (content.includes('muộn') || content.includes('trễ')) notifType = 'XIN VỀ TRỄ';
+        else if (content.includes('góp ý') || content.includes('hòm thư')) notifType = 'GÓP Ý';
       }
 
       return {
@@ -279,6 +281,7 @@ const ChatManager = ({ currentUser }) => {
       else if (statFilter === 'BAO_THUOC') matchesStat = s.allTypes.includes('BÁO THUỐC');
       else if (statFilter === 'DOI_NGUOI') matchesStat = s.allTypes.includes('ĐỔI NGƯỜI ĐÓN');
       else if (statFilter === 'VE_TRE') matchesStat = s.allTypes.includes('XIN VỀ TRỄ');
+      else if (statFilter === 'GOP_Y') matchesStat = s.allTypes.includes('GÓP Ý');
       else if (statFilter === 'GUI_TIN_NHAN') matchesStat = !!s.lastMsg;
 
       return matchesStat;
@@ -298,6 +301,7 @@ const ChatManager = ({ currentUser }) => {
       doiNguoi: baseSummaries.filter(s => s.allTypes.includes('ĐỔI NGƯỜI ĐÓN')).length,
       guiTinNhan: baseSummaries.filter(s => !!s.lastMsg).length,
       veTre: baseSummaries.filter(s => s.allTypes.includes('XIN VỀ TRỄ')).length,
+      gopY: baseSummaries.filter(s => s.allTypes.includes('GÓP Ý')).length,
     };
   }, [baseSummaries]);
 
@@ -1238,20 +1242,44 @@ const ChatManager = ({ currentUser }) => {
           <span className="report-label">Xin về trễ</span>
           <span className="report-value">{String(reports.veTre).padStart(2, '0')}</span>
         </div>
+
+        {(currentUser?.role === 'Quản lý' || currentUser?.role === 'Hiệu trưởng') && (
+          <div 
+            className="report-card gop-y"
+            onClick={() => setStatFilter(statFilter === 'GOP_Y' ? 'ALL' : 'GOP_Y')}
+            style={{ 
+              cursor: 'pointer', 
+              background: '#475569', 
+              color: 'white',
+              outline: statFilter === 'GOP_Y' ? '3px solid #64748b' : 'none', 
+              opacity: statFilter !== 'ALL' && statFilter !== 'GOP_Y' ? 0.6 : 1 
+            }}
+          >
+            <span className="report-label" style={{ color: '#f8fafc' }}>Thư góp ý</span>
+            <span className="report-value">{String(reports.gopY).padStart(2, '0')}</span>
+          </div>
+        )}
       </div>
 
       {/* Main Table Section */}
       <div className="chat-table-wrapper">
         <table className="chat-data-table">
           <thead>
-            <tr>
-              <th style={{ width: '25%' }}>Họ và tên</th>
-              <th style={{ width: '15%' }}>Số điện thoại</th>
-              <th style={{ width: '10%' }}>Lớp</th>
-              <th style={{ width: '20%' }}>Giáo viên</th>
-              <th style={{ width: '20%' }}>Thông báo mới</th>
-              <th style={{ width: '10%' }}>Thời gian</th>
-            </tr>
+            {statFilter === 'GOP_Y' ? (
+              <tr>
+                <th style={{ width: '75%' }}>Nội dung góp ý</th>
+                <th style={{ width: '25%' }}>Thời gian</th>
+              </tr>
+            ) : (
+              <tr>
+                <th style={{ width: '25%' }}>Họ và tên</th>
+                <th style={{ width: '15%' }}>Số điện thoại</th>
+                <th style={{ width: '10%' }}>Lớp</th>
+                <th style={{ width: '20%' }}>Giáo viên</th>
+                <th style={{ width: '20%' }}>Thông báo mới</th>
+                <th style={{ width: '10%' }}>Thời gian</th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {loading ? (
@@ -1260,25 +1288,36 @@ const ChatManager = ({ currentUser }) => {
               <tr><td colSpan="6" className="no-results">Không tìm thấy thông tin phù hợp</td></tr>
             ) : parentSummaries.map(s => (
               <tr key={s.mahv} onClick={() => { setSelectedStudent(s); setView('chat'); }}>
-                <td className="student-name-cell">
-                  {s.tenhv}
-                  {unreadCounts[s.mahv] > 0 && (
-                    <span style={{ marginLeft: '10px', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
-                      +{unreadCounts[s.mahv]}
-                    </span>
-                  )}
-                </td>
-                <td className="phone-cell">{s.sdtba || s.sdtme || s.mahv}</td>
-                <td>{s.className}</td>
-                <td>{s.teacherName}</td>
-                <td>
-                  {s.notifType ? (
-                    <span className={`badge-notification badge-${s.notifType.toLowerCase().replace(/ /g, '-')}`}>
-                      {s.notifType}
-                    </span>
-                  ) : <span style={{color: '#cbd5e1'}}>--</span>}
-                </td>
-                <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
+                {statFilter === 'GOP_Y' ? (
+                  <>
+                    <td className="student-name-cell" style={{ whiteSpace: 'normal', lineHeight: '1.5' }}>
+                      {s.lastMsg?.content?.replace(/📬 \[HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG\]\nNội dung: /i, '')}
+                    </td>
+                    <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="student-name-cell">
+                      {s.tenhv}
+                      {unreadCounts[s.mahv] > 0 && (
+                        <span style={{ marginLeft: '10px', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
+                          +{unreadCounts[s.mahv]}
+                        </span>
+                      )}
+                    </td>
+                    <td className="phone-cell">{s.sdtba || s.sdtme || s.mahv}</td>
+                    <td>{s.className}</td>
+                    <td>{s.teacherName}</td>
+                    <td>
+                      {s.notifType ? (
+                        <span className={`badge-notification badge-${s.notifType.toLowerCase().replace(/ /g, '-')}`}>
+                          {s.notifType}
+                        </span>
+                      ) : <span style={{color: '#cbd5e1'}}>--</span>}
+                    </td>
+                    <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>

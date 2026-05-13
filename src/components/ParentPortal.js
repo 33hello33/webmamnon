@@ -173,7 +173,8 @@ function ParentPortal({ parentData, setParentData }) {
             mahv: parentData.student.mahv,
             manv: targetManv,
             content: `📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]\nNội dung: ${feedbackContent}`,
-            description: 'PH'
+            description: 'PH',
+            is_read: false
          };
          const { error } = await supabase.from('hv_messages').insert([newMessage]);
          if (error) throw error;
