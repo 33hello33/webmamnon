@@ -26,6 +26,10 @@ function ParentPortal({ parentData, setParentData }) {
    const [feedbackContent, setFeedbackContent] = useState('');
    const [feedbackLoading, setFeedbackLoading] = useState(false);
    const [unreadChatCount, setUnreadChatCount] = useState(0);
+   const [unreadNotices, setUnreadNotices] = useState(0);
+   const [unreadHealth, setUnreadHealth] = useState(0);
+   const [unreadMenu, setUnreadMenu] = useState(0);
+   const [unreadNgoaiKhoa, setUnreadNgoaiKhoa] = useState(0);
    const [previewImage, setPreviewImage] = useState(null);
    const [calendarDate, setCalendarDate] = useState(new Date());
    const [monthlyAttendance, setMonthlyAttendance] = useState([]);
@@ -40,6 +44,12 @@ function ParentPortal({ parentData, setParentData }) {
    const chatContainerRef = useRef(null);
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
+
+   const showNotification = (title, body) => {
+      if (Notification.permission === 'granted') {
+         new Notification(title, { body, icon: '/logo192.png' });
+      }
+   };
 
    useEffect(() => {
       if ('Notification' in window && Notification.permission === 'default') {
@@ -374,10 +384,12 @@ function ParentPortal({ parentData, setParentData }) {
 
    const fetchUnreads = async () => {
       if (!parentData) return;
-      const { data } = await supabase.from('hv_messages').select('manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
-      if (data) {
+      
+      // 1. Fetch Chat Unreads
+      const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
+      if (chatData) {
          let count = 0;
-         data.forEach(d => {
+         chatData.forEach(d => {
             const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
             if (isTeacher) count++;
          });
@@ -387,6 +399,44 @@ function ParentPortal({ parentData, setParentData }) {
             else navigator.clearAppBadge().catch(console.error);
          }
       }
+
+      // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
+      const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
+      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(20);
+
+      // Notices (General + Class excluding Menu/NgoaiKhoa)
+      const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
+      const latestGenNotice = generalNotices?.[0];
+      const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA');
+      const latestClassNotice = classNotices?.[0];
+      
+      const currentLatestNoticeTime = Math.max(
+         latestGenNotice ? new Date(latestGenNotice.ngaylap).getTime() : 0,
+         latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
+      );
+      if (currentLatestNoticeTime > lastNoticeTime) setUnreadNotices(1);
+      else setUnreadNotices(0);
+
+      // Menu
+      const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
+      const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
+      const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
+      if (currentLatestMenuTime > lastMenuTime) setUnreadMenu(1);
+      else setUnreadMenu(0);
+
+      // Ngoai Khoa
+      const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
+      const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
+      const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
+      if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) setUnreadNgoaiKhoa(1);
+      else setUnreadNgoaiKhoa(0);
+
+      // 3. Fetch Health Unreads
+      const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
+      const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
+      const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
+      if (currentLatestHealthTime > lastHealthTime) setUnreadHealth(1);
+      else setUnreadHealth(0);
    };
 
    useEffect(() => {
@@ -397,10 +447,28 @@ function ParentPortal({ parentData, setParentData }) {
 
       fetchUnreads();
 
-      // If we are on the menu, we only care about unread count for the badge
+      // If we are on the menu, we can still subscribe to changes but we don't fetch full tab data
       if (parentTab === 'menu') {
+         // Optionally set up real-time for other tables too
+         const noticeChan = supabase.channel(`parent_notices_${parentData.student.mahv}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_thongbao' }, (payload) => { 
+               fetchUnreads(); 
+               showNotification('Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, (payload) => { 
+               fetchUnreads(); 
+               const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : 'Bảng tin lớp mới');
+               showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, () => { 
+               fetchUnreads(); 
+               showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
+            })
+            .subscribe();
+
          return () => {
             supabase.removeChannel(unreadChan);
+            supabase.removeChannel(noticeChan);
          };
       }
 
@@ -449,11 +517,7 @@ function ParentPortal({ parentData, setParentData }) {
          fetchNgoaiKhoaRegistration();
       }
 
-      const showNotification = (title, body) => {
-         if (Notification.permission === 'granted') {
-            new Notification(title, { body, icon: '/logo192.png' });
-         }
-      };
+
 
       const channel = supabase.channel(`parent_chat_${parentData.student.mahv}`)
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => {
@@ -476,8 +540,10 @@ function ParentPortal({ parentData, setParentData }) {
    }, [parentData, parentTab, calendarDate]);
 
    useEffect(() => {
-      if (parentTab === 'chat-tab' && parentData) {
-         const markAsRead = async () => {
+      if (!parentData) return;
+
+      const markAsRead = async () => {
+         if (parentTab === 'chat-tab') {
             setUnreadChatCount(0);
             if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
             const { data: toUpdate } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
@@ -485,10 +551,39 @@ function ParentPortal({ parentData, setParentData }) {
                const ids = toUpdate.filter(d => Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH')).map(d => d.id);
                if (ids.length > 0) await supabase.from('hv_messages').update({ is_read: true }).in('id', ids);
             }
-         };
-         markAsRead();
-      }
-   }, [parentTab, parentData]);
+         } else if (parentTab === 'notices-tab') {
+            if (parentNotices.length > 0) {
+               const latest = parentNotices.find(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA');
+               if (latest) {
+                  const time = new Date(latest.date).getTime();
+                  localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(time));
+               }
+            }
+            setUnreadNotices(0);
+         } else if (parentTab === 'menu-tab') {
+            const latest = parentNotices.find(n => n.title === 'THỰC ĐƠN');
+            if (latest) {
+               const time = new Date(latest.date).getTime();
+               localStorage.setItem(`last_menu_time_${parentData.student.mahv}`, String(time));
+            }
+            setUnreadMenu(0);
+         } else if (parentTab === 'ngoaikhoa-tab') {
+            const latest = parentNotices.find(n => n.title === 'NGOẠI KHÓA');
+            if (latest) {
+               const time = new Date(latest.date).getTime();
+               localStorage.setItem(`last_ngoaikhoa_time_${parentData.student.mahv}`, String(time));
+            }
+            setUnreadNgoaiKhoa(0);
+         } else if (parentTab === 'health-tab') {
+            if (healthHistory.length > 0) {
+               const time = new Date(healthHistory[0].ngay).getTime();
+               localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
+            }
+            setUnreadHealth(0);
+         }
+      };
+      markAsRead();
+   }, [parentTab, parentData, parentNotices, healthHistory]);
 
    useEffect(() => {
       if (parentTab === 'chat-tab') {
@@ -621,9 +716,9 @@ function ParentPortal({ parentData, setParentData }) {
                   <div className="premium-section-title">Nhóm dịch vụ</div>
                   <div className="premium-service-grid">
                      <div className="premium-service-item" onClick={() => setParentTab('notices-tab')}>
-                        <div className="premium-service-icon-wrapper">
+                        <div className="premium-service-icon-wrapper" style={{ position: 'relative' }}>
                            <Bell size={24} />
-                           <span className="service-new-badge">Mới</span>
+                           {unreadNotices > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>Mới</span>}
                         </div>
                         <span className="premium-service-label">Bảng tin<br />nhà trường</span>
                      </div>
@@ -632,7 +727,10 @@ function ParentPortal({ parentData, setParentData }) {
                         <span className="premium-service-label">Theo dõi<br />điểm danh</span>
                      </div>
                      <div className="premium-service-item" onClick={() => setParentTab('health-tab')}>
-                        <div className="premium-service-icon-wrapper" style={{ color: '#ec4899' }}><Heart size={24} /></div>
+                        <div className="premium-service-icon-wrapper" style={{ color: '#ec4899', position: 'relative' }}>
+                           <Heart size={24} />
+                           {unreadHealth > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>Mới</span>}
+                        </div>
                         <span className="premium-service-label">Hồ sơ<br />sức khỏe</span>
                      </div>
                      <div className="premium-service-item" onClick={() => setParentTab('chat-tab')}>
@@ -657,11 +755,17 @@ function ParentPortal({ parentData, setParentData }) {
                         <span className="premium-utility-label">Đổi người đón</span>
                      </div>
                      <div className="premium-utility-item" onClick={() => setParentTab('menu-tab')}>
-                        <div className="premium-utility-icon-wrapper" style={{ color: '#10b981' }}><Utensils size={24} /></div>
+                        <div className="premium-utility-icon-wrapper" style={{ color: '#10b981', position: 'relative' }}>
+                           <Utensils size={24} />
+                           {unreadMenu > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>Mới</span>}
+                        </div>
                         <span className="premium-utility-label">Thực đơn</span>
                      </div>
                      <div className="premium-utility-item" onClick={() => setParentTab('ngoaikhoa-tab')}>
-                        <div className="premium-utility-icon-wrapper" style={{ color: '#ec4899' }}><Image size={24} /></div>
+                        <div className="premium-utility-icon-wrapper" style={{ color: '#ec4899', position: 'relative' }}>
+                           <Image size={24} />
+                           {unreadNgoaiKhoa > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>Mới</span>}
+                        </div>
                         <span className="premium-utility-label">Ngoại khóa</span>
                      </div>
                      <div className="premium-utility-item" onClick={() => setIsFeedbackModalOpen(true)}>
