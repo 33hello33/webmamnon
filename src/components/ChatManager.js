@@ -1062,7 +1062,7 @@ ${ngoaiKhoaForm.content}
              <div className="large-avatar-circle" style={{ backgroundColor: '#ec4899' }}>
                {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <span>{getInitials(selectedStudent.tenhv)}</span>}
              </div>
-             <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtba || selectedStudent.sdtme || 'N/A'} - {selectedStudent.className}</h3>
+             <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtme || '--'} - {selectedStudent.className}</h3>
           </div>
           
           <div className="details-body scrollable">
@@ -1070,7 +1070,7 @@ ${ngoaiKhoaForm.content}
                 <h4 className="section-header-title"><LayoutGrid size={18} /> Thông tin khách hàng</h4>
                 <div className="info-list-modern">
                    <div className="info-item-modern"><User size={16} /> <span>{selectedStudent.tenhv}</span></div>
-                   <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtba || selectedStudent.sdtme || 'N/A'}</span></div>
+                   <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtme || '--'}</span></div>
                    <div className="info-item-modern"><MapPin size={16} /> <span>{selectedStudent.diachi || 'N/A'}</span></div>
                    <div className="info-item-modern"><FileText size={16} /> <span>{selectedStudent.className}</span></div>
                 </div>
@@ -1455,7 +1455,7 @@ ${ngoaiKhoaForm.content}
                         </span>
                       )}
                     </td>
-                    <td className="phone-cell">{s.sdtba || s.sdtme || s.mahv}</td>
+                    <td className="phone-cell">{s.sdtme || '--'}</td>
                     <td>{s.className}</td>
                     <td>{s.teacherName}</td>
                     <td>

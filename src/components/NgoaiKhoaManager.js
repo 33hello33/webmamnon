@@ -37,9 +37,14 @@ export default function NgoaiKhoaManager() {
       const { data: clsData } = await supabase.from('tbl_lop').select('malop, tenlop').or('daxoa.neq."Đã Xóa",daxoa.is.null');
       setClasses(clsData || []);
 
-      // 3. Fetch students
-      const { data: stData } = await supabase.from('tbl_hv').select('mahv, tenhv, malop, trangthai');
-      setStudents(stData || []);
+      // 3. Fetch active students only
+      const { data: stData } = await supabase
+        .from('tbl_hv')
+        .select('mahv, tenhv, malop, trangthai');
+      
+      // Filter active students in memory to be robust with casing
+      const activeStudents = (stData || []).filter(s => (s.trangthai || '').trim().toLowerCase() === 'đang học');
+      setStudents(activeStudents);
 
       // 4. Fetch registrations (ONLY after latest announcement)
       const { data: regData } = await supabase
@@ -203,7 +208,6 @@ export default function NgoaiKhoaManager() {
               <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>Mã HS</th>
               <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>Học sinh</th>
               <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>Lớp</th>
-              <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>TT Học</th>
               <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>Trạng thái</th>
               <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>Thời gian</th>
               <th style={{ padding: '15px', borderBottom: '1px solid #e2e8f0' }}>Ghi chú/Lý do</th>
@@ -223,15 +227,6 @@ export default function NgoaiKhoaManager() {
                 <td style={{ padding: '15px' }}>{item.mahv}</td>
                 <td style={{ padding: '15px', fontWeight: 600 }}>{item.tenhv}</td>
                 <td style={{ padding: '15px' }}>{item.className}</td>
-                <td style={{ padding: '15px' }}>
-                  <span style={{ 
-                    fontSize: '12px', 
-                    fontWeight: 600,
-                    color: (item.trangthai || '').trim().toLowerCase() === 'đang học' ? '#059669' : '#ef4444' 
-                  }}>
-                    {item.trangthai}
-                  </span>
-                </td>
                 <td style={{ padding: '15px' }}>
                   {!item.hasResponded ? (
                     <span style={{ padding: '4px 10px', borderRadius: '20px', background: '#fef3c7', color: '#92400e', fontSize: '12px', fontWeight: 600 }}>Chưa phản hồi</span>
