@@ -17,7 +17,7 @@ function Login() {
    const { config } = useConfig();
    const navigate = useNavigate();
 
-   const [loginMode, setLoginMode] = useState('login'); // 'login' | 'parent' | 'attendance'
+   const [loginMode, setLoginMode] = useState('parent'); // 'parent' | 'login' | 'attendance'
    const [parentData, setParentData] = useState(null);
    
    const [attendanceUser, setAttendanceUser] = useState(null);
@@ -32,11 +32,8 @@ function Login() {
       if (savedSession) {
          try {
             const session = JSON.parse(savedSession);
-            if (Date.now() < session.expiry) {
-               setParentData(session.data);
-            } else {
-               localStorage.removeItem('parent_session');
-            }
+            // Parent session persists until logout
+            setParentData(session.data || session); 
          } catch (e) {
             localStorage.removeItem('parent_session');
          }
@@ -116,8 +113,7 @@ function Login() {
          setParentData(parentDataObj);
 
          localStorage.setItem('parent_session', JSON.stringify({
-            data: parentDataObj,
-            expiry: Date.now() + (60 * 60 * 1000)
+            data: parentDataObj
          }));
       } catch (err) {
          console.error(err);
@@ -189,13 +185,6 @@ function Login() {
 
             {!parentData && !(loginMode === 'attendance' && attendanceUser) && (
                <div className="login-tabs" style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <button
-                     type="button"
-                     className={`login-tab-btn ${loginMode === 'login' || loginMode === 'attendance' ? 'active' : ''}`}
-                     onClick={() => { setLoginMode('login'); setMessage({ type: '', text: '' }); }}
-                     style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
-                     Nhân Viên
-                  </button>
                   {config?.phuhuynh && (
                      <button
                         type="button"
@@ -205,6 +194,13 @@ function Login() {
                         Phụ Huynh
                      </button>
                   )}
+                  <button
+                     type="button"
+                     className={`login-tab-btn ${loginMode === 'login' || loginMode === 'attendance' ? 'active' : ''}`}
+                     onClick={() => { setLoginMode('login'); setMessage({ type: '', text: '' }); }}
+                     style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
+                     Nhân Viên
+                  </button>
                </div>
             )}
 

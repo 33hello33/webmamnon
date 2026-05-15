@@ -59,7 +59,8 @@ const ALL_TABS = [
       { id: 'classes', label: 'Lớp' },
       { id: 'attendance_today', label: 'Danh sách đi học' },
       { id: 'attendance', label: 'Điểm danh' },
-      { id: 'leave_list', label: 'Danh sách nghỉ' }
+      { id: 'leave_list', label: 'Danh sách nghỉ' },
+      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa' }
     ]
   },
   { id: 'invoices', label: 'Thu học phí', icon: Receipt },

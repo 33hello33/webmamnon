@@ -9,6 +9,7 @@ import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
 import LeaveManager from './LeaveManager';
 import AttendanceToday from './AttendanceToday';
+import NgoaiKhoaManager from './NgoaiKhoaManager';
 import './StudentManager.css';
 import { useConfig } from '../ConfigContext';
 
@@ -498,8 +499,16 @@ export default function StudentManager({ activeSubTab }) {
   };
 
   const renderStudentsTab = () => {
-    const dangHoc = students.filter(s => s.trangthai === 'Đang Học').length;
-    const daNghi = students.filter(s => s.trangthai === 'Đã Nghỉ').length;
+    // Calculate stats based on filtered list to be more accurate to user view
+    const total = filteredStudents.length;
+    const dangHoc = filteredStudents.filter(s => {
+      const st = (s.trangthai || '').trim().toLowerCase();
+      return st === 'đang học';
+    }).length;
+    const daNghi = filteredStudents.filter(s => {
+      const st = (s.trangthai || '').trim().toLowerCase();
+      return st === 'đã nghỉ';
+    }).length;
 
     return (
       <div className="students-tab-content animate-fade-in">
@@ -509,7 +518,7 @@ export default function StudentManager({ activeSubTab }) {
             <div className="stat-icon"><Users size={24} /></div>
             <div className="stat-info">
               <span className="stat-label">Tổng Học Sinh</span>
-              <span className="stat-value">{students.length}</span>
+              <span className="stat-value">{total}</span>
             </div>
           </div>
           <div className="stat-card active">
@@ -755,6 +764,7 @@ export default function StudentManager({ activeSubTab }) {
         {activeSubTab === 'attendance_today' && <AttendanceToday students={students} classes={classes} />}
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}
+        {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager />}
       </div>
 
       {/* Form Modal */}

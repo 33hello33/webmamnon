@@ -792,7 +792,19 @@ function ParentPortal({ parentData, setParentData }) {
                                           <span style={{ fontSize: '0.8rem', color: '#be185d', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
                                        </div>
                                        <div style={{ padding: '15px' }}>
-                                          <p style={{ margin: '0 0 15px 0', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>{item.content}</p>
+                                           <div style={{ 
+                                              color: '#475569', 
+                                              fontSize: '0.95rem', 
+                                              lineHeight: '1.7', 
+                                              whiteSpace: 'pre-wrap',
+                                              background: '#f8fafc',
+                                              padding: '15px',
+                                              borderRadius: '12px',
+                                              border: '1px solid #f1f5f9',
+                                              marginBottom: '15px'
+                                           }}>
+                                              {item.content}
+                                           </div>
                                           {item.image_url && (
                                              <div
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}

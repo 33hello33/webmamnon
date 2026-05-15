@@ -58,6 +58,16 @@ const ChatManager = ({ currentUser }) => {
     }
     return url;
   };
+
+  const formatCurrency = (value) => {
+    if (!value) return '';
+    // Nếu là chuỗi đã có chữ (như "Miễn phí"), giữ nguyên
+    if (/[a-zA-Z]/.test(value) && !value.includes('VNĐ')) return value;
+    
+    const num = value.toString().replace(/\D/g, '');
+    if (!num) return value; // Trả về giá trị gốc nếu không có số
+    return num.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
   
   // Views
   const [view, setView] = useState('dashboard'); // 'dashboard' or 'chat'
@@ -106,7 +116,15 @@ const ChatManager = ({ currentUser }) => {
   
   const [isNgoaiKhoaModalOpen, setIsNgoaiKhoaModalOpen] = useState(false);
   const [ngoaiKhoaFiles, setNgoaiKhoaFiles] = useState({ image: null });
-  const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({ type: 'all', selectedClasses: [] });
+  const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({ 
+    type: 'all', 
+    selectedClasses: [],
+    content: '',
+    time: '',
+    location: '',
+    deadline: '',
+    cost: ''
+  });
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyNotices, setHistoryNotices] = useState([]);
@@ -804,11 +822,29 @@ const ChatManager = ({ currentUser }) => {
 
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
+      const formattedCost = ngoaiKhoaForm.cost 
+        ? (ngoaiKhoaForm.cost.includes('VNĐ') ? ngoaiKhoaForm.cost : `${ngoaiKhoaForm.cost} VNĐ`)
+        : 'Miễn phí';
+
+      const combinedContent = `
+🌟 THÔNG TIN HOẠT ĐỘNG NGOẠI KHÓA 🌟
+
+📍 ĐỊA ĐIỂM: ${ngoaiKhoaForm.location || 'Chưa cập nhật'}
+⏰ THỜI GIAN: ${ngoaiKhoaForm.time || 'Chưa cập nhật'}
+⏳ HẠN ĐĂNG KÝ: ${ngoaiKhoaForm.deadline || 'Chưa cập nhật'}
+💰 CHI PHÍ: ${formattedCost}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 NỘI DUNG CHI TIẾT:
+${ngoaiKhoaForm.content}
+`.trim();
+
       const payloads = targetClasses.map(malop => ({
         malop,
         manv: currentUser.manv || currentUser.username,
         title: 'NGOẠI KHÓA',
-        content: 'Thông tin hoạt động ngoại khóa mới',
+        content: combinedContent,
         image_url: imageUrl,
         file_name: ngoaiKhoaFiles.image.name,
         file_mime_type: ngoaiKhoaFiles.image.type
@@ -820,6 +856,15 @@ const ChatManager = ({ currentUser }) => {
       alert(`Đã gửi hoạt động ngoại khóa thành công tới ${targetClasses.length} lớp.`);
       setIsNgoaiKhoaModalOpen(false);
       setNgoaiKhoaFiles({ image: null });
+      setNgoaiKhoaForm({ 
+        type: 'all', 
+        selectedClasses: [],
+        content: '',
+        time: '',
+        location: '',
+        deadline: '',
+        cost: ''
+      });
     } catch (err) {
       alert('Lỗi khi gửi ngoại khóa: ' + err.message);
     } finally {
@@ -1781,15 +1826,72 @@ const ChatManager = ({ currentUser }) => {
                    </div>
                 )}
 
+                <div style={{ marginBottom: '15px' }}>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Nội dung hoạt động:</label>
+                   <textarea 
+                     placeholder="Mô tả ngắn gọn về hoạt động ngoại khóa..."
+                     rows="3"
+                     style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }}
+                     value={ngoaiKhoaForm.content}
+                     onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, content: e.target.value})}
+                   />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                   <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Thời gian tổ chức:</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ví dụ: 08:00 - 15/06"
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        value={ngoaiKhoaForm.time}
+                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, time: e.target.value})}
+                      />
+                   </div>
+                   <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Địa điểm:</label>
+                      <input 
+                        type="text" 
+                        placeholder="Nơi diễn ra hoạt động..."
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        value={ngoaiKhoaForm.location}
+                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, location: e.target.value})}
+                      />
+                   </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                   <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Thời hạn đăng ký:</label>
+                      <input 
+                        type="text" 
+                        placeholder="Hạn cuối đăng ký..."
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        value={ngoaiKhoaForm.deadline}
+                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, deadline: e.target.value})}
+                      />
+                   </div>
+                   <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Chi phí:</label>
+                      <input 
+                        type="text" 
+                        placeholder="Số tiền (nếu có)..."
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        value={ngoaiKhoaForm.cost}
+                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, cost: formatCurrency(e.target.value)})}
+                      />
+                   </div>
+                </div>
+
                 <div>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh hoạt động ngoại khóa:</label>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh hoạt động:</label>
                    <label style={{ 
                      display: 'flex', 
                      flexDirection: 'column',
                      alignItems: 'center', 
                      justifyContent: 'center', 
                      gap: '12px', 
-                     padding: '30px', 
+                     padding: '20px', 
                      borderRadius: '16px', 
                      border: '2px dashed #ec4899', 
                      background: '#fdf2f8', 
@@ -1805,8 +1907,7 @@ const ChatManager = ({ currentUser }) => {
                      ) : (
                         <>
                            <Upload size={40} style={{ color: '#ec4899' }} />
-                           <span style={{ fontWeight: 700, color: '#9d174d' }}>Chọn hoặc kéo thả ảnh ngoại khóa vào đây</span>
-                           <span style={{ fontSize: '0.8rem', color: '#be185d' }}>Chấp nhận định dạng JPG, PNG, WEBP</span>
+                           <span style={{ fontWeight: 700, color: '#9d174d' }}>Chọn ảnh ngoại khóa</span>
                         </>
                      )}
                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setNgoaiKhoaFiles({image: e.target.files[0]})} />
