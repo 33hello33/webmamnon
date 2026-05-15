@@ -299,12 +299,29 @@ export default function StudentManager({ activeSubTab }) {
     }
   };
 
+  // Computed values for filtered/sorted students
+  const filteredStudents = students.filter(s => {
+    const searchStr = searchTerm.toLowerCase();
+    const matchSearch = (s.tenhv && s.tenhv.toLowerCase().includes(searchStr)) ||
+      (s.mahv && s.mahv.toLowerCase().includes(searchStr)) ||
+      (s.sdtba && s.sdtba.includes(searchTerm)) ||
+      (s.sdtme && s.sdtme.includes(searchTerm));
+    const matchClass = classFilter ? (s.malop === classFilter) : true;
+    return matchSearch && matchClass;
+  });
+
+  const sortedStudents = [...filteredStudents].sort((a, b) => {
+    if (a.trangthai === 'Đã Nghỉ' && b.trangthai !== 'Đã Nghỉ') return 1;
+    if (a.trangthai !== 'Đã Nghỉ' && b.trangthai === 'Đã Nghỉ') return -1;
+    return (a.mahv || '').localeCompare(b.mahv || '');
+  });
+
   // Excel Actions
   const handleExportExcel = () => {
-    if (students.length === 0) return showMessage('error', 'Không có dữ liệu để xuất');
+    if (sortedStudents.length === 0) return showMessage('error', 'Không có dữ liệu để xuất (theo bộ lọc hiện tại)');
 
     // Chuẩn bị dữ liệu đẹp để xuất Excel
-    const exportData = students.map(s => {
+    const exportData = sortedStudents.map(s => {
       return {
         'Mã HS': s.mahv,
         'Tên Học Sinh': s.tenhv,
@@ -477,27 +494,7 @@ export default function StudentManager({ activeSubTab }) {
 
   const renderStudentsTab = () => {
     const dangHoc = students.filter(s => s.trangthai === 'Đang Học').length;
-
     const daNghi = students.filter(s => s.trangthai === 'Đã Nghỉ').length;
-
-    // Auto filter by search
-    const filteredStudents = students.filter(s => {
-      const searchStr = searchTerm.toLowerCase();
-      const matchSearch = (s.tenhv && s.tenhv.toLowerCase().includes(searchStr)) ||
-        (s.mahv && s.mahv.toLowerCase().includes(searchStr)) ||
-        (s.sdtba && s.sdtba.includes(searchTerm)) ||
-        (s.sdtme && s.sdtme.includes(searchTerm));
-      const matchClass = classFilter ? (s.malop === classFilter) : true;
-      return matchSearch && matchClass;
-    });
-
-    // Sort: 'Đã Nghỉ' at the bottom
-    const sortedStudents = [...filteredStudents].sort((a, b) => {
-      if (a.trangthai === 'Đã Nghỉ' && b.trangthai !== 'Đã Nghỉ') return 1;
-      if (a.trangthai !== 'Đã Nghỉ' && b.trangthai === 'Đã Nghỉ') return -1;
-      // Secondary sort logic (by mahv)
-      return (a.mahv || '').localeCompare(b.mahv || '');
-    });
 
     return (
       <div className="students-tab-content animate-fade-in">
