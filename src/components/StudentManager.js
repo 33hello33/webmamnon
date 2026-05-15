@@ -20,7 +20,8 @@ const INITIAL_FORM = {
   gioitinh: 'Nam', cccd: '', tinhtrangsk: '',
   nghenghiepba: '', nghenghiepme: '',
   ngaysinhba: new Date().toISOString().split('T')[0],
-  ngaysinhme: new Date().toISOString().split('T')[0]
+  ngaysinhme: new Date().toISOString().split('T')[0],
+  username: '', password: ''
 };
 
 export default function StudentManager({ activeSubTab }) {
@@ -343,7 +344,9 @@ export default function StudentManager({ activeSubTab }) {
         'Ngày Nhập Học': s.ngaynhaphoc,
         'Ngày Nghỉ Học': s.ngaynghihoc,
         'Địa Chỉ': s.diachi,
-        'Ghi Chú': s.ghichu
+        'Ghi Chú': s.ghichu,
+        'Username': s.username,
+        'Password': s.password
       };
     });
 
@@ -388,7 +391,9 @@ export default function StudentManager({ activeSubTab }) {
             'Ngày Nhập Học': 'ngaynhaphoc',
             'Ngày Nghỉ Học': 'ngaynghihoc',
             'Địa Chỉ': 'diachi',
-            'Ghi Chú': 'ghichu'
+            'Ghi Chú': 'ghichu',
+            'Username': 'username',
+            'Password': 'password'
           };
 
           let successCount = 0;
@@ -845,6 +850,17 @@ export default function StudentManager({ activeSubTab }) {
                   </div>
 
                 </div>
+              </div>
+
+              <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#3b82f6' }}>TÀI KHOẢN PHỤ HUYNH (ĐỂ ĐĂNG NHẬP)</div>
+
+              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
+                <label style={{ fontWeight: 700, color: '#059669' }}>Tên đăng nhập (Username)</label>
+                <input type="text" name="username" value={formData.username || ''} onChange={handleChange} placeholder="VD: ph_nguyenvana" />
+              </div>
+              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
+                <label style={{ fontWeight: 700, color: '#059669' }}>Mật khẩu (Password)</label>
+                <input type="text" name="password" value={formData.password || ''} onChange={handleChange} placeholder="Mật khẩu đăng nhập" />
               </div>
 
               <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#3b82f6' }}>THÔNG TIN GIA ĐÌNH</div>
