@@ -89,7 +89,7 @@ function ParentPortal({ parentData, setParentData }) {
             const oldHeight = chatContainerRef.current?.scrollHeight || 0;
             setChatMessages(prev => [...reversed, ...prev]);
             if (data.length < pageSize) setHasMoreChat(false);
-            
+
             // Maintain scroll position after prepending
             setTimeout(() => {
                if (chatContainerRef.current) {
@@ -114,79 +114,79 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const handleLeaveSubmit = async (e) => {
-       e.preventDefault();
-       let fromDateStr = leaveForm.from;
-       let toDateStr = leaveForm.to;
+      e.preventDefault();
+      let fromDateStr = leaveForm.from;
+      let toDateStr = leaveForm.to;
 
-       const today = new Date();
-       const todayStr = today.toISOString().split('T')[0];
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
 
-       if (leaveType === 'today') {
-          fromDateStr = toDateStr = todayStr;
-       } else if (leaveType === 'tomorrow') {
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          fromDateStr = toDateStr = tomorrow.toISOString().split('T')[0];
-       }
+      if (leaveType === 'today') {
+         fromDateStr = toDateStr = todayStr;
+      } else if (leaveType === 'tomorrow') {
+         const tomorrow = new Date();
+         tomorrow.setDate(tomorrow.getDate() + 1);
+         fromDateStr = toDateStr = tomorrow.toISOString().split('T')[0];
+      }
 
-       if (!fromDateStr || !toDateStr || !leaveForm.reason) {
-          alert('Vui lòng nhập đầy đủ thông tin xin nghỉ.');
-          return;
-       }
+      if (!fromDateStr || !toDateStr || !leaveForm.reason) {
+         alert('Vui lòng nhập đầy đủ thông tin xin nghỉ.');
+         return;
+      }
 
-       const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDateStr).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDateStr).toLocaleDateString('vi-VN')}\n- Lý do: ${leaveForm.reason}`;
-       await sendQuickMessage(msg);
+      const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDateStr).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDateStr).toLocaleDateString('vi-VN')}\n- Lý do: ${leaveForm.reason}`;
+      await sendQuickMessage(msg);
 
-       // Insert into tbl_diemdanh
-       try {
-          const start = new Date(fromDateStr);
-          const end = new Date(toDateStr);
-          const configTimeStr = config?.xinnghitruocmaygio || '08:00';
-          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
-          const cfgTimeTotal = cfgHour * 60 + cfgMin;
+      // Insert into tbl_diemdanh
+      try {
+         const start = new Date(fromDateStr);
+         const end = new Date(toDateStr);
+         const configTimeStr = config?.xinnghitruocmaygio || '08:00';
+         const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
+         const cfgTimeTotal = cfgHour * 60 + cfgMin;
 
-          let current = new Date(start);
-          while (current <= end) {
-             const currDateStr = current.toISOString().split('T')[0];
-             let trangthai = 'Nghỉ phép';
+         let current = new Date(start);
+         while (current <= end) {
+            const currDateStr = current.toISOString().split('T')[0];
+            let trangthai = 'Nghỉ phép';
 
-             if (currDateStr === todayStr) {
-                const now = new Date();
-                const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
-                if (currentTimeTotal > cfgTimeTotal) {
-                   trangthai = 'Nghỉ không phép';
-                }
-             } else if (currDateStr < todayStr) {
-                trangthai = 'Nghỉ không phép';
-             }
+            if (currDateStr === todayStr) {
+               const now = new Date();
+               const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
+               if (currentTimeTotal > cfgTimeTotal) {
+                  trangthai = 'Nghỉ không phép';
+               }
+            } else if (currDateStr < todayStr) {
+               trangthai = 'Nghỉ không phép';
+            }
 
-             const payload = {
-                mahv: parentData.student.mahv,
-                malop: parentData.student.malop,
-                ngay: currDateStr,
-                trangthai: trangthai,
-                ghichu: leaveForm.reason,
-                manv: parentData.teacherManv || 'parent'
-             };
+            const payload = {
+               mahv: parentData.student.mahv,
+               malop: parentData.student.malop,
+               ngay: currDateStr,
+               trangthai: trangthai,
+               ghichu: leaveForm.reason,
+               manv: parentData.teacherManv || 'parent'
+            };
 
-             // Check if record exists
-             const { data: existing } = await supabase.from('tbl_diemdanh').select('id').eq('mahv', payload.mahv).eq('ngay', payload.ngay).maybeSingle();
-             if (existing) {
-                await supabase.from('tbl_diemdanh').update(payload).eq('id', existing.id);
-             } else {
-                await supabase.from('tbl_diemdanh').insert([payload]);
-             }
+            // Check if record exists
+            const { data: existing } = await supabase.from('tbl_diemdanh').select('id').eq('mahv', payload.mahv).eq('ngay', payload.ngay).maybeSingle();
+            if (existing) {
+               await supabase.from('tbl_diemdanh').update(payload).eq('id', existing.id);
+            } else {
+               await supabase.from('tbl_diemdanh').insert([payload]);
+            }
 
-             current.setDate(current.getDate() + 1);
-          }
-       } catch (err) {
-          console.error('Lỗi khi cập nhật điểm danh:', err);
-       }
+            current.setDate(current.getDate() + 1);
+         }
+      } catch (err) {
+         console.error('Lỗi khi cập nhật điểm danh:', err);
+      }
 
-       setIsLeaveModalOpen(false);
-       setLeaveForm({ from: '', to: '', reason: '' });
-       setLeaveType('today');
-    };
+      setIsLeaveModalOpen(false);
+      setLeaveForm({ from: '', to: '', reason: '' });
+      setLeaveType('today');
+   };
 
    const handlePickupSubmit = async (e) => {
       e.preventDefault();
@@ -280,22 +280,22 @@ function ParentPortal({ parentData, setParentData }) {
    const tuitionStatus = (() => {
       const latestNotify = parentData?.latestFee;
       const latestInv = parentData?.invoices?.[0];
-      
+
       if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true };
-      
+
       const notifyTime = latestNotify ? new Date(latestNotify.ngaylap).getTime() : 0;
       const invTime = latestInv ? new Date(latestInv.ngaylap).getTime() : 0;
-      
+
       if (notifyTime > invTime) {
          const monthText = latestNotify.thang || formatMonthYear(latestNotify.ngaylap);
-         return { 
-            text: `Cần thanh toán Học phí tháng ${monthText}`, 
-            isPaid: false 
+         return {
+            text: `Cần thanh toán Học phí tháng ${monthText}`,
+            isPaid: false
          };
       } else {
-         return { 
-            text: 'Học phí đã thanh toán', 
-            isPaid: true 
+         return {
+            text: 'Học phí đã thanh toán',
+            isPaid: true
          };
       }
    })();
@@ -361,7 +361,7 @@ function ParentPortal({ parentData, setParentData }) {
 
          const { data, error } = await supabase.from('dangkyngoaikhoa').insert([payload]).select();
          if (error) throw error;
-         
+
          alert(codangky ? 'Đăng ký ngoại khóa thành công!' : 'Đã ghi nhận ý kiến không tham gia của phụ huynh.');
          if (data) setNgoaiKhoaReg(data[0]);
       } catch (err) {
@@ -646,7 +646,6 @@ function ParentPortal({ parentData, setParentData }) {
 
                   <div className="premium-section-title">
                      Tiện ích yêu thích
-                     <span style={{ fontSize: '0.8rem', color: '#b71c1c', cursor: 'pointer' }}>Chỉnh sửa <Settings size={14} style={{ verticalAlign: 'middle' }} /></span>
                   </div>
                   <div className="premium-utility-grid">
                      <div className="premium-utility-item" onClick={() => { setMedicineForm({ name: '', usage: '' }); setIsMedicineModalOpen(true); }}>
@@ -683,7 +682,7 @@ function ParentPortal({ parentData, setParentData }) {
 
          {parentTab !== 'menu' && (
             <div className="premium-tab-container">
-               <div className="premium-tab-pane-header" style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '20px 20px 10px', background: 'white', borderRadius: '24px 24px 0 0' }}>
+               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px', padding: '20px 20px 10px', background: 'white', borderRadius: '24px 24px 0 0' }}>
                   <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f' }}>
                      <ArrowLeft size={20} />
                   </button>
@@ -693,8 +692,8 @@ function ParentPortal({ parentData, setParentData }) {
                            parentTab === 'fee-tab' ? 'Học phí' :
                               parentTab === 'health-tab' ? 'Sức khỏe' :
                                  parentTab === 'menu-tab' ? 'Thực đơn' :
-                                 parentTab === 'ngoaikhoa-tab' ? 'Ngoại khóa' :
-                                    parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
+                                    parentTab === 'ngoaikhoa-tab' ? 'Ngoại khóa' :
+                                       parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
                   </h2>
                </div>
 
@@ -742,135 +741,135 @@ function ParentPortal({ parentData, setParentData }) {
                      </div>
                   )}
 
-                   {parentTab === 'menu-tab' && (
-                      <div id="menu-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                         <div className="notices-section">
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#166534' }}>
-                               <Utensils size={20} /> Thực đơn hàng ngày
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                               {parentNotices.filter(n => n.title === 'THỰC ĐƠN').length > 0 ? parentNotices.filter(n => n.title === 'THỰC ĐƠN').map((menu, idx) => (
-                                  <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                                     <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0fdf4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontWeight: 800, color: '#166534' }}>Thực đơn mới</span>
-                                        <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600 }}>{new Date(menu.date).toLocaleDateString('vi-VN')}</span>
-                                     </div>
-                                     <div style={{ padding: '15px' }}>
-                                        <p style={{ margin: '0 0 10px 0', color: '#475569', fontSize: '0.95rem' }}>{menu.content}</p>
-                                        {menu.image_url && (
-                                           <div 
-                                              style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
-                                              onClick={() => setPreviewImage(menu.image_url)}
-                                           >
-                                              <img src={menu.image_url} alt="menu" style={{ width: '100%', display: 'block' }} />
-                                           </div>
-                                        )}
-                                     </div>
-                                  </div>
-                               )) : (
-                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
-                                     <Utensils size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
-                                     <p>Hiện chưa có thực đơn mới nào được cập nhật.</p>
-                                  </div>
-                               )}
-                            </div>
-                         </div>
-                      </div>
-                   )}
+                  {parentTab === 'menu-tab' && (
+                     <div id="menu-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div className="notices-section">
+                           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#166534' }}>
+                              <Utensils size={20} /> Thực đơn hàng ngày
+                           </h3>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                              {parentNotices.filter(n => n.title === 'THỰC ĐƠN').length > 0 ? parentNotices.filter(n => n.title === 'THỰC ĐƠN').map((menu, idx) => (
+                                 <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                    <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0fdf4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                       <span style={{ fontWeight: 800, color: '#166534' }}>Thực đơn mới</span>
+                                       <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600 }}>{new Date(menu.date).toLocaleDateString('vi-VN')}</span>
+                                    </div>
+                                    <div style={{ padding: '15px' }}>
+                                       <p style={{ margin: '0 0 10px 0', color: '#475569', fontSize: '0.95rem' }}>{menu.content}</p>
+                                       {menu.image_url && (
+                                          <div
+                                             style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
+                                             onClick={() => setPreviewImage(menu.image_url)}
+                                          >
+                                             <img src={menu.image_url} alt="menu" style={{ width: '100%', display: 'block' }} />
+                                          </div>
+                                       )}
+                                    </div>
+                                 </div>
+                              )) : (
+                                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                                    <Utensils size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
+                                    <p>Hiện chưa có thực đơn mới nào được cập nhật.</p>
+                                 </div>
+                              )}
+                           </div>
+                        </div>
+                     </div>
+                  )}
 
-                   {parentTab === 'ngoaikhoa-tab' && (
-                      <div id="ngoaikhoa-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                         <div className="notices-section">
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#be185d' }}>
-                               <Image size={20} /> Hoạt động ngoại khóa mới nhất
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                               {parentNotices.filter(n => n.title === 'NGOẠI KHÓA').length > 0 ? (
-                                  parentNotices.filter(n => n.title === 'NGOẠI KHÓA').slice(0, 1).map((item, idx) => (
-                                  <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                                     <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#fdf2f8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontWeight: 800, color: '#be185d' }}>Thông tin ngoại khóa</span>
-                                        <span style={{ fontSize: '0.8rem', color: '#be185d', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
-                                     </div>
-                                     <div style={{ padding: '15px' }}>
-                                        <p style={{ margin: '0 0 15px 0', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>{item.content}</p>
-                                        {item.image_url && (
-                                           <div 
-                                              style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
-                                              onClick={() => setPreviewImage(item.image_url)}
-                                           >
-                                              <img src={item.image_url} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} />
-                                           </div>
-                                        )}
+                  {parentTab === 'ngoaikhoa-tab' && (
+                     <div id="ngoaikhoa-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div className="notices-section">
+                           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#be185d' }}>
+                              <Image size={20} /> Hoạt động ngoại khóa mới nhất
+                           </h3>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                              {parentNotices.filter(n => n.title === 'NGOẠI KHÓA').length > 0 ? (
+                                 parentNotices.filter(n => n.title === 'NGOẠI KHÓA').slice(0, 1).map((item, idx) => (
+                                    <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                       <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#fdf2f8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span style={{ fontWeight: 800, color: '#be185d' }}>Thông tin ngoại khóa</span>
+                                          <span style={{ fontSize: '0.8rem', color: '#be185d', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
+                                       </div>
+                                       <div style={{ padding: '15px' }}>
+                                          <p style={{ margin: '0 0 15px 0', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>{item.content}</p>
+                                          {item.image_url && (
+                                             <div
+                                                style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
+                                                onClick={() => setPreviewImage(item.image_url)}
+                                             >
+                                                <img src={item.image_url} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} />
+                                             </div>
+                                          )}
 
-                                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
-                                           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                                              <button 
-                                                 onClick={() => {
-                                                    setShowDeclineReason(false);
-                                                    handleNgoaiKhoaSubmit(true);
-                                                 }}
-                                                 disabled={ngoaiKhoaLoading}
-                                                 style={{ 
-                                                    flex: 1, padding: '12px', borderRadius: '12px', 
-                                                    background: ngoaiKhoaReg?.codangky === true ? '#16a34a' : 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', 
-                                                    color: 'white', border: 'none', fontWeight: 700, 
-                                                    opacity: ngoaiKhoaLoading ? 0.7 : 1, cursor: 'pointer',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                                                 }}
-                                              >
-                                                 {ngoaiKhoaReg?.codangky === true ? 'Đã đăng ký ✓' : 'Đăng ký tham gia'}
-                                              </button>
-                                              <button 
-                                                 onClick={() => setShowDeclineReason(true)}
-                                                 disabled={ngoaiKhoaLoading}
-                                                 style={{ 
-                                                    flex: 1, padding: '12px', borderRadius: '12px', 
-                                                    background: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? '#64748b' : 'white', 
-                                                    color: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? 'white' : '#475569', 
-                                                    border: '1px solid #e2e8f0', fontWeight: 700,
-                                                    cursor: 'pointer'
-                                                 }}
-                                              >
-                                                 {ngoaiKhoaReg?.codangky === false ? 'Đã từ chối' : 'Không đăng ký'}
-                                              </button>
-                                           </div>
+                                          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                                             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                                <button
+                                                   onClick={() => {
+                                                      setShowDeclineReason(false);
+                                                      handleNgoaiKhoaSubmit(true);
+                                                   }}
+                                                   disabled={ngoaiKhoaLoading}
+                                                   style={{
+                                                      flex: 1, padding: '12px', borderRadius: '12px',
+                                                      background: ngoaiKhoaReg?.codangky === true ? '#16a34a' : 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                                                      color: 'white', border: 'none', fontWeight: 700,
+                                                      opacity: ngoaiKhoaLoading ? 0.7 : 1, cursor: 'pointer',
+                                                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                                   }}
+                                                >
+                                                   {ngoaiKhoaReg?.codangky === true ? 'Đã đăng ký ✓' : 'Đăng ký tham gia'}
+                                                </button>
+                                                <button
+                                                   onClick={() => setShowDeclineReason(true)}
+                                                   disabled={ngoaiKhoaLoading}
+                                                   style={{
+                                                      flex: 1, padding: '12px', borderRadius: '12px',
+                                                      background: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? '#64748b' : 'white',
+                                                      color: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? 'white' : '#475569',
+                                                      border: '1px solid #e2e8f0', fontWeight: 700,
+                                                      cursor: 'pointer'
+                                                   }}
+                                                >
+                                                   {ngoaiKhoaReg?.codangky === false ? 'Đã từ chối' : 'Không đăng ký'}
+                                                </button>
+                                             </div>
 
-                                           {showDeclineReason && (
-                                              <div style={{ animation: 'slideDown 0.3s ease' }}>
-                                                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Lý do không tham gia:</label>
-                                                 <textarea 
-                                                    placeholder="Nhập lý do..." 
-                                                    value={ngoaiKhoaReason} 
-                                                    onChange={e => setNgoaiKhoaReason(e.target.value)}
-                                                    rows="2" 
-                                                    style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none', marginBottom: '10px' }}
-                                                 />
-                                                 <button 
-                                                    onClick={() => handleNgoaiKhoaSubmit(false)}
-                                                    disabled={ngoaiKhoaLoading || !ngoaiKhoaReason.trim()}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: '10px', background: '#475569', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}
-                                                 >
-                                                    {ngoaiKhoaLoading ? 'Đang gửi...' : 'Gửi lý do từ chối'}
-                                                 </button>
-                                              </div>
-                                           )}
-                                        </div>
-                                     </div>
-                                  </div>
-                                  ))
-                               ) : (
-                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
-                                     <Image size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
-                                     <p>Hiện chưa có thông tin ngoại khóa mới nào.</p>
-                                  </div>
-                               )}
-                            </div>
-                         </div>
-                      </div>
-                   )}
+                                             {showDeclineReason && (
+                                                <div style={{ animation: 'slideDown 0.3s ease' }}>
+                                                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Lý do không tham gia:</label>
+                                                   <textarea
+                                                      placeholder="Nhập lý do..."
+                                                      value={ngoaiKhoaReason}
+                                                      onChange={e => setNgoaiKhoaReason(e.target.value)}
+                                                      rows="2"
+                                                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none', marginBottom: '10px' }}
+                                                   />
+                                                   <button
+                                                      onClick={() => handleNgoaiKhoaSubmit(false)}
+                                                      disabled={ngoaiKhoaLoading || !ngoaiKhoaReason.trim()}
+                                                      style={{ width: '100%', padding: '10px', borderRadius: '10px', background: '#475569', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+                                                   >
+                                                      {ngoaiKhoaLoading ? 'Đang gửi...' : 'Gửi lý do từ chối'}
+                                                   </button>
+                                                </div>
+                                             )}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 ))
+                              ) : (
+                                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                                    <Image size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
+                                    <p>Hiện chưa có thông tin ngoại khóa mới nào.</p>
+                                 </div>
+                              )}
+                           </div>
+                        </div>
+                     </div>
+                  )}
 
-                   {parentTab === 'attendance-tab' && (
+                  {parentTab === 'attendance-tab' && (
                      <div id="attendance-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         <div style={{ background: 'white', borderRadius: '20px', padding: '15px', border: '1px solid #e2e8f0' }}>
                            <div className="calendar-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -961,16 +960,16 @@ function ParentPortal({ parentData, setParentData }) {
                                  </div>
                               </div>
                               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
-                              {!tuitionStatus.isPaid && (
-                                 <button onClick={() => {
-                                    const qr = getQRUrl();
-                                    if (qr) window.open(qr, '_blank');
-                                    else alert('Không tìm thấy thông tin chuyển khoản cấu hình.');
-                                 }} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Thanh toán ngay</button>
-                              )}
+                                 <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
+                                 {!tuitionStatus.isPaid && (
+                                    <button onClick={() => {
+                                       const qr = getQRUrl();
+                                       if (qr) window.open(qr, '_blank');
+                                       else alert('Không tìm thấy thông tin chuyển khoản cấu hình.');
+                                    }} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Thanh toán ngay</button>
+                                 )}
+                              </div>
                            </div>
-                        </div>
                         ) : (
                            <div className="fee-card-empty" style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', padding: '30px', borderRadius: '20px', textAlign: 'center', color: '#94a3b8', marginBottom: '20px' }}>
                               <Wallet size={32} style={{ marginBottom: '10px', opacity: 0.5 }} />
@@ -1001,88 +1000,88 @@ function ParentPortal({ parentData, setParentData }) {
                      </div>
                   )}
 
-                   {parentTab === 'health-tab' && (
-                      <div id="health-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                         <div style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px' }}>
-                               <div style={{ width: '56px', height: '56px', background: '#fff1f2', color: '#e11d48', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(225, 29, 72, 0.15)' }}>
-                                  <Heart size={32} />
-                               </div>
-                               <div>
-                                  <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>Cân nặng & Chiều cao</div>
-                                  <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#0f172a' }}>Hồ Sơ Sức Khỏe</div>
-                               </div>
-                            </div>
+                  {parentTab === 'health-tab' && (
+                     <div id="health-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
+                        <div style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px', borderBottom: '1px solid #f1f5f9', paddingBottom: '20px' }}>
+                              <div style={{ width: '56px', height: '56px', background: '#fff1f2', color: '#e11d48', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(225, 29, 72, 0.15)' }}>
+                                 <Heart size={32} />
+                              </div>
+                              <div>
+                                 <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>Cân nặng & Chiều cao</div>
+                                 <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#0f172a' }}>Hồ Sơ Sức Khỏe</div>
+                              </div>
+                           </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
-                               <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', padding: '20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #bfdbfe' }}>
-                                  <div style={{ fontSize: '0.85rem', color: '#1e40af', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Activity size={16} /> Chiều cao</div>
-                                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1e3a8a' }}>{healthHistory[0]?.chieucao || parentData.student.chieucao || '--'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>cm</span></div>
-                               </div>
-                               <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', padding: '20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
-                                  <div style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Activity size={16} /> Cân nặng</div>
-                                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#14532d' }}>{healthHistory[0]?.cannang || parentData.student.cannang || '--'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>kg</span></div>
-                               </div>
-                            </div>
+                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+                              <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', padding: '20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #bfdbfe' }}>
+                                 <div style={{ fontSize: '0.85rem', color: '#1e40af', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Activity size={16} /> Chiều cao</div>
+                                 <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1e3a8a' }}>{healthHistory[0]?.chieucao || parentData.student.chieucao || '--'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>cm</span></div>
+                              </div>
+                              <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', padding: '20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                                 <div style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Activity size={16} /> Cân nặng</div>
+                                 <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#14532d' }}>{healthHistory[0]?.cannang || parentData.student.cannang || '--'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>kg</span></div>
+                              </div>
+                           </div>
 
-                            <div style={{ padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontWeight: 800, marginBottom: '10px', fontSize: '0.95rem' }}>
-                                  <FileText size={18} className="text-primary" /> Nhận xét từ giáo viên:
-                               </div>
-                               <div style={{ fontSize: '1rem', color: '#334155', lineHeight: 1.6, fontStyle: parentData.student.ghichusuckhoe ? 'normal' : 'italic' }}>
-                                  {parentData.student.ghichusuckhoe || parentData.student.tinhtrangsk || 'Hiện tại chưa có nhận xét mới về tình trạng sức khỏe của bé.'}
-                                </div>
-                            </div>
-                         </div>
+                           <div style={{ padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontWeight: 800, marginBottom: '10px', fontSize: '0.95rem' }}>
+                                 <FileText size={18} className="text-primary" /> Nhận xét từ giáo viên:
+                              </div>
+                              <div style={{ fontSize: '1rem', color: '#334155', lineHeight: 1.6, fontStyle: parentData.student.ghichusuckhoe ? 'normal' : 'italic' }}>
+                                 {parentData.student.ghichusuckhoe || parentData.student.tinhtrangsk || 'Hiện tại chưa có nhận xét mới về tình trạng sức khỏe của bé.'}
+                              </div>
+                           </div>
+                        </div>
 
-                         <div style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                               <CalendarCheck size={20} className="text-primary" /> Lịch sử theo dõi hàng tháng
-                            </h3>
-                            
-                            {healthLoading ? (
-                               <div style={{ display: 'flex', justifyContent: 'center', padding: '30px' }}><Loader2 size={30} className="spinner text-primary" /></div>
-                            ) : healthHistory.length > 0 ? (
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                  {healthHistory.map((record, idx) => {
-                                     const date = new Date(record.ngay);
-                                     return (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
-                                           <div style={{ minWidth: '60px', textAlign: 'center', borderRight: '2px solid #e2e8f0', paddingRight: '15px' }}>
-                                              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Tháng</div>
-                                              <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>{date.getMonth() + 1}</div>
-                                              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8' }}>{date.getFullYear()}</div>
-                                           </div>
-                                           <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                              <div>
-                                                 <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Chiều cao</span>
-                                                 <strong style={{ fontSize: '1rem', color: '#3b82f6' }}>{record.chieucao} cm</strong>
-                                              </div>
-                                              <div>
-                                                 <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Cân nặng</span>
-                                                 <strong style={{ fontSize: '1rem', color: '#10b981' }}>{record.cannang} kg</strong>
-                                              </div>
-                                           </div>
-                                           <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic' }}>
-                                              {date.toLocaleDateString('vi-VN')}
-                                           </div>
-                                        </div>
-                                     );
-                                  })}
-                               </div>
-                            ) : (
-                               <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
-                                  <Activity size={32} style={{ marginBottom: '10px', opacity: 0.5 }} />
-                                  <p style={{ margin: 0 }}>Chưa có dữ liệu lịch sử sức khỏe.</p>
-                               </div>
-                            )}
-                         </div>
-                      </div>
-                   )}
+                        <div style={{ background: 'white', borderRadius: '24px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <CalendarCheck size={20} className="text-primary" /> Lịch sử theo dõi hàng tháng
+                           </h3>
+
+                           {healthLoading ? (
+                              <div style={{ display: 'flex', justifyContent: 'center', padding: '30px' }}><Loader2 size={30} className="spinner text-primary" /></div>
+                           ) : healthHistory.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                 {healthHistory.map((record, idx) => {
+                                    const date = new Date(record.ngay);
+                                    return (
+                                       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                                          <div style={{ minWidth: '60px', textAlign: 'center', borderRight: '2px solid #e2e8f0', paddingRight: '15px' }}>
+                                             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Tháng</div>
+                                             <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>{date.getMonth() + 1}</div>
+                                             <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8' }}>{date.getFullYear()}</div>
+                                          </div>
+                                          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                             <div>
+                                                <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Chiều cao</span>
+                                                <strong style={{ fontSize: '1rem', color: '#3b82f6' }}>{record.chieucao} cm</strong>
+                                             </div>
+                                             <div>
+                                                <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Cân nặng</span>
+                                                <strong style={{ fontSize: '1rem', color: '#10b981' }}>{record.cannang} kg</strong>
+                                             </div>
+                                          </div>
+                                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                             {date.toLocaleDateString('vi-VN')}
+                                          </div>
+                                       </div>
+                                    );
+                                 })}
+                              </div>
+                           ) : (
+                              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
+                                 <Activity size={32} style={{ marginBottom: '10px', opacity: 0.5 }} />
+                                 <p style={{ margin: 0 }}>Chưa có dữ liệu lịch sử sức khỏe.</p>
+                              </div>
+                           )}
+                        </div>
+                     </div>
+                  )}
 
                   {parentTab === 'chat-tab' && (
                      <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', background: '#f8fafc', borderRadius: '0 0 24px 24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0' }}>
+                        <div style={{ position: 'sticky', top: '66px', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0' }}>
                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ position: 'relative' }}>
                                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
