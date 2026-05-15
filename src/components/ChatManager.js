@@ -318,6 +318,15 @@ const ChatManager = ({ currentUser }) => {
       return b.lastTime - a.lastTime;
     });
   }, [baseSummaries, statFilter]);
+  
+  const suggestionMessages = useMemo(() => {
+    return latestMessages.filter(m => {
+      const isGopY = m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
+      if (!isGopY) return false;
+      
+      return isGopY;
+    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [latestMessages]);
 
   // Quick Report Counts
   const reports = useMemo(() => {
@@ -973,7 +982,13 @@ ${ngoaiKhoaForm.content}
 
           <div className="chat-messages scrollable" ref={scrollRef}>
             {loadingMessages ? <div className="loading-center"><Loader2 size={32} className="spinner" /></div> : (
-              messages.map((m, idx) => {
+              messages.filter(m => {
+                const isGopY = m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
+                if (isGopY) {
+                  return currentUser?.role === 'Quản lý' || currentUser?.role === 'Hiệu trưởng';
+                }
+                return true;
+              }).map((m, idx) => {
                 const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
                 const msgId = m.id || `msg-${idx}-${m.created_at}`;
                 return (
@@ -1434,40 +1449,60 @@ ${ngoaiKhoaForm.content}
           <tbody>
             {loading ? (
               <tr><td colSpan="6" className="no-results"><Loader2 size={24} className="spinner" /> Đang tải dữ liệu...</td></tr>
+            ) : statFilter === 'GOP_Y' ? (
+              suggestionMessages.length === 0 ? (
+                <tr><td colSpan="2" className="no-results">Chưa có góp ý nào</td></tr>
+              ) : suggestionMessages.map(m => {
+                const s = students.find(hv => hv.mahv === m.mahv);
+                return (
+                  <tr key={m.id} style={{ cursor: 'default' }}>
+                    <td className="student-name-cell" style={{ whiteSpace: 'normal', lineHeight: '1.5', padding: '15px' }}>
+                      <div style={{ fontWeight: 800, color: '#f97316', marginBottom: '5px' }}>👤 Phụ huynh ẩn danh</div>
+                      <div style={{ color: '#1e293b' }}>
+                        {m.content?.replace(/📬 \[HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG\]\nNội dung: /i, '')}
+                      </div>
+                    </td>
+                    <td className="time-cell" style={{ verticalAlign: 'top', paddingTop: '15px' }}>
+                      {new Date(m.created_at).toLocaleString('vi-VN')}
+                    </td>
+                  </tr>
+                );
+              })
             ) : parentSummaries.length === 0 ? (
               <tr><td colSpan="6" className="no-results">Không tìm thấy thông tin phù hợp</td></tr>
             ) : parentSummaries.map(s => (
               <tr key={s.mahv} onClick={() => { setSelectedStudent(s); setView('chat'); }}>
-                {statFilter === 'GOP_Y' ? (
-                  <>
-                    <td className="student-name-cell" style={{ whiteSpace: 'normal', lineHeight: '1.5' }}>
-                      {s.lastMsg?.content?.replace(/📬 \[HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG\]\nNội dung: /i, '')}
-                    </td>
-                    <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
-                  </>
-                ) : (
-                  <>
-                    <td className="student-name-cell">
-                      {s.tenhv}
-                      {unreadCounts[s.mahv] > 0 && (
-                        <span style={{ marginLeft: '10px', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
-                          +{unreadCounts[s.mahv]}
-                        </span>
-                      )}
-                    </td>
-                    <td className="phone-cell">{s.sdtme || '--'}</td>
-                    <td>{s.className}</td>
-                    <td>{s.teacherName}</td>
-                    <td>
-                      {s.notifType ? (
-                        <span className={`badge-notification badge-${s.notifType.toLowerCase().replace(/ /g, '-')}`}>
-                          {s.notifType}
-                        </span>
-                      ) : <span style={{color: '#cbd5e1'}}>--</span>}
-                    </td>
-                    <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
-                  </>
-                )}
+                <>
+                  <td className="student-name-cell">
+                    {s.tenhv}
+                    {unreadCounts[s.mahv] > 0 && (
+                      <span style={{ marginLeft: '10px', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
+                        +{unreadCounts[s.mahv]}
+                      </span>
+                    )}
+                  </td>
+                  <td className="phone-cell">{s.sdtme || '--'}</td>
+                  <td>{s.className}</td>
+                  <td>{s.teacherName}</td>
+                  <td>
+                    {s.lastMsg ? (
+                      <div 
+                        style={{ 
+                          fontSize: '0.85rem', 
+                          color: '#475569', 
+                          maxWidth: '220px', 
+                          overflow: 'hidden', 
+                          textOverflow: 'ellipsis', 
+                          whiteSpace: 'nowrap' 
+                        }} 
+                        title={s.lastMsg.content}
+                      >
+                        {s.lastMsg.content || (s.lastMsg.image_url ? '📷 [Hình ảnh]' : (s.lastMsg.file_url ? '📎 [Tài liệu]' : '...'))}
+                      </div>
+                    ) : <span style={{color: '#cbd5e1'}}>--</span>}
+                  </td>
+                  <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
+                </>
               </tr>
             ))}
           </tbody>

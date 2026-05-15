@@ -218,7 +218,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
       const { data } = await supabase
          .from('hv_messages')
-         .select('mahv, manv, description')
+         .select('content, mahv, manv, description')
          .in('mahv', studentIds)
          .is('is_read', false);
 
@@ -228,6 +228,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          data.forEach(d => {
             const isPH = d.description === 'PH' || (!d.manv);
             if (isPH) {
+               if (d.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')) return;
                counts[d.mahv] = (counts[d.mahv] || 0) + 1;
                totalUnread++;
             }
@@ -781,10 +782,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                           </td>
                                           <td>{st.malop}</td>
                                           <td>
-                                             {type ? (
-                                                <span className={`badge-notification badge-${type === 'Xin nghỉ' ? 'xin-nghi' : type === 'Báo thuốc' ? 'bao-thuoc' : type === 'Đổi người đón' ? 'doi-nguoi' : type === 'Về trễ' ? 've-tre' : 'tin-nhan'}`}>
-                                                   {type}
-                                                </span>
+                                             {msgToShow ? (
+                                                <div style={{ fontSize: '0.8rem', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={msgToShow.content}>
+                                                   {msgToShow.content || (msgToShow.image_url ? '📷 [Hình ảnh]' : (msgToShow.file_url ? '📎 [Tài liệu]' : '...'))}
+                                                </div>
                                              ) : <span style={{ color: '#cbd5e1' }}>--</span>}
                                           </td>
                                           <td className="time-cell">
@@ -823,7 +824,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            ) : attChatMessages.length === 0 ? (
                               <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontSize: '0.85rem' }}>Bắt đầu trò chuyện với phụ huynh của {attChatSelectedStudent.tenhv}</div>
                            ) : (
-                              attChatMessages.map((m, idx) => {
+                              attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
                                  const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
                                  return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>

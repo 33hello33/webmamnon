@@ -229,7 +229,7 @@ function Dashboard() {
 
       let query = supabase
         .from('hv_messages')
-        .select('manv, description, mahv')
+        .select('content, manv, description, mahv')
         .is('is_read', false);
       
       if (studentIds) {
@@ -242,7 +242,11 @@ function Dashboard() {
         let count = 0;
         data.forEach(d => {
           const isPH = d.description === 'PH' || (!d.manv);
-          if (isPH) count++;
+          if (isPH) {
+            const isGopY = d.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
+            if (isGopY && user.role !== 'Quản lý' && user.role !== 'Hiệu trưởng') return;
+            count++;
+          }
         });
         setUnreadChatCount(count);
 
