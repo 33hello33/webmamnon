@@ -382,62 +382,98 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
-   const fetchUnreads = async () => {
-      if (!parentData) return;
-      
-      // 1. Fetch Chat Unreads
-      const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
-      if (chatData) {
-         let count = 0;
-         chatData.forEach(d => {
-            const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-            if (isTeacher) count++;
-         });
-         setUnreadChatCount(count);
-         if ('setAppBadge' in navigator) {
-            if (count > 0) navigator.setAppBadge(count).catch(console.error);
-            else navigator.clearAppBadge().catch(console.error);
-         }
-      }
+    const fetchUnreads = async () => {
+       if (!parentData) return;
+       
+       let totalUnread = 0;
 
-      // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
-      const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
-      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(20);
+       // 1. Fetch Chat Unreads
+       const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
+       let chatCount = 0;
+       if (chatData) {
+          chatData.forEach(d => {
+             const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+             if (isTeacher) chatCount++;
+          });
+          setUnreadChatCount(chatCount);
+          totalUnread += chatCount;
+       }
 
-      // Notices (General + Class excluding Menu/NgoaiKhoa)
-      const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
-      const latestGenNotice = generalNotices?.[0];
-      const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA');
-      const latestClassNotice = classNotices?.[0];
-      
-      const currentLatestNoticeTime = Math.max(
-         latestGenNotice ? new Date(latestGenNotice.ngaylap).getTime() : 0,
-         latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
-      );
-      if (currentLatestNoticeTime > lastNoticeTime) setUnreadNotices(1);
-      else setUnreadNotices(0);
+       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
+       const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
+       const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(20);
 
-      // Menu
-      const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
-      const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
-      const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
-      if (currentLatestMenuTime > lastMenuTime) setUnreadMenu(1);
-      else setUnreadMenu(0);
+       // Notices (General + Class excluding Menu/NgoaiKhoa)
+       const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
+       const latestGenNotice = generalNotices?.[0];
+       const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA');
+       const latestClassNotice = classNotices?.[0];
+       
+       const currentLatestNoticeTime = Math.max(
+          latestGenNotice ? new Date(latestGenNotice.ngaylap).getTime() : 0,
+          latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
+       );
+       if (currentLatestNoticeTime > lastNoticeTime) {
+          setUnreadNotices(1);
+          totalUnread += 1;
+       } else {
+          setUnreadNotices(0);
+       }
 
-      // Ngoai Khoa
-      const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
-      const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
-      const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
-      if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) setUnreadNgoaiKhoa(1);
-      else setUnreadNgoaiKhoa(0);
+       // Menu
+       const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
+       const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
+       const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
+       if (currentLatestMenuTime > lastMenuTime) {
+          setUnreadMenu(1);
+          totalUnread += 1;
+       } else {
+          setUnreadMenu(0);
+       }
 
-      // 3. Fetch Health Unreads
-      const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
-      const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
-      const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
-      if (currentLatestHealthTime > lastHealthTime) setUnreadHealth(1);
-      else setUnreadHealth(0);
-   };
+       // Ngoai Khoa
+       const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
+       const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
+       const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
+       if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
+          setUnreadNgoaiKhoa(1);
+          totalUnread += 1;
+       } else {
+          setUnreadNgoaiKhoa(0);
+       }
+
+       // 3. Fetch Health Unreads
+       const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
+       const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
+       const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
+       if (currentLatestHealthTime > lastHealthTime) {
+          setUnreadHealth(1);
+          totalUnread += 1;
+       } else {
+          setUnreadHealth(0);
+       }
+
+       // 4. Fetch Tuition (latestFee) Unreads
+       const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${parentData.student.mahv}`) || '0');
+       const latestFee = parentData?.latestFee;
+       if (latestFee) {
+          const currentFeeTime = new Date(latestFee.ngaylap).getTime();
+          if (currentFeeTime > lastFeeTime) {
+             // Only count as unread if it hasn't been paid (if we can detect that)
+             // For now, any new fee notification counts as +1
+             totalUnread += 1;
+          }
+       }
+
+       // Update App Badge
+       if ('setAppBadge' in navigator) {
+          if (totalUnread > 0) {
+             navigator.setAppBadge(totalUnread).catch(console.error);
+          } else {
+             navigator.clearAppBadge().catch(console.error);
+          }
+       }
+    };
 
    useEffect(() => {
       if (!parentData) return;
@@ -447,29 +483,26 @@ function ParentPortal({ parentData, setParentData }) {
 
       fetchUnreads();
 
+      const noticeChan = supabase.channel(`parent_notices_${parentData.student.mahv}`)
+         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => { 
+            fetchUnreads(); 
+            const isTuition = payload.new.tieude?.toLowerCase().includes('học phí');
+            showNotification(isTuition ? 'Thông báo học phí' : 'Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
+         })
+         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, (payload) => { 
+            fetchUnreads(); 
+            const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : 'Bảng tin lớp mới');
+            showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
+         })
+         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, () => { 
+            fetchUnreads(); 
+            showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
+         })
+         .subscribe();
+
       // If we are on the menu, we can still subscribe to changes but we don't fetch full tab data
       if (parentTab === 'menu') {
-         // Optionally set up real-time for other tables too
-         const noticeChan = supabase.channel(`parent_notices_${parentData.student.mahv}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_thongbao' }, (payload) => { 
-               fetchUnreads(); 
-               showNotification('Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
-            })
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, (payload) => { 
-               fetchUnreads(); 
-               const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : 'Bảng tin lớp mới');
-               showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
-            })
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, () => { 
-               fetchUnreads(); 
-               showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
-            })
-            .subscribe();
-
-         return () => {
-            supabase.removeChannel(unreadChan);
-            supabase.removeChannel(noticeChan);
-         };
+         // Menu specific logic if any
       }
 
       // Rest of the tab-specific data fetching
@@ -536,6 +569,7 @@ function ParentPortal({ parentData, setParentData }) {
       return () => {
          if (channel) supabase.removeChannel(channel);
          supabase.removeChannel(unreadChan);
+         supabase.removeChannel(noticeChan);
       };
    }, [parentData, parentTab, calendarDate]);
 
@@ -575,12 +609,20 @@ function ParentPortal({ parentData, setParentData }) {
             }
             setUnreadNgoaiKhoa(0);
          } else if (parentTab === 'health-tab') {
-            if (healthHistory.length > 0) {
-               const time = new Date(healthHistory[0].ngay).getTime();
-               localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
-            }
-            setUnreadHealth(0);
-         }
+             if (healthHistory.length > 0) {
+                const time = new Date(healthHistory[0].ngay).getTime();
+                localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
+             }
+             setUnreadHealth(0);
+             fetchUnreads();
+          } else if (parentTab === 'fee-tab') {
+             const latestFee = parentData?.latestFee;
+             if (latestFee) {
+                const time = new Date(latestFee.ngaylap).getTime();
+                localStorage.setItem(`last_fee_time_${parentData.student.mahv}`, String(time));
+             }
+             fetchUnreads();
+          }
       };
       markAsRead();
    }, [parentTab, parentData, parentNotices, healthHistory]);
