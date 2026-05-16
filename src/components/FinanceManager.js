@@ -1581,6 +1581,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             )}
 
             <div className="fm-stats-grid">
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('hoadon'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-hocphi"><GraduationCap size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Thu học phí</span>
+                     <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
+                  </div>
+               </div>
                <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuchi'); setLoaiPhieuFilter('Chi'); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-chi"><TrendingDown size={24} /></div>
                   <div className="fm-stat-info">
@@ -1593,13 +1600,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Nhập kho</span>
                      <span className="fm-stat-value" style={{ color: '#ec4899' }}>{fCur(stats.nhapKho)}</span>
-                  </div>
-               </div>
-               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('hoadon'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
-                  <div className="fm-stat-icon ico-hocphi"><GraduationCap size={24} /></div>
-                  <div className="fm-stat-info">
-                     <span className="fm-stat-label">Thu học phí</span>
-                     <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
                   </div>
                </div>
                <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('billhang'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
