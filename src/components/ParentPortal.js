@@ -47,7 +47,15 @@ function ParentPortal({ parentData, setParentData }) {
 
    const showNotification = (title, body) => {
       if (Notification.permission === 'granted') {
-         new Notification(title, { body, icon: '/logo192.png' });
+         if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then((registration) => {
+               registration.showNotification(title, { body, icon: '/logo192.png' });
+            }).catch(() => {
+               new Notification(title, { body, icon: '/logo192.png' });
+            });
+         } else {
+            new Notification(title, { body, icon: '/logo192.png' });
+         }
       }
    };
 
