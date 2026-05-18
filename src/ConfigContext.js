@@ -25,9 +25,42 @@ export const ConfigProvider = ({ children }) => {
           const favicon = document.querySelector('link[rel="icon"]');
           if (favicon) favicon.href = data.logo;
         }
-        if (data.appleicon) {
+        if (data.appleicon || data.logo) {
+          const iconUrl = data.appleicon || data.logo;
           const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-          if (appleIcon) appleIcon.href = data.appleicon;
+          if (appleIcon) appleIcon.href = iconUrl;
+
+          // Dynamically generate manifest.json for Android Chrome PWA
+          const manifestObj = {
+            short_name: data.tenweb || "Mam Non",
+            name: data.tenweb || "Hệ thống Quản lý Mầm Non",
+            icons: [
+              {
+                src: iconUrl,
+                type: "image/png",
+                sizes: "192x192"
+              },
+              {
+                src: iconUrl,
+                type: "image/png",
+                sizes: "512x512"
+              }
+            ],
+            start_url: ".",
+            display: "standalone",
+            theme_color: "#ffffff",
+            background_color: "#ffffff"
+          };
+
+          const manifestBlob = new Blob([JSON.stringify(manifestObj)], { type: 'application/json' });
+          const manifestUrl = URL.createObjectURL(manifestBlob);
+          let manifestLink = document.querySelector('link[rel="manifest"]');
+          if (!manifestLink) {
+            manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            document.head.appendChild(manifestLink);
+          }
+          manifestLink.href = manifestUrl;
         }
       } else {
         // Fallback or initialization
