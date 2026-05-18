@@ -59,6 +59,77 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
+   const subscribeToPushNotifications = async () => {
+      if (!('serviceWorker' in navigator)) {
+         alert('Trình duyệt không hỗ trợ Service Worker.');
+         return;
+      }
+      if (!('PushManager' in window)) {
+         alert('Trình duyệt không hỗ trợ Push Notifications.');
+         return;
+      }
+
+      try {
+         const permission = await Notification.requestPermission();
+         if (permission !== 'granted') {
+            alert('Bạn đã từ chối nhận thông báo.');
+            return;
+         }
+
+         const registration = await navigator.serviceWorker.ready;
+         
+         // In a real app, replace this with your VAPID public key
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'; 
+         
+         // Convert VAPID key to Uint8Array
+         const urlBase64ToUint8Array = (base64String) => {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+               outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+         };
+
+         const existingSubscription = await registration.pushManager.getSubscription();
+         if (existingSubscription) {
+            console.log('Existing Push Subscription:', JSON.stringify(existingSubscription));
+            alert('Đã bật thông báo thành công (Đã có Subscription).');
+            return;
+         }
+
+         const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+         });
+
+         console.log('New Push Subscription Endpoint:', JSON.stringify(subscription));
+
+         // Save subscription to Supabase
+         if (parentData?.student?.mahv) {
+            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+               user_id: parentData.student.mahv,
+               role: 'parent',
+               subscription: subscription,
+               updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+
+            if (dbError) {
+               console.error('Lỗi khi lưu Subscription vào DB:', dbError);
+            }
+         }
+
+         alert('Đã bật thông báo thành công!');
+
+      } catch (err) {
+         console.error('Lỗi khi đăng ký nhận thông báo:', err);
+         alert('Có lỗi xảy ra khi đăng ký nhận thông báo: ' + err.message);
+      }
+   };
+
+
    useEffect(() => {
       if ('Notification' in window && Notification.permission === 'default') {
          Notification.requestPermission();
@@ -821,6 +892,10 @@ function ParentPortal({ parentData, setParentData }) {
                      <div className="premium-utility-item" onClick={() => setIsFeedbackModalOpen(true)}>
                         <div className="premium-utility-icon-wrapper" style={{ color: '#6366f1' }}><MessageCircle size={24} /></div>
                         <span className="premium-utility-label">Góp ý</span>
+                     </div>
+                     <div className="premium-utility-item" onClick={subscribeToPushNotifications}>
+                        <div className="premium-utility-icon-wrapper" style={{ color: '#0ea5e9' }}><Bell size={24} /></div>
+                        <span className="premium-utility-label">Bật thông báo</span>
                      </div>
                      <div className="premium-utility-item" onClick={() => {
                         setParentData(null);
