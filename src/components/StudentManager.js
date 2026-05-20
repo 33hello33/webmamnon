@@ -132,9 +132,48 @@ export default function StudentManager({ activeSubTab }) {
     }
   };
 
+  const generateUsername = (tenhv) => {
+    if (!tenhv) return '';
+    const words = tenhv.trim().split(/\s+/);
+    if (words.length < 2) words.unshift('');
+    const last2 = words.slice(-2).join('');
+    let base = last2.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
+    
+    if (!base) return '';
+    
+    let suggested = base;
+    let counter = 1;
+    const existingUsernames = students.map(s => s.username).filter(Boolean);
+    while (existingUsernames.includes(suggested)) {
+      suggested = base + counter;
+      counter++;
+    }
+    return suggested;
+  };
+
+  const generatePassword = (ngaysinh) => {
+    if (!ngaysinh) return '';
+    const parts = ngaysinh.split('-');
+    if (parts.length === 3) {
+      return parts[2] + parts[1];
+    }
+    return '';
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [name]: value };
+      if (!isEditMode) {
+        if (name === 'tenhv') {
+          next.username = generateUsername(value);
+        }
+        if (name === 'ngaysinh') {
+          next.password = generatePassword(value);
+        }
+      }
+      return next;
+    });
   };
 
   const handleAvatarChange = async (e) => {
@@ -232,7 +271,9 @@ export default function StudentManager({ activeSubTab }) {
       const { error } = await supabase.from('tbl_hv').update({
         trangthai: 'Đã Nghỉ',
         ngaynghihoc: today,
-        ghichu: newGhichu
+        ghichu: newGhichu,
+        username: null,
+        password: null
       }).eq('mahv', selectedStudentId);
       if (error) throw error;
 

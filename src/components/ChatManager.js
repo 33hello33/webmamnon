@@ -115,6 +115,9 @@ const ChatManager = ({ currentUser }) => {
   const [menuForm, setMenuForm] = useState({ type: 'all', selectedClasses: [] });
   
   const [isNgoaiKhoaModalOpen, setIsNgoaiKhoaModalOpen] = useState(false);
+  const [isChuongTrinhHocModalOpen, setIsChuongTrinhHocModalOpen] = useState(false);
+  const [chuongTrinhHocFiles, setChuongTrinhHocFiles] = useState({ image: null });
+  const [chuongTrinhHocForm, setChuongTrinhHocForm] = useState({ type: 'all', selectedClasses: [] });
   const [ngoaiKhoaFiles, setNgoaiKhoaFiles] = useState({ image: null });
   const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({ 
     type: 'all', 
@@ -807,6 +810,53 @@ const ChatManager = ({ currentUser }) => {
     }
   };
 
+  const handlePostChuongTrinhHoc = async () => {
+    if (!chuongTrinhHocFiles.image) {
+      alert('Vui lòng chọn hình ảnh chương trình học.');
+      return;
+    }
+
+    if (chuongTrinhHocForm.type === 'class' && chuongTrinhHocForm.selectedClasses.length === 0) {
+      alert('Vui lòng chọn ít nhất một lớp để gửi chương trình học.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const imageUrl = await uploadToR2(chuongTrinhHocFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+
+      let targetClasses = [];
+      if (chuongTrinhHocForm.type === 'all') {
+        targetClasses = classes.map(c => c.malop);
+      } else {
+        targetClasses = chuongTrinhHocForm.selectedClasses;
+      }
+
+      if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
+
+      const payloads = targetClasses.map(malop => ({
+        malop,
+        manv: currentUser.manv || currentUser.username,
+        title: 'CHƯƠNG TRÌNH HỌC',
+        content: 'Chương trình học',
+        image_url: imageUrl,
+        file_name: chuongTrinhHocFiles.image.name,
+        file_mime_type: chuongTrinhHocFiles.image.type
+      }));
+
+      const { error } = await supabase.from('class_announcements').insert(payloads);
+      if (error) throw error;
+
+      alert(`Đã gửi chương trình học thành công tới ${targetClasses.length} lớp.`);
+      setIsChuongTrinhHocModalOpen(false);
+      setChuongTrinhHocFiles({ image: null });
+    } catch (err) {
+      alert('Lỗi khi gửi chương trình học: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handlePostNgoaiKhoa = async () => {
     if (!ngoaiKhoaFiles.image) {
       alert('Vui lòng chọn hình ảnh hoạt động ngoại khóa.');
@@ -1290,6 +1340,13 @@ ${ngoaiKhoaForm.content}
               onClick={() => setIsNgoaiKhoaModalOpen(true)}
             >
                <ImageIcon size={18} /> Gửi Ngoại Khóa
+            </button>
+            <button 
+              className="chat-action-btn btn-chuongtrinhhoc"
+              onClick={() => setIsChuongTrinhHocModalOpen(true)}
+              style={{ background: '#0ea5e9', color: 'white', border: 'none' }}
+            >
+               <FileText size={18} /> Gửi C.Trình Học
             </button>
             <button 
               className="chat-action-btn btn-announcement"
@@ -1782,6 +1839,127 @@ ${ngoaiKhoaForm.content}
                 >
                    {uploading ? <Loader2 size={18} className="spinner" /> : <Utensils size={18} />}
                    Gửi Thực Đơn Cho Phụ Huynh
+                </button>
+             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* Chuong Trinh Hoc Modal */}
+      {isChuongTrinhHocModalOpen && createPortal(
+        <div className="chat-modal-overlay" onClick={() => setIsChuongTrinhHocModalOpen(false)}>
+          <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
+             <div className="modal-header">
+                <h3><FileText size={20} /> Gửi Chương Trình Học Cho Phụ Huynh</h3>
+                <button className="close-btn" onClick={() => setIsChuongTrinhHocModalOpen(false)}><X size={20} /></button>
+             </div>
+             <div className="modal-body">
+                <div style={{ marginBottom: '20px' }}>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                   <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        className={`mode-btn ${chuongTrinhHocForm.type === 'all' ? 'active' : ''}`}
+                        onClick={() => setChuongTrinhHocForm({...chuongTrinhHocForm, type: 'all'})}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: chuongTrinhHocForm.type === 'all' ? '2px solid #0ea5e9' : '1px solid #e2e8f0', 
+                          background: chuongTrinhHocForm.type === 'all' ? '#e0f2fe' : 'white', 
+                          color: chuongTrinhHocForm.type === 'all' ? '#0ea5e9' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Gửi tất cả các lớp
+                      </button>
+                      <button 
+                        className={`mode-btn ${chuongTrinhHocForm.type === 'class' ? 'active' : ''}`}
+                        onClick={() => setChuongTrinhHocForm({...chuongTrinhHocForm, type: 'class'})}
+                        style={{ 
+                          flex: 1, 
+                          padding: '12px', 
+                          borderRadius: '12px', 
+                          border: chuongTrinhHocForm.type === 'class' ? '2px solid #0ea5e9' : '1px solid #e2e8f0', 
+                          background: chuongTrinhHocForm.type === 'class' ? '#e0f2fe' : 'white', 
+                          color: chuongTrinhHocForm.type === 'class' ? '#0ea5e9' : '#64748b', 
+                          fontWeight: 700, 
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Chọn từng lớp riêng
+                      </button>
+                   </div>
+                </div>
+
+                {chuongTrinhHocForm.type === 'class' && (
+                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        {classes.map(c => (
+                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={chuongTrinhHocForm.selectedClasses.includes(c.malop)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setChuongTrinhHocForm(prev => {
+                                  const list = checked 
+                                    ? [...prev.selectedClasses, c.malop]
+                                    : prev.selectedClasses.filter(id => id !== c.malop);
+                                  return { ...prev, selectedClasses: list };
+                                });
+                              }}
+                            />
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                          </label>
+                        ))}
+                      </div>
+                   </div>
+                )}
+
+                <div>
+                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh chương trình học:</label>
+                   <label style={{ 
+                     display: 'flex', 
+                     flexDirection: 'column',
+                     alignItems: 'center', 
+                     justifyContent: 'center', 
+                     gap: '12px', 
+                     padding: '30px', 
+                     borderRadius: '16px', 
+                     border: '2px dashed #0ea5e9', 
+                     background: '#e0f2fe', 
+                     cursor: 'pointer',
+                     transition: 'all 0.2s'
+                   }}>
+                     {chuongTrinhHocFiles.image ? (
+                        <div style={{ textAlign: 'center' }}>
+                           <ImageIcon size={40} style={{ color: '#0ea5e9', marginBottom: '10px' }} />
+                           <div style={{ fontWeight: 700, color: '#0369a1' }}>{chuongTrinhHocFiles.image.name}</div>
+                           <div style={{ fontSize: '0.8rem', color: '#0284c7' }}>Nhấn để thay đổi ảnh</div>
+                        </div>
+                     ) : (
+                        <>
+                           <Upload size={40} style={{ color: '#0ea5e9' }} />
+                           <span style={{ fontWeight: 700, color: '#0369a1' }}>Chọn hoặc kéo thả ảnh vào đây</span>
+                           <span style={{ fontSize: '0.8rem', color: '#0284c7' }}>Chấp nhận định dạng JPG, PNG, WEBP</span>
+                        </>
+                     )}
+                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setChuongTrinhHocFiles({image: e.target.files[0]})} />
+                   </label>
+                </div>
+             </div>
+             <div className="modal-footer">
+                <button className="btn-cancel" onClick={() => setIsChuongTrinhHocModalOpen(false)}>Hủy bỏ</button>
+                <button 
+                  className="btn-forward-submit" 
+                  style={{ background: '#0ea5e9' }}
+                  disabled={uploading || !chuongTrinhHocFiles.image}
+                  onClick={handlePostChuongTrinhHoc}
+                >
+                   {uploading ? <Loader2 size={18} className="spinner" /> : <FileText size={18} />}
+                   Gửi Chương Trình Học
                 </button>
              </div>
           </div>

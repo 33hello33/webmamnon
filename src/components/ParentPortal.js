@@ -30,6 +30,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [unreadHealth, setUnreadHealth] = useState(0);
    const [unreadMenu, setUnreadMenu] = useState(0);
    const [unreadNgoaiKhoa, setUnreadNgoaiKhoa] = useState(0);
+   const [unreadChuongTrinhHoc, setUnreadChuongTrinhHoc] = useState(0);
    const [previewImage, setPreviewImage] = useState(null);
    const [calendarDate, setCalendarDate] = useState(new Date());
    const [monthlyAttendance, setMonthlyAttendance] = useState([]);
@@ -485,7 +486,7 @@ function ParentPortal({ parentData, setParentData }) {
        // Notices (General + Class excluding Menu/NgoaiKhoa)
        const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
        const latestGenNotice = generalNotices?.[0];
-       const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA');
+       const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
        const latestClassNotice = classNotices?.[0];
        
        const currentLatestNoticeTime = Math.max(
@@ -519,6 +520,17 @@ function ParentPortal({ parentData, setParentData }) {
           totalUnread += 1;
        } else {
           setUnreadNgoaiKhoa(0);
+       }
+
+       // Chuong trinh hoc
+       const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
+       const latestChuongTrinhHoc = (classAnnouncements || []).find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
+       const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
+       if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
+          setUnreadChuongTrinhHoc(1);
+          totalUnread += 1;
+       } else {
+          setUnreadChuongTrinhHoc(0);
        }
 
        // 3. Fetch Health Unreads
@@ -570,7 +582,7 @@ function ParentPortal({ parentData, setParentData }) {
          })
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, (payload) => { 
             fetchUnreads(); 
-            const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : 'Bảng tin lớp mới');
+            const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, () => { 
@@ -621,7 +633,7 @@ function ParentPortal({ parentData, setParentData }) {
       };
 
       if (parentTab === 'chat-tab') { fetchChatMessages(); fetchChatDocs(); }
-      if (parentTab === 'notices-tab' || parentTab === 'menu-tab') fetchParentNotices();
+      if (parentTab === 'notices-tab' || parentTab === 'menu-tab' || parentTab === 'chuongtrinhhoc-tab') fetchParentNotices();
       if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
       if (parentTab === 'health-tab') fetchHealthHistory();
       if (parentTab === 'ngoaikhoa-tab') {
@@ -666,7 +678,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
          } else if (parentTab === 'notices-tab') {
             if (parentNotices.length > 0) {
-               const latest = parentNotices.find(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA');
+               const latest = parentNotices.find(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
                if (latest) {
                   const time = new Date(latest.date).getTime();
                   localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(time));
@@ -687,6 +699,13 @@ function ParentPortal({ parentData, setParentData }) {
                localStorage.setItem(`last_ngoaikhoa_time_${parentData.student.mahv}`, String(time));
             }
             setUnreadNgoaiKhoa(0);
+         } else if (parentTab === 'chuongtrinhhoc-tab') {
+            const latest = parentNotices.find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
+            if (latest) {
+               const time = new Date(latest.date).getTime();
+               localStorage.setItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`, String(time));
+            }
+            setUnreadChuongTrinhHoc(0);
          } else if (parentTab === 'health-tab') {
              if (healthHistory.length > 0) {
                 const time = new Date(healthHistory[0].ngay).getTime();
@@ -843,9 +862,12 @@ function ParentPortal({ parentData, setParentData }) {
                         </div>
                         <span className="premium-service-label">Bảng tin<br />nhà trường</span>
                      </div>
-                     <div className="premium-service-item" onClick={() => setParentTab('attendance-tab')}>
-                        <div className="premium-service-icon-wrapper"><CalendarCheck size={24} /></div>
-                        <span className="premium-service-label">Theo dõi<br />điểm danh</span>
+                     <div className="premium-service-item" onClick={() => setParentTab('chuongtrinhhoc-tab')}>
+                        <div className="premium-service-icon-wrapper" style={{ color: '#0ea5e9', position: 'relative' }}>
+                           <FileText size={24} />
+                           {unreadChuongTrinhHoc > 0 && <span className="service-new-badge" style={{ background: '#ef4444', color: 'white', position: 'absolute', top: '-6px', right: '-12px', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold', border: '1.5px solid white' }}>Mới</span>}
+                        </div>
+                        <span className="premium-service-label">Chương trình<br />học</span>
                      </div>
                      <div className="premium-service-item" onClick={() => setParentTab('health-tab')}>
                         <div className="premium-service-icon-wrapper" style={{ color: '#ec4899', position: 'relative' }}>
@@ -889,6 +911,7 @@ function ParentPortal({ parentData, setParentData }) {
                         </div>
                         <span className="premium-utility-label">Ngoại khóa</span>
                      </div>
+
                      <div className="premium-utility-item" onClick={() => setIsFeedbackModalOpen(true)}>
                         <div className="premium-utility-icon-wrapper" style={{ color: '#6366f1' }}><MessageCircle size={24} /></div>
                         <span className="premium-utility-label">Góp ý</span>
@@ -1103,6 +1126,52 @@ function ParentPortal({ parentData, setParentData }) {
                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
                                     <Image size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
                                     <p>Hiện chưa có thông tin ngoại khóa mới nào.</p>
+                                 </div>
+                              )}
+                           </div>
+                        </div>
+                     </div>
+                  )}
+
+                  {parentTab === 'chuongtrinhhoc-tab' && (
+                     <div id="chuongtrinhhoc-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div className="notices-section">
+                           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0ea5e9' }}>
+                              <FileText size={20} /> Chương trình học mới nhất
+                           </h3>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                              {parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC').length > 0 ? (
+                                 parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC').map((item, idx) => (
+                                    <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                       <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0f9ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span style={{ fontWeight: 800, color: '#0ea5e9' }}>Thông tin chương trình học</span>
+                                          <span style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
+                                       </div>
+                                       <div style={{ padding: '15px' }}>
+                                          <div style={{ 
+                                             color: '#475569', 
+                                             fontSize: '0.95rem', 
+                                             lineHeight: '1.7', 
+                                             whiteSpace: 'pre-wrap',
+                                             marginBottom: item.image_url ? '15px' : '0'
+                                          }}>
+                                             {item.content}
+                                          </div>
+                                          {item.image_url && (
+                                             <div
+                                                style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
+                                                onClick={() => setPreviewImage(item.image_url)}
+                                             >
+                                                <img src={item.image_url} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} />
+                                             </div>
+                                          )}
+                                       </div>
+                                    </div>
+                                 ))
+                              ) : (
+                                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                                    <FileText size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
+                                    <p>Hiện chưa có chương trình học mới nào được cập nhật.</p>
                                  </div>
                               )}
                            </div>
