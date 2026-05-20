@@ -12,8 +12,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const getDateLimit = () => {
       const dateLimit = new Date();
-      if (attDateFilter === 'HÃ´m nay') dateLimit.setHours(0, 0, 0, 0);
-      else if (attDateFilter === 'Tuáº§n nÃ y') dateLimit.setDate(dateLimit.getDate() - 7);
+      if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
+      else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
       else dateLimit.setMonth(dateLimit.getMonth() - 1);
       return dateLimit;
    };
@@ -26,15 +26,15 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const getMessagePreview = (message) => {
       if (!message) return '--';
       if (message.content) return message.content;
-      if (message.image_url) return '[HÃ¬nh áº£nh]';
-      if (message.file_url) return '[TÃ i liá»‡u]';
+      if (message.image_url) return '[Hình ảnh]';
+      if (message.file_url) return '[Tài liệu]';
       return '...';
    };
 
    const getFilteredChatStudents = () => {
       const dateLimit = getDateLimit();
 
-      return attAllStudents.filter(s => {
+      const filtered = attAllStudents.filter(s => {
          const matchesSearch = s.tenhv?.toLowerCase().includes(attSearchQuery.toLowerCase()) || s.mahv?.toLowerCase().includes(attSearchQuery.toLowerCase());
          if (!matchesSearch) return false;
 
@@ -46,13 +46,28 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             const isPH = m.description === 'PH' || (!m.manv);
             if (!isPH) return false;
             const type = getNotifType(m.content);
-            if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghá»‰';
-            if (attStatFilter === 'BAO_THUOC') return type === 'BÃ¡o thuá»‘c';
-            if (attStatFilter === 'DOI_NGUOI') return type === 'Äá»•i ngÆ°á»i Ä‘Ã³n';
-            if (attStatFilter === 'VE_TRE') return type === 'Vá» trá»…';
-            if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nháº¯n';
+            if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghỉ';
+            if (attStatFilter === 'BAO_THUOC') return type === 'Báo thuốc';
+            if (attStatFilter === 'DOI_NGUOI') return type === 'Đổi người đón';
+            if (attStatFilter === 'VE_TRE') return type === 'Về trễ';
+            if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nhắn';
             return false;
          });
+      });
+
+      // Pre-map latest message timestamps for efficient sorting
+      const latestTimeMap = {};
+      attLatestMessages.forEach(m => {
+         if (!latestTimeMap[m.mahv]) {
+            latestTimeMap[m.mahv] = new Date(m.created_at).getTime();
+         }
+      });
+
+      // Sort students: latest message first; students with no messages go to the bottom
+      return filtered.sort((a, b) => {
+         const timeA = latestTimeMap[a.mahv] || 0;
+         const timeB = latestTimeMap[b.mahv] || 0;
+         return timeB - timeA;
       });
    };
 
@@ -162,22 +177,22 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const subscribeTeacherPushNotifications = async () => {
       if (!attendanceUser?.manv && !attendanceUser?.username) {
-         alert('Chưa xác định được tài khoản giáo viên để bật thông báo.');
+         console.warn('Chưa xác định được tài khoản giáo viên để bật thông báo.');
          return;
       }
       if (!('serviceWorker' in navigator)) {
-         alert('Trình duyệt không hỗ trợ Service Worker.');
+         console.warn('Trình duyệt không hỗ trợ Service Worker.');
          return;
       }
       if (!('PushManager' in window)) {
-         alert('Trình duyệt không hỗ trợ Push Notifications.');
+         console.warn('Trình duyệt không hỗ trợ Push Notifications.');
          return;
       }
 
       try {
          const permission = await Notification.requestPermission();
          if (permission !== 'granted') {
-            alert('Bạn đã từ chối nhận thông báo.');
+            console.warn('Người dùng đã từ chối nhận thông báo.');
             return;
          }
 
@@ -211,10 +226,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
          if (dbError) throw dbError;
 
-         alert(existingSubscription ? 'Thông báo đã được bật sẵn cho giáo viên.' : 'Đã bật thông báo cho giáo viên thành công!');
+         console.log(existingSubscription ? 'Thông báo đã được bật sẵn cho giáo viên.' : 'Đã bật thông báo cho giáo viên thành công!');
       } catch (err) {
          console.error('Lỗi khi đăng ký nhận thông báo cho giáo viên:', err);
-         alert('Có lỗi khi bật thông báo: ' + err.message);
+         console.error('Có lỗi khi bật thông báo: ' + err.message);
       }
    };
 
@@ -892,7 +907,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                               const dateLimit = getDateLimit();
 
                               if (filtered.length === 0) {
-                                 return <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', background: '#fff', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>KhÃ´ng cÃ³ dá»¯ liá»‡u phÃ¹ há»£p</div>;
+                                 return <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', background: '#fff', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>Không có dữ liệu phù hợp</div>;
                               }
 
                               return filtered.map(st => {
@@ -905,11 +920,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                        const isPH = m.description === 'PH' || (!m.manv);
                                        if (!isPH) return false;
                                        const type = getNotifType(m.content);
-                                       if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghá»‰';
-                                       if (attStatFilter === 'BAO_THUOC') return type === 'BÃ¡o thuá»‘c';
-                                       if (attStatFilter === 'DOI_NGUOI') return type === 'Äá»•i ngÆ°á»i Ä‘Ã³n';
-                                       if (attStatFilter === 'VE_TRE') return type === 'Vá» trá»…';
-                                       if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nháº¯n';
+                                       if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghỉ';
+                                       if (attStatFilter === 'BAO_THUOC') return type === 'Báo thuốc';
+                                       if (attStatFilter === 'DOI_NGUOI') return type === 'Đổi người đón';
+                                       if (attStatFilter === 'VE_TRE') return type === 'Về trễ';
+                                       if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nhắn';
                                        return false;
                                     });
                                     if (matchingMsg) msgToShow = matchingMsg;
@@ -970,31 +985,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            </thead>
                            <tbody>
                               {(() => {
-                                 let dateLimit = new Date();
-                                 if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
-                                 else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
-                                 else dateLimit.setMonth(dateLimit.getMonth() - 1);
-
-                                 const filtered = attAllStudents.filter(s => {
-                                    const matchesSearch = s.tenhv?.toLowerCase().includes(attSearchQuery.toLowerCase()) || s.mahv?.toLowerCase().includes(attSearchQuery.toLowerCase());
-                                    if (!matchesSearch) return false;
-
-                                    if (attStatFilter === 'ALL') return true;
-
-                                    const studentMsgs = attLatestMessages.filter(m => m.mahv === s.mahv);
-                                    return studentMsgs.some(m => {
-                                       if (new Date(m.created_at) < dateLimit) return false;
-                                       const isPH = m.description === 'PH' || (!m.manv);
-                                       if (!isPH) return false;
-                                       const type = getNotifType(m.content);
-                                       if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghỉ';
-                                       if (attStatFilter === 'BAO_THUOC') return type === 'Báo thuốc';
-                                       if (attStatFilter === 'DOI_NGUOI') return type === 'Đổi người đón';
-                                       if (attStatFilter === 'VE_TRE') return type === 'Về trễ';
-                                       if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nhắn';
-                                       return false;
-                                    });
-                                 });
+                                 const filtered = getFilteredChatStudents();
+                                 const dateLimit = getDateLimit();
 
                                  if (filtered.length === 0) {
                                     return <tr><td colSpan="4" className="no-results" style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Không có dữ liệu phù hợp</td></tr>
@@ -1132,7 +1124,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                     <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                                  </label>
                               </div>
-                              <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '0.9rem', outline: 'none' }} />
+                              <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '16px', outline: 'none' }} />
                               <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1 }}>
                                  {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                               </button>

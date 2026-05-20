@@ -46,8 +46,8 @@ function Login() {
          try {
             const session = JSON.parse(sessionStr);
             const currentTime = new Date().getTime();
-            const oneHour = 60 * 60 * 1000;
-            if (currentTime - session.loginTime < oneHour) {
+            const oneDay = 24 * 60 * 60 * 1000;
+            if (currentTime - session.loginTime < oneDay) {
                navigate('/dashboard');
             } else {
                localStorage.removeItem('auth_session');

@@ -302,7 +302,7 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    // Session validation (1 hour)
+    // Session validation (24 hours / 1 day)
     const sessionStr = localStorage.getItem('auth_session');
     if (!sessionStr) {
       navigate('/login');
@@ -312,9 +312,9 @@ function Dashboard() {
     try {
       const session = JSON.parse(sessionStr);
       const currentTime = new Date().getTime();
-      const oneHour = 60 * 60 * 1000;
+      const oneDay = 24 * 60 * 60 * 1000;
 
-      if (currentTime - session.loginTime > oneHour) {
+      if (currentTime - session.loginTime > oneDay) {
         localStorage.removeItem('auth_session');
         navigate('/login');
       } else {

@@ -451,8 +451,168 @@ function ParentPortal({ parentData, setParentData }) {
       return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}&addInfo=${encodeURIComponent(parentData.student.mahv + nameSuffix)}&accountName=${encodeURIComponent(matched.accName)}`;
    };
 
-   const handleOpenTuitionNoticeImage = async () => {
-      if (!parentData?.latestFee || !parentData?.student?.mahv) return;
+   const handleDownloadImage = async (imageUrl, filename = 'image.jpg', existingWindow = null) => {
+      if (!imageUrl) return;
+
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+      // Mobile and desktop flows are handled separately below.
+      if (false && isMobileDevice && navigator.share && navigator.canShare) {
+         try {
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const file = new File([blob], filename, { type: blob.type });
+            if (navigator.canShare({ files: [file] })) {
+               await navigator.share({
+                  files: [file],
+                  title: 'Tải ảnh',
+                  text: 'Lưu ảnh vào thư viện thiết bị',
+               });
+               if (existingWindow) existingWindow.close();
+               return;
+            }
+         } catch (error) {
+            console.warn('Web Share failed', error);
+         }
+      }
+
+      // 2. Direct Supabase Storage Download (Bypasses CORS entirely and downloads directly in background)
+      if (!isMobileDevice && imageUrl.includes('supabase.co')) {
+         try {
+            if (existingWindow) existingWindow.close();
+            const separator = imageUrl.includes('?') ? '&' : '?';
+            const downloadUrl = `${imageUrl}${separator}download=`;
+            
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            return;
+         } catch (err) {
+            console.error('Supabase direct download failed, falling back', err);
+         }
+      }
+
+      const triggerLocalDownload = (blob, name) => {
+         const blobUrl = window.URL.createObjectURL(blob);
+         const link = document.createElement('a');
+         link.href = blobUrl;
+         link.download = name;
+         document.body.appendChild(link);
+         link.click();
+         document.body.removeChild(link);
+         window.URL.revokeObjectURL(blobUrl);
+      };
+
+      const openImageForDeviceSave = (blob) => {
+         const blobUrl = window.URL.createObjectURL(blob);
+         if (existingWindow) {
+            existingWindow.location.href = blobUrl;
+         } else {
+            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+         }
+      };
+
+      const downloadRemoteBlob = async (url) => {
+         const response = await fetch(url);
+         return response.blob();
+      };
+
+      const downloadViaCorsProxy = async (url) => {
+         const proxyUrls = [
+            `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+         ];
+
+         let lastError = null;
+
+         for (const proxyUrl of proxyUrls) {
+            try {
+               return await downloadRemoteBlob(proxyUrl);
+            } catch (error) {
+               lastError = error;
+            }
+         }
+
+         throw lastError || new Error('Unable to fetch image through proxy');
+      };
+
+      if (isMobileDevice) {
+         let mobileBlob = null;
+
+         try {
+            mobileBlob = await downloadRemoteBlob(imageUrl);
+         } catch (error) {
+            console.warn('Direct mobile fetch failed, trying proxy...', error);
+            try {
+               mobileBlob = await downloadViaCorsProxy(imageUrl);
+            } catch (proxyError) {
+               console.warn('Proxy mobile fetch failed, opening original image...', proxyError);
+            }
+         }
+
+         if (mobileBlob) {
+            if (navigator.share) {
+               try {
+                  const file = new File([mobileBlob], filename, { type: mobileBlob.type || 'image/jpeg' });
+
+                  if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+                     await navigator.share({
+                        files: [file],
+                        title: 'Tải ảnh',
+                        text: 'Lưu ảnh vào thư viện thiết bị',
+                     });
+                     if (existingWindow) existingWindow.close();
+                     return;
+                  }
+               } catch (error) {
+                  console.warn('Web Share failed, falling back to image preview', error);
+               }
+            }
+
+            openImageForDeviceSave(mobileBlob);
+            return;
+         }
+
+         if (existingWindow) {
+            existingWindow.location.href = imageUrl;
+         } else {
+            window.open(imageUrl, '_blank', 'noopener,noreferrer');
+         }
+         return;
+      }
+
+      // 3. Desktop standard flow: Try direct fetch first (if CORS allowed on origin)
+      try {
+         const blob = await downloadRemoteBlob(imageUrl);
+         triggerLocalDownload(blob, filename);
+         if (existingWindow) existingWindow.close();
+         return;
+      } catch (error) {
+         console.warn('Direct fetch failed (likely CORS), trying via CORS proxy (corsproxy.io)...', error);
+      }
+
+      // 4. Try via corsproxy.io
+      try {
+         const blob = await downloadViaCorsProxy(imageUrl);
+         triggerLocalDownload(blob, filename);
+         if (existingWindow) existingWindow.close();
+         return;
+      } catch (error) {
+         console.error('CORS proxy fetch failed:', error);
+      }
+
+      // 6. Ultimate Fallback: Open in new/existing tab for manual right-click save
+      if (existingWindow) {
+         existingWindow.location.href = imageUrl;
+      } else {
+         window.open(imageUrl, '_blank', 'noopener,noreferrer');
+      }
+   };
+
+   const fetchTuitionNoticeImageUrl = async () => {
+      if (!parentData?.latestFee || !parentData?.student?.mahv) return null;
 
       const noticeId = String(parentData.latestFee.mahd || '').trim();
       const pickLatestImage = (messages = []) => {
@@ -473,42 +633,46 @@ function ParentPortal({ parentData, setParentData }) {
          return tuitionMatch?.image_url || validMessages[0].image_url || null;
       };
 
+      let imageUrl = pickLatestImage(chatMessages);
+
+      if (!imageUrl) {
+         let query = supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', parentData.student.mahv)
+            .not('image_url', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+         if (noticeId) {
+            query = query.ilike('content', `%${noticeId}%`);
+         }
+
+         const { data, error } = await query;
+         if (error) throw error;
+         imageUrl = pickLatestImage(data || []);
+      }
+
+      if (!imageUrl && noticeId) {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', parentData.student.mahv)
+            .not('image_url', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+         if (error) throw error;
+         imageUrl = pickLatestImage(data || []);
+      }
+
+      return imageUrl;
+   };
+
+   const handleOpenTuitionNoticeImage = async () => {
       setLoadingTuitionNoticeImage(true);
-
       try {
-         let imageUrl = pickLatestImage(chatMessages);
-
-         if (!imageUrl) {
-            let query = supabase
-               .from('hv_messages')
-               .select('content, image_url, created_at')
-               .eq('mahv', parentData.student.mahv)
-               .not('image_url', 'is', null)
-               .order('created_at', { ascending: false })
-               .limit(20);
-
-            if (noticeId) {
-               query = query.ilike('content', `%${noticeId}%`);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            imageUrl = pickLatestImage(data || []);
-         }
-
-         if (!imageUrl && noticeId) {
-            const { data, error } = await supabase
-               .from('hv_messages')
-               .select('content, image_url, created_at')
-               .eq('mahv', parentData.student.mahv)
-               .not('image_url', 'is', null)
-               .order('created_at', { ascending: false })
-               .limit(50);
-
-            if (error) throw error;
-            imageUrl = pickLatestImage(data || []);
-         }
-
+         const imageUrl = await fetchTuitionNoticeImageUrl();
          if (imageUrl) {
             setPreviewImage(imageUrl);
          } else {
@@ -516,6 +680,32 @@ function ParentPortal({ parentData, setParentData }) {
          }
       } catch (error) {
          console.error('Error loading tuition notice image:', error);
+         alert('Không tải được hình thông báo thu học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingTuitionNoticeImage(false);
+      }
+   };
+
+   const handleDownloadTuitionImage = async () => {
+      // Open a blank window synchronously immediately on click to prevent popup blockers on laptop/desktop
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      let newWindow = null;
+      if (!isMobileDevice) {
+         newWindow = window.open('', '_blank');
+      }
+
+      setLoadingTuitionNoticeImage(true);
+      try {
+         const imageUrl = await fetchTuitionNoticeImageUrl();
+         if (imageUrl) {
+            await handleDownloadImage(imageUrl, `thong-bao-hoc-phi-${parentData.student.mahv}.jpg`, newWindow);
+         } else {
+            if (newWindow) newWindow.close();
+            alert('Chưa tìm thấy hình thông báo thu học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         if (newWindow) newWindow.close();
+         console.error('Error downloading tuition notice image:', error);
          alert('Không tải được hình thông báo thu học phí. Vui lòng thử lại sau.');
       } finally {
          setLoadingTuitionNoticeImage(false);
@@ -1437,7 +1627,10 @@ function ParentPortal({ parentData, setParentData }) {
                               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                  <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
                                  {!tuitionStatus.isPaid && (
-                                    <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải hình...' : 'Thanh toán ngay'}</button>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
+                                       <button onClick={handleDownloadTuitionImage} disabled={loadingTuitionNoticeImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                                    </div>
                                  )}
                               </div>
                            </div>
@@ -1774,13 +1967,28 @@ function ParentPortal({ parentData, setParentData }) {
                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
                onClick={() => setPreviewImage(null)}
             >
-               <button
-                  onClick={() => setPreviewImage(null)}
-                  style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-               >
-                  <X size={24} />
-               </button>
-               <img src={previewImage} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} />
+               <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '10px' }} onClick={e => e.stopPropagation()}>
+                  <button
+                     onClick={() => handleDownloadImage(previewImage, `tai-ve-${Date.now()}.jpg`)}
+                     style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     title="Tải về"
+                  >
+                     <Download size={20} />
+                  </button>
+                  <button
+                     onClick={() => setPreviewImage(null)}
+                     style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     title="Đóng"
+                  >
+                     <X size={20} />
+                  </button>
+               </div>
+               <img 
+                  src={previewImage} 
+                  alt="Preview" 
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} 
+                  onClick={e => e.stopPropagation()}
+               />
             </div>
          )}
       </div>
