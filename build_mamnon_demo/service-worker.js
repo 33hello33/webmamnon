@@ -82,26 +82,26 @@ self.addEventListener('message', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  
+
   const urlToOpen = event.notification.data?.url || '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-      // If a window client is already open, focus it
       for (const client of clientList) {
         if (client.url.includes(urlToOpen) && 'focus' in client) {
           return client.focus();
         }
       }
-      // If no window client is open, open a new one
+
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
+
+      return undefined;
     })
   );
 });
 
-// Handle push events from the server
 self.addEventListener('push', event => {
   if (!event.data) return;
 

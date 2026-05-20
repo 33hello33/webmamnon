@@ -607,3 +607,22 @@
 [data-theme="kindergarten"] .premium-service-item:hover {
     background: #fff1f2 !important;
 }
+
+/* Chat Mode Layout Fixes */
+.premium-tab-container.chat-mode {
+    height: calc(100vh - 90px);
+}
+
+.premium-tab-container.chat-mode .premium-tab-content-wrapper {
+    flex: 1;
+    min-height: 0 !important;
+    height: 100%;
+    overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+    .premium-tab-container.chat-mode {
+        height: calc(100vh - 120px);
+    }
+}
+
