@@ -1551,7 +1551,7 @@ function ParentPortal({ parentData, setParentData }) {
                   )}
 
                   {parentTab === 'chat-tab' && (
-                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', background: '#f8fafc', borderRadius: '0 0 24px 24px', overflow: 'hidden' }}>
+                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', background: '#f8fafc', borderRadius: '0', overflow: 'hidden' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 99 }}>
                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ position: 'relative' }}>
@@ -1624,7 +1624,7 @@ function ParentPortal({ parentData, setParentData }) {
                            <div ref={chatEndRef} />
                         </div>
 
-                        <div style={{ padding: '15px 16px', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 24px 24px', zIndex: 99 }}>
+                        <div style={{ padding: '15px 16px calc(15px + env(safe-area-inset-bottom, 0px))', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0', zIndex: 99 }}>
                            <form onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ display: 'flex', gap: '5px' }}>
                                  <label style={{ cursor: 'pointer', padding: '8px', color: '#64748b' }}>

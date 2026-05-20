@@ -32,6 +32,7 @@ type PushMessage = {
   url: string;
   badgeCount: number | null;
   incrementBadgeBy: number;
+  tag: string;
 };
 
 const normalizeString = (value: unknown) => String(value ?? "").trim();
@@ -112,6 +113,7 @@ const buildPushContext = async (
           ? await getUnreadBadgeForTeacher(supabase, userId)
           : await getUnreadBadgeForParent(supabase, userId),
         incrementBadgeBy: 1,
+        tag: `hv_messages_${normalizeString(record.id) || Date.now()}`,
       },
     };
   }
@@ -128,6 +130,7 @@ const buildPushContext = async (
         url: "/",
         badgeCount: null,
         incrementBadgeBy: 1,
+        tag: `tbl_thongbao_${normalizeString(record.id || record.mahd) || Date.now()}`,
       },
     };
   }
@@ -168,6 +171,7 @@ const buildPushContext = async (
         url: "/",
         badgeCount: null,
         incrementBadgeBy: 1,
+        tag: `class_announcements_${normalizeString(record.id) || Date.now()}`,
       },
     };
   }
@@ -184,6 +188,7 @@ const buildPushContext = async (
         url: "/",
         badgeCount: null,
         incrementBadgeBy: 1,
+        tag: `suckhoedinhky_${normalizeString(record.id) || Date.now()}`,
       },
     };
   }
@@ -252,6 +257,7 @@ serve(async (req) => {
         url: context.message.url,
         badgeCount: context.message.badgeCount,
         incrementBadgeBy: context.message.incrementBadgeBy,
+        tag: context.message.tag,
       });
 
       try {

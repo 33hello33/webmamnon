@@ -110,12 +110,19 @@ self.addEventListener('push', event => {
     const incomingBadgeCount = Number(data.badgeCount);
     const incrementBadgeBy = Number(data.incrementBadgeBy ?? 1);
     const title = data.title || 'Thông báo mới';
+    const notificationTag = data.tag || `push-${Date.now()}`;
     const options = {
       body: data.body || 'Bạn có thông báo mới',
       icon: data.icon || '/logo192.png',
       badge: data.badge || '/logo192.png',
+      tag: notificationTag,
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
+      timestamp: Date.now(),
       data: {
-        url: data.url || '/'
+        url: data.url || '/',
+        tag: notificationTag
       },
       vibrate: [100, 50, 100],
     };
@@ -126,10 +133,8 @@ self.addEventListener('push', event => {
           ? Math.max(0, incomingBadgeCount)
           : (await readStoredBadgeCount()) + (Number.isFinite(incrementBadgeBy) ? incrementBadgeBy : 1);
 
-        await Promise.all([
-          self.registration.showNotification(title, options),
-          syncAppBadge(nextBadgeCount)
-        ]);
+        await self.registration.showNotification(String(title), options);
+        await syncAppBadge(nextBadgeCount);
       })()
     );
   } catch (error) {

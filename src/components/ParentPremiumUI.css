@@ -645,7 +645,7 @@ body:has(.chat-mode-active) {
 }
 
 .premium-tab-container.chat-mode {
-    height: calc(100vh - 90px);
+    height: 100vh;
 }
 
 .premium-tab-container.chat-mode .premium-tab-content-wrapper {
@@ -653,6 +653,7 @@ body:has(.chat-mode-active) {
     min-height: 0 !important;
     height: 100%;
     overflow: hidden;
+    border-radius: 0 !important;
 }
 
 @media (min-width: 1024px) {
