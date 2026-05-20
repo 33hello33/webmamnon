@@ -2,9 +2,16 @@
  * Image compression utility
  */
 
-export const compressImage = async (file, maxSizeKB = 100) => {
-  // If not an image or already smaller than target, return original
-  if (!file.type.startsWith('image/') || file.size / 1024 <= maxSizeKB) {
+export const compressImage = async (file, maxSizeKB = 150) => {
+  const fileType = String(file?.type || '').toLowerCase();
+  const supportedRasterTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+  const shouldConvertToJpeg = supportedRasterTypes.includes(fileType);
+
+  if (!fileType.startsWith('image/') || !shouldConvertToJpeg) {
+    return file;
+  }
+
+  if ((fileType === 'image/jpeg' || fileType === 'image/jpg') && file.size / 1024 <= maxSizeKB) {
     return file;
   }
 
@@ -56,7 +63,8 @@ export const compressImage = async (file, maxSizeKB = 100) => {
 
               if (blob.size <= targetSizeBytes) {
                 // Success!
-                const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                const extensionIndex = file.name.lastIndexOf('.');
+                const baseName = extensionIndex > 0 ? file.name.substring(0, extensionIndex) : file.name;
                 const compressedFile = new File([blob], `${baseName}.jpg`, {
                   type: 'image/jpeg',
                   lastModified: Date.now(),
@@ -70,7 +78,8 @@ export const compressImage = async (file, maxSizeKB = 100) => {
                 attemptCompression(0.7, Math.floor(currentWidth * 0.6), Math.floor(currentHeight * 0.6));
               } else {
                 // Give up and return the best we have
-                const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                const extensionIndex = file.name.lastIndexOf('.');
+                const baseName = extensionIndex > 0 ? file.name.substring(0, extensionIndex) : file.name;
                 const compressedFile = new File([blob], `${baseName}.jpg`, {
                   type: 'image/jpeg',
                   lastModified: Date.now(),

@@ -2,6 +2,8 @@
 
 // This service worker is required for PWA features and background notifications
 const CACHE_NAME = 'kindergarten-v1';
+const META_CACHE_NAME = 'kindergarten-meta-v1';
+const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -25,6 +27,56 @@ self.addEventListener('fetch', event => {
         if (response) return response;
         return fetch(event.request);
       })
+  );
+});
+
+const readStoredBadgeCount = async () => {
+  const cache = await caches.open(META_CACHE_NAME);
+  const response = await cache.match(BADGE_STATE_URL);
+  if (!response) return 0;
+
+  try {
+    const data = await response.json();
+    return Number.isFinite(data?.count) ? Math.max(0, data.count) : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const writeStoredBadgeCount = async (count) => {
+  const cache = await caches.open(META_CACHE_NAME);
+  await cache.put(
+    BADGE_STATE_URL,
+    new Response(JSON.stringify({ count }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  );
+};
+
+const syncAppBadge = async (count) => {
+  if (!self.navigator) return;
+
+  const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+  await writeStoredBadgeCount(badgeCount);
+
+  if (badgeCount > 0 && 'setAppBadge' in self.navigator) {
+    await self.navigator.setAppBadge(badgeCount);
+    return;
+  }
+
+  if (badgeCount === 0 && 'clearAppBadge' in self.navigator) {
+    await self.navigator.clearAppBadge();
+  }
+};
+
+self.addEventListener('message', event => {
+  const data = event.data || {};
+  if (data.type !== 'SYNC_APP_BADGE') return;
+
+  event.waitUntil(
+    syncAppBadge(data.count).catch(error => {
+      console.error('Error syncing app badge from page:', error);
+    })
   );
 });
 
@@ -55,6 +107,8 @@ self.addEventListener('push', event => {
 
   try {
     const data = event.data.json();
+    const incomingBadgeCount = Number(data.badgeCount);
+    const incrementBadgeBy = Number(data.incrementBadgeBy ?? 1);
     const title = data.title || 'Thông báo mới';
     const options = {
       body: data.body || 'Bạn có thông báo mới',
@@ -67,7 +121,16 @@ self.addEventListener('push', event => {
     };
 
     event.waitUntil(
-      self.registration.showNotification(title, options)
+      (async () => {
+        const nextBadgeCount = Number.isFinite(incomingBadgeCount)
+          ? Math.max(0, incomingBadgeCount)
+          : (await readStoredBadgeCount()) + (Number.isFinite(incrementBadgeBy) ? incrementBadgeBy : 1);
+
+        await Promise.all([
+          self.registration.showNotification(title, options),
+          syncAppBadge(nextBadgeCount)
+        ]);
+      })()
     );
   } catch (error) {
     console.error('Error handling push event:', error);

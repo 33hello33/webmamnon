@@ -3,18 +3,110 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart } from 'lucide-react';
+import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
    const [loading, setLoading] = useState(false);
+
+   const getDateLimit = () => {
+      const dateLimit = new Date();
+      if (attDateFilter === 'HÃ´m nay') dateLimit.setHours(0, 0, 0, 0);
+      else if (attDateFilter === 'Tuáº§n nÃ y') dateLimit.setDate(dateLimit.getDate() - 7);
+      else dateLimit.setMonth(dateLimit.getMonth() - 1);
+      return dateLimit;
+   };
+
+   const getClassDisplayName = (malop) => {
+      const cls = attClasses.find(c => c.malop === malop) || initialClasses?.find(c => c.malop === malop);
+      return cls?.tenlop || malop || '--';
+   };
+
+   const getMessagePreview = (message) => {
+      if (!message) return '--';
+      if (message.content) return message.content;
+      if (message.image_url) return '[HÃ¬nh áº£nh]';
+      if (message.file_url) return '[TÃ i liá»‡u]';
+      return '...';
+   };
+
+   const getFilteredChatStudents = () => {
+      const dateLimit = getDateLimit();
+
+      return attAllStudents.filter(s => {
+         const matchesSearch = s.tenhv?.toLowerCase().includes(attSearchQuery.toLowerCase()) || s.mahv?.toLowerCase().includes(attSearchQuery.toLowerCase());
+         if (!matchesSearch) return false;
+
+         if (attStatFilter === 'ALL') return true;
+
+         const studentMsgs = attLatestMessages.filter(m => m.mahv === s.mahv);
+         return studentMsgs.some(m => {
+            if (new Date(m.created_at) < dateLimit) return false;
+            const isPH = m.description === 'PH' || (!m.manv);
+            if (!isPH) return false;
+            const type = getNotifType(m.content);
+            if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghá»‰';
+            if (attStatFilter === 'BAO_THUOC') return type === 'BÃ¡o thuá»‘c';
+            if (attStatFilter === 'DOI_NGUOI') return type === 'Äá»•i ngÆ°á»i Ä‘Ã³n';
+            if (attStatFilter === 'VE_TRE') return type === 'Vá» trá»…';
+            if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nháº¯n';
+            return false;
+         });
+      });
+   };
+
+   const getTeacherStaffDisplayName = (staffId) => {
+      if (!staffId) return 'Nhà trường';
+      return attStaffDirectory[staffId] || staffId;
+   };
+
+   const getTeacherChatSenderName = (message) => {
+      if (!message) return '';
+      if (message.description === 'PH' || !message.manv) {
+         return attChatSelectedStudent?.tenhv ? `Phụ huynh bé ${attChatSelectedStudent.tenhv}` : 'Phụ huynh';
+      }
+
+      const currentStaffId = attendanceUser?.manv || attendanceUser?.username;
+      if (message.manv === currentStaffId) return 'Bạn';
+      return getTeacherStaffDisplayName(message.manv);
+   };
 
    useEffect(() => {
       if ('Notification' in window && Notification.permission === 'default') {
          Notification.requestPermission();
       }
    }, []);
-   
+
+   useEffect(() => {
+      const fetchStaffDirectory = async () => {
+         const { data, error } = await supabase.from('tbl_nv').select('manv, tennv');
+         if (error) {
+            console.error('Error fetching teacher staff directory:', error);
+            return;
+         }
+
+         const nextDirectory = {};
+         (data || []).forEach((staff) => {
+            if (staff?.manv) nextDirectory[staff.manv] = staff.tennv || staff.manv;
+         });
+         setAttStaffDirectory(nextDirectory);
+      };
+
+      fetchStaffDirectory();
+   }, []);
+
+   useEffect(() => {
+      const handleResize = () => setIsMobileChatView(window.innerWidth <= 768);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+   }, []);
+
+   useEffect(() => {
+      if (attendanceUser?.manv || attendanceUser?.username) {
+         subscribeTeacherPushNotifications().catch(console.error);
+      }
+   }, [attendanceUser?.manv, attendanceUser?.username]);
+
    // ----- Attendance Features -----
    const [attDate, setAttDate] = useState(() => {
       const d = new Date();
@@ -30,7 +122,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
    const [changePassLoading, setChangePassLoading] = useState(false);
    const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
-   
+
    // ----- Teacher Chat States -----
    const [attTab, setAttTab] = useState('attendance'); // 'attendance' | 'chat' | 'health'
    const [attChatSelectedStudent, setAttChatSelectedStudent] = useState(null);
@@ -48,6 +140,82 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [attDateFilter, setAttDateFilter] = useState('Hôm nay');
    const [attReports, setAttReports] = useState({ xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 });
    const [uploading, setUploading] = useState(false);
+   const [isMobileChatView, setIsMobileChatView] = useState(() => window.innerWidth <= 768);
+   const [attStaffDirectory, setAttStaffDirectory] = useState({});
+
+   const syncAppBadge = (count) => {
+      const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+
+      if ('setAppBadge' in navigator) {
+         if (badgeCount > 0) navigator.setAppBadge(badgeCount).catch(console.error);
+         else if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
+      }
+
+      if (navigator.serviceWorker?.controller) {
+         navigator.serviceWorker.controller.postMessage({
+            type: 'SYNC_APP_BADGE',
+            count: badgeCount
+         });
+      }
+   };
+
+   const subscribeTeacherPushNotifications = async () => {
+      if (!attendanceUser?.manv && !attendanceUser?.username) {
+         alert('Chưa xác định được tài khoản giáo viên để bật thông báo.');
+         return;
+      }
+      if (!('serviceWorker' in navigator)) {
+         alert('Trình duyệt không hỗ trợ Service Worker.');
+         return;
+      }
+      if (!('PushManager' in window)) {
+         alert('Trình duyệt không hỗ trợ Push Notifications.');
+         return;
+      }
+
+      try {
+         const permission = await Notification.requestPermission();
+         if (permission !== 'granted') {
+            alert('Bạn đã từ chối nhận thông báo.');
+            return;
+         }
+
+         const registration = await navigator.serviceWorker.ready;
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+
+         const urlBase64ToUint8Array = (base64String) => {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+               outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+         };
+
+         const existingSubscription = await registration.pushManager.getSubscription();
+         const subscription = existingSubscription || await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+         });
+
+         const teacherId = attendanceUser.manv || attendanceUser.username;
+         const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+            user_id: teacherId,
+            role: 'teacher',
+            subscription,
+            updated_at: new Date().toISOString()
+         }, { onConflict: 'user_id' });
+
+         if (dbError) throw dbError;
+
+         alert(existingSubscription ? 'Thông báo đã được bật sẵn cho giáo viên.' : 'Đã bật thông báo cho giáo viên thành công!');
+      } catch (err) {
+         console.error('Lỗi khi đăng ký nhận thông báo cho giáo viên:', err);
+         alert('Có lỗi khi bật thông báo: ' + err.message);
+      }
+   };
 
    useEffect(() => {
       setAttClasses(initialClasses || []);
@@ -61,10 +229,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          // Lấy danh sách học sinh từ bảng tbl_hv
          const { data: stFound, error: stError } = await supabase.from('tbl_hv').select('*').eq('malop', attSelectedClass);
          if (stError) console.error('Error fetching students:', stError);
-         
+
          // Lọc bỏ học sinh đã nghỉ ở phía client để tránh lỗi cú pháp truy vấn
          const studentsFound = (stFound || []).filter(s => s.trangthai !== 'Đã Nghỉ');
-         
+
          // Lấy thông tin sức khỏe mới nhất từ suckhoedinhky
          if (studentsFound.length > 0) {
             const stIds = studentsFound.map(s => s.mahv);
@@ -133,34 +301,34 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       setLoading(false);
    };
 
-    const handleSaveHealth = async () => {
-       if (!attSelectedClass) return window.alert('Chưa chọn lớp!');
-       setLoading(true);
-       try {
-          const today = new Date().toISOString();
-          for (const st of attStudents) {
-             // 1. Lưu vào bảng lịch sử sức khỏe định kỳ
-             const healthPayload = {
-                mahv: st.mahv,
-                chieucao: st.chieucao || '',
-                cannang: st.cannang || '',
-                ngay: today
-             };
-             await supabase.from('suckhoedinhky').insert([healthPayload]);
+   const handleSaveHealth = async () => {
+      if (!attSelectedClass) return window.alert('Chưa chọn lớp!');
+      setLoading(true);
+      try {
+         const today = new Date().toISOString();
+         for (const st of attStudents) {
+            // 1. Lưu vào bảng lịch sử sức khỏe định kỳ
+            const healthPayload = {
+               mahv: st.mahv,
+               chieucao: st.chieucao || '',
+               cannang: st.cannang || '',
+               ngay: today
+            };
+            await supabase.from('suckhoedinhky').insert([healthPayload]);
 
-             // 2. Cập nhật nhận xét vào bảng học viên (tinhtrangsk)
-             const hvPayload = {};
-             if (st.hasOwnProperty('ghichusuckhoe')) hvPayload.ghichusuckhoe = st.ghichusuckhoe;
-             else if (st.hasOwnProperty('tinhtrangsk')) hvPayload.tinhtrangsk = st.ghichusuckhoe || st.tinhtrangsk;
+            // 2. Cập nhật nhận xét vào bảng học viên (tinhtrangsk)
+            const hvPayload = {};
+            if (st.hasOwnProperty('ghichusuckhoe')) hvPayload.ghichusuckhoe = st.ghichusuckhoe;
+            else if (st.hasOwnProperty('tinhtrangsk')) hvPayload.tinhtrangsk = st.ghichusuckhoe || st.tinhtrangsk;
 
-             if (Object.keys(hvPayload).length > 0) {
-                await supabase.from('tbl_hv').update(hvPayload).eq('mahv', st.mahv);
-             }
-          }
-          window.alert('Lưu thông tin sức khỏe thành công!');
-       } catch (err) { console.error(err); window.alert('Lỗi lưu sức khỏe: ' + err.message); }
-       setLoading(false);
-    };
+            if (Object.keys(hvPayload).length > 0) {
+               await supabase.from('tbl_hv').update(hvPayload).eq('mahv', st.mahv);
+            }
+         }
+         window.alert('Lưu thông tin sức khỏe thành công!');
+      } catch (err) { console.error(err); window.alert('Lỗi lưu sức khỏe: ' + err.message); }
+      setLoading(false);
+   };
 
    const handleChangePassword = async (e) => {
       e.preventDefault();
@@ -212,7 +380,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const fetchAttUnreads = async () => {
       if (!attendanceUser || attAllStudents.length === 0) return;
-      
+
       const studentIds = attAllStudents.map(s => s.mahv);
       if (studentIds.length === 0) return;
 
@@ -235,19 +403,18 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          });
          setAttUnreadCounts(counts);
 
-         // Update App Badge
-         if ('setAppBadge' in navigator) {
-            if (totalUnread > 0) navigator.setAppBadge(totalUnread).catch(console.error);
-            else navigator.clearAppBadge().catch(console.error);
-         }
+         syncAppBadge(totalUnread);
+      } else {
+         setAttUnreadCounts({});
+         syncAppBadge(0);
       }
    };
 
    const fetchAttSummaries = async () => {
       if (!attendanceUser) return;
-      
+
       let dateLimit = new Date();
-      if (attDateFilter === 'Hôm nay') dateLimit.setHours(0,0,0,0);
+      if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
       else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
       else dateLimit.setMonth(dateLimit.getMonth() - 1);
 
@@ -311,35 +478,35 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (attendanceUser) {
          fetchAttUnreads();
          fetchAttSummaries();
-          const channel = supabase.channel('teacher_chat_monitor')
-             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
-                const isPH = payload.new.description === 'PH' || (!payload.new.manv);
-                if (isPH) {
-                   // Only notify if student is in teacher's classes
-                   if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
-                      if (Notification.permission === 'granted') {
-                         if ('serviceWorker' in navigator) {
-                            navigator.serviceWorker.ready.then(registration => {
-                               registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
-                            }).catch(() => {
-                               new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
-                            });
-                         } else {
-                            new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
-                         }
-                      }
-                   }
-                }
-                fetchAttUnreads(); fetchAttSummaries();
-             })
-             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => {
-                fetchAttUnreads(); fetchAttSummaries();
-             })
-             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => {
-                fetchAttUnreads(); fetchAttSummaries();
-             })
-             .subscribe();
-          return () => supabase.removeChannel(channel);
+         const channel = supabase.channel('teacher_chat_monitor')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+               const isPH = payload.new.description === 'PH' || (!payload.new.manv);
+               if (isPH) {
+                  // Only notify if student is in teacher's classes
+                  if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
+                     if (Notification.permission === 'granted') {
+                        if ('serviceWorker' in navigator) {
+                           navigator.serviceWorker.ready.then(registration => {
+                              registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                           }).catch(() => {
+                              new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                           });
+                        } else {
+                           new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                        }
+                     }
+                  }
+               }
+               fetchAttUnreads(); fetchAttSummaries();
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => {
+               fetchAttUnreads(); fetchAttSummaries();
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => {
+               fetchAttUnreads(); fetchAttSummaries();
+            })
+            .subscribe();
+         return () => supabase.removeChannel(channel);
       }
    }, [attendanceUser, attDateFilter]);
 
@@ -352,6 +519,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                return next;
             });
             await supabase.from('hv_messages').update({ is_read: true }).eq('mahv', attChatSelectedStudent.mahv).is('is_read', false);
+            fetchAttUnreads();
          };
          markAsRead();
 
@@ -407,7 +575,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       setUploading(true);
       try {
          let file = fileInput;
-         if (type === 'image') { try { file = await compressImage(fileInput, 100); } catch (err) {} }
+         if (type === 'image') { try { file = await compressImage(fileInput, 150); } catch (err) { } }
 
          let finalUrl = '';
          if (config.r2_enabled) {
@@ -460,6 +628,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                <p style={{ color: '#64748b', margin: 0, marginTop: '5px' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
+               <button onClick={subscribeTeacherPushNotifications} title="Bật thông báo PWA" style={{ width: '36px', height: '36px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
+                  <Bell size={18} />
+               </button>
                <button onClick={() => setIsChangePassOpen(true)} title="Đổi mật khẩu" style={{ width: '36px', height: '36px', background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
                   <Key size={18} />
                </button>
@@ -564,7 +735,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            return (
                               <div key={st.mahv} className="attendance-portal-card">
                                  <div>
-                                    <span className="portal-att-label">Học Sinh</span>
                                     <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{st.tenhv}</strong>
                                     <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>{st.mahv}</div>
                                  </div>
@@ -578,7 +748,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                        )}
                                        {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangP')) && (
                                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#d97706', fontWeight: 700, fontSize: '0.95rem', background: rec.trangthai === 'Nghỉ phép' ? '#fffbeb' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ phép' ? '1px solid #fef3c7' : '1px solid #e2e8f0', transition: '0.2s' }}>
-                                             <input type="radio" name={`tt_${st.mahv}`} checked={rec.trangthai === 'Nghỉ phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ phép')} /> Nghỉ phép
+                                             <input type="radio" name={`tt_${st.mahv}`} checked={rec.trangthai === 'Nghỉ phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ phép')} /> Nghỉ P
                                           </label>
                                        )}
                                        {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangKP')) && (
@@ -610,67 +780,67 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                )}
             </div>
          )}
-          {attTab === 'health' && (
-             <div className="health-tab-content" style={{ animation: 'fadeIn 0.3s ease' }}>
-                <div style={{ marginBottom: '1.5rem' }}>
-                   <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#334155' }}>Chọn Lớp</label>
-                   <select value={attSelectedClass} onChange={e => setAttSelectedClass(e.target.value)} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-                      <option value="">-- {attClasses.length > 0 ? 'Chọn Lớp' : 'Không có lớp phân công'} --</option>
-                      {attClasses.map(c => <option key={c.malop} value={c.malop}>{c.tenlop || c.malop}</option>)}
-                   </select>
-                </div>
+         {attTab === 'health' && (
+            <div className="health-tab-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+               <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#334155' }}>Chọn Lớp</label>
+                  <select value={attSelectedClass} onChange={e => setAttSelectedClass(e.target.value)} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+                     <option value="">-- {attClasses.length > 0 ? 'Chọn Lớp' : 'Không có lớp phân công'} --</option>
+                     {attClasses.map(c => <option key={c.malop} value={c.malop}>{c.tenlop || c.malop}</option>)}
+                  </select>
+               </div>
 
-                {attSelectedClass && (
-                   <>
-                      <div className="attendance-portal-list">
-                         {attStudents.length > 0 ? attStudents.map(st => (
-                            <div key={st.mahv} className="attendance-portal-card" style={{ borderLeft: '4px solid #ec4899', padding: '1.2rem' }}>
-                               <div style={{ marginBottom: '12px' }}>
-                                  <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{st.tenhv}</strong>
-                                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>{st.mahv}</div>
-                               </div>
-                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '12px' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                     <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Chiều cao (cm)</label>
-                                     <input type="number" value={st.chieucao || ''} onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? { ...s, chieucao: e.target.value } : s))} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }} />
-                                  </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                     <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Cân nặng (kg)</label>
-                                     <input type="number" step="0.1" value={st.cannang || ''} onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? { ...s, cannang: e.target.value } : s))} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }} />
-                                  </div>
-                               </div>
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Nhận xét sức khỏe</label>
-                                  <textarea 
-                                     placeholder="Nhận xét tình trạng sức khỏe của bé..." 
-                                     value={st.hasOwnProperty('ghichusuckhoe') ? (st.ghichusuckhoe || '') : (st.tinhtrangsk || '')} 
-                                     onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? (s.hasOwnProperty('ghichusuckhoe') ? { ...s, ghichusuckhoe: e.target.value } : { ...s, tinhtrangsk: e.target.value }) : s))} 
-                                     rows="2" 
-                                     style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', resize: 'vertical', fontSize: '0.9rem', fontFamily: 'inherit' }} 
-                                  />
-                               </div>
-                            </div>
-                         )) : (
-                            <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>Lớp không có học sinh.</div>
-                         )}
-                      </div>
-                      {attStudents.length > 0 && (
-                         <button onClick={handleSaveHealth} disabled={loading} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)' }}>
-                            {loading ? <Loader2 size={20} className="spinner" /> : 'Lưu Thông Tin Sức Khỏe'}
-                         </button>
-                      )}
-                   </>
-                )}
-             </div>
-          )}
+               {attSelectedClass && (
+                  <>
+                     <div className="attendance-portal-list">
+                        {attStudents.length > 0 ? attStudents.map(st => (
+                           <div key={st.mahv} className="attendance-portal-card" style={{ borderLeft: '4px solid #ec4899', padding: '1.2rem' }}>
+                              <div style={{ marginBottom: '12px' }}>
+                                 <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{st.tenhv}</strong>
+                                 <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>{st.mahv}</div>
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '12px' }}>
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Chiều cao (cm)</label>
+                                    <input type="number" value={st.chieucao || ''} onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? { ...s, chieucao: e.target.value } : s))} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }} />
+                                 </div>
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Cân nặng (kg)</label>
+                                    <input type="number" step="0.1" value={st.cannang || ''} onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? { ...s, cannang: e.target.value } : s))} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }} />
+                                 </div>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                 <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>Nhận xét sức khỏe</label>
+                                 <textarea
+                                    placeholder="Nhận xét tình trạng sức khỏe của bé..."
+                                    value={st.hasOwnProperty('ghichusuckhoe') ? (st.ghichusuckhoe || '') : (st.tinhtrangsk || '')}
+                                    onChange={e => setAttStudents(prev => prev.map(s => s.mahv === st.mahv ? (s.hasOwnProperty('ghichusuckhoe') ? { ...s, ghichusuckhoe: e.target.value } : { ...s, tinhtrangsk: e.target.value }) : s))}
+                                    rows="2"
+                                    style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', resize: 'vertical', fontSize: '0.9rem', fontFamily: 'inherit' }}
+                                 />
+                              </div>
+                           </div>
+                        )) : (
+                           <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>Lớp không có học sinh.</div>
+                        )}
+                     </div>
+                     {attStudents.length > 0 && (
+                        <button onClick={handleSaveHealth} disabled={loading} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)' }}>
+                           {loading ? <Loader2 size={20} className="spinner" /> : 'Lưu Thông Tin Sức Khỏe'}
+                        </button>
+                     )}
+                  </>
+               )}
+            </div>
+         )}
 
          {attTab === 'chat' && (
             <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: '600px' }}>
                {attChatView === 'dashboard' ? (
                   <div className="chat-dashboard" style={{ padding: '0', background: 'transparent' }}>
-                     <div className="chat-filters-row" style={{ marginBottom: '1.5rem', gap: '1rem' }}>
+                     <div className="chat-filters-row" style={{ marginBottom: '1.5rem', gap: '1rem', display: 'flex', flexDirection: isMobileChatView ? 'column' : 'row' }}>
                         <div className="filter-group">
-                           <div className="search-input-wrapper" style={{ width: '100%', maxWidth: '300px' }}>
+                           <div className="search-input-wrapper" style={{ width: '100%', maxWidth: isMobileChatView ? '100%' : '300px' }}>
                               <Search size={18} className="search-icon-inside" />
                               <input type="text" placeholder="TÌM THEO TÊN/MÃ..." value={attSearchQuery} onChange={(e) => setAttSearchQuery(e.target.value)} />
                            </div>
@@ -686,7 +856,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         </div>
                      </div>
 
-                     <div className="quick-reports-container" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: '1.5rem' }}>
+                     <div className="quick-reports-container" style={{ gridTemplateColumns: isMobileChatView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: '1.5rem', gap: isMobileChatView ? '0.75rem' : undefined }}>
                         <div className="report-card xin-nghi" onClick={() => setAttStatFilter(attStatFilter === 'XIN_NGHI' ? 'ALL' : 'XIN_NGHI')} style={{ outline: attStatFilter === 'XIN_NGHI' ? '3px solid #ef4444' : 'none' }}>
                            <span className="report-label">Xin nghỉ</span>
                            <span className="report-value">{String(attReports.xinNghi).padStart(2, '0')}</span>
@@ -709,7 +879,80 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         </div>
                      </div>
 
-                     <div className="chat-table-wrapper" style={{ borderRadius: '12px' }}>
+                     {isMobileChatView && (
+                        <div style={{ display: 'grid', gap: '0.85rem' }}>
+                           {(() => {
+                              const filtered = getFilteredChatStudents();
+                              const dateLimit = getDateLimit();
+
+                              if (filtered.length === 0) {
+                                 return <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', background: '#fff', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>KhÃ´ng cÃ³ dá»¯ liá»‡u phÃ¹ há»£p</div>;
+                              }
+
+                              return filtered.map(st => {
+                                 const studentMsgs = attLatestMessages.filter(m => m.mahv === st.mahv);
+                                 let msgToShow = studentMsgs[0];
+
+                                 if (attStatFilter !== 'ALL') {
+                                    const matchingMsg = studentMsgs.find(m => {
+                                       if (new Date(m.created_at) < dateLimit) return false;
+                                       const isPH = m.description === 'PH' || (!m.manv);
+                                       if (!isPH) return false;
+                                       const type = getNotifType(m.content);
+                                       if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghá»‰';
+                                       if (attStatFilter === 'BAO_THUOC') return type === 'BÃ¡o thuá»‘c';
+                                       if (attStatFilter === 'DOI_NGUOI') return type === 'Äá»•i ngÆ°á»i Ä‘Ã³n';
+                                       if (attStatFilter === 'VE_TRE') return type === 'Vá» trá»…';
+                                       if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nháº¯n';
+                                       return false;
+                                    });
+                                    if (matchingMsg) msgToShow = matchingMsg;
+                                 }
+
+                                 const unread = attUnreadCounts[st.mahv] || 0;
+                                 const type = getNotifType(msgToShow?.content);
+
+                                 return (
+                                    <button
+                                       key={st.mahv}
+                                       onClick={() => { setAttChatSelectedStudent(st); setAttChatView('chat'); }}
+                                       style={{ textAlign: 'left', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '0.95rem', background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)', boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)', cursor: 'pointer' }}
+                                    >
+                                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.8rem' }}>
+                                          <div style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '14px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                                             {st.tenhv?.charAt(0)}
+                                          </div>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                                                <div style={{ fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>{st.tenhv}</div>
+                                                {unread > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.72rem', padding: '2px 7px', borderRadius: '999px', fontWeight: 700 }}>+{unread}</span>}
+                                             </div>
+                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.55rem' }}>
+                                                <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>{getClassDisplayName(st.malop)}</span>
+                                                <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+                                                   {msgToShow ? new Date(msgToShow.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                </span>
+                                             </div>
+                                             {type && (
+                                                <div style={{ marginBottom: '0.5rem' }}>
+                                                   <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: '#fce7f3', color: '#be185d' }}>
+                                                      {type}
+                                                   </span>
+                                                </div>
+                                             )}
+                                             <div style={{ fontSize: '0.83rem', color: '#475569', lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                {getMessagePreview(msgToShow)}
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </button>
+                                 );
+                              });
+                           })()}
+                        </div>
+                     )}
+
+                     <div className="chat-table-wrapper" style={{ borderRadius: '12px', display: isMobileChatView ? 'none' : 'block' }}>
                         <table className="chat-data-table">
                            <thead>
                               <tr>
@@ -722,7 +965,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            <tbody>
                               {(() => {
                                  let dateLimit = new Date();
-                                 if (attDateFilter === 'Hôm nay') dateLimit.setHours(0,0,0,0);
+                                 if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
                                  else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
                                  else dateLimit.setMonth(dateLimit.getMonth() - 1);
 
@@ -773,7 +1016,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
                                     const unread = attUnreadCounts[st.mahv] || 0;
                                     const type = getNotifType(msgToShow?.content);
-                                    
+
                                     return (
                                        <tr key={st.mahv} onClick={() => { setAttChatSelectedStudent(st); setAttChatView('chat'); }} style={{ cursor: 'pointer' }}>
                                           <td className="student-name-cell">
@@ -785,7 +1028,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                                 {unread > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.7rem', padding: '1px 5px', borderRadius: '4px' }}>+{unread}</span>}
                                              </div>
                                           </td>
-                                          <td>{st.malop}</td>
+                                          <td>{getClassDisplayName(st.malop)}</td>
                                           <td>
                                              {msgToShow ? (
                                                 <div style={{ fontSize: '0.8rem', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={msgToShow.content}>
@@ -831,8 +1074,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            ) : (
                               attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
                                  const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
+                                 const senderName = getTeacherChatSenderName(m);
                                  return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                                       <div style={{ fontSize: '0.68rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
+                                          {senderName}
+                                       </div>
                                        {m.content && (
                                           <div style={{
                                              padding: '8px 12px', borderRadius: isMe ? '14px 14px 2px 14px' : '14px 14px 14px 2px',

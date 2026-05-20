@@ -75,6 +75,7 @@ const ChatManager = ({ currentUser }) => {
   // Data
   const [classes, setClasses] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [staffDirectory, setStaffDirectory] = useState({});
   const [students, setStudents] = useState([]);
   const [latestMessages, setLatestMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -135,6 +136,20 @@ const ChatManager = ({ currentUser }) => {
   
   const scrollRef = useRef();
 
+  const getStaffDisplayName = (staffId) => {
+    if (!staffId) return 'Nhà trường';
+    if (staffId === (currentUser?.manv || currentUser?.username)) return 'Bạn';
+    return staffDirectory[staffId] || staffId;
+  };
+
+  const getChatSenderName = (message) => {
+    if (!message) return '';
+    if (message.description === 'PH' || !message.manv) {
+      return selectedStudent?.tenhv ? `Phụ huynh bé ${selectedStudent.tenhv}` : 'Phụ huynh';
+    }
+    return getStaffDisplayName(message.manv);
+  };
+
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = () => setActiveMenu(null);
@@ -153,9 +168,16 @@ const ChatManager = ({ currentUser }) => {
         const { data: classData } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
         if (classData) setClasses(classData);
 
-        // Fetch Teachers
-        const { data: nvData } = await supabase.from('tbl_nv').select('manv, tennv').in('role', ['Giáo viên', 'Trợ giảng']);
-        if (nvData) setTeachers(nvData);
+        // Fetch Staff / Teachers
+        const { data: nvData } = await supabase.from('tbl_nv').select('manv, tennv, role');
+        if (nvData) {
+          setTeachers(nvData.filter(item => ['Giáo viên', 'Trợ giảng'].includes(item.role)));
+          const nextDirectory = {};
+          nvData.forEach((staff) => {
+            if (staff?.manv) nextDirectory[staff.manv] = staff.tennv || staff.manv;
+          });
+          setStaffDirectory(nextDirectory);
+        }
 
         // Fetch Students
         const { data: studentData } = await supabase.from('tbl_hv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
@@ -477,7 +499,7 @@ const ChatManager = ({ currentUser }) => {
       let fileToUpload = file;
       if (type === 'image') {
         try {
-          const compressed = await compressImage(file, 100);
+          const compressed = await compressImage(file, 150);
           fileToUpload = compressed;
         } catch (err) {
           console.error('Compression failed, using original file:', err);
@@ -495,7 +517,7 @@ const ChatManager = ({ currentUser }) => {
           config.r2_public_url
         );
       } else {
-        const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
+        const fileName = `${selectedStudent.mahv}_${Date.now()}_${fileToUpload.name}`;
         const folder = type === 'image' ? 'chat-images' : 'chat-files';
         const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, fileToUpload);
         if (error) throw error;
@@ -509,8 +531,8 @@ const ChatManager = ({ currentUser }) => {
         content: '',
         image_url: type === 'image' ? finalUrl : null,
         file_url: type !== 'image' ? finalUrl : null,
-        file_name: file.name,
-        file_mime_type: file.type
+        file_name: fileToUpload.name,
+        file_mime_type: fileToUpload.type
       };
 
       const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -1041,9 +1063,11 @@ ${ngoaiKhoaForm.content}
               }).map((m, idx) => {
                 const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
                 const msgId = m.id || `msg-${idx}-${m.created_at}`;
+                const senderName = getChatSenderName(m);
                 return (
                   <div key={msgId} id={`msg-${m.id}`} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
                      <div className="message-bubble-wrapper">
+                        <div className="msg-sender">{senderName}</div>
                         <div className="message-bubble">
                            {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
                            {m.description === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}

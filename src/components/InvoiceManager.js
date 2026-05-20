@@ -5,6 +5,7 @@ import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
 
 const dataUrlToBlob = (dataUrl) => {
    const arr = dataUrl.split(',');
@@ -21,17 +22,59 @@ const dataUrlToBlob = (dataUrl) => {
 
 
 const parseScheduleDays = (tgb) => {
-   if (!tgb) return [];
-   const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
-   const days = [];
-   if (normalized.includes('t2')) days.push(1);
+  if (!tgb) return [];
+  const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
+  const days = [];
+  if (normalized.includes('t2')) days.push(1);
    if (normalized.includes('t3')) days.push(2);
    if (normalized.includes('t4')) days.push(3);
    if (normalized.includes('t5')) days.push(4);
    if (normalized.includes('t6')) days.push(5);
    if (normalized.includes('t7')) days.push(6);
-   if (normalized.includes('cn')) days.push(0);
-   return days;
+  if (normalized.includes('cn')) days.push(0);
+  return days;
+};
+
+const getMealFeeInfo = (value, fallbackDays = 0) => {
+  if (value === null || value === undefined || value === '') {
+    return { amount: 0, days: fallbackDays };
+  }
+
+  let parsedValue = value;
+
+  if (typeof parsedValue === 'string') {
+    const trimmed = parsedValue.trim();
+    if (!trimmed) return { amount: 0, days: fallbackDays };
+
+    if (trimmed.startsWith('{')) {
+      try {
+        parsedValue = JSON.parse(trimmed);
+      } catch (error) {
+        parsedValue = trimmed;
+      }
+    } else {
+      return {
+        amount: parseInt(trimmed.replace(/[^\d-]/g, ''), 10) || 0,
+        days: fallbackDays
+      };
+    }
+  }
+
+  if (typeof parsedValue === 'number') {
+    return { amount: parsedValue, days: fallbackDays };
+  }
+
+  if (parsedValue && typeof parsedValue === 'object') {
+    return {
+      amount: parseInt(parsedValue.amount, 10) || 0,
+      days: parseInt(parsedValue.days, 10) || fallbackDays
+    };
+  }
+
+  return {
+    amount: parseInt(String(parsedValue).replace(/[^\d-]/g, ''), 10) || 0,
+    days: fallbackDays
+  };
 };
 
 const formatMonthYear = (dateStr) => {
@@ -301,13 +344,14 @@ export default function InvoiceManager() {
                      try {
                         const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
                         const blob = dataUrlToBlob(dataUrl);
-                        const file = new File([blob], fileName, { type: 'image/png' });
+                        const pngFile = new File([blob], fileName, { type: 'image/png' });
+                        const file = await compressImage(pngFile, 150);
                         
                         let imageUrl = '';
                         if (config?.r2_enabled) {
                            imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
                         } else {
-                           const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${fileName}`;
+                           const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${file.name}`;
                            const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
                            if (upErr) throw upErr;
                            const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
@@ -381,13 +425,14 @@ export default function InvoiceManager() {
                      try {
                         const fileName = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
                         const blob = dataUrlToBlob(dataUrl);
-                        const file = new File([blob], fileName, { type: 'image/png' });
+                        const pngFile = new File([blob], fileName, { type: 'image/png' });
+                        const file = await compressImage(pngFile, 150);
                         
                         let imageUrl = '';
                         if (config?.r2_enabled) {
                            imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
                         } else {
-                           const path = `chat-images/${downloadingNotice.mahv}_${Date.now()}_${fileName}`;
+                           const path = `chat-images/${downloadingNotice.mahv}_${Date.now()}_${file.name}`;
                            const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
                            if (upErr) throw upErr;
                            const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
@@ -1227,6 +1272,15 @@ export default function InvoiceManager() {
       setInvoiceData(prev => ({ ...prev, daDong: tongCong }));
    }, [tongCong, selectedStudent?.mahv, activeClass?.malop]);
 
+   const downloadingInvoiceMealInfo = getMealFeeInfo(
+      downloadingInvoice?.monthlyMealFee ?? downloadingInvoice?.tienan,
+      calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)
+   );
+   const downloadingNoticeMealInfo = getMealFeeInfo(
+      downloadingNotice?.monthlyMealFee ?? downloadingNotice?.tienan,
+      calculateWorkingDaysInMonth(downloadingNotice?.ngaybatdau)
+   );
+
    return (
       <div className={`invoice-manager animate-fade-in ${showMobileDetails ? 'mobile-show-details' : ''}`}>
 
@@ -1702,7 +1756,7 @@ export default function InvoiceManager() {
                      <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                            <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi} đ</b></div>
-                           <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></div>
+                           <div>Tiền ăn ({downloadingInvoiceMealInfo.days} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoiceMealInfo.amount)} đ</b></div>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                            <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi} đ</b></div>
@@ -1808,7 +1862,7 @@ export default function InvoiceManager() {
                   <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                         <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi} đ</b></div>
-                        <div>Tiền ăn ({calculateWorkingDaysInMonth(downloadingNotice?.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></div>
+                        <div>Tiền ăn ({downloadingNoticeMealInfo.days} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNoticeMealInfo.amount)} đ</b></div>
                      </div>
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi} đ</b></div>

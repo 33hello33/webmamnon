@@ -9,6 +9,7 @@ import {
 import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
 import './ClassManager.css';
 
 const dataUrlToBlob = (dataUrl) => {
@@ -60,6 +61,48 @@ const formatTuition = (val) => {
 const parseFormattedNumber = (val) => {
   if (!val) return 0;
   return parseInt(val.toString().replace(/,/g, ''), 10) || 0;
+};
+
+const getMealFeeInfo = (value, fallbackDays = 0) => {
+  if (value === null || value === undefined || value === '') {
+    return { amount: 0, days: fallbackDays };
+  }
+
+  let parsedValue = value;
+
+  if (typeof parsedValue === 'string') {
+    const trimmed = parsedValue.trim();
+    if (!trimmed) return { amount: 0, days: fallbackDays };
+
+    if (trimmed.startsWith('{')) {
+      try {
+        parsedValue = JSON.parse(trimmed);
+      } catch (error) {
+        parsedValue = trimmed;
+      }
+    } else {
+      return {
+        amount: parseInt(trimmed.replace(/[^\d-]/g, ''), 10) || 0,
+        days: fallbackDays
+      };
+    }
+  }
+
+  if (typeof parsedValue === 'number') {
+    return { amount: parsedValue, days: fallbackDays };
+  }
+
+  if (parsedValue && typeof parsedValue === 'object') {
+    return {
+      amount: parseInt(parsedValue.amount, 10) || 0,
+      days: parseInt(parsedValue.days, 10) || fallbackDays
+    };
+  }
+
+  return {
+    amount: parseInt(String(parsedValue).replace(/[^\d-]/g, ''), 10) || 0,
+    days: fallbackDays
+  };
 };
 
 const parseScheduleDays = (tgb) => {
@@ -751,7 +794,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       }
 
       const hp = parseInt(item.hocphi || 0);
-      const ta = parseInt(item.tienan || 0);
+      const ta = getMealFeeInfo(item.tienan).amount;
       const ghp = parseInt(item.giamhocphi || 0);
       const nc = parseInt(item.nocu || 0);
       const ptValue = Array.isArray(item.phuthu) ? item.phuthu.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0) : 0;
@@ -840,7 +883,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             }
           }
 
-          const taAmount = parseInt(newItem.tienan || 0);
+          const taAmount = getMealFeeInfo(newItem.tienan).amount;
           const taTier = config?.trutienan ? config.trutienan[String(taAmount)] : null;
           const tru_nghi_val = taTier ? (parseInt(taTier.tru_nghi) || 0) : getTruTienAn(newItem.hocphi);
 
@@ -857,7 +900,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         }
 
         const hp = parseInt(newItem.hocphi || 0);
-        const ta = parseInt(newItem.tienan || 0);
+        const ta = getMealFeeInfo(newItem.tienan).amount;
         const ghp = parseInt(newItem.giamhocphi || 0);
         const tta = parseInt(newItem.trutienan || 0);
         const tth = parseInt(newItem.trutiennghi || 0);
@@ -1008,13 +1051,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   try {
                     const fileName = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
                     const blob = dataUrlToBlob(dataUrl);
-                    const file = new File([blob], fileName, { type: 'image/png' });
+                    const pngFile = new File([blob], fileName, { type: 'image/png' });
+                    const file = await compressImage(pngFile, 150);
                     
                     let imageUrl = '';
                     if (config?.r2_enabled) {
                       imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
                     } else {
-                      const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${fileName}`;
+                      const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${file.name}`;
                       const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
                       if (upErr) throw upErr;
                       const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
@@ -1047,13 +1091,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     try {
                       const fileName = `ThongBao_${noticesToPrint[i].tenhv}_${noticesToPrint[i].mahd}.png`;
                       const blob = dataUrlToBlob(retryUrl);
-                      const file = new File([blob], fileName, { type: 'image/png' });
+                      const pngFile = new File([blob], fileName, { type: 'image/png' });
+                      const file = await compressImage(pngFile, 150);
                       
                       let imageUrl = '';
                       if (config?.r2_enabled) {
                         imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
                       } else {
-                        const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${fileName}`;
+                        const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${file.name}`;
                         const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
                         if (upErr) throw upErr;
                         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
@@ -2106,7 +2151,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                     <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</b></div>
-                    <div>Tiền ăn ({calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{printHoaDon.tienan} đ</b></div>
+                    <div>Tiền ăn ({getMealFeeInfo(printHoaDon.tienan, calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)).days} ngày): <b style={{ fontWeight: 900 }}>{formatTuition(getMealFeeInfo(printHoaDon.tienan).amount)} đ</b></div>
                   </div>
                   <div style={{ borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' }}>
                     {Array.isArray(printHoaDon.phuthu) && printHoaDon.phuthu.length > 0 ? (

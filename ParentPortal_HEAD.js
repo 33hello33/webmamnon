@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight } from 'lucide-react';
 
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
@@ -45,79 +45,6 @@ function ParentPortal({ parentData, setParentData }) {
    const chatContainerRef = useRef(null);
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
-   const [loadingTuitionNoticeImage, setLoadingTuitionNoticeImage] = useState(false);
-   const [staffDirectory, setStaffDirectory] = useState({});
-   const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
-   const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
-
-   const getStaffDisplayName = (staffId) => {
-      if (!staffId) return 'Nhà trường';
-      return staffDirectory[staffId] || (staffId === parentData?.teacherManv ? 'Giáo viên phụ trách' : staffId);
-   };
-
-   const getParentChatSenderName = (message) => {
-      if (!message) return '';
-      if (message.description === 'PH' || !message.manv) return 'Bạn';
-      return getStaffDisplayName(message.manv);
-   };
-
-   const handleCallHotline = () => {
-      if (!normalizedHotlineNumber) {
-         alert('Chưa cấu hình số hotline trong phần cấu hình hệ thống.');
-         return;
-      }
-
-      const zaloUrl = `https://zalo.me/${normalizedHotlineNumber}`;
-      const telUrl = `tel:${normalizedHotlineNumber}`;
-      let fallbackTriggered = false;
-
-      const cleanup = () => {
-         window.removeEventListener('blur', cancelFallback);
-         document.removeEventListener('visibilitychange', handleVisibilityChange);
-      };
-
-      const cancelFallback = () => {
-         fallbackTriggered = true;
-         cleanup();
-      };
-
-      const handleVisibilityChange = () => {
-         if (document.hidden) {
-            cancelFallback();
-         }
-      };
-
-      window.addEventListener('blur', cancelFallback, { once: true });
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-
-      window.location.href = zaloUrl;
-
-      window.setTimeout(() => {
-         if (!fallbackTriggered && !document.hidden) {
-            cleanup();
-            window.location.href = telUrl;
-         }
-      }, 1400);
-   };
-
-   const syncAppBadge = (count) => {
-      const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
-
-      if ('setAppBadge' in navigator) {
-         if (badgeCount > 0) {
-            navigator.setAppBadge(badgeCount).catch(console.error);
-         } else if ('clearAppBadge' in navigator) {
-            navigator.clearAppBadge().catch(console.error);
-         }
-      }
-
-      if (navigator.serviceWorker?.controller) {
-         navigator.serviceWorker.controller.postMessage({
-            type: 'SYNC_APP_BADGE',
-            count: badgeCount
-         });
-      }
-   };
 
    const showNotification = (title, body) => {
       if (Notification.permission === 'granted') {
@@ -208,24 +135,6 @@ function ParentPortal({ parentData, setParentData }) {
       if ('Notification' in window && Notification.permission === 'default') {
          Notification.requestPermission();
       }
-   }, []);
-
-   useEffect(() => {
-      const fetchStaffDirectory = async () => {
-         const { data, error } = await supabase.from('tbl_nv').select('manv, tennv');
-         if (error) {
-            console.error('Error fetching staff directory:', error);
-            return;
-         }
-
-         const nextDirectory = {};
-         (data || []).forEach((staff) => {
-            if (staff?.manv) nextDirectory[staff.manv] = staff.tennv || staff.manv;
-         });
-         setStaffDirectory(nextDirectory);
-      };
-
-      fetchStaffDirectory();
    }, []);
 
    const sendQuickMessage = async (content) => {
@@ -452,77 +361,6 @@ function ParentPortal({ parentData, setParentData }) {
       return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}&addInfo=${encodeURIComponent(parentData.student.mahv + nameSuffix)}&accountName=${encodeURIComponent(matched.accName)}`;
    };
 
-   const handleOpenTuitionNoticeImage = async () => {
-      if (!parentData?.latestFee || !parentData?.student?.mahv) return;
-
-      const noticeId = String(parentData.latestFee.mahd || '').trim();
-      const pickLatestImage = (messages = []) => {
-         const validMessages = messages.filter(msg => msg?.image_url);
-         if (validMessages.length === 0) return null;
-
-         const exactMatch = noticeId
-            ? validMessages.find(msg => String(msg.content || '').includes(noticeId))
-            : null;
-
-         if (exactMatch) return exactMatch.image_url;
-
-         const tuitionMatch = validMessages.find(msg => {
-            const normalized = String(msg.content || '').toLowerCase();
-            return normalized.includes('hoc phi') || normalized.includes('học phí');
-         });
-
-         return tuitionMatch?.image_url || validMessages[0].image_url || null;
-      };
-
-      setLoadingTuitionNoticeImage(true);
-
-      try {
-         let imageUrl = pickLatestImage(chatMessages);
-
-         if (!imageUrl) {
-            let query = supabase
-               .from('hv_messages')
-               .select('content, image_url, created_at')
-               .eq('mahv', parentData.student.mahv)
-               .not('image_url', 'is', null)
-               .order('created_at', { ascending: false })
-               .limit(20);
-
-            if (noticeId) {
-               query = query.ilike('content', `%${noticeId}%`);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            imageUrl = pickLatestImage(data || []);
-         }
-
-         if (!imageUrl && noticeId) {
-            const { data, error } = await supabase
-               .from('hv_messages')
-               .select('content, image_url, created_at')
-               .eq('mahv', parentData.student.mahv)
-               .not('image_url', 'is', null)
-               .order('created_at', { ascending: false })
-               .limit(50);
-
-            if (error) throw error;
-            imageUrl = pickLatestImage(data || []);
-         }
-
-         if (imageUrl) {
-            setPreviewImage(imageUrl);
-         } else {
-            alert('Chưa tìm thấy hình thông báo thu học phí trong mục Liên lạc GV.');
-         }
-      } catch (error) {
-         console.error('Error loading tuition notice image:', error);
-         alert('Không tải được hình thông báo thu học phí. Vui lòng thử lại sau.');
-      } finally {
-         setLoadingTuitionNoticeImage(false);
-      }
-   };
-
    const formatMonthYear = (dateStr) => {
       if (!dateStr) return '';
       const d = new Date(dateStr);
@@ -718,7 +556,14 @@ function ParentPortal({ parentData, setParentData }) {
           }
        }
 
-       syncAppBadge(totalUnread);
+       // Update App Badge
+       if ('setAppBadge' in navigator) {
+          if (totalUnread > 0) {
+             navigator.setAppBadge(totalUnread).catch(console.error);
+          } else {
+             navigator.clearAppBadge().catch(console.error);
+          }
+       }
     };
 
    useEffect(() => {
@@ -913,7 +758,7 @@ function ParentPortal({ parentData, setParentData }) {
       try {
          let file = fileInput;
          if (type === 'image') {
-            try { file = await compressImage(fileInput, 150); } catch (err) { console.error('Compression failed:', err); }
+            try { file = await compressImage(fileInput, 100); } catch (err) { console.error('Compression failed:', err); }
          }
 
          let finalUrl = '';
@@ -1074,13 +919,6 @@ function ParentPortal({ parentData, setParentData }) {
                      <div className="premium-utility-item" onClick={subscribeToPushNotifications}>
                         <div className="premium-utility-icon-wrapper" style={{ color: '#0ea5e9' }}><Bell size={24} /></div>
                         <span className="premium-utility-label">Bật thông báo</span>
-                     </div>
-                     <div className="premium-utility-item" onClick={handleCallHotline}>
-                        <div className="premium-utility-icon-wrapper" style={{ color: '#14b8a6' }}><Phone size={24} /></div>
-                        <span className="premium-utility-label">
-                           Hotline
-                           {hotlineNumber && <><br />{hotlineNumber}</>}
-                        </span>
                      </div>
                      <div className="premium-utility-item" onClick={() => {
                         setParentData(null);
@@ -1434,7 +1272,11 @@ function ParentPortal({ parentData, setParentData }) {
                               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                  <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
                                  {!tuitionStatus.isPaid && (
-                                    <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải hình...' : 'Thanh toán ngay'}</button>
+                                    <button onClick={() => {
+                                       const qr = getQRUrl();
+                                       if (qr) window.open(qr, '_blank');
+                                       else alert('Không tìm thấy thông tin chuyển khoản cấu hình.');
+                                    }} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Thanh toán ngay</button>
                                  )}
                               </div>
                            </div>
@@ -1585,12 +1427,8 @@ function ParentPortal({ parentData, setParentData }) {
                            ) : (
                               chatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
                                  const isMe = m.description === 'PH';
-                                 const senderName = getParentChatSenderName(m);
                                  return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
-                                       <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
-                                          {senderName}
-                                       </div>
                                        {m.content && (
                                           <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                                              {m.content}

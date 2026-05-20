@@ -27,6 +27,8 @@ serve(async (req) => {
     let title = "Thông báo mới";
     let body = "Bạn có một thông báo mới từ hệ thống.";
     let url = "/";
+    let badgeCount: number | null = 1;
+    let incrementBadgeBy = 1;
 
     if (payload.table === "hv_messages") {
       // Chat message inserted
@@ -53,6 +55,31 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    if (payload.table === "hv_messages") {
+      if (record.description === "PH") {
+        const { count } = await supabase
+          .from("hv_messages")
+          .select("*", { count: "exact", head: true })
+          .eq("manv", record.manv)
+          .is("is_read", false)
+          .eq("description", "PH");
+
+        badgeCount = count ?? 1;
+      } else {
+        const { count } = await supabase
+          .from("hv_messages")
+          .select("*", { count: "exact", head: true })
+          .eq("mahv", record.mahv)
+          .is("is_read", false)
+          .not("manv", "is", null)
+          .neq("description", "PH");
+
+        badgeCount = count ?? 1;
+      }
+    } else if (payload.table === "tbl_thongbao") {
+      badgeCount = null;
+    }
+
     const { data: subscriptionData, error: subError } = await supabase
       .from("push_subscriptions")
       .select("subscription")
@@ -72,7 +99,9 @@ serve(async (req) => {
       body: body,
       icon: "/logo192.png",
       badge: "/logo192.png",
-      url: url
+      url: url,
+      badgeCount,
+      incrementBadgeBy
     });
 
     // Send push notification
