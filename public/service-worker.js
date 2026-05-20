@@ -9,8 +9,7 @@ const urlsToCache = [
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png'
+  '/appleicon.png'
 ];
 
 self.addEventListener('install', event => {
@@ -113,8 +112,8 @@ self.addEventListener('push', event => {
     const notificationTag = data.tag || `push-${Date.now()}`;
     const options = {
       body: data.body || 'Bạn có thông báo mới',
-      icon: data.icon || '/logo192.png',
-      badge: data.badge || '/logo192.png',
+      icon: data.icon || '/appleicon.png',
+      badge: data.badge || '/appleicon.png',
       tag: notificationTag,
       renotify: true,
       requireInteraction: true,

@@ -651,7 +651,7 @@ function ParentPortal({ parentData, setParentData }) {
        const latestClassNotice = classNotices?.[0];
        
        const currentLatestNoticeTime = Math.max(
-          latestGenNotice ? new Date(latestGenNotice.ngaylap).getTime() : 0,
+          0, /* General notices excluded */
           latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
        );
        if (currentLatestNoticeTime > lastNoticeTime) {
@@ -832,7 +832,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
          } else if (parentTab === 'notices-tab') {
             if (parentNotices.length > 0) {
-               const latest = parentNotices.find(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
+               const latest = parentNotices.find(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
                if (latest) {
                   const time = new Date(latest.date).getTime();
                   localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(time));
@@ -1122,7 +1122,7 @@ function ParentPortal({ parentData, setParentData }) {
                               <Bell size={20} className="text-primary" /> Thông báo từ nhà trường
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {parentNotices.length > 0 ? parentNotices.map((notice, idx) => (
+                              {parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').length > 0 ? parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').map((notice, idx) => (
                                  <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.date).toLocaleDateString('vi-VN')}</span>

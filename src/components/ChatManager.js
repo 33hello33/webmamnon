@@ -777,8 +777,13 @@ const ChatManager = ({ currentUser }) => {
         file_mime_type: mimeType
       }));
 
-      const { error } = await supabase.from('class_announcements').insert(payloads);
+      const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
+      if (insertedData) {
+        for (const record of insertedData) {
+          await triggerPushNotification(supabase, 'class_announcements', record);
+        }
+      }
 
       alert(`Đã đăng bảng tin thành công tới ${targetClasses.length} lớp học.`);
       setIsAnnouncementModalOpen(false);
@@ -828,8 +833,13 @@ const ChatManager = ({ currentUser }) => {
         file_mime_type: menuFiles.image.type
       }));
 
-      const { error } = await supabase.from('class_announcements').insert(payloads);
+      const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
+      if (insertedData) {
+        for (const record of insertedData) {
+          await triggerPushNotification(supabase, 'class_announcements', record);
+        }
+      }
 
       alert(`Đã gửi thực đơn thành công tới ${targetClasses.length} lớp.`);
       setIsMenuModalOpen(false);
@@ -875,8 +885,13 @@ const ChatManager = ({ currentUser }) => {
         file_mime_type: chuongTrinhHocFiles.image.type
       }));
 
-      const { error } = await supabase.from('class_announcements').insert(payloads);
+      const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
+      if (insertedData) {
+        for (const record of insertedData) {
+          await triggerPushNotification(supabase, 'class_announcements', record);
+        }
+      }
 
       alert(`Đã gửi chương trình học thành công tới ${targetClasses.length} lớp.`);
       setIsChuongTrinhHocModalOpen(false);
@@ -940,8 +955,13 @@ ${ngoaiKhoaForm.content}
         file_mime_type: ngoaiKhoaFiles.image.type
       }));
 
-      const { error } = await supabase.from('class_announcements').insert(payloads);
+      const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
+      if (insertedData) {
+        for (const record of insertedData) {
+          await triggerPushNotification(supabase, 'class_announcements', record);
+        }
+      }
 
       alert(`Đã gửi hoạt động ngoại khóa thành công tới ${targetClasses.length} lớp.`);
       setIsNgoaiKhoaModalOpen(false);

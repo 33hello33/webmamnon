@@ -157,16 +157,16 @@ const buildPushContext = async (
 
     if (targets.length === 0) return null;
 
-    const title = normalizeString(record.title);
-    let fallbackTitle = "Thông báo lớp mới";
-    if (title === "THỰC ĐƠN") fallbackTitle = "Thực đơn mới";
-    else if (title === "NGOẠI KHÓA") fallbackTitle = "Hoạt động ngoại khóa mới";
-    else if (title === "CHƯƠNG TRÌNH HỌC") fallbackTitle = "Chương trình học mới";
+    const rawTitle = normalizeString(record.title);
+    let displayTitle = rawTitle || "Thông báo lớp mới";
+    if (rawTitle === "THỰC ĐƠN") displayTitle = "Thực đơn mới";
+    else if (rawTitle === "NGOẠI KHÓA") displayTitle = "Hoạt động ngoại khóa mới";
+    else if (rawTitle === "CHƯƠNG TRÌNH HỌC") displayTitle = "Chương trình học mới";
 
     return {
       targets,
       message: {
-        title: title || fallbackTitle,
+        title: displayTitle,
         body: normalizeString(record.content) || "Nhấn để xem chi tiết.",
         url: "/",
         badgeCount: null,

@@ -315,7 +315,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                cannang: st.cannang || '',
                ngay: today
             };
-            await supabase.from('suckhoedinhky').insert([healthPayload]);
+            const { data: insertedHealth, error: healthError } = await supabase.from('suckhoedinhky').insert([healthPayload]).select();
+            if (!healthError && insertedHealth && insertedHealth.length > 0) {
+               await triggerPushNotification(supabase, 'suckhoedinhky', insertedHealth[0]);
+            }
 
             // 2. Cập nhật nhận xét vào bảng học viên (tinhtrangsk)
             const hvPayload = {};
