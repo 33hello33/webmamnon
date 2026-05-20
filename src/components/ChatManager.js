@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2, deleteFromR2 } from '../utils/cloudflareR2';
+import { triggerPushNotification } from '../utils/pushNotifications';
 import {
   MessageSquare,
   Send,
@@ -484,6 +485,7 @@ const ChatManager = ({ currentUser }) => {
 
     const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
     if (!error && data) {
+      await triggerPushNotification(supabase, 'hv_messages', data[0]);
       setInputText('');
       setMessages(prev => [...prev, data[0]]);
       setTimeout(scrollToBottom, 50);
@@ -536,7 +538,10 @@ const ChatManager = ({ currentUser }) => {
       };
 
       const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-      if (data) setMessages(prev => [...prev, data[0]]);
+      if (data) {
+        await triggerPushNotification(supabase, 'hv_messages', data[0]);
+        setMessages(prev => [...prev, data[0]]);
+      }
 
       const newDoc = {
         mahv: selectedStudent.mahv,
@@ -692,8 +697,12 @@ const ChatManager = ({ currentUser }) => {
         description: forwardingMessage.description || null
       }));
 
-      const { error } = await supabase.from('hv_messages').insert(payloads);
+      const { data: insertedMessages, error } = await supabase.from('hv_messages').insert(payloads).select();
       if (error) throw error;
+
+      for (const message of insertedMessages || []) {
+        await triggerPushNotification(supabase, 'hv_messages', message);
+      }
 
       if (forwardingMessage.image_url || forwardingMessage.file_url) {
         const docPayloads = selectedForwardStudents.map(mahv => ({

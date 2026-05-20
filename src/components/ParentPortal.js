@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
+import { triggerPushNotification } from '../utils/pushNotifications';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 
 function ParentPortal({ parentData, setParentData }) {
@@ -168,18 +169,12 @@ function ParentPortal({ parentData, setParentData }) {
          };
 
          const existingSubscription = await registration.pushManager.getSubscription();
-         if (existingSubscription) {
-            console.log('Existing Push Subscription:', JSON.stringify(existingSubscription));
-            alert('Đã bật thông báo thành công (Đã có Subscription).');
-            return;
-         }
-
-         const subscription = await registration.pushManager.subscribe({
+         const subscription = existingSubscription || await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
 
-         console.log('New Push Subscription Endpoint:', JSON.stringify(subscription));
+         console.log('Push Subscription Endpoint:', JSON.stringify(subscription));
 
          // Save subscription to Supabase
          if (parentData?.student?.mahv) {
@@ -195,7 +190,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
          }
 
-         alert('Đã bật thông báo thành công!');
+         alert(existingSubscription ? 'Đã bật thông báo thành công (Đã có Subscription).' : 'Đã bật thông báo thành công!');
 
       } catch (err) {
          console.error('Lỗi khi đăng ký nhận thông báo:', err);
@@ -242,6 +237,7 @@ function ParentPortal({ parentData, setParentData }) {
          return;
       }
       if (data) {
+         await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatMessages(prev => [...prev, data[0]]);
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
@@ -415,8 +411,11 @@ function ParentPortal({ parentData, setParentData }) {
             description: 'PH',
             is_read: false
          };
-         const { error } = await supabase.from('hv_messages').insert([newMessage]);
+         const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
          if (error) throw error;
+         if (data?.[0]) {
+            await triggerPushNotification(supabase, 'hv_messages', data[0]);
+         }
          alert('Cảm ơn ý kiến góp ý của quý phụ huynh. Thông tin đã được gửi trực tiếp đến Ban Giám Hiệu.');
          setIsFeedbackModalOpen(false);
          setFeedbackContent('');
@@ -899,6 +898,7 @@ function ParentPortal({ parentData, setParentData }) {
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) { console.error('Lỗi khi gửi tin nhắn:', error); return; }
       if (data) {
+         await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
          setChatMessages(prev => [...prev, data[0]]);
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -940,7 +940,10 @@ function ParentPortal({ parentData, setParentData }) {
          };
 
          const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-         if (data) setChatMessages(prev => [...prev, data[0]]);
+         if (data) {
+            await triggerPushNotification(supabase, 'hv_messages', data[0]);
+            setChatMessages(prev => [...prev, data[0]]);
+         }
 
          const newDoc = {
             mahv: parentData.student.mahv,
@@ -958,7 +961,7 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    return (
-      <div id="parent-dashboard" className="parent-premium-mobile">
+      <div id="parent-dashboard" className={`parent-premium-mobile ${parentTab === 'chat-tab' ? 'chat-mode-active' : ''}`}>
          {parentTab === 'menu' && (
             <div className="premium-home">
                <div className="premium-sidebar">

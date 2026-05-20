@@ -10,6 +10,11 @@ if (publicVapidKey && privateVapidKey) {
   webpush.setVapidDetails(email, publicVapidKey, privateVapidKey);
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 type WebhookPayload = {
   table?: string;
   record?: Record<string, unknown>;
@@ -188,13 +193,17 @@ const buildPushContext = async (
 
 serve(async (req) => {
   try {
+    if (req.method === "OPTIONS") {
+      return new Response("ok", { headers: corsHeaders });
+    }
+
     if (req.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
+      return new Response("Method not allowed", { status: 405, headers: corsHeaders });
     }
 
     if (!publicVapidKey || !privateVapidKey) {
       return new Response(JSON.stringify({ error: "Missing VAPID keys" }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
         status: 500,
       });
     }
@@ -202,7 +211,7 @@ serve(async (req) => {
     const payload = await req.json() as WebhookPayload;
     if (!isWebhookInsert(payload)) {
       return new Response(JSON.stringify({ message: "Ignored payload" }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
         status: 200,
       });
     }
@@ -214,7 +223,7 @@ serve(async (req) => {
     const context = await buildPushContext(supabase, payload);
     if (!context || context.targets.length === 0) {
       return new Response(JSON.stringify({ message: "No push targets" }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
         status: 200,
       });
     }
@@ -259,7 +268,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ success: true, results }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
       status: 200,
     });
   } catch (error) {
@@ -267,7 +276,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       error: error instanceof Error ? error.message : "Unknown error",
     }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
       status: 500,
     });
   }

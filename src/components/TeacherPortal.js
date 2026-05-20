@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
+import { triggerPushNotification } from '../utils/pushNotifications';
 import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
@@ -562,6 +563,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (!error && data) {
+         await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setAttChatInput('');
          setAttChatMessages(prev => [...prev, data[0]]);
          setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
@@ -601,6 +603,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
          const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
          if (data) {
+            await triggerPushNotification(supabase, 'hv_messages', data[0]);
             setAttChatMessages(prev => [...prev, data[0]]);
             setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
          }
