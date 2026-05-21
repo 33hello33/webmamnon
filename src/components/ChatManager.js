@@ -2221,8 +2221,8 @@ ${ngoaiKhoaForm.content}
                             fontWeight: 700, 
                             padding: '4px 10px', 
                             borderRadius: '6px',
-                            background: notice.title === 'THỰC ĐƠN' ? '#f0fdf4' : notice.title === 'NGOẠI KHÓA' ? '#fdf2f8' : '#f5f3ff',
-                            color: notice.title === 'THỰC ĐƠN' ? '#10b981' : notice.title === 'NGOẠI KHÓA' ? '#ec4899' : '#8b5cf6'
+                            background: noticeTitle === 'TH?C ??N' ? '#f0fdf4' : noticeTitle === 'NGO?I KH?A' ? '#fdf2f8' : '#f5f3ff',
+                            color: noticeTitle === 'TH?C ??N' ? '#10b981' : noticeTitle === 'NGO?I KH?A' ? '#ec4899' : '#8b5cf6'
                           }}>
                             {noticeTitle}
                           </span>

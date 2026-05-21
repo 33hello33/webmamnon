@@ -187,15 +187,17 @@ const LinkPreviewCard = ({ url, isOwnMessage }) => {
         maxWidth: '320px'
       }}
     >
-      <img
-        src={meta.favicon}
-        alt=""
-        width="40"
-        height="40"
-        style={{ borderRadius: '10px', flexShrink: 0, background: '#fff' }}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
+      {meta.favicon ? (
+        <img
+          src={meta.favicon}
+          alt=""
+          width="40"
+          height="40"
+          style={{ borderRadius: '10px', flexShrink: 0, background: '#fff' }}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      ) : null}
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '3px' }}>{meta.title}</div>
         <div

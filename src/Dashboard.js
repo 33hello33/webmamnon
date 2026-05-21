@@ -624,12 +624,14 @@ function Dashboard() {
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <div className="logo-mark" style={{ background: 'transparent' }}>
-              <img
-                src={config?.logo || ''}
-                alt="Logo"
-                style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
+              {config?.logo ? (
+                <img
+                  src={config.logo}
+                  alt="Logo"
+                  style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              ) : null}
             </div>
             {!collapsed && <span className="logo-text">{config?.tenweb || 'EASY4SCHOOL'}</span>}
           </div>

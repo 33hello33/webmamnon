@@ -565,6 +565,20 @@ function ParentPortal({ parentData, setParentData }) {
       };
 
       if (isMobileDevice) {
+         if (navigator.share) {
+            try {
+               await navigator.share({
+                  title: 'Tải ảnh',
+                  text: 'Mở ảnh để lưu về máy',
+                  url: resolvedImageUrl
+               });
+               if (existingWindow) existingWindow.close();
+               return;
+            } catch (error) {
+               console.warn('Direct URL share failed, falling back to blob download flow', error);
+            }
+         }
+
          let mobileBlob = null;
 
          try {
