@@ -9,6 +9,9 @@ import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search } from 'l
 import ParentPortal from './components/ParentPortal';
 import TeacherPortal from './components/TeacherPortal';
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const ONE_MONTH_MS = 30 * ONE_DAY_MS;
+
 function Login() {
    const [username, setUsername] = useState('');
    const [password, setPassword] = useState('');
@@ -17,107 +20,311 @@ function Login() {
    const { config } = useConfig();
    const navigate = useNavigate();
 
-   const [loginMode, setLoginMode] = useState('parent'); // 'parent' | 'login' | 'attendance'
+   const [loginMode, setLoginMode] = useState('parent');
    const [parentData, setParentData] = useState(null);
-   
+
    const [attendanceUser, setAttendanceUser] = useState(null);
    const [attClasses, setAttClasses] = useState([]);
    const [attAllStudents, setAttAllStudents] = useState([]);
+
+   const clearAuthSession = () => {
+      localStorage.removeItem('auth_session');
+   };
+
+   const clearParentSession = () => {
+      localStorage.removeItem('parent_session');
+   };
+
+   const buildAuthSession = (user) => ({
+      user,
+      username: user?.username || '',
+      password: user?.password || '',
+      loginTime: Date.now(),
+      loginType: user?.role === 'Giáo viên' ? 'attendance' : 'dashboard'
+   });
+
+   const persistAuthSession = (user) => {
+      localStorage.setItem('auth_session', JSON.stringify(buildAuthSession(user)));
+   };
+
+   const buildParentSession = (parentSessionData, loginUsername, loginPassword) => ({
+      data: parentSessionData,
+      username: loginUsername || '',
+      password: loginPassword || '',
+      loginTime: Date.now()
+   });
+
+   const persistParentSession = (parentSessionData, loginUsername, loginPassword) => {
+      localStorage.setItem('parent_session', JSON.stringify(buildParentSession(parentSessionData, loginUsername, loginPassword)));
+   };
+
+   const preloadTeacherData = async (user) => {
+      setAttendanceUser(user);
+      setLoginMode('attendance');
+
+      const { data: allCls } = await supabase
+         .from('tbl_lop')
+         .select('*')
+         .or('daxoa.neq."Đã Xóa",daxoa.is.null');
+
+      const teacherClasses = (allCls || []).filter(
+         c => c.manv === user.manv || c.manv === user.username || c.manv === user.tennv || c.manv === user.id
+      );
+      setAttClasses(teacherClasses);
+
+      if (teacherClasses.length > 0) {
+         const classIds = teacherClasses.map(c => c.malop);
+         const { data: allSts } = await supabase
+            .from('tbl_hv')
+            .select('mahv, tenhv, malop, imgpath')
+            .in('malop', classIds)
+            .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+         setAttAllStudents(allSts || []);
+      } else {
+         setAttAllStudents([]);
+      }
+   };
+
+   const authenticateStaff = async (loginUsername, loginPassword) => {
+      const { data, error } = await supabase
+         .from('tbl_nv')
+         .select('*')
+         .eq('username', loginUsername)
+         .eq('password', loginPassword)
+         .maybeSingle();
+
+      if (error) throw new Error('Lỗi kết nối cơ sở dữ liệu.');
+      if (!data) return { ok: false, reason: 'invalid' };
+      if (data.trangthai === 'Đã Nghỉ') return { ok: false, reason: 'inactive' };
+
+      return { ok: true, user: data };
+   };
+
+   const completeStaffLogin = async (user, options = {}) => {
+      const { showSuccessMessage = true } = options;
+      persistAuthSession(user);
+
+      if (user.role === 'Giáo viên') {
+         await preloadTeacherData(user);
+         if (showSuccessMessage) {
+            setMessage({ type: 'success', text: 'Đăng nhập thành công!' });
+         }
+         return;
+      }
+
+      if (showSuccessMessage) {
+         setMessage({ type: 'success', text: 'Đăng nhập thành công! Đang chuyển hướng...' });
+      }
+      navigate('/dashboard');
+   };
+
+   const tryAutoReLogin = async (session) => {
+      const savedUsername = session?.username || session?.user?.username || '';
+      const savedPassword = session?.password || session?.user?.password || '';
+
+      if (!savedUsername) {
+         clearAuthSession();
+         return false;
+      }
+
+      setUsername(savedUsername);
+      setPassword('');
+      setLoginMode('login');
+
+      if (!savedPassword) {
+         clearAuthSession();
+         return false;
+      }
+
+      const result = await authenticateStaff(savedUsername, savedPassword);
+      if (!result.ok) {
+         clearAuthSession();
+         return false;
+      }
+
+      await completeStaffLogin(result.user, { showSuccessMessage: false });
+      return true;
+   };
+
+   const fetchParentPortalData = async (studentRecord) => {
+      const mahv = studentRecord.mahv;
+      const { data: feeData } = await supabase.from('tbl_thongbao').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(1).maybeSingle();
+      const { data: invoices } = await supabase.from('tbl_hd').select('*').eq('mahv', mahv).or('daxoa.neq."Đã xóa",daxoa.is.null').order('ngaylap', { ascending: false }).limit(10);
+      const { data: attendances } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', mahv).order('ngay', { ascending: false }).limit(30);
+
+      let teacherManv = null;
+      let tenLop = null;
+      const { data: classData } = await supabase.from('tbl_lop').select('manv, tenlop').eq('malop', studentRecord.malop).maybeSingle();
+      if (classData) {
+         teacherManv = classData.manv;
+         tenLop = classData.tenlop;
+      } else {
+         const { data: firstNv } = await supabase.from('tbl_nv').select('manv').limit(1).maybeSingle();
+         teacherManv = firstNv?.manv || null;
+      }
+
+      let teacherInfo = null;
+      if (teacherManv) {
+         const { data: nvData } = await supabase.from('tbl_nv').select('tennv, role, sdt').eq('manv', teacherManv).maybeSingle();
+         teacherInfo = nvData;
+      }
+
+      return {
+         student: { ...studentRecord, tenlop: tenLop },
+         latestFee: feeData || null,
+         invoices: invoices || [],
+         attendances: attendances || [],
+         teacherManv,
+         teacherInfo
+      };
+   };
+
+   const authenticateParent = async (loginUsername, loginPassword) => {
+      const { data, error } = await supabase
+         .from('tbl_hv')
+         .select('*')
+         .eq('username', loginUsername)
+         .eq('password', loginPassword)
+         .maybeSingle();
+
+      if (error) throw new Error('Lỗi hệ thống khi tra cứu dữ liệu.');
+      if (!data) return { ok: false };
+
+      return { ok: true, student: data };
+   };
+
+   const completeParentLogin = async (studentRecord, loginUsername, loginPassword) => {
+      const parentDataObj = await fetchParentPortalData(studentRecord);
+      setParentData(parentDataObj);
+      persistParentSession(parentDataObj, loginUsername, loginPassword);
+   };
+
+   const tryAutoParentReLogin = async (session) => {
+      const savedUsername = session?.username || session?.data?.student?.username || '';
+      const savedPassword = session?.password || session?.data?.student?.password || '';
+
+      if (!savedUsername) {
+         clearParentSession();
+         return false;
+      }
+
+      setUsername(savedUsername);
+      setPassword('');
+      setLoginMode('parent');
+
+      if (!savedPassword) {
+         clearParentSession();
+         return false;
+      }
+
+      const result = await authenticateParent(savedUsername, savedPassword);
+      if (!result.ok) {
+         clearParentSession();
+         return false;
+      }
+
+      await completeParentLogin(result.student, savedUsername, savedPassword);
+      return true;
+   };
 
    useEffect(() => {
       const theme = localStorage.getItem('app_theme') || 'kindergarten';
       document.body.setAttribute('data-theme', theme);
 
-      const savedSession = localStorage.getItem('parent_session');
-      if (savedSession) {
+      let isCancelled = false;
+
+      const restoreParentSession = async () => {
+         const savedSession = localStorage.getItem('parent_session');
+         if (!savedSession) return;
+
          try {
             const session = JSON.parse(savedSession);
-            // Parent session persists until logout
-            setParentData(session.data || session); 
+            const currentTime = Date.now();
+
+            if (!session.loginTime || currentTime - session.loginTime < ONE_MONTH_MS) {
+               if (!isCancelled) {
+                  setParentData(session.data || session);
+               }
+               return;
+            }
+
+            const relogged = await tryAutoParentReLogin(session);
+            if (!relogged && !isCancelled) {
+               setMessage({ type: 'error', text: 'Phiên phụ huynh đã hết hạn. Vui lòng nhập lại mật khẩu.' });
+            }
          } catch (e) {
-            localStorage.removeItem('parent_session');
+            clearParentSession();
          }
-      }
+      };
+
+      restoreParentSession();
+
+      return () => {
+         isCancelled = true;
+      };
    }, []);
 
    useEffect(() => {
-      const sessionStr = localStorage.getItem('auth_session');
-      if (sessionStr) {
+      let isCancelled = false;
+
+      const restoreStaffSession = async () => {
+         const sessionStr = localStorage.getItem('auth_session');
+         if (!sessionStr) return;
+
          try {
             const session = JSON.parse(sessionStr);
-            const currentTime = new Date().getTime();
-            const oneDay = 24 * 60 * 60 * 1000;
-            if (currentTime - session.loginTime < oneDay) {
+            const currentTime = Date.now();
+
+            if (currentTime - session.loginTime < ONE_DAY_MS) {
+               if (session.loginType === 'attendance' || session.user?.role === 'Giáo viên') {
+                  if (!isCancelled) {
+                     await preloadTeacherData(session.user);
+                  }
+                  return;
+               }
+
                navigate('/dashboard');
-            } else {
-               localStorage.removeItem('auth_session');
+               return;
+            }
+
+            const relogged = await tryAutoReLogin(session);
+            if (!relogged && !isCancelled) {
+               setMessage({ type: 'error', text: 'Phiên đăng nhập đã hết hạn. Vui lòng nhập lại mật khẩu.' });
             }
          } catch (e) {
-            localStorage.removeItem('auth_session');
+            clearAuthSession();
          }
-      }
+      };
+
+      restoreStaffSession();
+
+      return () => {
+         isCancelled = true;
+      };
    }, [navigate]);
 
    const handleParentLogin = async (e) => {
       e.preventDefault();
       if (!username || !password) {
-         setMessage({ type: 'error', text: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.' });
+         setMessage({ type: 'error', text: 'Vui l�ng nh?p d?y d? t�n dang nh?p v� m?t kh?u.' });
          return;
       }
+
       setLoading(true);
       setMessage({ type: '', text: '' });
       try {
-         const { data: stData, error: stErr } = await supabase
-            .from('tbl_hv')
-            .select('*')
-            .eq('username', username)
-            .eq('password', password)
-            .maybeSingle();
+         const result = await authenticateParent(username, password);
 
-         if (stErr || !stData) {
-            setMessage({ type: 'error', text: 'Tên đăng nhập hoặc mật khẩu phụ huynh không đúng.' });
+         if (!result.ok) {
+            setMessage({ type: 'error', text: 'T�n dang nh?p ho?c m?t kh?u ph? huynh kh�ng d�ng.' });
             setLoading(false);
             return;
          }
 
-         const mahv = stData.mahv;
-         const { data: feeData } = await supabase.from('tbl_thongbao').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(1).maybeSingle();
-         const { data: invoices } = await supabase.from('tbl_hd').select('*').eq('mahv', mahv).or('daxoa.neq."Đã xóa",daxoa.is.null').order('ngaylap', { ascending: false }).limit(10);
-         const { data: attendances } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', mahv).order('ngay', { ascending: false }).limit(30);
-
-         let teacherManv = null;
-         let tenLop = null;
-         const { data: classData } = await supabase.from('tbl_lop').select('manv, tenlop').eq('malop', stData.malop).maybeSingle();
-         if (classData) {
-            teacherManv = classData.manv;
-            tenLop = classData.tenlop;
-         } else {
-            const { data: firstNv } = await supabase.from('tbl_nv').select('manv').limit(1).maybeSingle();
-            teacherManv = firstNv?.manv || null;
-         }
-
-         let teacherInfo = null;
-         if (teacherManv) {
-            const { data: nvData } = await supabase.from('tbl_nv').select('tennv, role, sdt').eq('manv', teacherManv).maybeSingle();
-            teacherInfo = nvData;
-         }
-
-         const parentDataObj = {
-            student: { ...stData, tenlop: tenLop },
-            latestFee: feeData || null,
-            invoices: invoices || [],
-            attendances: attendances || [],
-            teacherManv: teacherManv,
-            teacherInfo: teacherInfo
-         };
-         setParentData(parentDataObj);
-
-         localStorage.setItem('parent_session', JSON.stringify({
-            data: parentDataObj
-         }));
+         await completeParentLogin(result.student, username, password);
       } catch (err) {
          console.error(err);
-         setMessage({ type: 'error', text: 'Lỗi hệ thống khi tra cứu dữ liệu.' });
+         setMessage({ type: 'error', text: 'L?i h? th?ng khi tra c?u d? li?u.' });
       }
       setLoading(false);
    };
@@ -128,42 +335,25 @@ function Login() {
          setMessage({ type: 'error', text: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.' });
          return;
       }
-      setLoading(true); setMessage({ type: '', text: '' });
+
+      setLoading(true);
+      setMessage({ type: '', text: '' });
+
       try {
-         const { data, error } = await supabase.from('tbl_nv').select('*').eq('username', username).eq('password', password);
-         if (error) {
-            setMessage({ type: 'error', text: 'Lỗi kết nối cơ sở dữ liệu.' });
-         } else if (data && data.length > 0) {
-            const user = data[0];
-            if (user.trangthai === 'Đã Nghỉ') {
+         const result = await authenticateStaff(username, password);
+         if (!result.ok) {
+            if (result.reason === 'inactive') {
                setMessage({ type: 'error', text: 'Tài khoản đã nghỉ việc.' });
-            } else if (user.role === 'Giáo viên') {
-               setAttendanceUser(user);
-               setLoginMode('attendance');
-               const { data: allCls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
-               if (allCls) {
-                  const teacherClasses = allCls.filter(c => c.manv === user.manv || c.manv === user.username || c.manv === user.tennv || c.manv === user.id);
-                  setAttClasses(teacherClasses);
-                  
-                  if (teacherClasses.length > 0) {
-                     const classIds = teacherClasses.map(c => c.malop);
-                     const { data: allSts } = await supabase.from('tbl_hv').select('mahv, tenhv, malop, imgpath').in('malop', classIds).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
-                     if (allSts) setAttAllStudents(allSts);
-                  }
-               }
-               setMessage({ type: 'success', text: 'Đăng nhập thành công!' });
             } else {
-               setMessage({ type: 'success', text: `Đăng nhập thành công! Đang chuyển hướng...` });
-               const sessionData = { user, loginTime: new Date().getTime() };
-               localStorage.setItem('auth_session', JSON.stringify(sessionData));
-               setTimeout(() => navigate('/dashboard'), 1000);
+               setMessage({ type: 'error', text: 'Tên đăng nhập hoặc mật khẩu không đúng.' });
             }
-         } else {
-            setMessage({ type: 'error', text: 'Tên đăng nhập hoặc mật khẩu không đúng.' });
+            return;
          }
+
+         await completeStaffLogin(result.user);
       } catch (err) {
          console.error(err);
-         setMessage({ type: 'error', text: 'Đã xảy ra lỗi không xác định.' });
+         setMessage({ type: 'error', text: err.message || 'Đã xảy ra lỗi không xác định.' });
       } finally {
          setLoading(false);
       }
@@ -199,7 +389,7 @@ function Login() {
                      className={`login-tab-btn ${loginMode === 'login' || loginMode === 'attendance' ? 'active' : ''}`}
                      onClick={() => { setLoginMode('login'); setMessage({ type: '', text: '' }); }}
                      style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
-                     Nhân Viên
+                     Giáo Viên
                   </button>
                </div>
             )}
@@ -229,7 +419,7 @@ function Login() {
                   <form onSubmit={loginMode === 'login' ? handleLogin : handleParentLogin} className="login-form">
                      <div className="input-group">
                         <div className="input-icon"><User size={18} /></div>
-                        <input type="text" placeholder={loginMode === 'login' ? "Tên đăng nhập nhân viên" : "Tên đăng nhập phụ huynh"} value={username} onChange={(e) => setUsername(e.target.value)} />
+                        <input type="text" placeholder={loginMode === 'login' ? 'Tên đăng nhập nhân viên' : 'Tên đăng nhập phụ huynh'} value={username} onChange={(e) => setUsername(e.target.value)} />
                      </div>
 
                      <div className="input-group">
@@ -256,7 +446,12 @@ function Login() {
                      if ('clearAppBadge' in navigator) {
                         navigator.clearAppBadge().catch(console.error);
                      }
+                     clearAuthSession();
                      setAttendanceUser(null);
+                     setAttClasses([]);
+                     setAttAllStudents([]);
+                     setLoginMode('login');
+                     setUsername('');
                      setPassword('');
                   }}
                />

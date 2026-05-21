@@ -315,7 +315,8 @@ function Dashboard() {
       const oneDay = 24 * 60 * 60 * 1000;
 
       if (currentTime - session.loginTime > oneDay) {
-        localStorage.removeItem('auth_session');
+        navigate('/login');
+      } else if (session.loginType === 'attendance' || session.user?.role === 'Giáo viên') {
         navigate('/login');
       } else {
         setUser(session.user);
