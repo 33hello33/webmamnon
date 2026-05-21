@@ -4,6 +4,8 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2, deleteFromR2 } from '../utils/cloudflareR2';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import ChatMessageContent from './ChatMessageContent';
+import ChatMediaAttachment from './ChatMediaAttachment';
 import {
   MessageSquare,
   Send,
@@ -487,7 +489,6 @@ const ChatManager = ({ currentUser }) => {
     if (!error && data) {
       await triggerPushNotification(supabase, 'hv_messages', data[0]);
       setInputText('');
-      setMessages(prev => [...prev, data[0]]);
       setTimeout(scrollToBottom, 50);
     }
   };
@@ -540,7 +541,6 @@ const ChatManager = ({ currentUser }) => {
       const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
       if (data) {
         await triggerPushNotification(supabase, 'hv_messages', data[0]);
-        setMessages(prev => [...prev, data[0]]);
       }
 
       const newDoc = {
@@ -1100,7 +1100,11 @@ ${ngoaiKhoaForm.content}
                         <div className="message-bubble">
                            {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
                            {m.description === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
-                           {m.content && <div className="msg-text">{m.content}</div>}
+                           {m.content && (
+                             <div className="msg-text">
+                               <ChatMessageContent content={m.content} isOwnMessage={isMine} />
+                             </div>
+                           )}
                            {m.image_url && (
                              <div className="msg-image">
                                <img 
@@ -1111,11 +1115,7 @@ ${ngoaiKhoaForm.content}
                                />
                              </div>
                            )}
-                           {m.file_url && (
-                             <div className="msg-file" onClick={() => window.open(m.file_url)}>
-                               <FileText size={20} /> <span>{m.file_name}</span>
-                             </div>
-                           )}
+                           {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMine} />}
                            <div className="msg-time">{formatTime(new Date(m.created_at))}</div>
                         </div>
 

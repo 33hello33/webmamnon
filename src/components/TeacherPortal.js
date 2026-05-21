@@ -4,6 +4,8 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import ChatMessageContent from './ChatMessageContent';
+import ChatMediaAttachment from './ChatMediaAttachment';
 import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
@@ -27,6 +29,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (!message) return '--';
       if (message.content) return message.content;
       if (message.image_url) return '[Hình ảnh]';
+      if (message.file_mime_type?.toLowerCase().startsWith('video/')) return '[Video]';
       if (message.file_url) return '[Tài liệu]';
       return '...';
    };
@@ -583,7 +586,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (!error && data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setAttChatInput('');
-         setAttChatMessages(prev => [...prev, data[0]]);
          setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
       }
    };
@@ -622,7 +624,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
          if (data) {
             await triggerPushNotification(supabase, 'hv_messages', data[0]);
-            setAttChatMessages(prev => [...prev, data[0]]);
             setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
          }
 
@@ -1084,7 +1085,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                              background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b',
                                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)', fontSize: '0.9rem', lineHeight: 1.4
                                           }}>
-                                             {m.content}
+                                             <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                                           </div>
                                        )}
                                        {m.image_url && (
@@ -1092,17 +1093,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                              <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '250px', display: 'block' }} />
                                           </div>
                                        )}
-                                       {m.file_url && (
-                                          <a href={m.file_url} target="_blank" rel="noreferrer" style={{
-                                             marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                             background: isMe ? '#be185d' : '#f1f5f9', color: isMe ? 'white' : '#1e293b',
-                                             borderRadius: '10px', textDecoration: 'none', fontSize: '0.8rem'
-                                          }}>
-                                             <FileText size={16} />
-                                             <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name || 'Tài liệu'}</span>
-                                             <Download size={14} />
-                                          </a>
-                                       )}
+                                       {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
                                        <span style={{ fontSize: '0.6rem', color: '#94a3b8', marginTop: '2px' }}>
                                           {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                        </span>

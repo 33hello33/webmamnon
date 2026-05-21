@@ -4,6 +4,8 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import ChatMessageContent from './ChatMessageContent';
+import ChatMediaAttachment from './ChatMediaAttachment';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 
 function ParentPortal({ parentData, setParentData }) {
@@ -50,6 +52,18 @@ function ParentPortal({ parentData, setParentData }) {
    const [staffDirectory, setStaffDirectory] = useState({});
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
+
+   const getDisplayUrl = (url) => {
+      if (!url) return '';
+      if (url.includes('drive.google.com/')) {
+         let id = '';
+         if (url.includes('id=')) id = url.split('id=')[1]?.split('&')[0];
+         else if (url.includes('/d/')) id = url.split('/d/')[1]?.split('/')[0];
+
+         if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+      }
+      return url;
+   };
 
    const getStaffDisplayName = (staffId) => {
       if (!staffId) return 'Nhà trường';
@@ -238,7 +252,7 @@ function ParentPortal({ parentData, setParentData }) {
       }
       if (data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
-         setChatMessages(prev => [...prev, data[0]]);
+         setChatInput('');
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
    };
@@ -455,11 +469,13 @@ function ParentPortal({ parentData, setParentData }) {
       if (!imageUrl) return;
 
       const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isStandaloneMode = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone;
+      const resolvedImageUrl = getDisplayUrl(imageUrl);
 
       // Mobile and desktop flows are handled separately below.
       if (false && isMobileDevice && navigator.share && navigator.canShare) {
          try {
-            const response = await fetch(imageUrl);
+            const response = await fetch(resolvedImageUrl);
             const blob = await response.blob();
             const file = new File([blob], filename, { type: blob.type });
             if (navigator.canShare({ files: [file] })) {
@@ -477,11 +493,11 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // 2. Direct Supabase Storage Download (Bypasses CORS entirely and downloads directly in background)
-      if (!isMobileDevice && imageUrl.includes('supabase.co')) {
+      if (!isMobileDevice && resolvedImageUrl.includes('supabase.co')) {
          try {
             if (existingWindow) existingWindow.close();
-            const separator = imageUrl.includes('?') ? '&' : '?';
-            const downloadUrl = `${imageUrl}${separator}download=`;
+            const separator = resolvedImageUrl.includes('?') ? '&' : '?';
+            const downloadUrl = `${resolvedImageUrl}${separator}download=`;
             
             const link = document.createElement('a');
             link.href = downloadUrl;
@@ -505,17 +521,27 @@ function ParentPortal({ parentData, setParentData }) {
          window.URL.revokeObjectURL(blobUrl);
       };
 
-      const openImageForDeviceSave = (blob) => {
-         const blobUrl = window.URL.createObjectURL(blob);
+      const openImageForDeviceSave = (blob, fallbackUrl = resolvedImageUrl) => {
+         const blobUrl = blob ? window.URL.createObjectURL(blob) : '';
+         const targetUrl = blobUrl || fallbackUrl;
+
+         if (isMobileDevice && isStandaloneMode) {
+            window.location.href = targetUrl;
+            return;
+         }
+
          if (existingWindow) {
-            existingWindow.location.href = blobUrl;
+            existingWindow.location.href = targetUrl;
          } else {
-            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+            window.open(targetUrl, '_blank', 'noopener,noreferrer');
          }
       };
 
       const downloadRemoteBlob = async (url) => {
-         const response = await fetch(url);
+         const response = await fetch(url, { credentials: 'omit' });
+         if (!response.ok) {
+            throw new Error(`Download failed with status ${response.status}`);
+         }
          return response.blob();
       };
 
@@ -542,11 +568,11 @@ function ParentPortal({ parentData, setParentData }) {
          let mobileBlob = null;
 
          try {
-            mobileBlob = await downloadRemoteBlob(imageUrl);
+            mobileBlob = await downloadRemoteBlob(resolvedImageUrl);
          } catch (error) {
             console.warn('Direct mobile fetch failed, trying proxy...', error);
             try {
-               mobileBlob = await downloadViaCorsProxy(imageUrl);
+               mobileBlob = await downloadViaCorsProxy(resolvedImageUrl);
             } catch (proxyError) {
                console.warn('Proxy mobile fetch failed, opening original image...', proxyError);
             }
@@ -566,26 +592,42 @@ function ParentPortal({ parentData, setParentData }) {
                      if (existingWindow) existingWindow.close();
                      return;
                   }
-               } catch (error) {
+                } catch (error) {
                   console.warn('Web Share failed, falling back to image preview', error);
+                }
+
+               try {
+                  await navigator.share({
+                     title: 'Tải ảnh',
+                     text: 'Mở ảnh để lưu về máy',
+                     url: resolvedImageUrl
+                  });
+                  if (existingWindow) existingWindow.close();
+                  return;
+               } catch (error) {
+                  console.warn('URL share failed, falling back to image preview', error);
                }
             }
 
-            openImageForDeviceSave(mobileBlob);
+            openImageForDeviceSave(mobileBlob, resolvedImageUrl);
             return;
          }
 
          if (existingWindow) {
-            existingWindow.location.href = imageUrl;
+            existingWindow.location.href = resolvedImageUrl;
          } else {
-            window.open(imageUrl, '_blank', 'noopener,noreferrer');
+            if (isStandaloneMode) {
+               window.location.href = resolvedImageUrl;
+            } else {
+               window.open(resolvedImageUrl, '_blank', 'noopener,noreferrer');
+            }
          }
          return;
       }
 
       // 3. Desktop standard flow: Try direct fetch first (if CORS allowed on origin)
       try {
-         const blob = await downloadRemoteBlob(imageUrl);
+         const blob = await downloadRemoteBlob(resolvedImageUrl);
          triggerLocalDownload(blob, filename);
          if (existingWindow) existingWindow.close();
          return;
@@ -595,7 +637,7 @@ function ParentPortal({ parentData, setParentData }) {
 
       // 4. Try via corsproxy.io
       try {
-         const blob = await downloadViaCorsProxy(imageUrl);
+         const blob = await downloadViaCorsProxy(resolvedImageUrl);
          triggerLocalDownload(blob, filename);
          if (existingWindow) existingWindow.close();
          return;
@@ -605,9 +647,9 @@ function ParentPortal({ parentData, setParentData }) {
 
       // 6. Ultimate Fallback: Open in new/existing tab for manual right-click save
       if (existingWindow) {
-         existingWindow.location.href = imageUrl;
+         existingWindow.location.href = resolvedImageUrl;
       } else {
-         window.open(imageUrl, '_blank', 'noopener,noreferrer');
+         window.open(resolvedImageUrl, '_blank', 'noopener,noreferrer');
       }
    };
 
@@ -1090,7 +1132,6 @@ function ParentPortal({ parentData, setParentData }) {
       if (data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
-         setChatMessages(prev => [...prev, data[0]]);
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
    };
@@ -1132,7 +1173,6 @@ function ParentPortal({ parentData, setParentData }) {
          const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
          if (data) {
             await triggerPushNotification(supabase, 'hv_messages', data[0]);
-            setChatMessages(prev => [...prev, data[0]]);
          }
 
          const newDoc = {
@@ -1328,7 +1368,7 @@ function ParentPortal({ parentData, setParentData }) {
                                           style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', cursor: 'zoom-in', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
                                           onClick={() => setPreviewImage(notice.image_url)}
                                        >
-                                          <img src={notice.image_url} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} />
+                                          <img src={getDisplayUrl(notice.image_url)} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
                                        </div>
                                     )}
 
@@ -1368,7 +1408,7 @@ function ParentPortal({ parentData, setParentData }) {
                                              style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
                                              onClick={() => setPreviewImage(menu.image_url)}
                                           >
-                                             <img src={menu.image_url} alt="menu" style={{ width: '100%', display: 'block' }} />
+                                             <img src={getDisplayUrl(menu.image_url)} alt="menu" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                           </div>
                                        )}
                                     </div>
@@ -1417,7 +1457,7 @@ function ParentPortal({ parentData, setParentData }) {
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
                                                 onClick={() => setPreviewImage(item.image_url)}
                                              >
-                                                <img src={item.image_url} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} />
+                                                <img src={getDisplayUrl(item.image_url)} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                              </div>
                                           )}
 
@@ -1517,7 +1557,7 @@ function ParentPortal({ parentData, setParentData }) {
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
                                                 onClick={() => setPreviewImage(item.image_url)}
                                              >
-                                                <img src={item.image_url} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} />
+                                                <img src={getDisplayUrl(item.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                              </div>
                                           )}
                                        </div>
@@ -1789,7 +1829,7 @@ function ParentPortal({ parentData, setParentData }) {
                                        </div>
                                        {m.content && (
                                           <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                                             {m.content}
+                                             <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                                           </div>
                                        )}
                                        {m.image_url && (
@@ -1797,16 +1837,10 @@ function ParentPortal({ parentData, setParentData }) {
                                              style={{ marginTop: '5px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', cursor: 'zoom-in' }}
                                              onClick={() => setPreviewImage(m.image_url)}
                                           >
-                                             <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} />
+                                             <img src={getDisplayUrl(m.image_url)} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
                                           </div>
                                        )}
-                                       {m.file_url && (
-                                          <a href={m.file_url} target="_blank" rel="noreferrer" style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: isMe ? '#be185d' : '#f1f5f9', color: isMe ? 'white' : '#1e293b', borderRadius: '12px', textDecoration: 'none', fontSize: '0.85rem' }}>
-                                             <FileText size={18} />
-                                             <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name || 'Tài liệu'}</span>
-                                             <Download size={16} />
-                                          </a>
-                                       )}
+                                       {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
                                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '4px', fontWeight: 600 }}>
                                           {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                        </span>
@@ -1984,9 +2018,10 @@ function ParentPortal({ parentData, setParentData }) {
                   </button>
                </div>
                <img 
-                  src={previewImage} 
+                  src={getDisplayUrl(previewImage)} 
                   alt="Preview" 
                   style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} 
+                  referrerPolicy="no-referrer"
                   onClick={e => e.stopPropagation()}
                />
             </div>
