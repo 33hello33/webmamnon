@@ -1263,7 +1263,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                     <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                                  </label>
                               </div>
-                              <input type="text" placeholder="Nh???p tin nh???n..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '16px', outline: 'none' }} />
+                              <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '16px', outline: 'none' }} />
                               <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '36px', height: '36px', minWidth: '36px', flexShrink: 0, borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1 }}>
                                  {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                               </button>

@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-const CACHE_NAME = 'kindergarten-v1';
+const CACHE_NAME = 'kindergarten-v2';
 const META_CACHE_NAME = 'kindergarten-meta-v1';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
@@ -13,13 +13,54 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
   );
 });
 
+self.addEventListener('activate', event => {
+  const cacheWhitelist = [CACHE_NAME, META_CACHE_NAME];
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (!cacheWhitelist.includes(cacheName)) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+          return null;
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+
+  // Use Network-First strategy for the root HTML files so users always get the latest version
+  if (url.origin === self.location.origin && (url.pathname === '/' || url.pathname === '/index.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response && response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // Cache-First strategy for other static resources in urlsToCache
   event.respondWith(
     caches.match(event.request)
       .then(response => {
