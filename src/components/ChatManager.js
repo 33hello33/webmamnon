@@ -2211,7 +2211,9 @@ ${ngoaiKhoaForm.content}
                   <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Chưa có bản tin nào được đăng.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', padding: '5px' }}>
-                    {historyNotices.map(notice => (
+                    {historyNotices.map(notice => {
+                      const noticeTitle = notice.title || 'THÔNG BÁO';
+                      return (
                       <div key={notice.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '15px', position: 'relative' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                           <span style={{ 
@@ -2222,7 +2224,7 @@ ${ngoaiKhoaForm.content}
                             background: notice.title === 'THỰC ĐƠN' ? '#f0fdf4' : notice.title === 'NGOẠI KHÓA' ? '#fdf2f8' : '#f5f3ff',
                             color: notice.title === 'THỰC ĐƠN' ? '#10b981' : notice.title === 'NGOẠI KHÓA' ? '#ec4899' : '#8b5cf6'
                           }}>
-                            {notice.title}
+                            {noticeTitle}
                           </span>
                           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{new Date(notice.created_at).toLocaleString('vi-VN')}</span>
                         </div>
@@ -2242,7 +2244,7 @@ ${ngoaiKhoaForm.content}
                           <Trash2 size={14} /> Thu hồi
                         </button>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
              </div>

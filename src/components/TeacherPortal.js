@@ -161,6 +161,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [uploading, setUploading] = useState(false);
    const [isMobileChatView, setIsMobileChatView] = useState(() => window.innerWidth <= 768);
    const [attStaffDirectory, setAttStaffDirectory] = useState({});
+   const [isClassBroadcastOpen, setIsClassBroadcastOpen] = useState(false);
+   const [classBroadcastText, setClassBroadcastText] = useState('');
+   const [classBroadcastImage, setClassBroadcastImage] = useState(null);
+   const [classBroadcastClassId, setClassBroadcastClassId] = useState('');
 
    const syncAppBadge = (count) => {
       const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -642,6 +646,139 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
    };
 
+   const getBroadcastClassOptions = () => {
+      const classMap = new Map();
+
+      attAllStudents.forEach((student) => {
+         if (!student?.mahv || !student?.malop || classMap.has(student.malop)) return;
+         classMap.set(student.malop, {
+            malop: student.malop,
+            label: getClassDisplayName(student.malop)
+         });
+      });
+
+      return Array.from(classMap.values());
+   };
+
+   const openClassBroadcastModal = () => {
+      const classOptions = getBroadcastClassOptions();
+      if (classOptions.length === 0) {
+         window.alert('Kh\u00f4ng c\u00f3 l\u1edbp n\u00e0o \u0111\u1ec3 g\u1eedi th\u00f4ng b\u00e1o.');
+         return;
+      }
+
+      setClassBroadcastClassId(attChatSelectedStudent?.malop || classBroadcastClassId || classOptions[0].malop);
+      setIsClassBroadcastOpen(true);
+   };
+
+   const closeClassBroadcastModal = () => {
+      setIsClassBroadcastOpen(false);
+      setClassBroadcastText('');
+      setClassBroadcastImage(null);
+      setClassBroadcastClassId('');
+   };
+
+   const handleClassBroadcastImageChange = (e) => {
+      const selectedFile = e.target.files?.[0] || null;
+      setClassBroadcastImage(selectedFile);
+      e.target.value = '';
+   };
+
+   const handleBroadcastToClass = async (e) => {
+      e.preventDefault();
+      if (!attendanceUser) return;
+
+      const messageText = classBroadcastText.trim();
+      if (false && !messageText && !classBroadcastImage) {
+         window.alert('Vui lòng nhập nội dung hoặc chọn hình để gửi.');
+         return;
+      }
+
+      if (!messageText && !classBroadcastImage) {
+         window.alert('Vui l\u00f2ng nh\u1eadp n\u1ed9i dung ho\u1eb7c ch\u1ecdn h\u00ecnh \u0111\u1ec3 g\u1eedi.');
+         return;
+      }
+
+      if (!classBroadcastClassId) {
+         window.alert('Vui l\u00f2ng ch\u1ecdn l\u1edbp c\u1ea7n g\u1eedi.');
+         return;
+      }
+
+      const classStudents = attAllStudents.filter(
+         (student) => student?.mahv && student.malop === classBroadcastClassId
+      );
+
+      if (classStudents.length === 0) {
+         window.alert('Kh\u00f4ng t\u00ecm th\u1ea5y h\u1ecdc sinh n\u00e0o trong l\u1edbp n\u00e0y.');
+         return;
+      }
+      setUploading(true);
+      try {
+         let uploadedImageUrl = null;
+         let uploadedImageName = null;
+         let uploadedImageType = null;
+
+         if (classBroadcastImage) {
+            let file = classBroadcastImage;
+            try {
+               file = await compressImage(classBroadcastImage, 150);
+            } catch (err) { }
+
+            if (config.r2_enabled) {
+               uploadedImageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+            } else {
+               const fileName = `${classBroadcastClassId || 'class'}_${Date.now()}_${file.name}`;
+               const { error } = await supabase.storage.from('assets').upload(`chat-images/${fileName}`, file);
+               if (error) throw error;
+               const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`chat-images/${fileName}`);
+               uploadedImageUrl = publicUrl;
+            }
+
+            uploadedImageName = classBroadcastImage.name;
+            uploadedImageType = classBroadcastImage.type;
+         }
+
+         const staffId = attendanceUser.manv || attendanceUser.username;
+         const payloads = [{
+            malop: classBroadcastClassId,
+            manv: staffId,
+            title: 'THÔNG BÁO',
+            content: messageText,
+            image_url: uploadedImageUrl,
+            file_url: null,
+            file_name: uploadedImageName,
+            file_mime_type: uploadedImageType
+         }];
+
+         const { data: insertedAnnouncements, error: insertError } = await supabase.from('class_announcements').insert(payloads).select();
+         if (insertError) throw insertError;
+
+         for (const announcement of insertedAnnouncements || []) {
+            await triggerPushNotification(supabase, 'class_announcements', announcement);
+         }
+
+         if (false && uploadedImageUrl) {
+            const documentPayloads = classStudents.map((student) => ({
+               mahv: student.mahv,
+               name: uploadedImageName || 'Thong bao lop',
+               category: 'Ảnh',
+               file_url: uploadedImageUrl,
+               mime_type: uploadedImageType
+            }));
+            await supabase.from('documents').insert(documentPayloads);
+         }
+
+         closeClassBroadcastModal();
+         setTimeout(() => {
+            if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
+         }, 100);
+      } catch (err) {
+         window.alert('L\u1ed7i khi g\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp: ' + err.message);
+      } finally {
+         setUploading(false);
+      }
+   };
+
    return (
       <div className="attendance-portal" style={{ textAlign: 'left', animation: 'fadeIn 0.3s ease' }}>
          <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
@@ -862,9 +999,20 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   <div className="chat-dashboard" style={{ padding: '0', background: 'transparent' }}>
                      <div className="chat-filters-row" style={{ marginBottom: '1.5rem', gap: '1rem', display: 'flex', flexDirection: isMobileChatView ? 'column' : 'row' }}>
                         <div className="filter-group">
-                           <div className="search-input-wrapper" style={{ width: '100%', maxWidth: isMobileChatView ? '100%' : '300px' }}>
-                              <Search size={18} className="search-icon-inside" />
-                              <input type="text" placeholder="TÌM THEO TÊN/MÃ..." value={attSearchQuery} onChange={(e) => setAttSearchQuery(e.target.value)} />
+                           <div style={{ display: 'flex', gap: '0.75rem', flexDirection: isMobileChatView ? 'column' : 'row', alignItems: isMobileChatView ? 'stretch' : 'center' }}>
+                              <div className="search-input-wrapper" style={{ width: '100%', maxWidth: isMobileChatView ? '100%' : '300px' }}>
+                                 <Search size={18} className="search-icon-inside" />
+                                 <input type="text" placeholder={'T\u00ecm theo t\u00ean/m\u00e3...'} value={attSearchQuery} onChange={(e) => setAttSearchQuery(e.target.value)} />
+                              </div>
+                              <button
+                                 type="button"
+                                 onClick={openClassBroadcastModal}
+                                 title={'G\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp'}
+                                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1rem', minWidth: isMobileChatView ? '100%' : '160px', background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: '12px', color: '#be185d', cursor: 'pointer', fontWeight: 700 }}
+                              >
+                                 <Bell size={16} />
+                                 <span>{'G\u1eedi c\u1ea3 l\u1edbp'}</span>
+                              </button>
                            </div>
                         </div>
                         <div className="filter-group">
@@ -1104,19 +1252,19 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         </div>
 
                         <div style={{ padding: '0.75rem 1rem', background: 'white', borderTop: '1px solid #e2e8f0' }}>
-                           <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ display: 'flex', gap: '2px' }}>
-                                 <label style={{ cursor: 'pointer', padding: '6px', color: '#64748b' }}>
+                           <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: isMobileChatView ? '6px' : '8px', width: '100%' }}>
+                              <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                                 <label style={{ cursor: 'pointer', padding: '6px', color: '#64748b', flexShrink: 0 }}>
                                     <Image size={20} />
                                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'image')} disabled={uploading} />
                                  </label>
-                                 <label style={{ cursor: 'pointer', padding: '6px', color: '#64748b' }}>
+                                 <label style={{ cursor: 'pointer', padding: '6px', color: '#64748b', flexShrink: 0 }}>
                                     <Paperclip size={20} />
                                     <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                                  </label>
                               </div>
-                              <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '16px', outline: 'none' }} />
-                              <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1 }}>
+                              <input type="text" placeholder="Nh???p tin nh???n..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '16px', outline: 'none' }} />
+                              <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '36px', height: '36px', minWidth: '36px', flexShrink: 0, borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1 }}>
                                  {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                               </button>
                            </form>
@@ -1124,6 +1272,80 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </div>
                   </div>
                )}
+            </div>
+         )}
+
+         {isClassBroadcastOpen && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+               <div style={{ width: '100%', maxWidth: '520px', background: 'white', borderRadius: '20px', boxShadow: '0 25px 50px rgba(15, 23, 42, 0.25)', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
+                     <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{'G\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp'}</h3>
+                        <div style={{ marginTop: '0.25rem', fontSize: '0.82rem', color: '#64748b' }}>
+                           {'L\u1edbp'} {getClassDisplayName(classBroadcastClassId)} {'\u2022'} {attAllStudents.filter(student => student?.mahv && student.malop === classBroadcastClassId).length} {'h\u1ecdc sinh'}
+                        </div>
+                     </div>
+                     <button type="button" onClick={closeClassBroadcastModal} style={{ width: '34px', height: '34px', borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <X size={18} />
+                     </button>
+                  </div>
+
+                  <form onSubmit={handleBroadcastToClass} style={{ padding: '1.25rem', display: 'grid', gap: '1rem' }}>
+                     <select
+                        value={classBroadcastClassId}
+                        onChange={(e) => setClassBroadcastClassId(e.target.value)}
+                        style={{ width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', background: 'white' }}
+                     >
+                        {getBroadcastClassOptions().map((cls) => (
+                           <option key={cls.malop} value={cls.malop}>
+                              {cls.label}
+                           </option>
+                        ))}
+                     </select>
+
+                     <textarea
+                        value={classBroadcastText}
+                        onChange={(e) => setClassBroadcastText(e.target.value)}
+                        placeholder={'Nh\u1eadp n\u1ed9i dung th\u00f4ng b\u00e1o cho c\u1ea3 l\u1edbp...'}
+                        rows={5}
+                        style={{ width: '100%', resize: 'vertical', minHeight: '130px', padding: '0.9rem 1rem', borderRadius: '16px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', lineHeight: 1.5, fontFamily: 'inherit' }}
+                     />
+
+                     <div style={{ display: 'grid', gap: '0.75rem' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', padding: '0.85rem 1rem', borderRadius: '14px', border: '1px dashed #f9a8d4', background: '#fdf2f8', color: '#be185d', cursor: 'pointer', fontWeight: 700 }}>
+                           <Image size={18} />
+                           <span>{'Ch\u1ecdn h\u00ecnh th\u00f4ng b\u00e1o'}</span>
+                           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleClassBroadcastImageChange} disabled={uploading} />
+                        </label>
+
+                        {classBroadcastImage && (
+                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.75rem 0.9rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fed7aa', color: '#9a3412' }}>
+                              <div style={{ minWidth: 0 }}>
+                                 <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>{'H\u00ecnh \u0111\u00e3 ch\u1ecdn'}</div>
+                                 <div style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{classBroadcastImage.name}</div>
+                              </div>
+                              <button type="button" onClick={() => setClassBroadcastImage(null)} style={{ border: 'none', background: 'transparent', color: '#9a3412', cursor: 'pointer', fontWeight: 700 }}>
+                                 {'B\u1ecf'}
+                              </button>
+                           </div>
+                        )}
+                     </div>
+
+                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                        <button type="button" onClick={closeClassBroadcastModal} disabled={uploading} style={{ padding: '0.8rem 1.1rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', cursor: 'pointer', fontWeight: 700 }}>
+                           {'H\u1ee7y'}
+                        </button>
+                        <button
+                           type="submit"
+                           disabled={uploading || (!classBroadcastText.trim() && !classBroadcastImage)}
+                           style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && !classBroadcastImage) ? 0.65 : 1 }}
+                        >
+                           {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                           <span>{'G\u1eedi t\u1edbi c\u1ea3 l\u1edbp'}</span>
+                        </button>
+                     </div>
+                  </form>
+               </div>
             </div>
          )}
       </div>
