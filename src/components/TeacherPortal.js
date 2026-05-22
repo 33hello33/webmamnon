@@ -451,6 +451,33 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
    };
 
+   const markTeacherThreadAsRead = async (studentId) => {
+      if (!studentId) return;
+
+      setAttUnreadCounts(prev => {
+         if (!prev[studentId]) return prev;
+         const next = { ...prev };
+         delete next[studentId];
+         return next;
+      });
+
+      await supabase
+         .from('hv_messages')
+         .update({ is_read: true })
+         .eq('mahv', studentId)
+         .is('is_read', false);
+
+      fetchAttUnreads();
+   };
+
+   const openTeacherChatThread = async (student) => {
+      if (!student?.mahv) return;
+
+      setAttChatSelectedStudent(student);
+      setAttChatView('chat');
+      await markTeacherThreadAsRead(student.mahv);
+   };
+
    const fetchAttSummaries = async () => {
       if (!attendanceUser) return;
 
@@ -595,13 +622,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    useEffect(() => {
       if (attTab === 'chat' && attChatSelectedStudent) {
          const markAsRead = async () => {
-            setAttUnreadCounts(prev => {
-               const next = { ...prev };
-               delete next[attChatSelectedStudent.mahv];
-               return next;
-            });
-            await supabase.from('hv_messages').update({ is_read: true }).eq('mahv', attChatSelectedStudent.mahv).is('is_read', false);
-            fetchAttUnreads();
+            await markTeacherThreadAsRead(attChatSelectedStudent.mahv);
          };
          markAsRead();
 
@@ -627,6 +648,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   if (prev.some(m => m.id === payload.new.id)) return prev;
                   return [...prev, payload.new];
                });
+               const isParentMessage = payload.new.description === 'PH' || (!payload.new.manv);
+               if (isParentMessage && !payload.new.is_read) {
+                  markTeacherThreadAsRead(attChatSelectedStudent.mahv);
+               }
                setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
             }).subscribe();
 
@@ -853,10 +878,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          <div className="chat-dashboard" style={{ padding: '0', background: 'transparent', display: 'grid', gap: '18px' }}>
             <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fbff 100%)', border: '1px solid #dbeafe', borderRadius: '24px', padding: isMobileChatView ? '16px' : '20px', boxShadow: '0 12px 30px rgba(59, 130, 246, 0.08)' }}>
                <div style={{ display: 'flex', flexDirection: isMobileChatView ? 'column' : 'row', gap: '14px', alignItems: isMobileChatView ? 'stretch' : 'center', justifyContent: 'space-between' }}>
-                  <div style={{ minWidth: 0 }}>
-                     <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>Liên lạc phụ huynh</div>
-                     <div style={{ fontSize: '0.9rem', color: '#64748b', lineHeight: 1.5 }}>Theo dõi tin nhắn mới, lọc theo loại yêu cầu và mở nhanh hội thoại cần xử lý.</div>
-                  </div>
                   <button
                      type="button"
                      onClick={openClassBroadcastModal}
@@ -912,9 +933,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>Danh sách hội thoại</div>
                      <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{filtered.length} phụ huynh phù hợp bộ lọc hiện tại</div>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '999px', padding: '6px 10px', fontWeight: 700 }}>
-                     {attStatFilter === 'ALL' ? 'Tất cả hội thoại' : `Đang lọc: ${attStatFilter}`}
-                  </div>
                </div>
 
                {filtered.length === 0 ? (
@@ -956,7 +974,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         return (
                            <button
                               key={st.mahv}
-                              onClick={() => { setAttChatSelectedStudent(st); setAttChatView('chat'); }}
+                              onClick={() => openTeacherChatThread(st)}
                               style={{ textAlign: 'left', border: unread > 0 ? '1px solid #bfdbfe' : '1px solid #e2e8f0', borderRadius: '20px', padding: '1rem', background: unread > 0 ? 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)' : 'white', boxShadow: unread > 0 ? '0 14px 30px rgba(59, 130, 246, 0.08)' : '0 8px 20px rgba(15, 23, 42, 0.05)', cursor: 'pointer' }}
                            >
                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
