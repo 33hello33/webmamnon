@@ -3,7 +3,10 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight } from 'lucide-react';
+import { triggerPushNotification } from '../utils/pushNotifications';
+import ChatMessageContent from './ChatMessageContent';
+import ChatMediaAttachment from './ChatMediaAttachment';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
@@ -45,6 +48,91 @@ function ParentPortal({ parentData, setParentData }) {
    const chatContainerRef = useRef(null);
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
+   const [loadingTuitionNoticeImage, setLoadingTuitionNoticeImage] = useState(false);
+   const [staffDirectory, setStaffDirectory] = useState({});
+   const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
+   const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
+
+   const getDisplayUrl = (url) => {
+      if (!url) return '';
+      if (url.includes('drive.google.com/')) {
+         let id = '';
+         if (url.includes('id=')) id = url.split('id=')[1]?.split('&')[0];
+         else if (url.includes('/d/')) id = url.split('/d/')[1]?.split('/')[0];
+
+         if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+      }
+      return url;
+   };
+
+   const getStaffDisplayName = (staffId) => {
+      if (!staffId) return 'Nhà trường';
+      return staffDirectory[staffId] || (staffId === parentData?.teacherManv ? 'Giáo viên phụ trách' : staffId);
+   };
+
+   const getParentChatSenderName = (message) => {
+      if (!message) return '';
+      if (message.description === 'PH' || !message.manv) return 'Bạn';
+      return getStaffDisplayName(message.manv);
+   };
+
+   const handleCallHotline = () => {
+      if (!normalizedHotlineNumber) {
+         alert('Chưa cấu hình số hotline trong phần cấu hình hệ thống.');
+         return;
+      }
+
+      const zaloUrl = `https://zalo.me/${normalizedHotlineNumber}`;
+      const telUrl = `tel:${normalizedHotlineNumber}`;
+      let fallbackTriggered = false;
+
+      const cleanup = () => {
+         window.removeEventListener('blur', cancelFallback);
+         document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+
+      const cancelFallback = () => {
+         fallbackTriggered = true;
+         cleanup();
+      };
+
+      const handleVisibilityChange = () => {
+         if (document.hidden) {
+            cancelFallback();
+         }
+      };
+
+      window.addEventListener('blur', cancelFallback, { once: true });
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      window.location.href = zaloUrl;
+
+      window.setTimeout(() => {
+         if (!fallbackTriggered && !document.hidden) {
+            cleanup();
+            window.location.href = telUrl;
+         }
+      }, 1400);
+   };
+
+   const syncAppBadge = (count) => {
+      const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+
+      if ('setAppBadge' in navigator) {
+         if (badgeCount > 0) {
+            navigator.setAppBadge(badgeCount).catch(console.error);
+         } else if ('clearAppBadge' in navigator) {
+            navigator.clearAppBadge().catch(console.error);
+         }
+      }
+
+      if (navigator.serviceWorker?.controller) {
+         navigator.serviceWorker.controller.postMessage({
+            type: 'SYNC_APP_BADGE',
+            count: badgeCount
+         });
+      }
+   };
 
    const showNotification = (title, body) => {
       if (Notification.permission === 'granted') {
@@ -95,18 +183,12 @@ function ParentPortal({ parentData, setParentData }) {
          };
 
          const existingSubscription = await registration.pushManager.getSubscription();
-         if (existingSubscription) {
-            console.log('Existing Push Subscription:', JSON.stringify(existingSubscription));
-            alert('Đã bật thông báo thành công (Đã có Subscription).');
-            return;
-         }
-
-         const subscription = await registration.pushManager.subscribe({
+         const subscription = existingSubscription || await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
 
-         console.log('New Push Subscription Endpoint:', JSON.stringify(subscription));
+         console.log('Push Subscription Endpoint:', JSON.stringify(subscription));
 
          // Save subscription to Supabase
          if (parentData?.student?.mahv) {
@@ -122,7 +204,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
          }
 
-         alert('Đã bật thông báo thành công!');
+         alert(existingSubscription ? 'Đã bật thông báo thành công (Đã có Subscription).' : 'Đã bật thông báo thành công!');
 
       } catch (err) {
          console.error('Lỗi khi đăng ký nhận thông báo:', err);
@@ -135,6 +217,24 @@ function ParentPortal({ parentData, setParentData }) {
       if ('Notification' in window && Notification.permission === 'default') {
          Notification.requestPermission();
       }
+   }, []);
+
+   useEffect(() => {
+      const fetchStaffDirectory = async () => {
+         const { data, error } = await supabase.from('tbl_nv').select('manv, tennv');
+         if (error) {
+            console.error('Error fetching staff directory:', error);
+            return;
+         }
+
+         const nextDirectory = {};
+         (data || []).forEach((staff) => {
+            if (staff?.manv) nextDirectory[staff.manv] = staff.tennv || staff.manv;
+         });
+         setStaffDirectory(nextDirectory);
+      };
+
+      fetchStaffDirectory();
    }, []);
 
    const sendQuickMessage = async (content) => {
@@ -151,7 +251,8 @@ function ParentPortal({ parentData, setParentData }) {
          return;
       }
       if (data) {
-         setChatMessages(prev => [...prev, data[0]]);
+         await triggerPushNotification(supabase, 'hv_messages', data[0]);
+         setChatInput('');
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
    };
@@ -324,8 +425,11 @@ function ParentPortal({ parentData, setParentData }) {
             description: 'PH',
             is_read: false
          };
-         const { error } = await supabase.from('hv_messages').insert([newMessage]);
+         const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
          if (error) throw error;
+         if (data?.[0]) {
+            await triggerPushNotification(supabase, 'hv_messages', data[0]);
+         }
          alert('Cảm ơn ý kiến góp ý của quý phụ huynh. Thông tin đã được gửi trực tiếp đến Ban Giám Hiệu.');
          setIsFeedbackModalOpen(false);
          setFeedbackContent('');
@@ -359,6 +463,309 @@ function ParentPortal({ parentData, setParentData }) {
          nameSuffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + parentData.student.tenhv;
       }
       return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}&addInfo=${encodeURIComponent(parentData.student.mahv + nameSuffix)}&accountName=${encodeURIComponent(matched.accName)}`;
+   };
+
+   const handleDownloadImage = async (imageUrl, filename = 'image.jpg', existingWindow = null) => {
+      if (!imageUrl) return;
+
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isStandaloneMode = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone;
+      const resolvedImageUrl = getDisplayUrl(imageUrl);
+
+      // Mobile and desktop flows are handled separately below.
+      if (false && isMobileDevice && navigator.share && navigator.canShare) {
+         try {
+            const response = await fetch(resolvedImageUrl);
+            const blob = await response.blob();
+            const file = new File([blob], filename, { type: blob.type });
+            if (navigator.canShare({ files: [file] })) {
+               await navigator.share({
+                  files: [file],
+                  title: 'Tải ảnh',
+                  text: 'Lưu ảnh vào thư viện thiết bị',
+               });
+               if (existingWindow) existingWindow.close();
+               return;
+            }
+         } catch (error) {
+            console.warn('Web Share failed', error);
+         }
+      }
+
+      // 2. Direct Supabase Storage Download (Bypasses CORS entirely and downloads directly in background)
+      if (!isMobileDevice && resolvedImageUrl.includes('supabase.co')) {
+         try {
+            if (existingWindow) existingWindow.close();
+            const separator = resolvedImageUrl.includes('?') ? '&' : '?';
+            const downloadUrl = `${resolvedImageUrl}${separator}download=`;
+            
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            return;
+         } catch (err) {
+            console.error('Supabase direct download failed, falling back', err);
+         }
+      }
+
+      const triggerLocalDownload = (blob, name) => {
+         const blobUrl = window.URL.createObjectURL(blob);
+         const link = document.createElement('a');
+         link.href = blobUrl;
+         link.download = name;
+         document.body.appendChild(link);
+         link.click();
+         document.body.removeChild(link);
+         window.URL.revokeObjectURL(blobUrl);
+      };
+
+      const openImageForDeviceSave = (blob, fallbackUrl = resolvedImageUrl) => {
+         const blobUrl = blob ? window.URL.createObjectURL(blob) : '';
+         const targetUrl = blobUrl || fallbackUrl;
+
+         if (isMobileDevice && isStandaloneMode) {
+            window.location.href = targetUrl;
+            return;
+         }
+
+         if (existingWindow) {
+            existingWindow.location.href = targetUrl;
+         } else {
+            window.open(targetUrl, '_blank', 'noopener,noreferrer');
+         }
+      };
+
+      const downloadRemoteBlob = async (url) => {
+         const response = await fetch(url, { credentials: 'omit' });
+         if (!response.ok) {
+            throw new Error(`Download failed with status ${response.status}`);
+         }
+         return response.blob();
+      };
+
+      const downloadViaCorsProxy = async (url) => {
+         const proxyUrls = [
+            `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+         ];
+
+         let lastError = null;
+
+         for (const proxyUrl of proxyUrls) {
+            try {
+               return await downloadRemoteBlob(proxyUrl);
+            } catch (error) {
+               lastError = error;
+            }
+         }
+
+         throw lastError || new Error('Unable to fetch image through proxy');
+      };
+
+      if (isMobileDevice) {
+         if (navigator.share) {
+            try {
+               await navigator.share({
+                  title: 'Tải ảnh',
+                  text: 'Mở ảnh để lưu về máy',
+                  url: resolvedImageUrl
+               });
+               if (existingWindow) existingWindow.close();
+               return;
+            } catch (error) {
+               console.warn('Direct URL share failed, falling back to blob download flow', error);
+            }
+         }
+
+         let mobileBlob = null;
+
+         try {
+            mobileBlob = await downloadRemoteBlob(resolvedImageUrl);
+         } catch (error) {
+            console.warn('Direct mobile fetch failed, trying proxy...', error);
+            try {
+               mobileBlob = await downloadViaCorsProxy(resolvedImageUrl);
+            } catch (proxyError) {
+               console.warn('Proxy mobile fetch failed, opening original image...', proxyError);
+            }
+         }
+
+         if (mobileBlob) {
+            if (navigator.share) {
+               try {
+                  const file = new File([mobileBlob], filename, { type: mobileBlob.type || 'image/jpeg' });
+
+                  if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+                     await navigator.share({
+                        files: [file],
+                        title: 'Tải ảnh',
+                        text: 'Lưu ảnh vào thư viện thiết bị',
+                     });
+                     if (existingWindow) existingWindow.close();
+                     return;
+                  }
+                } catch (error) {
+                  console.warn('Web Share failed, falling back to image preview', error);
+                }
+
+               try {
+                  await navigator.share({
+                     title: 'Tải ảnh',
+                     text: 'Mở ảnh để lưu về máy',
+                     url: resolvedImageUrl
+                  });
+                  if (existingWindow) existingWindow.close();
+                  return;
+               } catch (error) {
+                  console.warn('URL share failed, falling back to image preview', error);
+               }
+            }
+
+            openImageForDeviceSave(mobileBlob, resolvedImageUrl);
+            return;
+         }
+
+         if (existingWindow) {
+            existingWindow.location.href = resolvedImageUrl;
+         } else {
+            if (isStandaloneMode) {
+               window.location.href = resolvedImageUrl;
+            } else {
+               window.open(resolvedImageUrl, '_blank', 'noopener,noreferrer');
+            }
+         }
+         return;
+      }
+
+      // 3. Desktop standard flow: Try direct fetch first (if CORS allowed on origin)
+      try {
+         const blob = await downloadRemoteBlob(resolvedImageUrl);
+         triggerLocalDownload(blob, filename);
+         if (existingWindow) existingWindow.close();
+         return;
+      } catch (error) {
+         console.warn('Direct fetch failed (likely CORS), trying via CORS proxy (corsproxy.io)...', error);
+      }
+
+      // 4. Try via corsproxy.io
+      try {
+         const blob = await downloadViaCorsProxy(resolvedImageUrl);
+         triggerLocalDownload(blob, filename);
+         if (existingWindow) existingWindow.close();
+         return;
+      } catch (error) {
+         console.error('CORS proxy fetch failed:', error);
+      }
+
+      // 6. Ultimate Fallback: Open in new/existing tab for manual right-click save
+      if (existingWindow) {
+         existingWindow.location.href = resolvedImageUrl;
+      } else {
+         window.open(resolvedImageUrl, '_blank', 'noopener,noreferrer');
+      }
+   };
+
+   const fetchTuitionNoticeImageUrl = async () => {
+      if (!parentData?.latestFee || !parentData?.student?.mahv) return null;
+
+      const noticeId = String(parentData.latestFee.mahd || '').trim();
+      const pickLatestImage = (messages = []) => {
+         const validMessages = messages.filter(msg => msg?.image_url);
+         if (validMessages.length === 0) return null;
+
+         const exactMatch = noticeId
+            ? validMessages.find(msg => String(msg.content || '').includes(noticeId))
+            : null;
+
+         if (exactMatch) return exactMatch.image_url;
+
+         const tuitionMatch = validMessages.find(msg => {
+            const normalized = String(msg.content || '').toLowerCase();
+            return normalized.includes('hoc phi') || normalized.includes('học phí');
+         });
+
+         return tuitionMatch?.image_url || validMessages[0].image_url || null;
+      };
+
+      let imageUrl = pickLatestImage(chatMessages);
+
+      if (!imageUrl) {
+         let query = supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', parentData.student.mahv)
+            .not('image_url', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+         if (noticeId) {
+            query = query.ilike('content', `%${noticeId}%`);
+         }
+
+         const { data, error } = await query;
+         if (error) throw error;
+         imageUrl = pickLatestImage(data || []);
+      }
+
+      if (!imageUrl && noticeId) {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', parentData.student.mahv)
+            .not('image_url', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+         if (error) throw error;
+         imageUrl = pickLatestImage(data || []);
+      }
+
+      return imageUrl;
+   };
+
+   const handleOpenTuitionNoticeImage = async () => {
+      setLoadingTuitionNoticeImage(true);
+      try {
+         const imageUrl = await fetchTuitionNoticeImageUrl();
+         if (imageUrl) {
+            setPreviewImage(imageUrl);
+         } else {
+            alert('Chưa tìm thấy hình thông báo thu học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         console.error('Error loading tuition notice image:', error);
+         alert('Không tải được hình thông báo thu học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingTuitionNoticeImage(false);
+      }
+   };
+
+   const handleDownloadTuitionImage = async () => {
+      // Open a blank window synchronously immediately on click to prevent popup blockers on laptop/desktop
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      let newWindow = null;
+      if (!isMobileDevice) {
+         newWindow = window.open('', '_blank');
+      }
+
+      setLoadingTuitionNoticeImage(true);
+      try {
+         const imageUrl = await fetchTuitionNoticeImageUrl();
+         if (imageUrl) {
+            await handleDownloadImage(imageUrl, `thong-bao-hoc-phi-${parentData.student.mahv}.jpg`, newWindow);
+         } else {
+            if (newWindow) newWindow.close();
+            alert('Chưa tìm thấy hình thông báo thu học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         if (newWindow) newWindow.close();
+         console.error('Error downloading tuition notice image:', error);
+         alert('Không tải được hình thông báo thu học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingTuitionNoticeImage(false);
+      }
    };
 
    const formatMonthYear = (dateStr) => {
@@ -490,7 +897,7 @@ function ParentPortal({ parentData, setParentData }) {
        const latestClassNotice = classNotices?.[0];
        
        const currentLatestNoticeTime = Math.max(
-          latestGenNotice ? new Date(latestGenNotice.ngaylap).getTime() : 0,
+          0, /* General notices excluded */
           latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
        );
        if (currentLatestNoticeTime > lastNoticeTime) {
@@ -556,14 +963,7 @@ function ParentPortal({ parentData, setParentData }) {
           }
        }
 
-       // Update App Badge
-       if ('setAppBadge' in navigator) {
-          if (totalUnread > 0) {
-             navigator.setAppBadge(totalUnread).catch(console.error);
-          } else {
-             navigator.clearAppBadge().catch(console.error);
-          }
-       }
+       syncAppBadge(totalUnread);
     };
 
    useEffect(() => {
@@ -678,7 +1078,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
          } else if (parentTab === 'notices-tab') {
             if (parentNotices.length > 0) {
-               const latest = parentNotices.find(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
+               const latest = parentNotices.find(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
                if (latest) {
                   const time = new Date(latest.date).getTime();
                   localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(time));
@@ -744,8 +1144,8 @@ function ParentPortal({ parentData, setParentData }) {
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) { console.error('Lỗi khi gửi tin nhắn:', error); return; }
       if (data) {
+         await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
-         setChatMessages(prev => [...prev, data[0]]);
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
    };
@@ -758,7 +1158,7 @@ function ParentPortal({ parentData, setParentData }) {
       try {
          let file = fileInput;
          if (type === 'image') {
-            try { file = await compressImage(fileInput, 100); } catch (err) { console.error('Compression failed:', err); }
+            try { file = await compressImage(fileInput, 150); } catch (err) { console.error('Compression failed:', err); }
          }
 
          let finalUrl = '';
@@ -785,7 +1185,9 @@ function ParentPortal({ parentData, setParentData }) {
          };
 
          const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-         if (data) setChatMessages(prev => [...prev, data[0]]);
+         if (data) {
+            await triggerPushNotification(supabase, 'hv_messages', data[0]);
+         }
 
          const newDoc = {
             mahv: parentData.student.mahv,
@@ -803,7 +1205,7 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    return (
-      <div id="parent-dashboard" className="parent-premium-mobile">
+      <div id="parent-dashboard" className={`parent-premium-mobile ${parentTab === 'chat-tab' ? 'chat-mode-active' : ''}`}>
          {parentTab === 'menu' && (
             <div className="premium-home">
                <div className="premium-sidebar">
@@ -920,6 +1322,13 @@ function ParentPortal({ parentData, setParentData }) {
                         <div className="premium-utility-icon-wrapper" style={{ color: '#0ea5e9' }}><Bell size={24} /></div>
                         <span className="premium-utility-label">Bật thông báo</span>
                      </div>
+                     <div className="premium-utility-item" onClick={handleCallHotline}>
+                        <div className="premium-utility-icon-wrapper" style={{ color: '#14b8a6' }}><Phone size={24} /></div>
+                        <span className="premium-utility-label">
+                           Hotline
+                           {hotlineNumber && <><br />{hotlineNumber}</>}
+                        </span>
+                     </div>
                      <div className="premium-utility-item" onClick={() => {
                         setParentData(null);
                         localStorage.removeItem('parent_session');
@@ -933,7 +1342,7 @@ function ParentPortal({ parentData, setParentData }) {
          )}
 
          {parentTab !== 'menu' && (
-            <div className="premium-tab-container">
+            <div className={parentTab === 'chat-tab' ? 'premium-tab-container chat-mode' : 'premium-tab-container'}>
                <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px', padding: '20px 20px 10px', background: 'white', borderRadius: '24px 24px 0 0' }}>
                   <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f' }}>
                      <ArrowLeft size={20} />
@@ -957,7 +1366,7 @@ function ParentPortal({ parentData, setParentData }) {
                               <Bell size={20} className="text-primary" /> Thông báo từ nhà trường
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {parentNotices.length > 0 ? parentNotices.map((notice, idx) => (
+                              {parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').length > 0 ? parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').map((notice, idx) => (
                                  <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.date).toLocaleDateString('vi-VN')}</span>
@@ -973,7 +1382,7 @@ function ParentPortal({ parentData, setParentData }) {
                                           style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', cursor: 'zoom-in', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
                                           onClick={() => setPreviewImage(notice.image_url)}
                                        >
-                                          <img src={notice.image_url} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} />
+                                          <img src={getDisplayUrl(notice.image_url)} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
                                        </div>
                                     )}
 
@@ -1013,7 +1422,7 @@ function ParentPortal({ parentData, setParentData }) {
                                              style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
                                              onClick={() => setPreviewImage(menu.image_url)}
                                           >
-                                             <img src={menu.image_url} alt="menu" style={{ width: '100%', display: 'block' }} />
+                                             <img src={getDisplayUrl(menu.image_url)} alt="menu" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                           </div>
                                        )}
                                     </div>
@@ -1062,7 +1471,7 @@ function ParentPortal({ parentData, setParentData }) {
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
                                                 onClick={() => setPreviewImage(item.image_url)}
                                              >
-                                                <img src={item.image_url} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} />
+                                                <img src={getDisplayUrl(item.image_url)} alt="ngoaikhoa" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                              </div>
                                           )}
 
@@ -1162,7 +1571,7 @@ function ParentPortal({ parentData, setParentData }) {
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
                                                 onClick={() => setPreviewImage(item.image_url)}
                                              >
-                                                <img src={item.image_url} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} />
+                                                <img src={getDisplayUrl(item.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                              </div>
                                           )}
                                        </div>
@@ -1272,11 +1681,10 @@ function ParentPortal({ parentData, setParentData }) {
                               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                  <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
                                  {!tuitionStatus.isPaid && (
-                                    <button onClick={() => {
-                                       const qr = getQRUrl();
-                                       if (qr) window.open(qr, '_blank');
-                                       else alert('Không tìm thấy thông tin chuyển khoản cấu hình.');
-                                    }} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Thanh toán ngay</button>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                       <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
+                                       <button onClick={handleDownloadTuitionImage} disabled={loadingTuitionNoticeImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                                    </div>
                                  )}
                               </div>
                            </div>
@@ -1390,8 +1798,8 @@ function ParentPortal({ parentData, setParentData }) {
                   )}
 
                   {parentTab === 'chat-tab' && (
-                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', background: '#f8fafc', borderRadius: '0 0 24px 24px' }}>
-                        <div style={{ position: 'sticky', top: '66px', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0' }}>
+                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', background: '#f8fafc', borderRadius: '0', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 99 }}>
                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ position: 'relative' }}>
                                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
@@ -1411,7 +1819,7 @@ function ParentPortal({ parentData, setParentData }) {
                            </div>
                         </div>
 
-                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px', minHeight: '400px' }}>
+                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                            {isLoadMoreChat && (
                               <div style={{ display: 'flex', justifyContent: 'center', padding: '10px' }}><Loader2 size={16} className="spinner" /></div>
                            )}
@@ -1427,11 +1835,15 @@ function ParentPortal({ parentData, setParentData }) {
                            ) : (
                               chatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
                                  const isMe = m.description === 'PH';
+                                 const senderName = getParentChatSenderName(m);
                                  return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                                       <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
+                                          {senderName}
+                                       </div>
                                        {m.content && (
                                           <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                                             {m.content}
+                                             <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                                           </div>
                                        )}
                                        {m.image_url && (
@@ -1439,16 +1851,10 @@ function ParentPortal({ parentData, setParentData }) {
                                              style={{ marginTop: '5px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', cursor: 'zoom-in' }}
                                              onClick={() => setPreviewImage(m.image_url)}
                                           >
-                                             <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} />
+                                             <img src={getDisplayUrl(m.image_url)} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
                                           </div>
                                        )}
-                                       {m.file_url && (
-                                          <a href={m.file_url} target="_blank" rel="noreferrer" style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: isMe ? '#be185d' : '#f1f5f9', color: isMe ? 'white' : '#1e293b', borderRadius: '12px', textDecoration: 'none', fontSize: '0.85rem' }}>
-                                             <FileText size={18} />
-                                             <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name || 'Tài liệu'}</span>
-                                             <Download size={16} />
-                                          </a>
-                                       )}
+                                       {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
                                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '4px', fontWeight: 600 }}>
                                           {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                        </span>
@@ -1459,7 +1865,7 @@ function ParentPortal({ parentData, setParentData }) {
                            <div ref={chatEndRef} />
                         </div>
 
-                        <div style={{ padding: '15px 16px', background: 'white', borderTop: '1px solid #e2e8f0' }}>
+                        <div style={{ padding: '15px 16px calc(15px + env(safe-area-inset-bottom, 0px))', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0', zIndex: 99 }}>
                            <form onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ display: 'flex', gap: '5px' }}>
                                  <label style={{ cursor: 'pointer', padding: '8px', color: '#64748b' }}>
@@ -1609,13 +2015,29 @@ function ParentPortal({ parentData, setParentData }) {
                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
                onClick={() => setPreviewImage(null)}
             >
-               <button
-                  onClick={() => setPreviewImage(null)}
-                  style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-               >
-                  <X size={24} />
-               </button>
-               <img src={previewImage} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} />
+               <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '10px' }} onClick={e => e.stopPropagation()}>
+                  <button
+                     onClick={() => handleDownloadImage(previewImage, `tai-ve-${Date.now()}.jpg`)}
+                     style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     title="Tải về"
+                  >
+                     <Download size={20} />
+                  </button>
+                  <button
+                     onClick={() => setPreviewImage(null)}
+                     style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     title="Đóng"
+                  >
+                     <X size={20} />
+                  </button>
+               </div>
+               <img 
+                  src={getDisplayUrl(previewImage)} 
+                  alt="Preview" 
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} 
+                  referrerPolicy="no-referrer"
+                  onClick={e => e.stopPropagation()}
+               />
             </div>
          )}
       </div>

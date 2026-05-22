@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -16,6 +16,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [chatInput, setChatInput] = useState('');
    const [chatDocuments, setChatDocuments] = useState([]);
    const [parentNotices, setParentNotices] = useState([]);
+   const [ngoaiKhoaAnnouncements, setNgoaiKhoaAnnouncements] = useState([]);
    const [uploading, setUploading] = useState(false);
    const [showChatInfo, setShowChatInfo] = useState(false);
    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -255,6 +256,68 @@ function ParentPortal({ parentData, setParentData }) {
          setChatInput('');
          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
+   };
+
+   const fetchClassAnnouncementsByTitle = async (title, limit = 10) => {
+      if (!parentData?.student?.malop) return [];
+
+      const { data, error } = await supabase
+         .from('class_announcements')
+         .select('*')
+         .eq('malop', parentData.student.malop)
+         .eq('title', title)
+         .order('created_at', { ascending: false })
+         .limit(limit);
+
+      if (error) {
+         console.error(error);
+         return [];
+      }
+
+      return (data || []).map(item => ({
+         ...item,
+         type: 'class',
+         date: item.created_at,
+         title: item.title,
+         content: item.content,
+         image_url: item.image_url,
+         file_url: item.file_url,
+         file_name: item.file_name
+      }));
+   };
+
+   const fetchParentNotices = async () => {
+      if (!parentData?.student?.mahv || !parentData?.student?.malop) return;
+
+      const { data: generalNotices } = await supabase
+         .from('tbl_thongbao')
+         .select('*')
+         .eq('mahv', parentData.student.mahv)
+         .order('ngaylap', { ascending: false })
+         .limit(10);
+
+      const { data: classAnnouncements } = await supabase
+         .from('class_announcements')
+         .select('*')
+         .eq('malop', parentData.student.malop)
+         .order('created_at', { ascending: false })
+         .limit(10);
+
+      const combined = [
+         ...(generalNotices || []).map(n => ({ ...n, type: 'general', date: n.ngaylap, title: n.tieude, content: n.ghichu })),
+         ...(classAnnouncements || []).map(n => ({ ...n, type: 'class', date: n.created_at, title: n.title, content: n.content, image_url: n.image_url, file_url: n.file_url, file_name: n.file_name }))
+      ].sort((a, b) => {
+         const dateA = new Date(a.date).getTime();
+         const dateB = new Date(b.date).getTime();
+         return dateB - dateA;
+      });
+
+      setParentNotices(combined);
+   };
+
+   const fetchNgoaiKhoaAnnouncements = async () => {
+      const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 10);
+      setNgoaiKhoaAnnouncements(data);
    };
 
    const fetchChatMessages = async (isLoadMore = false) => {
@@ -859,6 +922,10 @@ function ParentPortal({ parentData, setParentData }) {
          const { data, error } = await supabase.from('dangkyngoaikhoa').insert([payload]).select();
          if (error) throw error;
 
+         if (data?.[0]) {
+            await triggerPushNotification(supabase, 'dangkyngoaikhoa', data[0]);
+         }
+
          alert(codangky ? 'Đăng ký ngoại khóa thành công!' : 'Đã ghi nhận ý kiến không tham gia của phụ huynh.');
          if (data) setNgoaiKhoaReg(data[0]);
       } catch (err) {
@@ -969,25 +1036,67 @@ function ParentPortal({ parentData, setParentData }) {
    useEffect(() => {
       if (!parentData) return;
 
+      const refreshAnnouncementsForCurrentTab = async () => {
+         if (['notices-tab', 'menu-tab', 'chuongtrinhhoc-tab'].includes(parentTab)) {
+            await fetchParentNotices();
+         }
+         if (parentTab === 'ngoaikhoa-tab') {
+            await fetchNgoaiKhoaAnnouncements();
+         }
+      };
+
+      const refreshHealthForCurrentTab = async () => {
+         if (parentTab === 'health-tab') {
+            await fetchHealthHistory();
+         }
+      };
+
       const unreadChan = supabase.channel(`parent_unread_${parentData.student.mahv}`)
          .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, () => { fetchUnreads(); }).subscribe();
 
       fetchUnreads();
 
       const noticeChan = supabase.channel(`parent_notices_${parentData.student.mahv}`)
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => { 
-            fetchUnreads(); 
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+            await fetchUnreads();
+            await refreshAnnouncementsForCurrentTab();
+            if (payload.eventType !== 'INSERT') return;
             const isTuition = payload.new.tieude?.toLowerCase().includes('học phí');
             showNotification(isTuition ? 'Thông báo học phí' : 'Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
          })
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, (payload) => { 
-            fetchUnreads(); 
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, async (payload) => {
+            await fetchUnreads();
+            await refreshAnnouncementsForCurrentTab();
+            if (payload.eventType !== 'INSERT') return;
             const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, () => { 
-            fetchUnreads(); 
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+            await fetchUnreads();
+            await refreshHealthForCurrentTab();
+            if (payload.eventType !== 'INSERT') return;
             showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
+         })
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hv', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+            setParentData(prev => {
+               if (!prev?.student) return prev;
+               return {
+                  ...prev,
+                  student: {
+                     ...prev.student,
+                     ...payload.new
+                  }
+               };
+            });
+            await refreshHealthForCurrentTab();
+         })
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'dangkyngoaikhoa', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+            if (parentTab === 'ngoaikhoa-tab') {
+               await fetchNgoaiKhoaRegistration();
+            }
+            if (payload.eventType === 'INSERT' && payload.new?.codangky !== undefined) {
+               showNotification('Ngoại khóa', payload.new.codangky ? 'Đăng ký ngoại khóa đã được ghi nhận' : 'Phản hồi không tham gia ngoại khóa đã được ghi nhận');
+            }
          })
          .subscribe();
 
@@ -1001,22 +1110,6 @@ function ParentPortal({ parentData, setParentData }) {
          const { data } = await supabase.from('documents').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: false });
          if (data) setChatDocuments(data || []);
       };
-      const fetchParentNotices = async () => {
-         const { data: generalNotices } = await supabase.from('tbl_thongbao').select('*').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(10);
-         const { data: classAnnouncements } = await supabase.from('class_announcements').select('*').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(10);
-
-         const combined = [
-            ...(generalNotices || []).map(n => ({ ...n, type: 'general', date: n.ngaylap, title: n.tieude, content: n.ghichu })),
-            ...(classAnnouncements || []).map(n => ({ ...n, type: 'class', date: n.created_at, title: n.title, content: n.content, image_url: n.image_url, file_url: n.file_url, file_name: n.file_name }))
-         ].sort((a, b) => {
-            const dateA = new Date(a.date).getTime();
-            const dateB = new Date(b.date).getTime();
-            return dateB - dateA;
-         });
-
-         setParentNotices(combined);
-      };
-
       const fetchMonthlyAttendance = async () => {
          if (!parentData) return;
          setCalendarLoading(true);
@@ -1037,7 +1130,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
       if (parentTab === 'health-tab') fetchHealthHistory();
       if (parentTab === 'ngoaikhoa-tab') {
-         fetchParentNotices();
+         fetchNgoaiKhoaAnnouncements();
          fetchNgoaiKhoaRegistration();
       }
 
@@ -1093,7 +1186,11 @@ function ParentPortal({ parentData, setParentData }) {
             }
             setUnreadMenu(0);
          } else if (parentTab === 'ngoaikhoa-tab') {
-            const latest = parentNotices.find(n => n.title === 'NGOẠI KHÓA');
+            let latest = ngoaiKhoaAnnouncements[0];
+            if (!latest) {
+               const announcements = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 1);
+               latest = announcements[0];
+            }
             if (latest) {
                const time = new Date(latest.date).getTime();
                localStorage.setItem(`last_ngoaikhoa_time_${parentData.student.mahv}`, String(time));
@@ -1123,7 +1220,7 @@ function ParentPortal({ parentData, setParentData }) {
           }
       };
       markAsRead();
-   }, [parentTab, parentData, parentNotices, healthHistory]);
+   }, [parentTab, parentData, parentNotices, ngoaiKhoaAnnouncements, healthHistory]);
 
    useEffect(() => {
       if (parentTab === 'chat-tab') {
@@ -1445,8 +1542,8 @@ function ParentPortal({ parentData, setParentData }) {
                               <Image size={20} /> Hoạt động ngoại khóa mới nhất
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                              {parentNotices.filter(n => n.title === 'NGOẠI KHÓA').length > 0 ? (
-                                 parentNotices.filter(n => n.title === 'NGOẠI KHÓA').slice(0, 1).map((item, idx) => (
+                              {ngoaiKhoaAnnouncements.length > 0 ? (
+                                 ngoaiKhoaAnnouncements.slice(0, 1).map((item, idx) => (
                                     <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                        <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#fdf2f8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                           <span style={{ fontWeight: 800, color: '#be185d' }}>Thông tin ngoại khóa</span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -143,7 +143,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
 
    // ----- Teacher Chat States -----
-   const [attTab, setAttTab] = useState('menu'); // 'menu' | 'attendance' | 'chat' | 'health' | 'notices' | 'curriculum'
+   const [attTab, setAttTab] = useState('attendance'); // 'attendance' | 'chat' | 'health'
    const [attChatSelectedStudent, setAttChatSelectedStudent] = useState(null);
    const [attUnreadCounts, setAttUnreadCounts] = useState({});
    const [attLatestMessages, setAttLatestMessages] = useState([]);
@@ -165,9 +165,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [classBroadcastText, setClassBroadcastText] = useState('');
    const [classBroadcastImage, setClassBroadcastImage] = useState(null);
    const [classBroadcastClassId, setClassBroadcastClassId] = useState('');
-   const [attLatestHealthDate, setAttLatestHealthDate] = useState('');
-   const [teacherAnnouncements, setTeacherAnnouncements] = useState([]);
-   const [teacherAnnouncementsLoading, setTeacherAnnouncementsLoading] = useState(false);
 
    const syncAppBadge = (count) => {
       const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -250,13 +247,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    useEffect(() => {
       const loadData = async () => {
-         if (!attSelectedClass) {
-            setAttStudents([]);
-            setAttRecords({});
-            setLessonContent('');
-            setAttLatestHealthDate('');
-            return;
-         }
+         if (!attSelectedClass) { setAttStudents([]); setAttRecords({}); setLessonContent(''); return; }
 
          // Lấy danh sách học sinh từ bảng tbl_hv
          const { data: stFound, error: stError } = await supabase.from('tbl_hv').select('*').eq('malop', attSelectedClass);
@@ -270,7 +261,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             const stIds = studentsFound.map(s => s.mahv);
             const { data: healthData } = await supabase.from('suckhoedinhky').select('*').in('mahv', stIds).order('ngay', { ascending: false });
             if (healthData) {
-               setAttLatestHealthDate(healthData[0]?.ngay || '');
                studentsFound.forEach(s => {
                   const latest = healthData.find(h => h.mahv === s.mahv);
                   if (latest) {
@@ -278,11 +268,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      s.cannang = latest.cannang;
                   }
                });
-            } else {
-               setAttLatestHealthDate('');
             }
-         } else {
-            setAttLatestHealthDate('');
          }
          setAttStudents(studentsFound);
 
@@ -365,7 +351,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                await supabase.from('tbl_hv').update(hvPayload).eq('mahv', st.mahv);
             }
          }
-         setAttLatestHealthDate(today);
          window.alert('Lưu thông tin sức khỏe thành công!');
       } catch (err) { console.error(err); window.alert('Lỗi lưu sức khỏe: ' + err.message); }
       setLoading(false);
@@ -490,47 +475,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return 'Tin nhắn';
    };
 
-   const fetchTeacherAnnouncements = async (type) => {
-      if (!type) {
-         setTeacherAnnouncements([]);
-         return;
-      }
-
-      const classIds = (attClasses || []).map(cls => cls.malop).filter(Boolean);
-      if (classIds.length === 0) {
-         setTeacherAnnouncements([]);
-         return;
-      }
-
-      setTeacherAnnouncementsLoading(true);
-      try {
-         let query = supabase
-            .from('class_announcements')
-            .select('*')
-            .in('malop', classIds)
-            .order('created_at', { ascending: false })
-            .limit(50);
-
-         if (type === 'curriculum') {
-            query = query.eq('title', 'CHƯƠNG TRÌNH HỌC');
-         } else if (type === 'notices') {
-            query = query
-               .neq('title', 'THỰC ĐƠN')
-               .neq('title', 'NGOẠI KHÓA')
-               .neq('title', 'CHƯƠNG TRÌNH HỌC');
-         }
-
-         const { data, error } = await query;
-         if (error) throw error;
-         setTeacherAnnouncements(data || []);
-      } catch (error) {
-         console.error('Error fetching teacher announcements:', error);
-         setTeacherAnnouncements([]);
-      } finally {
-         setTeacherAnnouncementsLoading(false);
-      }
-   };
-
    useEffect(() => {
       const fetchAllStudentsData = async () => {
          if (attendanceUser && attTab === 'chat' && attAllStudents.length === 0) {
@@ -633,16 +577,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          return () => supabase.removeChannel(threadChannel);
       }
    }, [attTab, attChatSelectedStudent]);
-
-   useEffect(() => {
-      if (attTab === 'notices') {
-         fetchTeacherAnnouncements('notices');
-      } else if (attTab === 'curriculum') {
-         fetchTeacherAnnouncements('curriculum');
-      } else {
-         setTeacherAnnouncements([]);
-      }
-   }, [attTab, attClasses]);
 
    const handleAttSendChat = async (e) => {
       e.preventDefault();
@@ -845,254 +779,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
    };
 
-   const renderTeacherChatDashboard = () => {
-      const filtered = getFilteredChatStudents();
-      const dateLimit = getDateLimit();
-
-      return (
-         <div className="chat-dashboard" style={{ padding: '0', background: 'transparent', display: 'grid', gap: '18px' }}>
-            <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fbff 100%)', border: '1px solid #dbeafe', borderRadius: '24px', padding: isMobileChatView ? '16px' : '20px', boxShadow: '0 12px 30px rgba(59, 130, 246, 0.08)' }}>
-               <div style={{ display: 'flex', flexDirection: isMobileChatView ? 'column' : 'row', gap: '14px', alignItems: isMobileChatView ? 'stretch' : 'center', justifyContent: 'space-between' }}>
-                  <div style={{ minWidth: 0 }}>
-                     <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '4px' }}>Liên lạc phụ huynh</div>
-                     <div style={{ fontSize: '0.9rem', color: '#64748b', lineHeight: 1.5 }}>Theo dõi tin nhắn mới, lọc theo loại yêu cầu và mở nhanh hội thoại cần xử lý.</div>
-                  </div>
-                  <button
-                     type="button"
-                     onClick={openClassBroadcastModal}
-                     title="Gửi thông báo cả lớp"
-                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '0.9rem 1rem', minWidth: isMobileChatView ? '100%' : '172px', background: '#0f172a', border: 'none', borderRadius: '14px', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.18)' }}
-                  >
-                     <Bell size={16} />
-                     <span>Gửi cả lớp</span>
-                  </button>
-               </div>
-
-               <div style={{ display: 'flex', gap: '12px', flexDirection: isMobileChatView ? 'column' : 'row', alignItems: isMobileChatView ? 'stretch' : 'center', marginTop: '16px' }}>
-                  <div className="search-input-wrapper" style={{ width: '100%', maxWidth: isMobileChatView ? '100%' : '360px', background: 'white', borderRadius: '14px', border: '1px solid #dbeafe', boxShadow: '0 6px 18px rgba(148, 163, 184, 0.12)' }}>
-                     <Search size={18} className="search-icon-inside" />
-                     <input type="text" placeholder="Tìm theo tên hoặc mã học sinh..." value={attSearchQuery} onChange={(e) => setAttSearchQuery(e.target.value)} />
-                  </div>
-                  <div className="date-filters" style={{ flexWrap: 'wrap' }}>
-                     {['Hôm nay', 'Tuần này', 'Tháng này'].map(f => (
-                        <button key={f} className={`date-filter-btn ${attDateFilter === f ? 'active' : ''}`} onClick={() => setAttDateFilter(f)}>
-                           {f}
-                        </button>
-                     ))}
-                  </div>
-               </div>
-            </div>
-
-            <div className="quick-reports-container" style={{ gridTemplateColumns: isMobileChatView ? 'repeat(3, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: '8px', marginBottom: '1.2rem' }}>
-               <div className="report-card xin-nghi" onClick={() => setAttStatFilter(attStatFilter === 'XIN_NGHI' ? 'ALL' : 'XIN_NGHI')} style={{ padding: '8px 4px', borderRadius: '12px', outline: attStatFilter === 'XIN_NGHI' ? '3px solid #ef4444' : 'none', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
-                  <span className="report-label" style={{ fontSize: '0.62rem', marginBottom: '2px' }}>Xin nghỉ</span>
-                  <span className="report-value" style={{ fontSize: '1.1rem' }}>{String(attReports.xinNghi).padStart(2, '0')}</span>
-               </div>
-               <div className="report-card bao-thuoc" onClick={() => setAttStatFilter(attStatFilter === 'BAO_THUOC' ? 'ALL' : 'BAO_THUOC')} style={{ padding: '8px 4px', borderRadius: '12px', outline: attStatFilter === 'BAO_THUOC' ? '3px solid #854d0e' : 'none', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
-                  <span className="report-label" style={{ fontSize: '0.62rem', marginBottom: '2px' }}>Báo thuốc</span>
-                  <span className="report-value" style={{ fontSize: '1.1rem' }}>{String(attReports.baoThuoc).padStart(2, '0')}</span>
-               </div>
-               <div className="report-card gui-tin-nhan" onClick={() => setAttStatFilter(attStatFilter === 'GUI_TIN_NHAN' ? 'ALL' : 'GUI_TIN_NHAN')} style={{ padding: '8px 4px', borderRadius: '12px', outline: attStatFilter === 'GUI_TIN_NHAN' ? '3px solid #3b82f6' : 'none', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
-                  <span className="report-label" style={{ fontSize: '0.62rem', marginBottom: '2px' }}>Tin nhắn</span>
-                  <span className="report-value" style={{ fontSize: '1.1rem' }}>{String(attReports.guiTinNhan).padStart(2, '0')}</span>
-               </div>
-               <div className="report-card doi-nguoi" onClick={() => setAttStatFilter(attStatFilter === 'DOI_NGUOI' ? 'ALL' : 'DOI_NGUOI')} style={{ padding: '8px 4px', borderRadius: '12px', outline: attStatFilter === 'DOI_NGUOI' ? '3px solid #065f46' : 'none', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
-                  <span className="report-label" style={{ fontSize: '0.62rem', marginBottom: '2px' }}>Đổi người đón</span>
-                  <span className="report-value" style={{ fontSize: '1.1rem' }}>{String(attReports.doiNguoi).padStart(2, '0')}</span>
-               </div>
-               <div className="report-card ve-tre" onClick={() => setAttStatFilter(attStatFilter === 'VE_TRE' ? 'ALL' : 'VE_TRE')} style={{ padding: '8px 4px', borderRadius: '12px', outline: attStatFilter === 'VE_TRE' ? '3px solid #7c3aed' : 'none', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
-                  <span className="report-label" style={{ fontSize: '0.62rem', marginBottom: '2px' }}>Về trễ</span>
-                  <span className="report-value" style={{ fontSize: '1.1rem' }}>{String(attReports.veTre).padStart(2, '0')}</span>
-               </div>
-            </div>
-
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '24px', padding: isMobileChatView ? '14px' : '18px', boxShadow: '0 14px 30px rgba(15, 23, 42, 0.06)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
-                  <div>
-                     <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>Danh sách hội thoại</div>
-                     <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{filtered.length} phụ huynh phù hợp bộ lọc hiện tại</div>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '999px', padding: '6px 10px', fontWeight: 700 }}>
-                     {attStatFilter === 'ALL' ? 'Tất cả hội thoại' : `Đang lọc: ${attStatFilter}`}
-                  </div>
-               </div>
-
-               {filtered.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2.2rem', color: '#94a3b8', background: '#f8fafc', borderRadius: '18px', border: '1px dashed #cbd5e1' }}>Không có dữ liệu phù hợp</div>
-               ) : (
-                  <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: isMobileChatView ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-                     {filtered.map(st => {
-                        const studentMsgs = attLatestMessages.filter(m => m.mahv === st.mahv);
-                        let msgToShow = studentMsgs[0];
-
-                        if (attStatFilter !== 'ALL') {
-                           const matchingMsg = studentMsgs.find(m => {
-                              if (new Date(m.created_at) < dateLimit) return false;
-                              const isPH = m.description === 'PH' || (!m.manv);
-                              if (!isPH) return false;
-                              const type = getNotifType(m.content);
-                              if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghỉ';
-                              if (attStatFilter === 'BAO_THUOC') return type === 'Báo thuốc';
-                              if (attStatFilter === 'DOI_NGUOI') return type === 'Đổi người đón';
-                              if (attStatFilter === 'VE_TRE') return type === 'Về trễ';
-                              if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nhắn';
-                              return false;
-                           });
-                           if (matchingMsg) msgToShow = matchingMsg;
-                        }
-
-                        const unread = attUnreadCounts[st.mahv] || 0;
-                        const type = getNotifType(msgToShow?.content);
-                        const typeStyles = type === 'Xin nghỉ'
-                           ? { background: '#fee2e2', color: '#b91c1c' }
-                           : type === 'Báo thuốc'
-                              ? { background: '#fef3c7', color: '#92400e' }
-                              : type === 'Đổi người đón'
-                                 ? { background: '#dcfce7', color: '#166534' }
-                                 : type === 'Về trễ'
-                                    ? { background: '#ede9fe', color: '#6d28d9' }
-                                    : { background: '#dbeafe', color: '#1d4ed8' };
-
-                        return (
-                           <button
-                              key={st.mahv}
-                              onClick={() => { setAttChatSelectedStudent(st); setAttChatView('chat'); }}
-                              style={{ textAlign: 'left', border: unread > 0 ? '1px solid #bfdbfe' : '1px solid #e2e8f0', borderRadius: '20px', padding: '1rem', background: unread > 0 ? 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)' : 'white', boxShadow: unread > 0 ? '0 14px 30px rgba(59, 130, 246, 0.08)' : '0 8px 20px rgba(15, 23, 42, 0.05)', cursor: 'pointer' }}
-                           >
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
-                                 <div style={{ width: '48px', height: '48px', flexShrink: 0, borderRadius: '16px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem' }}>
-                                    {st.tenhv?.charAt(0)}
-                                 </div>
-                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
-                                       <div style={{ minWidth: 0 }}>
-                                          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.tenhv}</div>
-                                          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Lớp {getClassDisplayName(st.malop)}</div>
-                                       </div>
-                                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                          <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>{msgToShow ? new Date(msgToShow.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</div>
-                                          {unread > 0 && <div style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '26px', height: '22px', padding: '0 8px', borderRadius: '999px', background: '#ef4444', color: 'white', fontSize: '0.72rem', fontWeight: 800 }}>+{unread}</div>}
-                                       </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                                       {type && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 9px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, ...typeStyles }}>{type}</span>}
-                                       <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 9px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>Mã: {st.mahv}</span>
-                                    </div>
-                                    <div style={{ fontSize: '0.84rem', color: '#475569', lineHeight: 1.55, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: '2.6em' }}>
-                                       {getMessagePreview(msgToShow)}
-                                    </div>
-                                    <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#2563eb', fontWeight: 700 }}>Mở hội thoại</div>
-                                 </div>
-                              </div>
-                           </button>
-                        );
-                     })}
-                  </div>
-               )}
-            </div>
-         </div>
-      );
-   };
-
-   const renderTeacherChatThread = () => (
-      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '680px', background: '#ffffff', borderRadius: '24px', overflow: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}>
-         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ padding: '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'center', gap: '12px' }}>
-               <button onClick={() => { setAttChatSelectedStudent(null); setAttChatView('dashboard'); }} style={{ background: 'white', border: '1px solid #dbeafe', width: '36px', height: '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', cursor: 'pointer', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.08)' }}>
-                  <ArrowLeft size={18} />
-               </button>
-               <div style={{ width: '44px', height: '44px', borderRadius: '16px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
-                  {attChatSelectedStudent.tenhv?.charAt(0)}
-               </div>
-               <div style={{ flex: 1, minWidth: 0 }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>{attChatSelectedStudent.tenhv}</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                     <span style={{ fontSize: '0.74rem', color: '#2563eb', background: 'white', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '4px 8px', fontWeight: 700 }}>Lớp {getClassDisplayName(attChatSelectedStudent.malop)}</span>
-                     <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>Phụ huynh đang trao đổi</span>
-                  </div>
-               </div>
-               <button style={{ padding: '9px', background: 'white', border: '1px solid #dbeafe', borderRadius: '12px', color: '#2563eb', cursor: 'pointer' }}>
-                  <Phone size={18} />
-               </button>
-            </div>
-
-            <div ref={attScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)' }}>
-               {attChatLoading ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
-               ) : attChatMessages.length === 0 ? (
-                  <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontSize: '0.9rem', background: 'white', border: '1px dashed #cbd5e1', borderRadius: '18px', padding: '1.5rem 1.25rem' }}>Bắt đầu trò chuyện với phụ huynh của {attChatSelectedStudent.tenhv}</div>
-               ) : (
-                  attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
-                     const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
-                     const senderName = getTeacherChatSenderName(m);
-                     return (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '88%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
-                           <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800 }}>
-                              {senderName}
-                           </div>
-                           {m.content && (
-                              <div style={{
-                                 padding: '11px 14px',
-                                 borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                 background: isMe ? 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)' : 'white',
-                                 color: isMe ? 'white' : '#1e293b',
-                                 border: isMe ? 'none' : '1px solid #e2e8f0',
-                                 boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
-                                 fontSize: '0.92rem',
-                                 lineHeight: 1.5
-                              }}>
-                                 <ChatMessageContent content={m.content} isOwnMessage={isMe} />
-                              </div>
-                           )}
-                           {m.image_url && (
-                              <div style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white' }}>
-                                 <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '260px', display: 'block' }} />
-                              </div>
-                           )}
-                           {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
-                           <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
-                              {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                           </span>
-                        </div>
-                     );
-                  })
-               )}
-            </div>
-
-            <div style={{ padding: '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe' }}>
-               <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '8px 10px' }}>
-                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                     <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Image size={18} />
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'image')} disabled={uploading} />
-                     </label>
-                     <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Paperclip size={18} />
-                        <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
-                     </label>
-                  </div>
-                  <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: '15px', outline: 'none', color: '#0f172a' }} />
-                  <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '40px', height: '40px', minWidth: '40px', flexShrink: 0, borderRadius: '14px', background: '#0f172a', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1, boxShadow: '0 10px 18px rgba(15, 23, 42, 0.18)' }}>
-                     {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
-                  </button>
-               </form>
-            </div>
-         </div>
-      </div>
-   );
-
    return (
       <div className="attendance-portal" style={{ textAlign: 'left', animation: 'fadeIn 0.3s ease' }}>
          <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
             <div>
-               <h2 style={{ fontSize: '1.4rem', margin: 0 }}>
-                  {attTab === 'menu' ? 'Cổng Giáo Viên'
-                     : attTab === 'attendance' ? 'Điểm Danh Lớp Học'
-                     : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
-                        : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
-                           : attTab === 'curriculum' ? 'Chương Trình Học'
-                              : 'Trung Tâm Tin Nhắn'}
-               </h2>
+               <h2 style={{ fontSize: '1.4rem', margin: 0 }}>{attTab === 'attendance' ? 'Điểm Danh Lớp Học' : 'Trung Tâm Tin Nhắn'}</h2>
                <p style={{ color: '#64748b', margin: 0, marginTop: '5px' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -1108,67 +799,23 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          </div>
 
-         {attTab === 'menu' && (
-         <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Nhóm dịch vụ</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
-               <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <CalendarCheck size={24} />
-                  </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
-               </div>
-
-               <div onClick={() => setAttTab('notices')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <Bell size={24} />
-                  </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Bảng tin<br />nhà trường</div>
-               </div>
-
-               <div onClick={() => setAttTab('curriculum')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#f0f9ff', border: '3px solid #bae6fd', color: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <FileText size={24} />
-                  </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Chương trình<br />học</div>
-               </div>
-
-               <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <Heart size={24} />
-                  </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Hồ sơ<br />sức khỏe</div>
-               </div>
-
-               <div onClick={() => setAttTab('chat')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                     <MessageSquare size={24} />
-                     {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0) > 0 && (
-                        <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
-                           +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
-                        </span>
-                     )}
-                  </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc GV</div>
-               </div>
-            </div>
+         {/* Tab Navigation */}
+         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', background: '#f1f5f9', padding: '0.4rem', borderRadius: '12px' }}>
+            <button onClick={() => setAttTab('attendance')} style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', fontWeight: 700, cursor: 'pointer', background: attTab === 'attendance' ? 'white' : 'transparent', color: attTab === 'attendance' ? '#ec4899' : '#64748b', boxShadow: attTab === 'attendance' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: '0.2s' }}>
+               <CalendarCheck size={18} /> Điểm danh
+            </button>
+            <button onClick={() => setAttTab('chat')} style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', fontWeight: 700, cursor: 'pointer', background: attTab === 'chat' ? 'white' : 'transparent', color: attTab === 'chat' ? '#ec4899' : '#64748b', boxShadow: attTab === 'chat' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: '0.2s', position: 'relative' }}>
+               <MessageSquare size={18} /> Trò chuyện
+               {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0) > 0 && (
+                  <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', border: '2px solid white' }}>
+                     {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
+                  </span>
+               )}
+            </button>
+            <button onClick={() => setAttTab('health')} style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', fontWeight: 700, cursor: 'pointer', background: attTab === 'health' ? 'white' : 'transparent', color: attTab === 'health' ? '#ec4899' : '#64748b', boxShadow: attTab === 'health' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: '0.2s' }}>
+               <Heart size={18} /> Sức khỏe
+            </button>
          </div>
-         )}
-
-         {attTab !== 'menu' && (
-            <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '12px', padding: '0.75rem 0.2rem' }}>
-               <button onClick={() => setAttTab('menu')} style={{ background: '#f1f5f9', border: 'none', width: '34px', height: '34px', borderRadius: '999px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155', cursor: 'pointer' }}>
-                  <ArrowLeft size={18} />
-               </button>
-               <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
-                  {attTab === 'attendance' ? 'Điểm danh'
-                     : attTab === 'health' ? 'Sức khỏe'
-                        : attTab === 'notices' ? 'Bảng tin'
-                           : attTab === 'curriculum' ? 'Chương trình học'
-                              : 'Liên lạc GV'}
-               </div>
-            </div>
-         )}
 
          {/* Change Password Modal */}
          {isChangePassOpen && (
@@ -1300,11 +947,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      <option value="">-- {attClasses.length > 0 ? 'Chọn Lớp' : 'Không có lớp phân công'} --</option>
                      {attClasses.map(c => <option key={c.malop} value={c.malop}>{c.tenlop || c.malop}</option>)}
                   </select>
-                  {attSelectedClass && (
-                     <div style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#0f766e', fontWeight: 600 }}>
-                        Ngày nhập gần nhất: {attLatestHealthDate ? new Date(attLatestHealthDate).toLocaleDateString('vi-VN') : 'Chưa có dữ liệu'}
-                     </div>
-                  )}
                </div>
 
                {attSelectedClass && (
@@ -1351,63 +993,285 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {(attTab === 'notices' || attTab === 'curriculum') && (
-            <div style={{ animation: 'fadeIn 0.3s ease' }}>
-               {attClasses.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                     Chưa có lớp phân công để xem {attTab === 'notices' ? 'bảng tin' : 'chương trình học'}.
-                  </div>
-               ) : teacherAnnouncementsLoading ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-                     <Loader2 size={24} className="spinner" />
-                  </div>
-               ) : teacherAnnouncements.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                     {teacherAnnouncements.map((item) => (
-                        <div key={item.id} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)' }}>
-                           <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: attTab === 'notices' ? '#eff6ff' : '#f0f9ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                              <div style={{ minWidth: 0 }}>
-                                 <div style={{ fontWeight: 800, color: attTab === 'notices' ? '#2563eb' : '#0f766e' }}>
-                                    {item.title || (attTab === 'notices' ? 'Thông báo lớp' : 'Chương trình học')}
-                                 </div>
-                                 <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>
-                                    Lớp: {getClassDisplayName(item.malop)}
-                                 </div>
-                              </div>
-                              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                 {new Date(item.created_at).toLocaleDateString('vi-VN')}
-                              </span>
-                           </div>
-                           <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              <div style={{ color: '#475569', fontSize: '0.95rem', lineHeight: '1.7', whiteSpace: 'pre-wrap', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
-                                 {item.content || 'Chưa có nội dung chi tiết.'}
-                              </div>
-                              {item.image_url && (
-                                 <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                    <img src={item.image_url} alt={item.title || 'announcement'} style={{ width: '100%', display: 'block' }} />
-                                 </div>
-                              )}
-                              {item.file_url && (
-                                 <a href={item.file_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: '#f8fafc', borderRadius: '10px', textDecoration: 'none', color: '#475569', border: '1px solid #e2e8f0' }}>
-                                    <Download size={16} />
-                                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file_name || 'Xem tệp đính kèm'}</span>
-                                 </a>
-                              )}
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               ) : (
-                  <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                     Chưa có {attTab === 'notices' ? 'bảng tin' : 'chương trình học'} nào trong các lớp được phân công.
-                  </div>
-               )}
-            </div>
-         )}
-
          {attTab === 'chat' && (
             <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: '600px' }}>
-               {attChatView === 'dashboard' ? renderTeacherChatDashboard() : renderTeacherChatThread()}
+               {attChatView === 'dashboard' ? (
+                  <div className="chat-dashboard" style={{ padding: '0', background: 'transparent' }}>
+                     <div className="chat-filters-row" style={{ marginBottom: '1.5rem', gap: '1rem', display: 'flex', flexDirection: isMobileChatView ? 'column' : 'row' }}>
+                        <div className="filter-group">
+                           <div style={{ display: 'flex', gap: '0.75rem', flexDirection: isMobileChatView ? 'column' : 'row', alignItems: isMobileChatView ? 'stretch' : 'center' }}>
+                              <div className="search-input-wrapper" style={{ width: '100%', maxWidth: isMobileChatView ? '100%' : '300px' }}>
+                                 <Search size={18} className="search-icon-inside" />
+                                 <input type="text" placeholder={'T\u00ecm theo t\u00ean/m\u00e3...'} value={attSearchQuery} onChange={(e) => setAttSearchQuery(e.target.value)} />
+                              </div>
+                              <button
+                                 type="button"
+                                 onClick={openClassBroadcastModal}
+                                 title={'G\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp'}
+                                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1rem', minWidth: isMobileChatView ? '100%' : '160px', background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: '12px', color: '#be185d', cursor: 'pointer', fontWeight: 700 }}
+                              >
+                                 <Bell size={16} />
+                                 <span>{'G\u1eedi c\u1ea3 l\u1edbp'}</span>
+                              </button>
+                           </div>
+                        </div>
+                        <div className="filter-group">
+                           <div className="date-filters">
+                              {['Hôm nay', 'Tuần này', 'Tháng này'].map(f => (
+                                 <button key={f} className={`date-filter-btn ${attDateFilter === f ? 'active' : ''}`} onClick={() => setAttDateFilter(f)}>
+                                    {f}
+                                 </button>
+                              ))}
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="quick-reports-container" style={{ gridTemplateColumns: isMobileChatView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: '1.5rem', gap: isMobileChatView ? '0.75rem' : undefined }}>
+                        <div className="report-card xin-nghi" onClick={() => setAttStatFilter(attStatFilter === 'XIN_NGHI' ? 'ALL' : 'XIN_NGHI')} style={{ outline: attStatFilter === 'XIN_NGHI' ? '3px solid #ef4444' : 'none' }}>
+                           <span className="report-label">Xin nghỉ</span>
+                           <span className="report-value">{String(attReports.xinNghi).padStart(2, '0')}</span>
+                        </div>
+                        <div className="report-card bao-thuoc" onClick={() => setAttStatFilter(attStatFilter === 'BAO_THUOC' ? 'ALL' : 'BAO_THUOC')} style={{ outline: attStatFilter === 'BAO_THUOC' ? '3px solid #854d0e' : 'none' }}>
+                           <span className="report-label">Báo thuốc</span>
+                           <span className="report-value">{String(attReports.baoThuoc).padStart(2, '0')}</span>
+                        </div>
+                        <div className="report-card gui-tin-nhan" onClick={() => setAttStatFilter(attStatFilter === 'GUI_TIN_NHAN' ? 'ALL' : 'GUI_TIN_NHAN')} style={{ outline: attStatFilter === 'GUI_TIN_NHAN' ? '3px solid #3b82f6' : 'none' }}>
+                           <span className="report-label">Tin nhắn</span>
+                           <span className="report-value">{String(attReports.guiTinNhan).padStart(2, '0')}</span>
+                        </div>
+                        <div className="report-card doi-nguoi" onClick={() => setAttStatFilter(attStatFilter === 'DOI_NGUOI' ? 'ALL' : 'DOI_NGUOI')} style={{ outline: attStatFilter === 'DOI_NGUOI' ? '3px solid #065f46' : 'none' }}>
+                           <span className="report-label">Đổi người</span>
+                           <span className="report-value">{String(attReports.doiNguoi).padStart(2, '0')}</span>
+                        </div>
+                        <div className="report-card ve-tre" onClick={() => setAttStatFilter(attStatFilter === 'VE_TRE' ? 'ALL' : 'VE_TRE')} style={{ outline: attStatFilter === 'VE_TRE' ? '3px solid #7c3aed' : 'none' }}>
+                           <span className="report-label">Về trễ</span>
+                           <span className="report-value">{String(attReports.veTre).padStart(2, '0')}</span>
+                        </div>
+                     </div>
+
+                     {isMobileChatView && (
+                        <div style={{ display: 'grid', gap: '0.85rem' }}>
+                           {(() => {
+                              const filtered = getFilteredChatStudents();
+                              const dateLimit = getDateLimit();
+
+                              if (filtered.length === 0) {
+                                 return <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', background: '#fff', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>Không có dữ liệu phù hợp</div>;
+                              }
+
+                              return filtered.map(st => {
+                                 const studentMsgs = attLatestMessages.filter(m => m.mahv === st.mahv);
+                                 let msgToShow = studentMsgs[0];
+
+                                 if (attStatFilter !== 'ALL') {
+                                    const matchingMsg = studentMsgs.find(m => {
+                                       if (new Date(m.created_at) < dateLimit) return false;
+                                       const isPH = m.description === 'PH' || (!m.manv);
+                                       if (!isPH) return false;
+                                       const type = getNotifType(m.content);
+                                       if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghỉ';
+                                       if (attStatFilter === 'BAO_THUOC') return type === 'Báo thuốc';
+                                       if (attStatFilter === 'DOI_NGUOI') return type === 'Đổi người đón';
+                                       if (attStatFilter === 'VE_TRE') return type === 'Về trễ';
+                                       if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nhắn';
+                                       return false;
+                                    });
+                                    if (matchingMsg) msgToShow = matchingMsg;
+                                 }
+
+                                 const unread = attUnreadCounts[st.mahv] || 0;
+                                 const type = getNotifType(msgToShow?.content);
+
+                                 return (
+                                    <button
+                                       key={st.mahv}
+                                       onClick={() => { setAttChatSelectedStudent(st); setAttChatView('chat'); }}
+                                       style={{ textAlign: 'left', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '0.95rem', background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)', boxShadow: '0 8px 20px rgba(15, 23, 42, 0.05)', cursor: 'pointer' }}
+                                    >
+                                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.8rem' }}>
+                                          <div style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '14px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                                             {st.tenhv?.charAt(0)}
+                                          </div>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                                                <div style={{ fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>{st.tenhv}</div>
+                                                {unread > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.72rem', padding: '2px 7px', borderRadius: '999px', fontWeight: 700 }}>+{unread}</span>}
+                                             </div>
+                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.55rem' }}>
+                                                <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>{getClassDisplayName(st.malop)}</span>
+                                                <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+                                                   {msgToShow ? new Date(msgToShow.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                </span>
+                                             </div>
+                                             {type && (
+                                                <div style={{ marginBottom: '0.5rem' }}>
+                                                   <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: '#fce7f3', color: '#be185d' }}>
+                                                      {type}
+                                                   </span>
+                                                </div>
+                                             )}
+                                             <div style={{ fontSize: '0.83rem', color: '#475569', lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                {getMessagePreview(msgToShow)}
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </button>
+                                 );
+                              });
+                           })()}
+                        </div>
+                     )}
+
+                     <div className="chat-table-wrapper" style={{ borderRadius: '12px', display: isMobileChatView ? 'none' : 'block' }}>
+                        <table className="chat-data-table">
+                           <thead>
+                              <tr>
+                                 <th>Học sinh</th>
+                                 <th>Lớp</th>
+                                 <th>Thông báo mới nhất</th>
+                                 <th>Thời gian</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              {(() => {
+                                 const filtered = getFilteredChatStudents();
+                                 const dateLimit = getDateLimit();
+
+                                 if (filtered.length === 0) {
+                                    return <tr><td colSpan="4" className="no-results" style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Không có dữ liệu phù hợp</td></tr>
+                                 }
+
+                                 return filtered.map(st => {
+                                    const studentMsgs = attLatestMessages.filter(m => m.mahv === st.mahv);
+                                    let msgToShow = studentMsgs[0];
+
+                                    if (attStatFilter !== 'ALL') {
+                                       const matchingMsg = studentMsgs.find(m => {
+                                          if (new Date(m.created_at) < dateLimit) return false;
+                                          const isPH = m.description === 'PH' || (!m.manv);
+                                          if (!isPH) return false;
+                                          const type = getNotifType(m.content);
+                                          if (attStatFilter === 'XIN_NGHI') return type === 'Xin nghỉ';
+                                          if (attStatFilter === 'BAO_THUOC') return type === 'Báo thuốc';
+                                          if (attStatFilter === 'DOI_NGUOI') return type === 'Đổi người đón';
+                                          if (attStatFilter === 'VE_TRE') return type === 'Về trễ';
+                                          if (attStatFilter === 'GUI_TIN_NHAN') return type === 'Tin nhắn';
+                                          return false;
+                                       });
+                                       if (matchingMsg) msgToShow = matchingMsg;
+                                    }
+
+                                    const unread = attUnreadCounts[st.mahv] || 0;
+                                    const type = getNotifType(msgToShow?.content);
+
+                                    return (
+                                       <tr key={st.mahv} onClick={() => { setAttChatSelectedStudent(st); setAttChatView('chat'); }} style={{ cursor: 'pointer' }}>
+                                          <td className="student-name-cell">
+                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem' }}>
+                                                   {st.tenhv?.charAt(0)}
+                                                </div>
+                                                <span>{st.tenhv}</span>
+                                                {unread > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.7rem', padding: '1px 5px', borderRadius: '4px' }}>+{unread}</span>}
+                                             </div>
+                                          </td>
+                                          <td>{getClassDisplayName(st.malop)}</td>
+                                          <td>
+                                             {msgToShow ? (
+                                                <div style={{ fontSize: '0.8rem', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={msgToShow.content}>
+                                                   {msgToShow.content || (msgToShow.image_url ? '📷 [Hình ảnh]' : (msgToShow.file_url ? '📎 [Tài liệu]' : '...'))}
+                                                </div>
+                                             ) : <span style={{ color: '#cbd5e1' }}>--</span>}
+                                          </td>
+                                          <td className="time-cell">
+                                             {msgToShow ? new Date(msgToShow.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                          </td>
+                                       </tr>
+                                    );
+                                 });
+                              })()}
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               ) : (
+                  <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '600px', background: '#f8fafc', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                        <div style={{ padding: '0.75rem 1rem', background: 'white', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                           <button onClick={() => { setAttChatSelectedStudent(null); setAttChatView('dashboard'); }} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer' }}>
+                              <ArrowLeft size={18} />
+                           </button>
+                           <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                              {attChatSelectedStudent.tenhv?.charAt(0)}
+                           </div>
+                           <div style={{ flex: 1 }}>
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{attChatSelectedStudent.tenhv}</h4>
+                              <div style={{ fontSize: '0.7rem', color: '#22c55e', fontWeight: 600 }}>Phụ huynh đang trực tuyến</div>
+                           </div>
+                           <button style={{ padding: '8px', background: '#f1f5f9', border: 'none', borderRadius: '8px', color: '#64748b' }}>
+                              <Phone size={18} />
+                           </button>
+                        </div>
+
+                        <div ref={attScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                           {attChatLoading ? (
+                              <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
+                           ) : attChatMessages.length === 0 ? (
+                              <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontSize: '0.85rem' }}>Bắt đầu trò chuyện với phụ huynh của {attChatSelectedStudent.tenhv}</div>
+                           ) : (
+                              attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
+                                 const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
+                                 const senderName = getTeacherChatSenderName(m);
+                                 return (
+                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                                       <div style={{ fontSize: '0.68rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
+                                          {senderName}
+                                       </div>
+                                       {m.content && (
+                                          <div style={{
+                                             padding: '8px 12px', borderRadius: isMe ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                                             background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b',
+                                             boxShadow: '0 1px 2px rgba(0,0,0,0.05)', fontSize: '0.9rem', lineHeight: 1.4
+                                          }}>
+                                             <ChatMessageContent content={m.content} isOwnMessage={isMe} />
+                                          </div>
+                                       )}
+                                       {m.image_url && (
+                                          <div style={{ marginTop: '4px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                             <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '250px', display: 'block' }} />
+                                          </div>
+                                       )}
+                                       {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
+                                       <span style={{ fontSize: '0.6rem', color: '#94a3b8', marginTop: '2px' }}>
+                                          {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                       </span>
+                                    </div>
+                                 );
+                              })
+                           )}
+                        </div>
+
+                        <div style={{ padding: '0.75rem 1rem', background: 'white', borderTop: '1px solid #e2e8f0' }}>
+                           <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: isMobileChatView ? '6px' : '8px', width: '100%' }}>
+                              <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                                 <label style={{ cursor: 'pointer', padding: '6px', color: '#64748b', flexShrink: 0 }}>
+                                    <Image size={20} />
+                                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'image')} disabled={uploading} />
+                                 </label>
+                                 <label style={{ cursor: 'pointer', padding: '6px', color: '#64748b', flexShrink: 0 }}>
+                                    <Paperclip size={20} />
+                                    <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
+                                 </label>
+                              </div>
+                              <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.6rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '20px', fontSize: '16px', outline: 'none' }} />
+                              <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '36px', height: '36px', minWidth: '36px', flexShrink: 0, borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1 }}>
+                                 {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                              </button>
+                           </form>
+                        </div>
+                     </div>
+                  </div>
+               )}
             </div>
          )}
 
