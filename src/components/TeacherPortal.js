@@ -981,7 +981,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                     <div style={{ fontSize: '0.84rem', color: '#475569', lineHeight: 1.55, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: '2.6em' }}>
                                        {getMessagePreview(msgToShow)}
                                     </div>
-                                    <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#2563eb', fontWeight: 700 }}>Mở hội thoại</div>
                                  </div>
                               </div>
                            </button>
@@ -1088,10 +1087,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                <h2 style={{ fontSize: '1.4rem', margin: 0 }}>
                   {attTab === 'menu' ? 'Cổng Giáo Viên'
                      : attTab === 'attendance' ? 'Điểm Danh Lớp Học'
-                     : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
-                        : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
-                           : attTab === 'curriculum' ? 'Chương Trình Học'
-                              : 'Trung Tâm Tin Nhắn'}
+                        : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
+                           : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
+                              : attTab === 'curriculum' ? 'Chương Trình Học'
+                                 : 'Trung Tâm Tin Nhắn'}
                </h2>
                <p style={{ color: '#64748b', margin: 0, marginTop: '5px' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
             </div>
@@ -1109,50 +1108,50 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          </div>
 
          {attTab === 'menu' && (
-         <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Nhóm dịch vụ</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
-               <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <CalendarCheck size={24} />
+            <div style={{ marginBottom: '1.5rem' }}>
+               <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Nhóm dịch vụ</div>
+               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
+                  <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <CalendarCheck size={24} />
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
                   </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
-               </div>
 
-               <div onClick={() => setAttTab('notices')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <Bell size={24} />
+                  <div onClick={() => setAttTab('notices')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Bell size={24} />
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Bảng tin<br />nhà trường</div>
                   </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Bảng tin<br />nhà trường</div>
-               </div>
 
-               <div onClick={() => setAttTab('curriculum')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#f0f9ff', border: '3px solid #bae6fd', color: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <FileText size={24} />
+                  <div onClick={() => setAttTab('curriculum')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#f0f9ff', border: '3px solid #bae6fd', color: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileText size={24} />
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Chương trình<br />học</div>
                   </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Chương trình<br />học</div>
-               </div>
 
-               <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <Heart size={24} />
+                  <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Heart size={24} />
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Hồ sơ<br />sức khỏe</div>
                   </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Hồ sơ<br />sức khỏe</div>
-               </div>
 
-               <div onClick={() => setAttTab('chat')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                  <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                     <MessageSquare size={24} />
-                     {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0) > 0 && (
-                        <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
-                           +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
-                        </span>
-                     )}
+                  <div onClick={() => setAttTab('chat')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                        <MessageSquare size={24} />
+                        {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0) > 0 && (
+                           <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
+                              +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
+                           </span>
+                        )}
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc GV</div>
                   </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc GV</div>
                </div>
             </div>
-         </div>
          )}
 
          {attTab !== 'menu' && (
