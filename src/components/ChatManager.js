@@ -494,6 +494,7 @@ const ChatManager = ({ currentUser }) => {
   };
 
   const handleFileUpload = async (e, type) => {
+    const inputElement = e.target;
     const file = e.target.files[0];
     if (!file || !selectedStudent) return;
 
@@ -557,6 +558,7 @@ const ChatManager = ({ currentUser }) => {
       alert('Lỗi: ' + err.message);
     } finally {
       setUploading(false);
+      if (inputElement) inputElement.value = '';
     }
   };
 

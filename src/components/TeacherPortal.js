@@ -226,13 +226,22 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
 
-         const teacherId = attendanceUser.manv || attendanceUser.username;
-         const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+         const teacherIds = [...new Set([
+            attendanceUser.manv,
+            attendanceUser.username,
+            attendanceUser.tennv
+         ].map(value => String(value || '').trim()).filter(Boolean))];
+
+         const payloads = teacherIds.map((teacherId) => ({
             user_id: teacherId,
             role: 'teacher',
             subscription,
             updated_at: new Date().toISOString()
-         }, { onConflict: 'user_id' });
+         }));
+
+         const { error: dbError } = await supabase
+            .from('push_subscriptions')
+            .upsert(payloads, { onConflict: 'user_id' });
 
          if (dbError) throw dbError;
 
@@ -596,12 +605,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      if (Notification.permission === 'granted') {
                         if ('serviceWorker' in navigator) {
                            navigator.serviceWorker.ready.then(registration => {
-                              registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                              registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                            }).catch(() => {
-                              new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                              new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                            });
                         } else {
-                           new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                           new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                         }
                      }
                   }
@@ -617,7 +626,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             .subscribe();
          return () => supabase.removeChannel(channel);
       }
-   }, [attendanceUser, attDateFilter]);
+   }, [attendanceUser, attDateFilter, attAllStudents]);
 
    useEffect(() => {
       if (attTab === 'chat' && attChatSelectedStudent) {
@@ -686,6 +695,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    const handleAttFileUpload = async (e, type) => {
+      const inputElement = e.target;
       const fileInput = e.target.files[0];
       if (!fileInput || !attChatSelectedStudent || !attendanceUser) return;
 
@@ -734,6 +744,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          alert('Lỗi: ' + err.message);
       } finally {
          setUploading(false);
+         if (inputElement) inputElement.value = '';
       }
    };
 
@@ -1088,7 +1099,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                      </label>
                   </div>
-                  <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: '15px', outline: 'none', color: '#0f172a' }} />
+                  <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: '16px', outline: 'none', color: '#0f172a' }} />
                   <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '40px', height: '40px', minWidth: '40px', flexShrink: 0, borderRadius: '14px', background: '#0f172a', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1, boxShadow: '0 10px 18px rgba(15, 23, 42, 0.18)' }}>
                      {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                   </button>
@@ -1166,7 +1177,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            </span>
                         )}
                      </div>
-                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc GV</div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc PH</div>
                   </div>
                </div>
             </div>

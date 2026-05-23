@@ -36,6 +36,8 @@ type PushMessage = {
 };
 
 const normalizeString = (value: unknown) => String(value ?? "").trim();
+const uniqueStrings = (values: unknown[]) =>
+  [...new Set(values.map(normalizeString).filter(Boolean))];
 
 const isWebhookInsert = (payload: WebhookPayload) => {
   const table = normalizeString(payload.table);
@@ -83,6 +85,53 @@ const getUnreadBadgeForParent = async (
   }).length;
 
   return unreadCount || 1;
+};
+
+const getTeacherSubscription = async (
+  supabase: ReturnType<typeof createClient>,
+  teacherId: string,
+) => {
+  const exactLookup = await supabase
+    .from("push_subscriptions")
+    .select("subscription, user_id, updated_at")
+    .eq("user_id", teacherId)
+    .eq("role", "teacher")
+    .maybeSingle();
+
+  if (exactLookup.data?.subscription) {
+    return exactLookup;
+  }
+
+  const { data: teacherRecord } = await supabase
+    .from("tbl_nv")
+    .select("manv, username, tennv")
+    .or(`manv.eq.${teacherId},username.eq.${teacherId},tennv.eq.${teacherId}`)
+    .maybeSingle();
+
+  const candidateIds = uniqueStrings([
+    teacherId,
+    teacherRecord?.manv,
+    teacherRecord?.username,
+    teacherRecord?.tennv,
+  ]);
+
+  if (candidateIds.length <= 1) {
+    return exactLookup;
+  }
+
+  const aliasLookup = await supabase
+    .from("push_subscriptions")
+    .select("subscription, user_id, updated_at")
+    .in("user_id", candidateIds)
+    .eq("role", "teacher")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  const aliasMatch = aliasLookup.data?.[0];
+  return {
+    data: aliasMatch ? { subscription: aliasMatch.subscription } : null,
+    error: aliasLookup.error,
+  };
 };
 
 const buildPushContext = async (
@@ -236,12 +285,16 @@ serve(async (req) => {
     const results = [];
 
     for (const target of context.targets) {
-      const { data: subscriptionData, error: subError } = await supabase
-        .from("push_subscriptions")
-        .select("subscription")
-        .eq("user_id", target.userId)
-        .eq("role", target.role)
-        .maybeSingle();
+      const subscriptionLookup = target.role === "teacher"
+        ? await getTeacherSubscription(supabase, target.userId)
+        : await supabase
+            .from("push_subscriptions")
+            .select("subscription")
+            .eq("user_id", target.userId)
+            .eq("role", target.role)
+            .maybeSingle();
+
+      const { data: subscriptionData, error: subError } = subscriptionLookup;
 
       if (subError || !subscriptionData?.subscription) {
         console.log("No subscription found for target:", target);

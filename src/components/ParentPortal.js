@@ -6,7 +6,7 @@ import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone } from 'lucide-react';
 
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
@@ -18,7 +18,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [parentNotices, setParentNotices] = useState([]);
    const [ngoaiKhoaAnnouncements, setNgoaiKhoaAnnouncements] = useState([]);
    const [uploading, setUploading] = useState(false);
-   const [showChatInfo, setShowChatInfo] = useState(false);
+   const [showChatInfo, setShowChatInfo] = useState(true);
    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
    const [leaveType, setLeaveType] = useState('today');
    const [leaveForm, setLeaveForm] = useState({ from: '', to: '', reason: '' });
@@ -1160,6 +1160,10 @@ function ParentPortal({ parentData, setParentData }) {
    useEffect(() => {
       if (!parentData) return;
 
+      if (parentTab === 'chat-tab') {
+         setShowChatInfo(true);
+      }
+
       const markAsRead = async () => {
          if (parentTab === 'chat-tab') {
             setUnreadChatCount(0);
@@ -1248,6 +1252,7 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const handleFileUpload = async (e, type) => {
+      const inputElement = e.target;
       const fileInput = e.target.files[0];
       if (!fileInput || !parentData) return;
 
@@ -1298,6 +1303,7 @@ function ParentPortal({ parentData, setParentData }) {
          alert('Lỗi: ' + err.message);
       } finally {
          setUploading(false);
+         if (inputElement) inputElement.value = '';
       }
    };
 
@@ -1911,10 +1917,21 @@ function ParentPortal({ parentData, setParentData }) {
                            </div>
                            <div style={{ display: 'flex', gap: '5px' }}>
                               <button style={{ padding: '8px', background: '#f1f5f9', border: 'none', borderRadius: '10px', color: '#64748b' }} onClick={() => setShowChatInfo(!showChatInfo)}>
-                                 <MoreVertical size={20} />
+                                 {showChatInfo ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                               </button>
                            </div>
                         </div>
+
+                        {showChatInfo && (
+                           <div style={{ padding: '12px 16px', background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
+                              <div style={{ fontSize: '0.82rem', lineHeight: 1.55, color: '#9a3412', fontWeight: 600 }}>
+                                 <div style={{ marginBottom: '6px' }}>Lưu ý: Khung giờ thuận tiện giáo viên trả lời tin nhắn là</div>
+                                 <div>✅ trước 8h sáng</div>
+                                 <div>✅ từ 11h-13h45</div>
+                                 <div>✅ từ 16h-20h</div>
+                              </div>
+                           </div>
+                        )}
 
                         <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                            {isLoadMoreChat && (
@@ -1975,7 +1992,7 @@ function ParentPortal({ parentData, setParentData }) {
                                  </label>
                               </div>
                               <div style={{ flex: 1, position: 'relative' }}>
-                                 <input type="text" placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={uploading} style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '0.9rem', outline: 'none' }} />
+                                 <input type="text" placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={uploading} style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none' }} />
                               </div>
                               <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1 }}>
                                  {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}

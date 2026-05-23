@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-const CACHE_NAME = 'kindergarten-v2';
+const CACHE_NAME = 'kindergarten-v3';
 const META_CACHE_NAME = 'kindergarten-meta-v1';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
@@ -39,9 +39,17 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+  const isGetRequest = event.request.method === 'GET';
+  const isSameOrigin = url.origin === self.location.origin;
+
+  // Never intercept uploads, writes, or third-party requests.
+  // Let the browser handle them directly to avoid breaking chat attachments.
+  if (!isGetRequest || !isSameOrigin) {
+    return;
+  }
 
   // Use Network-First strategy for the root HTML files so users always get the latest version
-  if (url.origin === self.location.origin && (url.pathname === '/' || url.pathname === '/index.html')) {
+  if (url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(
       fetch(event.request)
         .then(response => {
@@ -66,6 +74,13 @@ self.addEventListener('fetch', event => {
       .then(response => {
         if (response) return response;
         return fetch(event.request);
+      })
+      .catch(() => {
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+
+        return Response.error();
       })
   );
 });
