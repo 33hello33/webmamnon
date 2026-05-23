@@ -994,11 +994,12 @@ export default function InvoiceManager() {
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
    let tuitionRefund = 0;
    let mealRefund = 0;
-   const nlConfig = typeof config?.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : (config?.nghilientiep || { songaynghilientiep: 7, phantramgiam: 50 });
-   const threshold = nlConfig.songaynghilientiep || 7;
-   const percent = nlConfig.phantramgiam || 0;
+   const p6 = parseFloat(config?.nghi6ngay) || 0;
+   const p12 = parseFloat(config?.nghi12ngay) || 0;
+   const threshold = 6;
+   const percent = 0;
 
-   if (studySummary) {
+   if (studySummary?.consecutiveLeave) {
       // 1. Hoàn trả tiền ăn: Tất cả ngày nghỉ phép (không cần liên tiếp)
       mealRefund = (studySummary.nghiPhep || 0) * trutienan_val;
 
@@ -1013,9 +1014,29 @@ export default function InvoiceManager() {
       }
    }
 
-   const actualMealRefund = mealRefund;
-   const actualTuitionRefund = tuitionRefund;
-   const deductionSum = studySummary ? Math.round(actualMealRefund + actualTuitionRefund) : 0;
+   mealRefund = 0;
+   tuitionRefund = 0;
+
+   if (studySummary?.consecutiveLeave) {
+      studySummary.consecutiveLeave.forEach(group => {
+         const count = group.so_ngay_nghi_lien_tuc;
+         if (count >= 12) {
+            tuitionRefund += count * trutiennghi_val * (p12 / 100);
+         } else if (count >= 6) {
+            tuitionRefund += count * trutiennghi_val * (p6 / 100);
+         }
+      });
+   }
+
+   if (studySummary?.nghiPhep >= 3) {
+      mealRefund = studySummary.nghiPhep * trutienan_val;
+   }
+
+   const roundedMealRefund = Math.round(mealRefund / 1000) * 1000;
+   const roundedTuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
+   const actualMealRefund = roundedMealRefund;
+   const actualTuitionRefund = roundedTuitionRefund;
+   const deductionSum = (actualMealRefund || 0) + (actualTuitionRefund || 0);
 
    const workingDaysCount = getWorkingDaysInMonth(invoiceData.ngayBatDau);
    const isMonthly = (invoiceData.loaiDong || '').toLowerCase().includes('tháng');
@@ -1447,7 +1468,7 @@ export default function InvoiceManager() {
                                        <span style={{ fontWeight: 700 }}>-{formatCurrency(actualMealRefund)}đ</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                                       <span>Hoàn trả học phí (Nghỉ liên tiếp ≥{threshold} ngày):</span>
+                                       <span>Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
                                        <span style={{ fontWeight: 700 }}>-{formatCurrency(actualTuitionRefund)}đ</span>
                                     </div>
                                     <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
@@ -1782,8 +1803,8 @@ export default function InvoiceManager() {
                               <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn học phí (Nghỉ liên tiếp ≥{downloadingInvoice.studySummary?.threshold || 7} ngày):</span>
-                              <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                              <span>- Hoàn học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                              <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualTuitionRefund || 0)} đ</b>
                            </div>
                         </div>
                      )}
@@ -1887,8 +1908,8 @@ export default function InvoiceManager() {
                         <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b>
                      </div>
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Hoàn học phí ({downloadingNotice?.studySummary?.maxConsecutive || 0} ngày nghỉ liên tiếp):</div>
-                        <b style={{ fontWeight: 800 }}>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b>
+                        <div>Hoàn học phí (Nghỉ liên tiếp ≥6 ngày):</div>
+                        <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingNotice?.actualTuitionRefund || 0)} đ</b>
                      </div>
                   </div>
 

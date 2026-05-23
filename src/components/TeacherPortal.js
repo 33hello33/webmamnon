@@ -1182,7 +1182,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      : attTab === 'health' ? 'Sức khỏe'
                         : attTab === 'notices' ? 'Bảng tin'
                            : attTab === 'curriculum' ? 'Chương trình học'
-                              : 'Liên lạc GV'}
+                              : 'Liên lạc PH'}
                </div>
             </div>
          )}
@@ -1248,13 +1248,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      )}
                   </div>
                </div>
-
-               {attSelectedClass && (
-                  <div style={{ marginBottom: '1.5rem' }}>
-                     <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#db2777' }}>Nội dung buổi dạy hôm nay</label>
-                     <textarea placeholder="Nhập kiến thức đã dạy, bài tập về nhà..." value={lessonContent} onChange={e => setLessonContent(e.target.value)} rows="3" style={{ width: '100%', padding: '0.8rem', border: '2px solid #fbcfe8', borderRadius: '8px', fontSize: '0.95rem', fontFamily: 'inherit' }} />
-                  </div>
-               )}
 
                {attSelectedClass && (
                   <>

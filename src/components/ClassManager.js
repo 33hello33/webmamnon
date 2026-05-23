@@ -213,6 +213,29 @@ const calculateConsecutiveLeave = (attendance) => {
   return groups;
 };
 
+const calculatePortalRefunds = ({ nghiPhep = 0, consecutiveGroups = [], trutienanVal = 0, trutiennghiVal = 0, p6 = 0, p12 = 0 }) => {
+  let mealRefund = 0;
+  let tuitionRefund = 0;
+
+  if (nghiPhep >= 3) {
+    mealRefund = nghiPhep * trutienanVal;
+  }
+
+  (consecutiveGroups || []).forEach(group => {
+    const count = Array.isArray(group) ? group.length : (parseInt(group?.so_ngay_nghi_lien_tuc, 10) || 0);
+    if (count >= 12) {
+      tuitionRefund += count * trutiennghiVal * (p12 / 100);
+    } else if (count >= 6) {
+      tuitionRefund += count * trutiennghiVal * (p6 / 100);
+    }
+  });
+
+  return {
+    mealRefund: Math.round(mealRefund / 1000) * 1000,
+    tuitionRefund: Math.round(tuitionRefund / 1000) * 1000
+  };
+};
+
 export default function ClassManager({ students, showMessage, fetchStudents }) {
   const { config, getTruTienAn, getTienAnConfig } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
@@ -559,8 +582,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         attendance = attData || [];
       }
 
-      const trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+      const p6 = parseFloat(config?.nghi6ngay) || 0;
+      const p12 = parseFloat(config?.nghi12ngay) || 0;
 
       setBatchAttendance(attendance || []);
       setBatchNoticeData({
@@ -611,17 +635,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
         const soNgayNghi = nghiPhep + nghiKP;
         const taCfg = getTienAnConfig(initHocPhi);
-        const mealRefund = nghiPhep * taCfg.tru_nghi;
         const workingDays = calculateWorkingDaysInMonth(startStr);
         const monthlyMealFee = taCfg.amount;
-
-        // Tuition refund logic
-        const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
-        const threshold = thresholdCfg.songaynghilientiep || 7;
-        let tuitionRefund = 0;
-        if (maxConsecutive >= threshold) {
-          tuitionRefund = maxConsecutive * trutiennghi_val;
-        }
+        const { mealRefund, tuitionRefund } = calculatePortalRefunds({
+          nghiPhep,
+          consecutiveGroups,
+          trutienanVal: taCfg.tru_nghi,
+          trutiennghiVal: trutiennghi_val,
+          p6,
+          p12
+        });
 
         // Calculate current old debt
         let nocu = 0;
@@ -782,23 +805,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       const consecutiveGroups = calculateConsecutiveLeave(stAttendance);
       const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
-      
-      const taCfg = getTienAnConfig(item.hocphi);
+
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-      
-      const newTruTienAn = nghiPhep * taCfg.tru_nghi;
-      let newTruTuition = 0;
-      const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
-      if (maxConsecutive >= (thresholdCfg.songaynghilientiep || 7)) {
-        newTruTuition = maxConsecutive * trutiennghi_val;
-      }
+      const taCfg = getTienAnConfig(item.hocphi);
+      const p6 = parseFloat(config?.nghi6ngay) || 0;
+      const p12 = parseFloat(config?.nghi12ngay) || 0;
+      const { mealRefund: newTruTienAn, tuitionRefund: newTruTuition } = calculatePortalRefunds({
+        nghiPhep,
+        consecutiveGroups,
+        trutienanVal: taCfg.tru_nghi,
+        trutiennghiVal: trutiennghi_val,
+        p6,
+        p12
+      });
 
       const hp = parseInt(item.hocphi || 0);
       const ta = getMealFeeInfo(item.tienan).amount;
       const ghp = parseInt(item.giamhocphi || 0);
       const nc = parseInt(item.nocu || 0);
       const ptValue = Array.isArray(item.phuthu) ? item.phuthu.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0) : 0;
-      
+
       return {
         ...item,
         coMat,
@@ -888,15 +914,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           const tru_nghi_val = taTier ? (parseInt(taTier.tru_nghi) || 0) : getTruTienAn(newItem.hocphi);
 
           const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-          newItem.trutienan = newItem.nghiPhep * tru_nghi_val;
-
-          const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
-          const threshold = thresholdCfg.songaynghilientiep || 7;
-          if (newItem.maxConsecutive >= threshold) {
-            newItem.trutiennghi = newItem.maxConsecutive * trutiennghi_val;
-          } else {
-            newItem.trutiennghi = 0;
-          }
+          const p6 = parseFloat(config?.nghi6ngay) || 0;
+          const p12 = parseFloat(config?.nghi12ngay) || 0;
+          const simulatedGroups = Number(newItem.maxConsecutive) > 0 ? [new Array(parseInt(newItem.maxConsecutive, 10) || 0)] : [];
+          const { mealRefund, tuitionRefund } = calculatePortalRefunds({
+            nghiPhep: parseInt(newItem.nghiPhep, 10) || 0,
+            consecutiveGroups: simulatedGroups,
+            trutienanVal: tru_nghi_val,
+            trutiennghiVal: trutiennghi_val,
+            p6,
+            p12
+          });
+          newItem.trutienan = mealRefund;
+          newItem.trutiennghi = tuitionRefund;
         }
 
         const hp = parseInt(newItem.hocphi || 0);
@@ -1053,7 +1083,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     const blob = dataUrlToBlob(dataUrl);
                     const pngFile = new File([blob], fileName, { type: 'image/png' });
                     const file = await compressImage(pngFile, 150);
-                    
+
                     let imageUrl = '';
                     if (config?.r2_enabled) {
                       imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
@@ -1093,7 +1123,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       const blob = dataUrlToBlob(retryUrl);
                       const pngFile = new File([blob], fileName, { type: 'image/png' });
                       const file = await compressImage(pngFile, 150);
-                      
+
                       let imageUrl = '';
                       if (config?.r2_enabled) {
                         imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
@@ -1386,9 +1416,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <span className="class-id">Mã số: {selectedClass.malop}</span>
                   </div>
                   <div className="class-actions">
-                    <button className="btn btn-outline" style={{ borderLeft: '4px solid #db2777' }} onClick={() => setIsNoidungModalOpen(true)}>
-                      <FileText size={16} /> Lịch Sử Nội Dung Dạy
-                    </button>
                     <button className="btn btn-outline" onClick={handleOpenEdit}><Edit size={16} /> Sửa Lớp</button>
                     <button className="btn btn-danger" onClick={handleDelete}><Trash2 size={16} /> Xóa Lớp</button>
                   </div>
@@ -1820,16 +1847,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                   <div className="flex-center" style={{ gap: '10px', background: '#fff7ed', padding: '5px 15px', borderRadius: '12px', border: '1px solid #ffedd5' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#9a3412' }}>HẠN THỐNG KÊ NGHỈ:</span>
-                    <input 
-                      type="date" 
-                      value={batchNoticeData.statsStart} 
+                    <input
+                      type="date"
+                      value={batchNoticeData.statsStart}
                       onChange={e => handleUpdateStatsRange('statsStart', e.target.value)}
                       style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
                     />
                     <span style={{ color: '#9a3412', fontWeight: 900 }}>→</span>
-                    <input 
-                      type="date" 
-                      value={batchNoticeData.statsEnd} 
+                    <input
+                      type="date"
+                      value={batchNoticeData.statsEnd}
                       onChange={e => handleUpdateStatsRange('statsEnd', e.target.value)}
                       style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
                     />
@@ -2032,16 +2059,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             </td>
                             <td>
                               <div style={{ position: 'relative' }}>
-                                 <input
-                                   type="text"
-                                   value={formatTuition(row.nocu)}
-                                   onChange={e => handleBatchStudentChange(row.mahv, 'nocu', e.target.value)}
-                                   className="td-input"
-                                   style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: row.nocu > 0 ? '#dc2626' : (row.nocu < 0 ? '#16a34a' : 'inherit') }}
-                                 />
-                                 {row.nocu < 0 && <span style={{ position: 'absolute', right: '4px', top: '-10px', fontSize: '0.6rem', color: '#16a34a', fontWeight: 700 }}>Tiền dư</span>}
-                               </div>
-                             </td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.nocu)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'nocu', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: row.nocu > 0 ? '#dc2626' : (row.nocu < 0 ? '#16a34a' : 'inherit') }}
+                                />
+                                {row.nocu < 0 && <span style={{ position: 'absolute', right: '4px', top: '-10px', fontSize: '0.6rem', color: '#16a34a', fontWeight: 700 }}>Tiền dư</span>}
+                              </div>
+                            </td>
                             <td>
                               <input type="text" value={row.coMat} onChange={e => handleBatchStudentChange(row.mahv, 'coMat', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center', color: '#16a34a' }} />
                             </td>
