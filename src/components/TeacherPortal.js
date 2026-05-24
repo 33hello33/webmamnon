@@ -207,7 +207,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
 
          const registration = await navigator.serviceWorker.ready;
-         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -1023,9 +1023,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    const renderTeacherChatThread = () => (
-      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '680px', background: '#ffffff', borderRadius: '24px', overflow: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}>
-         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ padding: '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', height: '680px', background: '#ffffff', borderRadius: '24px', overflow: 'hidden', overflowX: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+            <div style={{ padding: '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                <button onClick={() => { setAttChatSelectedStudent(null); setAttChatView('dashboard'); }} style={{ background: 'white', border: '1px solid #dbeafe', width: '36px', height: '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', cursor: 'pointer', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.08)' }}>
                   <ArrowLeft size={18} />
                </button>
@@ -1044,7 +1044,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                </button>
             </div>
 
-            <div ref={attScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)' }}>
+            <div ref={attScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)', width: '100%', maxWidth: '100%', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                {attChatLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
                ) : attChatMessages.length === 0 ? (
@@ -1054,7 +1054,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
                      const senderName = getTeacherChatSenderName(m);
                      return (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '88%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', width: '100%', maxWidth: '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', overflowX: 'hidden' }}>
                            <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800 }}>
                               {senderName}
                            </div>
@@ -1087,8 +1087,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                )}
             </div>
 
-            <div style={{ padding: '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe' }}>
-               <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '8px 10px' }}>
+            <div style={{ padding: '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+               <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '100%', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '8px 10px', overflowX: 'hidden' }}>
                   <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                      <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Image size={18} />
@@ -1427,7 +1427,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          )}
 
          {attTab === 'chat' && (
-            <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: '600px' }}>
+            <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: '600px', width: '100%', maxWidth: '100%', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                {attChatView === 'dashboard' ? renderTeacherChatDashboard() : renderTeacherChatThread()}
             </div>
          )}

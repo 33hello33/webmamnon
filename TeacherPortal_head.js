@@ -204,7 +204,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
 
          const registration = await navigator.serviceWorker.ready;
-         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);

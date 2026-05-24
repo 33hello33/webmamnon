@@ -169,7 +169,7 @@ function ParentPortal({ parentData, setParentData }) {
          const registration = await navigator.serviceWorker.ready;
          
          // In a real app, replace this with your VAPID public key
-         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'; 
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || ''; 
          
          // Convert VAPID key to Uint8Array
          const urlBase64ToUint8Array = (base64String) => {
@@ -397,7 +397,22 @@ function ParentPortal({ parentData, setParentData }) {
          const end = new Date(toDateStr);
          const configTimeStr = config?.xinnghitruocmaygio || '08:00';
          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
-         const cfgTimeTotal = cfgHour * 60 + cfgMin;
+         const cfgTimeTotal = (Number.isFinite(cfgHour) ? cfgHour : 8) * 60 + (Number.isFinite(cfgMin) ? cfgMin : 0);
+         let leaveMalop = parentData.student.malop || null;
+         let leaveManv = parentData.teacherManv || null;
+
+         if (leaveMalop) {
+            const { data: classData } = await supabase
+               .from('tbl_lop')
+               .select('malop, manv')
+               .eq('malop', leaveMalop)
+               .maybeSingle();
+
+            if (classData) {
+               leaveMalop = classData.malop || leaveMalop;
+               leaveManv = classData.manv || leaveManv;
+            }
+         }
 
          let current = new Date(start);
          while (current <= end) {
@@ -410,17 +425,15 @@ function ParentPortal({ parentData, setParentData }) {
                if (currentTimeTotal > cfgTimeTotal) {
                   trangthai = 'Nghỉ không phép';
                }
-            } else if (currDateStr < todayStr) {
-               trangthai = 'Nghỉ không phép';
             }
 
             const payload = {
                mahv: parentData.student.mahv,
-               malop: parentData.student.malop,
+               malop: leaveMalop,
                ngay: currDateStr,
-               trangthai: trangthai,
+               trangthai,
                ghichu: leaveForm.reason,
-               manv: parentData.teacherManv || 'parent'
+               manv: leaveManv
             };
 
             // Check if record exists
@@ -1233,6 +1246,22 @@ function ParentPortal({ parentData, setParentData }) {
       }
    }, [parentTab]);
 
+   useEffect(() => {
+      if (parentTab === 'menu') return;
+
+      const resetTopPosition = () => {
+         window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+         document.documentElement.scrollTop = 0;
+         document.body.scrollTop = 0;
+         document.getElementById('login-box-target')?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+         document.getElementById('parent-dashboard')?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      };
+
+      resetTopPosition();
+      const rafId = window.requestAnimationFrame(resetTopPosition);
+      return () => window.cancelAnimationFrame(rafId);
+   }, [parentTab]);
+
    const handleSendChat = async (e) => {
       e.preventDefault();
       if (!chatInput.trim() || !parentData) return;
@@ -1446,7 +1475,7 @@ function ParentPortal({ parentData, setParentData }) {
 
          {parentTab !== 'menu' && (
             <div className={parentTab === 'chat-tab' ? 'premium-tab-container chat-mode' : 'premium-tab-container'}>
-               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px', padding: '20px 20px 10px', background: 'white', borderRadius: '24px 24px 0 0' }}>
+               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px', padding: parentTab === 'chat-tab' ? 'calc(12px + env(safe-area-inset-top, 0px)) 16px 12px' : '20px 20px 10px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '24px 24px 0 0', flexShrink: 0 }}>
                   <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f' }}>
                      <ArrowLeft size={20} />
                   </button>
@@ -1461,7 +1490,7 @@ function ParentPortal({ parentData, setParentData }) {
                   </h2>
                </div>
 
-               <div className="premium-tab-content-wrapper" style={{ padding: parentTab === 'chat-tab' ? '0' : '20px', background: 'white', borderRadius: '0 0 24px 24px', minHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
+               <div className="premium-tab-content-wrapper" style={{ padding: parentTab === 'chat-tab' ? '0' : '20px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '0 0 24px 24px', minHeight: parentTab === 'chat-tab' ? '0' : 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', flex: 1 }}>
                   {parentTab === 'notices-tab' && (
                      <div id="notices-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div className="notices-section">

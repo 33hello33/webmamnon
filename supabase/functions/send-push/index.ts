@@ -288,11 +288,11 @@ serve(async (req) => {
       const subscriptionLookup = target.role === "teacher"
         ? await getTeacherSubscription(supabase, target.userId)
         : await supabase
-            .from("push_subscriptions")
-            .select("subscription")
-            .eq("user_id", target.userId)
-            .eq("role", target.role)
-            .maybeSingle();
+          .from("push_subscriptions")
+          .select("subscription")
+          .eq("user_id", target.userId)
+          .eq("role", target.role)
+          .maybeSingle();
 
       const { data: subscriptionData, error: subError } = subscriptionLookup;
 
