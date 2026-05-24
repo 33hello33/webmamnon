@@ -309,15 +309,36 @@ function ParentPortal({ parentData, setParentData }) {
       let fromDateStr = leaveForm.from;
       let toDateStr = leaveForm.to;
 
+      const formatLocalDate = (date) => {
+         const year = date.getFullYear();
+         const month = String(date.getMonth() + 1).padStart(2, '0');
+         const day = String(date.getDate()).padStart(2, '0');
+         return `${year}-${month}-${day}`;
+      };
+
+      const getLeaveStatus = (dateStr, todayDateStr, cutoffMinutes) => {
+         if (dateStr < todayDateStr) {
+            return 'Nghỉ không phép';
+         }
+
+         if (dateStr > todayDateStr) {
+            return 'Nghỉ phép';
+         }
+
+         const now = new Date();
+         const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
+         return currentTimeTotal <= cutoffMinutes ? 'Nghỉ phép' : 'Nghỉ không phép';
+      };
+
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = formatLocalDate(today);
 
       if (leaveType === 'today') {
          fromDateStr = toDateStr = todayStr;
       } else if (leaveType === 'tomorrow') {
          const tomorrow = new Date();
          tomorrow.setDate(tomorrow.getDate() + 1);
-         fromDateStr = toDateStr = tomorrow.toISOString().split('T')[0];
+         fromDateStr = toDateStr = formatLocalDate(tomorrow);
       }
 
       if (!fromDateStr || !toDateStr || !leaveForm.reason) {
@@ -332,24 +353,14 @@ function ParentPortal({ parentData, setParentData }) {
       try {
          const start = new Date(fromDateStr);
          const end = new Date(toDateStr);
-         const configTimeStr = config?.xinnghitruocmaygio || '08:00';
+         const configTimeStr = config?.xinnghitruocmaygio || config?.xinghitruocmaygio || '08:00';
          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
          const cfgTimeTotal = cfgHour * 60 + cfgMin;
 
          let current = new Date(start);
          while (current <= end) {
-            const currDateStr = current.toISOString().split('T')[0];
-            let trangthai = 'Nghỉ phép';
-
-            if (currDateStr === todayStr) {
-               const now = new Date();
-               const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
-               if (currentTimeTotal > cfgTimeTotal) {
-                  trangthai = 'Nghỉ không phép';
-               }
-            } else if (currDateStr < todayStr) {
-               trangthai = 'Nghỉ không phép';
-            }
+            const currDateStr = formatLocalDate(current);
+            const trangthai = getLeaveStatus(currDateStr, todayStr, cfgTimeTotal);
 
             const payload = {
                mahv: parentData.student.mahv,

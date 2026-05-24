@@ -1,6 +1,6 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
-export const uploadToR2 = async (file, endpoint, accessKeyId, secretAccessKey, bucketName, publicUrlPrefix) => {
+export const uploadToR2 = async (file, endpoint, accessKeyId, secretAccessKey, bucketName, publicUrlPrefix, options = {}) => {
   if (!endpoint || !accessKeyId || !secretAccessKey || !bucketName) {
     throw new Error('Cấu hình Cloudflare R2 chưa đầy đủ.');
   }
@@ -15,7 +15,9 @@ export const uploadToR2 = async (file, endpoint, accessKeyId, secretAccessKey, b
   });
 
   const fileExtension = file.name.split('.').pop() || 'tmp';
-  const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExtension}`;
+  const customKey = typeof options === 'string' ? options : options?.key;
+  const normalizedCustomKey = customKey ? String(customKey).replace(/^\/+/, '') : '';
+  const fileName = normalizedCustomKey || `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExtension}`;
   
   // Convert File/Blob to Uint8Array to avoid stream compatibility issues in browser
   const arrayBuffer = await file.arrayBuffer();

@@ -8,6 +8,12 @@ import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 
+const buildTuitionNoticeImageKey = (mahv, mahd) => {
+   const safeMahv = String(mahv || '').trim();
+   const safeMahd = String(mahd || '').trim();
+   return `tuition-notices/${safeMahv}/ThongBaoHocPhi_${safeMahv}_${safeMahd}.png`;
+};
+
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
    const [parentTab, setParentTab] = useState('menu');
@@ -372,15 +378,36 @@ function ParentPortal({ parentData, setParentData }) {
       let fromDateStr = leaveForm.from;
       let toDateStr = leaveForm.to;
 
+      const formatLocalDate = (date) => {
+         const year = date.getFullYear();
+         const month = String(date.getMonth() + 1).padStart(2, '0');
+         const day = String(date.getDate()).padStart(2, '0');
+         return `${year}-${month}-${day}`;
+      };
+
+      const getLeaveStatus = (dateStr, todayDateStr, cutoffMinutes) => {
+         if (dateStr < todayDateStr) {
+            return 'Nghỉ không phép';
+         }
+
+         if (dateStr > todayDateStr) {
+            return 'Nghỉ phép';
+         }
+
+         const now = new Date();
+         const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
+         return currentTimeTotal <= cutoffMinutes ? 'Nghỉ phép' : 'Nghỉ không phép';
+      };
+
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = formatLocalDate(today);
 
       if (leaveType === 'today') {
          fromDateStr = toDateStr = todayStr;
       } else if (leaveType === 'tomorrow') {
          const tomorrow = new Date();
          tomorrow.setDate(tomorrow.getDate() + 1);
-         fromDateStr = toDateStr = tomorrow.toISOString().split('T')[0];
+         fromDateStr = toDateStr = formatLocalDate(tomorrow);
       }
 
       if (!fromDateStr || !toDateStr || !leaveForm.reason) {
@@ -395,24 +422,14 @@ function ParentPortal({ parentData, setParentData }) {
       try {
          const start = new Date(fromDateStr);
          const end = new Date(toDateStr);
-         const configTimeStr = config?.xinnghitruocmaygio || '08:00';
+         const configTimeStr = config?.xinnghitruocmaygio || config?.xinghitruocmaygio || '08:00';
          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
          const cfgTimeTotal = cfgHour * 60 + cfgMin;
 
          let current = new Date(start);
          while (current <= end) {
-            const currDateStr = current.toISOString().split('T')[0];
-            let trangthai = 'Nghỉ phép';
-
-            if (currDateStr === todayStr) {
-               const now = new Date();
-               const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
-               if (currentTimeTotal > cfgTimeTotal) {
-                  trangthai = 'Nghỉ không phép';
-               }
-            } else if (currDateStr < todayStr) {
-               trangthai = 'Nghỉ không phép';
-            }
+            const currDateStr = formatLocalDate(current);
+            const trangthai = getLeaveStatus(currDateStr, todayStr, cfgTimeTotal);
 
             const payload = {
                mahv: parentData.student.mahv,
@@ -734,6 +751,31 @@ function ParentPortal({ parentData, setParentData }) {
       if (!parentData?.latestFee || !parentData?.student?.mahv) return null;
 
       const noticeId = String(parentData.latestFee.mahd || '').trim();
+      const studentId = String(parentData.student.mahv || '').trim();
+
+      if (noticeId) {
+         const { data: noticeData, error: noticeError } = await supabase
+            .from('tbl_thongbao')
+            .select('image_url')
+            .eq('mahv', studentId)
+            .eq('mahd', noticeId)
+            .maybeSingle();
+
+         if (noticeError) {
+            console.warn('Không đọc được image_url từ tbl_thongbao:', noticeError);
+         }
+         if (noticeData?.image_url) return noticeData.image_url;
+
+         const basePublicUrl = (config?.r2_public_url || '').replace(/\/+$/, '');
+         if (config?.r2_enabled && basePublicUrl) {
+            return `${basePublicUrl}/${buildTuitionNoticeImageKey(studentId, noticeId)}`;
+         }
+
+         const storagePath = `chat-images/${buildTuitionNoticeImageKey(studentId, noticeId)}`;
+         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
+         if (publicUrl) return publicUrl;
+      }
+
       const pickLatestImage = (messages = []) => {
          const validMessages = messages.filter(msg => msg?.image_url);
          if (validMessages.length === 0) return null;

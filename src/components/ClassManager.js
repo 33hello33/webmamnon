@@ -24,6 +24,47 @@ const dataUrlToBlob = (dataUrl) => {
   return new Blob([u8arr], { type: mime });
 };
 
+const buildTuitionNoticeImageKey = (mahv, mahd) => {
+  const safeMahv = String(mahv || '').trim();
+  const safeMahd = String(mahd || '').trim();
+  return `tuition-notices/${safeMahv}/ThongBaoHocPhi_${safeMahv}_${safeMahd}.png`;
+};
+
+const syncTuitionNoticeImage = async ({ file, mahv, mahd, config }) => {
+  const objectKey = buildTuitionNoticeImageKey(mahv, mahd);
+  let imageUrl = '';
+
+  if (config?.r2_enabled) {
+    imageUrl = await uploadToR2(
+      file,
+      config.r2_endpoint,
+      config.r2_access_key_id,
+      config.r2_secret_access_key,
+      config.r2_bucket_name,
+      config.r2_public_url,
+      { key: objectKey }
+    );
+  } else {
+    const path = `chat-images/${objectKey}`;
+    const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
+    if (upErr) throw upErr;
+    const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+    imageUrl = publicUrl;
+  }
+
+  const { error: updateErr } = await supabase
+    .from('tbl_thongbao')
+    .update({ image_url: imageUrl })
+    .eq('mahv', mahv)
+    .eq('mahd', mahd);
+
+  if (updateErr) {
+    console.warn('Không cập nhật được image_url cho tbl_thongbao:', updateErr);
+  }
+
+  return imageUrl;
+};
+
 const INITIAL_FORM = {
   malop: '', tenlop: '', hocphi: '', manv: '', daxoa: 'Đang Học'
 }
@@ -1054,16 +1095,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     const pngFile = new File([blob], fileName, { type: 'image/png' });
                     const file = await compressImage(pngFile, 150);
                     
-                    let imageUrl = '';
-                    if (config?.r2_enabled) {
-                      imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-                    } else {
-                      const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${file.name}`;
-                      const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
-                      if (upErr) throw upErr;
-                      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
-                      imageUrl = publicUrl;
-                    }
+                    const imageUrl = await syncTuitionNoticeImage({
+                      file,
+                      mahv: noticesToPrint[i].mahv,
+                      mahd: noticesToPrint[i].mahd,
+                      config
+                    });
 
                     const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
                     await supabase.from('hv_messages').insert([{
@@ -1094,16 +1131,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       const pngFile = new File([blob], fileName, { type: 'image/png' });
                       const file = await compressImage(pngFile, 150);
                       
-                      let imageUrl = '';
-                      if (config?.r2_enabled) {
-                        imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-                      } else {
-                        const path = `chat-images/${noticesToPrint[i].mahv}_${Date.now()}_${file.name}`;
-                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
-                        if (upErr) throw upErr;
-                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
-                        imageUrl = publicUrl;
-                      }
+                      const imageUrl = await syncTuitionNoticeImage({
+                        file,
+                        mahv: noticesToPrint[i].mahv,
+                        mahd: noticesToPrint[i].mahd,
+                        config
+                      });
 
                       const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
                       await supabase.from('hv_messages').insert([{
