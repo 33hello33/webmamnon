@@ -32,7 +32,7 @@ export const ConfigProvider = ({ children }) => {
 
           // Dynamically generate manifest.json for Android Chrome PWA
           const manifestObj = {
-            short_name: data.tenweb || "Mam Non",
+            short_name: data.tenweb || "Trường Lá",
             name: data.tenweb || "Hệ thống Quản lý Mầm Non",
             icons: [
               {

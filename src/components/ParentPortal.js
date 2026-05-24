@@ -66,6 +66,15 @@ function ParentPortal({ parentData, setParentData }) {
       return url;
    };
 
+   const scrollParentChatToBottom = (behavior = 'auto') => {
+      if (!chatContainerRef.current) return;
+      chatContainerRef.current.scrollTo({
+         top: chatContainerRef.current.scrollHeight,
+         left: 0,
+         behavior
+      });
+   };
+
    const getStaffDisplayName = (staffId) => {
       if (!staffId) return 'Nhà trường';
       return staffDirectory[staffId] || (staffId === parentData?.teacherManv ? 'Giáo viên phụ trách' : staffId);
@@ -254,7 +263,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
-         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+         setTimeout(() => scrollParentChatToBottom('smooth'), 100);
       }
    };
 
@@ -353,7 +362,7 @@ function ParentPortal({ parentData, setParentData }) {
          } else {
             setChatMessages(reversed);
             setHasMoreChat(data.length === pageSize);
-            setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+            setTimeout(() => scrollParentChatToBottom('auto'), 50);
          }
       }
 
@@ -1158,7 +1167,7 @@ function ParentPortal({ parentData, setParentData }) {
             setChatMessages(prev => {
                const exists = prev.some(m => m.id === payload.new.id);
                if (exists) return prev;
-               setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+               setTimeout(() => scrollParentChatToBottom('smooth'), 100);
                return [...prev, payload.new];
             });
          }).subscribe();
@@ -1276,7 +1285,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
-         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+         setTimeout(() => scrollParentChatToBottom('smooth'), 100);
       }
    };
 
