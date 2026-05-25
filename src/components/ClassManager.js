@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText, Plus
+  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, Users, User, DollarSign, X, Eye, GraduationCap, Plus
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
@@ -362,17 +362,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const batchNgayKetThuc = batchNoticeData.ngayKetThuc;
   const batchLoaiDong = batchNoticeData.loaiDong;
   const batchSoLuong = batchNoticeData.soLuong;
-
-
-
-  // Lesson Content
-  const [isNoidungModalOpen, setIsNoidungModalOpen] = useState(false);
-  const [noidungFilter, setNoidungFilter] = useState('this_month');
-  const [noidungCustomStart, setNoidungCustomStart] = useState('');
-  const [noidungCustomEnd, setNoidungCustomEnd] = useState('');
-  const [noidungList, setNoidungList] = useState([]);
-  const [noidungLoading, setNoidungLoading] = useState(false);
-
   // Delete Confirmation
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -417,62 +406,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     fetchTeachers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const fetchNoidungDay = useCallback(async (filter) => {
-    if (!selectedClassId) return;
-    setNoidungLoading(true);
-    try {
-      let startD, endD;
-      const today = new Date();
-      const now = new Date(today - today.getTimezoneOffset() * 60000);
-      const todayIso = now.toISOString().split('T')[0];
-
-      if (filter === 'this_week') {
-        const day = now.getDay() || 7;
-        const wStart = new Date(now);
-        wStart.setHours(-24 * (day - 1));
-        startD = wStart.toISOString().split('T')[0];
-        endD = todayIso;
-      } else if (filter === 'this_month') {
-        startD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-        endD = todayIso;
-      } else if (filter === 'last_month') {
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        startD = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
-        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-        endD = lastDay.toISOString().split('T')[0];
-      } else if (filter === 'custom') {
-        startD = noidungCustomStart;
-        endD = noidungCustomEnd;
-      }
-
-      let query = supabase
-        .from('tbl_noidungday')
-        .select('*')
-        .eq('malop', selectedClassId);
-
-      if (filter !== 'all_time') {
-        if (startD) query = query.gte('ngay', startD);
-        if (endD) query = query.lte('ngay', endD);
-      }
-
-      const { data, error } = await query.order('ngay', { ascending: false });
-
-      if (error) throw error;
-      setNoidungList(data || []);
-    } catch (err) {
-      console.error(err);
-      showMessage('error', 'Lỗi tải nội dung dạy: ' + err.message);
-    } finally {
-      setNoidungLoading(false);
-    }
-  }, [selectedClassId, noidungCustomStart, noidungCustomEnd, showMessage]);
-
-  useEffect(() => {
-    if (isNoidungModalOpen) {
-      fetchNoidungDay(noidungFilter);
-    }
-  }, [isNoidungModalOpen, noidungFilter, fetchNoidungDay]);
 
   const classStudents = React.useMemo(() => {
     if (!selectedClassId || !students) return [];
@@ -1483,9 +1416,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <span className="class-id">Mã số: {selectedClass.malop}</span>
                   </div>
                   <div className="class-actions">
-                    <button className="btn btn-outline" style={{ borderLeft: '4px solid #db2777' }} onClick={() => setIsNoidungModalOpen(true)}>
-                      <FileText size={16} /> Lịch Sử Nội Dung Dạy
-                    </button>
                     <button className="btn btn-outline" onClick={handleOpenEdit}><Edit size={16} /> Sửa Lớp</button>
                     <button className="btn btn-danger" onClick={handleDelete}><Trash2 size={16} /> Xóa Lớp</button>
                   </div>
@@ -2328,81 +2258,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           ))}
         </div>
       )}
-      {/* Lesson Content Modal */}
-      {isNoidungModalOpen && createPortal(
-        <div className="modal-overlay" style={{ zIndex: 1000 }}>
-          <div className="modal-content" style={{ maxWidth: '800px', width: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#db2777', color: 'white', padding: '8px', borderRadius: '8px' }}>
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Nội dung dạy: {selectedClass?.tenlop}</h3>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Theo dõi tiến độ giảng dạy của lớp</p>
-                </div>
-              </div>
-              <button className="close-btn" onClick={() => setIsNoidungModalOpen(false)}><X size={20} /></button>
-            </div>
-
-            <div className="modal-body" style={{ padding: '20px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '1.5rem', background: 'white', padding: '12px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontWeight: 600, color: '#334155' }}>Khoảng thời gian:</label>
-                  <select
-                    value={noidungFilter}
-                    onChange={(e) => setNoidungFilter(e.target.value)}
-                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', minWidth: '200px' }}
-                  >
-                    <option value="this_week">Trong tuần này</option>
-                    <option value="this_month">Trong tháng này</option>
-                    <option value="last_month">Trong tháng trước</option>
-                    <option value="all_time">Toàn bộ thời gian</option>
-                    <option value="custom">Tùy chọn ngày...</option>
-                  </select>
-                </div>
-                {noidungFilter === 'custom' && (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end', borderTop: '1px dashed #e2e8f0', paddingTop: '10px' }}>
-                    <input type="date" value={noidungCustomStart} onChange={e => setNoidungCustomStart(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                    <span style={{ color: '#64748b' }}>-</span>
-                    <input type="date" value={noidungCustomEnd} onChange={e => setNoidungCustomEnd(e.target.value)} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                  </div>
-                )}
-              </div>
-
-              {noidungLoading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Đang tải dữ liệu...</div>
-              ) : noidungList.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {noidungList.map((item) => (
-                    <div key={item.id} style={{ background: 'white', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.95rem' }}>
-                          📅 {new Date(item.ngay).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        </span>
-                      </div>
-                      <div style={{ color: '#334155', lineHeight: '1.6', fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
-                        {item.noidungday || <i style={{ color: '#94a3b8' }}>Không có nội dung được ghi lại.</i>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '12px', border: '2px dashed #e2e8f0' }}>
-                  <div style={{ color: '#94a3b8', marginBottom: '10px' }}><FileText size={48} strokeWidth={1} /></div>
-                  <p style={{ color: '#64748b', fontSize: '1.1rem' }}>Chưa có nội dung dạy nào trong khoảng thời gian này.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e2e8f0', textAlign: 'right', background: 'white' }}>
-              <button className="btn btn-primary" onClick={() => setIsNoidungModalOpen(false)}>Đóng</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
       {/* Delete Confirmation Modal */}
       {isDeleteOpen && createPortal(
         <div className="modal-overlay" style={{ zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

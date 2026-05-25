@@ -136,7 +136,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [attSelectedClass, setAttSelectedClass] = useState('');
    const [attStudents, setAttStudents] = useState([]);
    const [attRecords, setAttRecords] = useState({});
-   const [lessonContent, setLessonContent] = useState('');
    const [isChangePassOpen, setIsChangePassOpen] = useState(false);
    const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
    const [changePassLoading, setChangePassLoading] = useState(false);
@@ -253,7 +252,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          if (!attSelectedClass) {
             setAttStudents([]);
             setAttRecords({});
-            setLessonContent('');
             setAttLatestHealthDate('');
             return;
          }
@@ -297,10 +295,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          });
          setAttRecords(rMap);
-
-         // Tải nội dung dạy
-         const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
-         setLessonContent(nd ? nd.noidungday : '');
       };
       if (attendanceUser) loadData();
    }, [attSelectedClass, attDate, attendanceUser]);
@@ -325,15 +319,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             else await supabase.from('tbl_diemdanh').insert([payload]);
          }
 
-         // Lưu nội dung dạy
-         const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
-         if (exists) {
-            await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-         } else {
-            await supabase.from('tbl_noidungday').insert([{ malop: attSelectedClass, ngay: attDate, noidungday: lessonContent }]);
-         }
-
-         window.alert('Lưu điểm danh & nội dung dạy thành công!');
+         window.alert('Lưu điểm danh thành công!');
       } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
       setLoading(false);
    };
@@ -1248,13 +1234,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      )}
                   </div>
                </div>
-
-               {attSelectedClass && (
-                  <div style={{ marginBottom: '1.5rem' }}>
-                     <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#db2777' }}>Nội dung buổi dạy hôm nay</label>
-                     <textarea placeholder="Nhập kiến thức đã dạy, bài tập về nhà..." value={lessonContent} onChange={e => setLessonContent(e.target.value)} rows="3" style={{ width: '100%', padding: '0.8rem', border: '2px solid #fbcfe8', borderRadius: '8px', fontSize: '0.95rem', fontFamily: 'inherit' }} />
-                  </div>
-               )}
 
                {attSelectedClass && (
                   <>
