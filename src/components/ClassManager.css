@@ -126,8 +126,9 @@
 
 /* Right Pane: Details */
 .class-details-pane {
-  max-height: 1000px;
+  max-height: unset;
   flex: 1;
+  min-height: 0;
   background: white;
   border-radius: 16px;
   border: 1px solid #e2e8f0;

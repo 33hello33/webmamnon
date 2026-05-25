@@ -1,114 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { supabase, insertLog } from '../supabase';
-import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../supabase';
+import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
-import { uploadToR2 } from '../utils/cloudflareR2';
-import { compressImage } from '../utils/imageUtils';
-
-const dataUrlToBlob = (dataUrl) => {
-   const arr = dataUrl.split(',');
-   const mime = arr[0].match(/:(.*?);/)[1];
-   const bstr = atob(arr[1]);
-   let n = bstr.length;
-   const u8arr = new Uint8Array(n);
-   while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-   }
-   return new Blob([u8arr], { type: mime });
-};
 
 
 
 const parseScheduleDays = (tgb) => {
-  if (!tgb) return [];
-  const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
-  const days = [];
-  if (normalized.includes('t2')) days.push(1);
+   if (!tgb) return [];
+   const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
+   const days = [];
+   if (normalized.includes('t2')) days.push(1);
    if (normalized.includes('t3')) days.push(2);
    if (normalized.includes('t4')) days.push(3);
    if (normalized.includes('t5')) days.push(4);
    if (normalized.includes('t6')) days.push(5);
    if (normalized.includes('t7')) days.push(6);
-  if (normalized.includes('cn')) days.push(0);
-  return days;
-};
-
-const getMealFeeInfo = (value, fallbackDays = 0) => {
-  if (value === null || value === undefined || value === '') {
-    return { amount: 0, days: fallbackDays };
-  }
-
-  let parsedValue = value;
-
-  if (typeof parsedValue === 'string') {
-    const trimmed = parsedValue.trim();
-    if (!trimmed) return { amount: 0, days: fallbackDays };
-
-    if (trimmed.startsWith('{')) {
-      try {
-        parsedValue = JSON.parse(trimmed);
-      } catch (error) {
-        parsedValue = trimmed;
-      }
-    } else {
-      return {
-        amount: parseInt(trimmed.replace(/[^\d-]/g, ''), 10) || 0,
-        days: fallbackDays
-      };
-    }
-  }
-
-  if (typeof parsedValue === 'number') {
-    return { amount: parsedValue, days: fallbackDays };
-  }
-
-  if (parsedValue && typeof parsedValue === 'object') {
-    return {
-      amount: parseInt(parsedValue.amount, 10) || 0,
-      days: parseInt(parsedValue.days, 10) || fallbackDays
-    };
-  }
-
-  return {
-    amount: parseInt(String(parsedValue).replace(/[^\d-]/g, ''), 10) || 0,
-    days: fallbackDays
-  };
+   if (normalized.includes('cn')) days.push(0);
+   return days;
 };
 
 const formatMonthYear = (dateStr) => {
    if (!dateStr) return '';
    const d = new Date(dateStr);
    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-};
-
-const getWorkingDaysInMonth = (dateStr) => {
-   if (!dateStr) return 0;
-   const d = new Date(dateStr);
-   const year = d.getFullYear();
-   const month = d.getMonth();
-   const daysInMonth = new Date(year, month + 1, 0).getDate();
-   let workingDays = 0;
-   for (let i = 1; i <= daysInMonth; i++) {
-      const day = new Date(year, month, i).getDay();
-      if (day !== 0 && day !== 6) { // 0: Sunday, 6: Saturday
-         workingDays++;
-      }
-   }
-   return workingDays;
-};
-
-const calculateWorkingDaysInMonth = getWorkingDaysInMonth;
-
-const parseAmount = (val) => {
-   if (typeof val === 'number') return val;
-   if (!val) return 0;
-   const str = String(val);
-   const isNeg = str.includes('-');
-   const cleaned = str.replace(/\D/g, '');
-   const num = parseInt(cleaned, 10) || 0;
-   return isNeg ? -num : num;
 };
 
 const calculateThoiluong = (inv) => {
@@ -136,13 +52,19 @@ const getQRUrl = (hoaDon, walletsConfig) => {
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
-      let suffix = '';
-      if (hoaDon.tenhv) {
-         const parts = hoaDon.tenhv.trim().split(' ');
-         suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
-      }
+      // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
+      const mahv = hoaDon.mahv || '';
+      const tenhv = hoaDon.tenhv || '';
+      const mahd = hoaDon.mahd || '';
 
-      const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
+      // Rút gọn tên nếu cần (lấy tối đa 2 từ cuối để vừa độ dài QR nếu quá dài)
+      let shortenedName = tenhv.trim();
+      /* 
+      const nameParts = shortenedName.split(' ');
+      if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
+      */
+
+      const info = encodeURIComponent(`${mahd} ${mahv} ${shortenedName}`.trim());
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
@@ -216,6 +138,7 @@ const calculateConsecutiveLeave = (attendance) => {
 
    groups.push(currentGroup);
 
+
    return groups.map(g => ({
       ngay_bat_dau_nghi: g[0].toISOString().split('T')[0],
       ngay_ket_thuc_nghi: g[g.length - 1].toISOString().split('T')[0],
@@ -239,6 +162,7 @@ export default function InvoiceManager() {
    const [selectedStudent, setSelectedStudent] = useState(null);
    const [activeClass, setActiveClass] = useState(null);
    const [classTeacher, setClassTeacher] = useState(null);
+   const currentStudentRef = useRef(null);
 
    const [isSaving, setIsSaving] = useState(false);
    const [message, setMessage] = useState({ type: '', text: '' });
@@ -248,9 +172,11 @@ export default function InvoiceManager() {
    const [downloadingNotice, setDownloadingNotice] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
    const [studySummary, setStudySummary] = useState(null);
+   const [refundOverrides, setRefundOverrides] = useState({ meal: null, tuition: null });
+   const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
-   const [invoiceData, setInvoiceData] = useState({
+   const initialInvoiceData = {
       loaiDong: 'Tháng',
       soLuong: 1,
       ngayBatDau: (() => {
@@ -266,9 +192,10 @@ export default function InvoiceManager() {
       daDong: 0,
       hinhThuc: (config && (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name)) ? (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name) : 'Tiền mặt',
       ghiChu: '',
-      phuthu: [],
-      selectedTienAnTier: null
-   });
+      phuthu: []
+   };
+
+   const [invoiceData, setInvoiceData] = useState(initialInvoiceData);
 
    const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
    const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
@@ -279,8 +206,8 @@ export default function InvoiceManager() {
 
    const fetchBaseData = async () => {
       try {
-         const { data: stRaw } = await supabase.from('tbl_hv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null').order('tenhv', { ascending: true });
-         const { data: cls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
+         const { data: stRaw } = await supabase.from('tbl_hv').select('*').or('trangthai.is.null,trangthai.neq.Đã Nghỉ').order('tenhv', { ascending: true });
+         const { data: cls } = await supabase.from('tbl_lop').select('*').or('daxoa.is.null,daxoa.neq.Đã Xóa');
          const { data: emp } = await supabase.from('tbl_nv').select('*');
 
          const st = (stRaw || []).map(s => ({
@@ -338,38 +265,6 @@ export default function InvoiceManager() {
                      link.click();
                      document.body.removeChild(link);
                   }
-
-                  // Auto-send to student chat
-                  const autoSend = async () => {
-                     try {
-                        const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
-                        const blob = dataUrlToBlob(dataUrl);
-                        const pngFile = new File([blob], fileName, { type: 'image/png' });
-                        const file = await compressImage(pngFile, 150);
-                        
-                        let imageUrl = '';
-                        if (config?.r2_enabled) {
-                           imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-                        } else {
-                           const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${file.name}`;
-                           const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
-                           if (upErr) throw upErr;
-                           const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
-                           imageUrl = publicUrl;
-                        }
-
-                        await supabase.from('hv_messages').insert([{
-                           mahv: downloadingInvoice.mahv,
-                           manv: auth.user?.manv || auth.user?.username || 'admin',
-                           content: `Gửi phụ huynh Hóa đơn học phí ${downloadingInvoice.mahd}`,
-                           image_url: imageUrl
-                        }]);
-                        console.log('Auto-sent invoice to student chat');
-                     } catch (err) {
-                        console.error('Auto-send invoice error:', err);
-                     }
-                  };
-                  autoSend();
                }
             } catch (err) {
                console.error('Lỗi xuất PNG:', err);
@@ -419,38 +314,6 @@ export default function InvoiceManager() {
                      link.click();
                      document.body.removeChild(link);
                   }
-
-                  // Auto-send to student chat
-                  const autoSend = async () => {
-                     try {
-                        const fileName = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
-                        const blob = dataUrlToBlob(dataUrl);
-                        const pngFile = new File([blob], fileName, { type: 'image/png' });
-                        const file = await compressImage(pngFile, 150);
-                        
-                        let imageUrl = '';
-                        if (config?.r2_enabled) {
-                           imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-                        } else {
-                           const path = `chat-images/${downloadingNotice.mahv}_${Date.now()}_${file.name}`;
-                           const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
-                           if (upErr) throw upErr;
-                           const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
-                           imageUrl = publicUrl;
-                        }
-
-                        await supabase.from('hv_messages').insert([{
-                           mahv: downloadingNotice.mahv,
-                           manv: auth.user?.manv || auth.user?.username || 'admin',
-                           content: `Gửi phụ huynh Thông báo đóng học phí ${downloadingNotice.mahd}`,
-                           image_url: imageUrl
-                        }]);
-                        console.log('Auto-sent notice to student chat');
-                     } catch (err) {
-                        console.error('Auto-send notice error:', err);
-                     }
-                  };
-                  autoSend();
                }
             } catch (err) {
                console.error('Notice capture error:', err);
@@ -466,16 +329,29 @@ export default function InvoiceManager() {
       try {
          let totalHdDebt = 0;
          let totalBillDebt = 0;
-         const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
+         const parseCur = (v) => {
+            const s = String(v || 0).trim();
+            const isNegative = s.startsWith('-');
+            const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+            return isNegative ? -n : n;
+         };
 
          // Debt from tuition invoices
          const { data: hd } = await supabase.from('tbl_hd').select('mahd, conno, daxoa').eq('mahv', mahv);
-         (hd || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa').forEach(x => totalHdDebt += parseAmount(x.conno));
+         (hd || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa').forEach(x => totalHdDebt += parseCur(x.conno));
 
          // Debt from product sales (SalesPOS)
-         const { data: bills } = await supabase.from('tbl_billhanghoa').select('mabill, conno, daxoa, ngaylap, daxacnhan, noidung').eq('mahv', mahv);
-         const validBills = (bills || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa' && (x.daxacnhan === false || parseAmount(x.conno) > 0));
-         validBills.forEach(x => totalBillDebt += parseAmount(x.conno));
+         const { data: bills } = await supabase.from('tbl_billhanghoa')
+            .select('mabill, conno, dadong, tongcong, daxoa, ngaylap, noidung')
+            .eq('mahv', mahv);
+
+         const validBills = (bills || []).filter(x =>
+            (x.daxoa || '').toLowerCase() !== 'đã xóa' &&
+            parseCur(x.dadong) === 0
+         );
+         validBills.forEach(x => totalBillDebt += parseCur(x.conno));
+
+         if (currentStudentRef.current !== mahv) return;
 
          setNoCu(totalHdDebt);
          setUnpaidBills(validBills);
@@ -487,9 +363,22 @@ export default function InvoiceManager() {
 
 
    const handleSelectStudent = async (st) => {
+      currentStudentRef.current = st.mahv;
+
+      // Reset states to prevent mixing data from previous student
+      setNoCu(0);
+      setUnpaidBillsTotal(0);
+      setUnpaidBills([]);
+      setInvoiceData({
+         ...initialInvoiceData,
+         hinhThuc: (st.hinhthucdong || '').trim() || initialInvoiceData.hinhThuc
+      });
+
       setSelectedStudent(st);
       setShowMobileDetails(true);
       setMessage({ type: '', text: '' });
+      setRefundOverrides({ meal: null, tuition: null });
+      setIsHinhThucLocked(true);
       calculateOldDebt(st.mahv);
 
       const firstMalop = st.malop_list && st.malop_list.length > 0 ? st.malop_list[0] : null;
@@ -538,10 +427,9 @@ export default function InvoiceManager() {
 
       let hocphi = defaultFee;
       let giamHocphi = 0;
-      let hinhThuc = walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt';
+      let hinhThuc = (student.hinhthucdong || '').trim() || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
       let ghiChu = '';
       let phuthu = [];
-      let selectedTienAnTier = null;
 
       setStudySummary(null);
       setRecentSourceText('');
@@ -560,6 +448,8 @@ export default function InvoiceManager() {
             supabase.from('tbl_hd').select('*').eq('mahv', student.mahv),
             supabase.from('tbl_thongbao').select('*').eq('mahv', student.mahv)
          ]);
+
+         if (currentStudentRef.current !== student.mahv) return;
 
          const validHDs = (allHDs || []).filter(x => x.mahd && (x.daxoa || '').toLowerCase() !== 'đã xóa');
          const validTBs = (allTBs || []).filter(x => x.mahd && (x.daxoa || '').toLowerCase() !== 'đã xóa');
@@ -589,18 +479,66 @@ export default function InvoiceManager() {
          recentHD = validHDs.length > 0 ? validHDs[0] : null;
 
          if (recentDoc) {
-            setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
-            hocphi = parseAmount(recentDoc.hocphi);
-            giamHocphi = parseAmount(recentDoc.giamhocphi);
-            hinhThuc = recentDoc.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
-            if (walletsConfig.length > 0 && !walletsConfig.some(w => w.name === hinhThuc)) {
+            const isFromTB = recentDoc.mahd?.startsWith('TB');
+            setRecentSourceText(isFromTB ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
+
+            const parseCur = (v) => {
+               const s = String(v || 0).trim();
+               const isNegative = s.startsWith('-');
+               const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+               return isNegative ? -n : n;
+            };
+            const loadedHocPhi = parseCur(recentDoc.hocphi);
+            if (loadedHocPhi > 0) {
+               hocphi = loadedHocPhi;
+            }
+            giamHocphi = parseCur(recentDoc.giamhocphi);
+
+            // Hoàn trả tính lại từ điểm danh tháng liền trước → reset về null để tính tươi
+            setRefundOverrides({ meal: null, tuition: null });
+
+            const studentHinhThuc = (student.hinhthucdong || '').trim();
+            hinhThuc = studentHinhThuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
+            if (walletsConfig.length > 0 && hinhThuc !== 'Tiền mặt' && !walletsConfig.some(w => w.name === hinhThuc)) {
                hinhThuc = walletsConfig[0].name;
             }
             ghiChu = recentDoc.ghichu || '';
-            if (recentDoc.ngaybatdau) {
-               startStr = recentDoc.ngaybatdau;
-               endMonthStr = ''; // Recalculate based on start and loaded quantity
+
+            // --- THỜI LƯỢNG ĐÓNG = THÁNG LIỀN SAU KỲ HD/TB GẦN NHẤT ---
+            // Tính startStr từ ngayketthuc hoặc thoiluong của recentDoc (không dùng ngaybatdau)
+            let nextStartComputed = false;
+            if (recentDoc.ngayketthuc) {
+               const ketThucDate = new Date(recentDoc.ngayketthuc);
+               if (!isNaN(ketThucDate.getTime())) {
+                  // Tháng tiếp theo: lấy đầu tháng sau ngayketthuc
+                  const nextMonth = new Date(ketThucDate.getFullYear(), ketThucDate.getMonth() + 1, 1);
+                  startStr = nextMonth.toISOString().split('T')[0];
+                  nextStartComputed = true;
+               }
             }
+            if (!nextStartComputed && recentDoc.thoiluong) {
+               // Fallback: parse thoiluong dạng "MM/YYYY" hoặc cuối cùng trong chuỗi
+               const thoiluongParts = (recentDoc.thoiluong || '').split(',').map(s => s.trim()).filter(Boolean);
+               const lastPart = thoiluongParts[thoiluongParts.length - 1];
+               const mMatch = lastPart && lastPart.match(/(\d{1,2})\/(\d{4})/);
+               if (mMatch) {
+                  const mm = parseInt(mMatch[1], 10) - 1;
+                  const yyyy = parseInt(mMatch[2], 10);
+                  const nextMonth = new Date(yyyy, mm + 1, 1);
+                  startStr = nextMonth.toISOString().split('T')[0];
+                  nextStartComputed = true;
+               }
+            }
+            if (!nextStartComputed && recentDoc.ngaybatdau) {
+               // Fallback cuối: dùng ngaybatdau + 1 tháng
+               const batDauDate = new Date(recentDoc.ngaybatdau);
+               if (!isNaN(batDauDate.getTime())) {
+                  const nextMonth = new Date(batDauDate.getFullYear(), batDauDate.getMonth() + 1, 1);
+                  startStr = nextMonth.toISOString().split('T')[0];
+               }
+            }
+            endMonthStr = ''; // Recalculate based on new startStr and quantity
+
             if (recentDoc.phuthu) {
                try {
                   phuthu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
@@ -613,10 +551,10 @@ export default function InvoiceManager() {
             if (recentDoc.sobuoihoc) {
                const text = recentDoc.sobuoihoc;
 
-               // ❌ Bỏ qua nếu là dạng tháng/năm
+               // ❌ Bỏ qua nếu là dạng tháng/năm -> Mặc định là đóng theo Tháng
                if (/^\d{1,2}\/\d{4}$/.test(text.trim())) {
                   soLuong = 1;
-                  loaiDong = '';
+                  loaiDong = 'Tháng';
                } else {
                   const qm = text.match(/(?:^|\s)(\d+)\s*(buổi|tháng|khóa|tuần)/i);
 
@@ -625,20 +563,8 @@ export default function InvoiceManager() {
                      loaiDong = qm[2].charAt(0).toUpperCase() + qm[2].slice(1);
                   } else {
                      soLuong = 1;
+                     loaiDong = 'Tháng';
                   }
-               }
-            }
-            if (recentDoc.tienan) {
-               try {
-                  const taData = typeof recentDoc.tienan === 'string' ? JSON.parse(recentDoc.tienan) : recentDoc.tienan;
-                  if (taData && taData.amount) {
-                     const tierKey = String(taData.amount);
-                     if (config?.trutienan && config.trutienan[tierKey]) {
-                        selectedTienAnTier = { amount: taData.amount, ...config.trutienan[tierKey] };
-                     }
-                  }
-               } catch (e) {
-                  console.error('Error parsing tienan from recent Doc:', e);
                }
             }
          }
@@ -676,15 +602,19 @@ export default function InvoiceManager() {
          }
       }
 
-      setInvoiceData({
+      if (currentStudentRef.current !== student.mahv) return;
+
+      setInvoiceData(prev => ({
+         ...prev,
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
          hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu,
-         selectedTienAnTier
-      });
+         discountPercent: 0
+      }));
 
       try {
-         // Thống kê điểm danh - Chỉ lấy từ hóa đơn/thông báo trước đó
-         const targetForStats = recentHD || (recentDoc?.ngaybatdau ? recentDoc : null);
+         // Thống kê điểm danh - load kỳ của HD/TB gần nhất (= tháng liền trước thời lượng đóng mới)
+         // Ưu tiên recentDoc (doc đã dùng để tính startStr), fallback recentHD nếu chỉ có HD mà không có TB
+         const targetForStats = recentDoc || recentHD;
 
          if (targetForStats) {
             const ensureIsoDate = (dStr) => {
@@ -708,11 +638,13 @@ export default function InvoiceManager() {
             let statsEnd = ensureIsoDate(targetForStats.ngayketthuc);
 
             // Fallback: Nếu không có ngày cụ thể nhưng có chuỗi thời lượng "MM/YYYY"
+            // Lấy tháng CUỐI CÙNG trong thoiluong (kỳ gần nhất đã đóng = tháng liền trước thời lượng đóng mới)
             if ((!statsStart || !statsEnd) && targetForStats.thoiluong) {
-               const m = targetForStats.thoiluong.match(/(\d{2})\/(\d{4})/);
-               if (m) {
-                  const mm = parseInt(m[1]) - 1;
-                  const yyyy = parseInt(m[2]);
+               const allMonthMatches = [...(targetForStats.thoiluong.matchAll(/(\d{1,2})\/(\d{4})/g))];
+               if (allMonthMatches.length > 0) {
+                  const lastMatch = allMonthMatches[allMonthMatches.length - 1];
+                  const mm = parseInt(lastMatch[1]) - 1;
+                  const yyyy = parseInt(lastMatch[2]);
                   statsStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
                   statsEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
                }
@@ -749,6 +681,8 @@ export default function InvoiceManager() {
 
                const { data: attendance } = await attendanceQuery;
 
+               if (currentStudentRef.current !== student.mahv) return;
+
                const normalizeStatus = (s) => (s || '').trim().toLowerCase();
                let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
                (attendance || []).forEach(att => {
@@ -758,20 +692,21 @@ export default function InvoiceManager() {
                   else if (s === 'nghỉ không phép') nghiKhongPhep++;
                });
 
-               const groups = calculateConsecutiveLeave(attendance || []);
-               const maxConsecutive = groups.length > 0 ? Math.max(...groups.map(g => g.so_ngay_nghi_lien_tuc)) : 0;
+               const consecutiveLeave = calculateConsecutiveLeave(attendance || []);
+               const maxConsecutive = consecutiveLeave.length > 0 ? Math.max(...consecutiveLeave.map(l => l.so_ngay_nghi_lien_tuc)) : 0;
 
                setStudySummary({
                   daHoc,
                   nghiPhep,
                   nghiKhongPhep,
                   tongBuoi,
-                  consecutiveLeave: groups,
+                  consecutiveLeave,
                   maxConsecutive,
                   sourceHd: targetForStats.mahd,
                   period: targetForStats.thoiluong || `${statsStart} - ${statsEnd}`
                });
             }
+
          }
       } catch (err) {
          console.error('Lỗi tính thống kê điểm danh:', err);
@@ -799,16 +734,7 @@ export default function InvoiceManager() {
    const updateSurcharge = (index, field, value) => {
       const newPT = [...invoiceData.phuthu];
       if (field === 'amount') {
-         const valStr = String(value);
-         if (valStr.trim() === '-') {
-            newPT[index][field] = -0;
-         } else {
-            const isNeg = valStr.includes('-');
-            const raw = valStr.replace(/[^\d]/g, '');
-            let num = parseInt(raw, 10) || 0;
-            if (isNeg) num = -num;
-            newPT[index][field] = num;
-         }
+         newPT[index][field] = parseInt(String(value).replace(/,/g, ''), 10) || 0;
       } else {
          newPT[index][field] = value;
       }
@@ -816,36 +742,28 @@ export default function InvoiceManager() {
    };
 
    const formatCurrency = (val) => {
-      if (val === null || val === undefined || val === '') return '';
-      if (Object.is(val, -0)) return '-';
-
-      const num = typeof val === 'number' ? val : parseInt(String(val).replace(/,/g, ''), 10);
-      if (isNaN(num)) return String(val);
-
-      const isNeg = num < 0;
-      const absNum = Math.abs(num);
-      const formatted = absNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-      return (isNeg ? '-' : '') + formatted;
+      if (typeof val === 'number') return val.toLocaleString('en-US');
+      const s = String(val || 0).trim();
+      const isNegative = s.startsWith('-');
+      const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+      return (isNegative ? '-' : '') + n.toLocaleString('en-US');
    };
 
    const handleFinanceInput = (field, e) => {
-      const val = e.target.value;
-      if (val === '-') {
-         setInvoiceData(prev => ({ ...prev, [field]: -0 }));
-         return;
-      }
-      const isNegative = val.includes('-');
-      const rawValue = val.replace(/[^\d]/g, '');
-      let num = parseInt(rawValue, 10) || 0;
-      if (isNegative) num = -num;
+      const s = e.target.value.trim();
+      const isNeg = s.startsWith('-');
+      const rawValue = s.replace(/[^\d]/g, '');
+      const num = (parseInt(rawValue, 10) || 0) * (isNeg ? -1 : 1);
       setInvoiceData(prev => {
          let next = { ...prev, [field]: num };
          if (field === 'hocphi') {
             if (prev.soLuong) next.donGia = num / prev.soLuong;
-            if (prev.discountPercent !== 0) {
+            // Nếu thay đổi học phí thì tính lại số tiền giảm nếu có phần trăm
+            if (prev.discountPercent > 0) {
                next.giamHocphi = Math.round((num * prev.discountPercent) / 100);
             }
          }
+         // Nếu tự nhập tay số tiền giảm thì xóa phần trăm (tránh xung đột)
          if (field === 'giamHocphi') {
             next.discountPercent = 0;
          }
@@ -854,18 +772,11 @@ export default function InvoiceManager() {
    };
 
    const handlePercentDiscount = (e) => {
-      const val = e.target.value;
-      if (val === '-') {
-         setInvoiceData(prev => ({ ...prev, discountPercent: -0, giamHocphi: 0 }));
-         return;
-      }
-      const isNeg = val.includes('-');
-      const raw = val.replace(/[^\d.]/g, '');
-      let pct = parseFloat(raw) || 0;
-      if (isNeg) pct = -pct;
-
+      const raw = e.target.value.replace(/[^\d.]/g, '');
+      const pct = parseFloat(raw) || 0;
       setInvoiceData(prev => {
-         const discountAmt = Math.round((prev.hocphi * pct) / 100);
+         const hp = Number(prev.hocphi) || 0;
+         const discountAmt = Math.round((hp * pct) / 100);
          return {
             ...prev,
             discountPercent: pct,
@@ -921,7 +832,7 @@ export default function InvoiceManager() {
          }
       }
 
-      setInvoiceData(newInv);
+      setInvoiceData(prev => ({ ...prev, ...newInv }));
    };
 
    const handleFormChange = (field, val) => {
@@ -955,188 +866,81 @@ export default function InvoiceManager() {
             }
          }
       }
-      setInvoiceData(newInv);
+      setInvoiceData(prev => ({ ...prev, ...newInv }));
    };
 
-   const shiftMonth = (delta) => {
+   // Load thống kê điểm danh cho tháng liền trước billing start
+   const loadAttendanceForMonth = async (billingStartStr) => {
+      if (!selectedStudent || !billingStartStr) return;
+      try {
+         // Tháng liền trước = tháng của billingStartStr - 1
+         const billingDate = new Date(billingStartStr);
+         if (isNaN(billingDate.getTime())) return;
+         const prevMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() - 1, 1);
+         const statsStart = prevMonth.toISOString().split('T')[0];
+         const statsEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).toISOString().split('T')[0];
+
+         const malop = selectedStudent.malop_list?.[0] || null;
+         let scheduleToUse = activeClass?.thoigianbieu;
+
+         let tongBuoi = 0;
+         if (scheduleToUse) {
+            const activeDays = parseScheduleDays(scheduleToUse);
+            let cDate = new Date(`${statsStart}T00:00:00`);
+            const eDate = new Date(`${statsEnd}T23:59:59`);
+            let safeCount = 0;
+            while (cDate <= eDate && safeCount < 1000) {
+               if (activeDays.includes(cDate.getDay())) tongBuoi++;
+               cDate.setDate(cDate.getDate() + 1);
+               safeCount++;
+            }
+         }
+
+         const { data: attendance } = await supabase.from('tbl_diemdanh').select('*')
+            .eq('mahv', selectedStudent.mahv)
+            .gte('ngay', statsStart).lte('ngay', statsEnd);
+
+         if (currentStudentRef.current !== selectedStudent.mahv) return;
+
+         const normalizeStatus = (s) => (s || '').trim().toLowerCase();
+         let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
+         (attendance || []).forEach(att => {
+            const s = normalizeStatus(att.trangthai);
+            if (s === 'có mặt') daHoc++;
+            else if (s === 'nghỉ phép') nghiPhep++;
+            else if (s === 'nghỉ không phép') nghiKhongPhep++;
+         });
+
+         const consecutiveLeave = calculateConsecutiveLeave(attendance || []);
+         const maxConsecutive = consecutiveLeave.length > 0 ? Math.max(...consecutiveLeave.map(l => l.so_ngay_nghi_lien_tuc)) : 0;
+
+         const mm = String(prevMonth.getMonth() + 1).padStart(2, '0');
+         const yyyy = prevMonth.getFullYear();
+
+         setStudySummary({
+            daHoc,
+            nghiPhep,
+            nghiKhongPhep,
+            tongBuoi,
+            consecutiveLeave,
+            maxConsecutive,
+            sourceHd: null,
+            period: `${mm}/${yyyy}`
+         });
+         // Reset hoàn trả để tính lại từ điểm danh mới
+         setRefundOverrides({ meal: null, tuition: null });
+      } catch (err) {
+         console.error('Lỗi tải điểm danh khi chuyển tháng:', err);
+      }
+   };
+
+   const shiftMonth = async (delta) => {
       const d = new Date(invoiceData.ngayBatDau);
       if (isNaN(d.getTime())) return;
       d.setMonth(d.getMonth() + delta);
-      handleFormChange('ngayBatDau', d.toISOString().split('T')[0]);
-   };
-
-   const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-
-   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const { getTruTienAn } = useConfig();
-   const trutienan_config = config?.trutienan || {};
-
-   // Tìm tier được chọn hoặc tự động (chọn tier có key gần nhất với hocphi nếu tự động, hoặc lấy tier đầu tiên)
-   let activeTier = null;
-   if (invoiceData.selectedTienAnTier) {
-      activeTier = invoiceData.selectedTienAnTier;
-   } else if (trutienan_config && typeof trutienan_config === 'object') {
-      // Tự động tìm mức phù hợp hoặc lấy mức đầu tiên làm mặc định
-      const keys = Object.keys(trutienan_config);
-      if (keys.length > 0) {
-         // Thử tìm mức trùng khớp với hocphi (mặc định cũ) hoặc lấy mức đầu tiên
-         const matchKey = keys.find(k => parseAmount(k) === invoiceData.hocphi) || keys[0];
-         activeTier = {
-            amount: parseAmount(matchKey),
-            tru_nghi: parseAmount(trutienan_config[matchKey].tru_nghi)
-         };
-      }
-   }
-
-   const trutienan_val = activeTier ? activeTier.tru_nghi : 0;
-   const trutiennghi_val = parseAmount(config?.trutiennghi || '0');
-
-   // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
-   let tuitionRefund = 0;
-   let mealRefund = 0;
-   const p6 = parseFloat(config?.nghi6ngay) || 0;
-   const p12 = parseFloat(config?.nghi12ngay) || 0;
-   const threshold = 6;
-   const percent = 0;
-
-   if (studySummary?.consecutiveLeave) {
-      // 1. Hoàn trả tiền ăn: Tất cả ngày nghỉ phép (không cần liên tiếp)
-      mealRefund = (studySummary.nghiPhep || 0) * trutienan_val;
-
-      // 2. Hoàn trả học phí: Nghỉ liên tiếp từ threshold ngày trở lên
-      if (studySummary.consecutiveLeave) {
-         studySummary.consecutiveLeave.forEach(group => {
-            const count = group.so_ngay_nghi_lien_tuc;
-            if (count >= threshold) {
-               tuitionRefund += count * trutiennghi_val * (percent / 100);
-            }
-         });
-      }
-   }
-
-   mealRefund = 0;
-   tuitionRefund = 0;
-
-   if (studySummary?.consecutiveLeave) {
-      studySummary.consecutiveLeave.forEach(group => {
-         const count = group.so_ngay_nghi_lien_tuc;
-         if (count >= 12) {
-            tuitionRefund += count * trutiennghi_val * (p12 / 100);
-         } else if (count >= 6) {
-            tuitionRefund += count * trutiennghi_val * (p6 / 100);
-         }
-      });
-   }
-
-   if (studySummary?.nghiPhep >= 3) {
-      mealRefund = studySummary.nghiPhep * trutienan_val;
-   }
-
-   const roundedMealRefund = Math.round(mealRefund / 1000) * 1000;
-   const roundedTuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
-   const actualMealRefund = roundedMealRefund;
-   const actualTuitionRefund = roundedTuitionRefund;
-   const deductionSum = (actualMealRefund || 0) + (actualTuitionRefund || 0);
-
-   const workingDaysCount = getWorkingDaysInMonth(invoiceData.ngayBatDau);
-   const isMonthly = (invoiceData.loaiDong || '').toLowerCase().includes('tháng');
-   // Tiền ăn là cố định theo mức (key của tier)
-   const monthlyMealFee = isMonthly && activeTier ? activeTier.amount : 0;
-
-   const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum + monthlyMealFee - invoiceData.giamHocphi - deductionSum;
-   const conLai = tongCong - invoiceData.daDong;
-
-   const handleExportNotice = async () => {
-      const currentTimePeriod = calculateThoiluong(invoiceData);
-      if (currentTimePeriod) {
-         const { data: allDocs } = await supabase.from('tbl_hd')
-            .select('mahd, daxoa, thoiluong')
-            .eq('mahv', selectedStudent.mahv)
-            .eq('malop', activeClass?.malop || '');
-
-         const validHDs = (allDocs || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
-         const currentMonths = currentTimePeriod.split(',').map(m => m.trim());
-         const existingMonths = validHDs.flatMap(d => (d.thoiluong || '').split(',').map(m => m.trim()));
-
-         const overlappingMonth = currentMonths.find(m => existingMonths.includes(m));
-         if (overlappingMonth) {
-            setWarningModal({
-               isOpen: true,
-               title: 'Cảnh Báo Đóng Trùng Học Phí',
-               message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Vui lòng kiểm tra lại các Hóa Đơn cũ của học sinh!`
-            });
-            return;
-         }
-      }
-
-      // Generate TB code
-      const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
-      let nextNum = 1;
-      if (recentTB && recentTB.length > 0 && recentTB[0].mahd) {
-         const numPart = recentTB[0].mahd.replace(/\D/g, '');
-         if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
-      }
-      const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
-      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
-
-      const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
-      const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
-      const insertData = {
-         mahd: newMaTB,
-         ngaylap: localNow,
-         mahv: selectedStudent.mahv,
-         tenlop: activeClass?.tenlop || '',
-         manv: auth.user?.manv || auth.user?.username || '',
-         hocphi: formatCurrency(invoiceData.hocphi),
-         giamhocphi: formatCurrency(invoiceData.giamHocphi),
-         tongcong: formatCurrency(tongCong),
-         dadong: '0',
-         conno: formatCurrency(tongCong),
-         hinhthuc: invoiceData.hinhThuc,
-         ghichu: `${invoiceData.ghiChu}${billNote}`,
-         phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
-         daxoa: null,
-         malop: activeClass?.malop || '',
-         thoiluong: currentTimePeriod,
-         sobuoihoc: sobuoihocFinal,
-         tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee }) : null
-      };
-
-      try {
-         const { error } = await supabase.from('tbl_thongbao').insert([insertData]);
-         if (error) throw error;
-
-         setDownloadingNotice({
-            mahd: newMaTB,
-            ngaylap: localNow,
-            tenhv: selectedStudent.tenhv,
-            mahv: selectedStudent.mahv,
-            sdt: selectedStudent.sdt,
-            tenlop: activeClass?.tenlop || '',
-            ngaybatdau: invoiceData.ngayBatDau || null,
-            ngayketthuc: invoiceData.ngayKetThuc || null,
-            hocphi: formatCurrency(invoiceData.hocphi),
-            giamhocphi: formatCurrency(invoiceData.giamHocphi),
-            tongcong: formatCurrency(tongCong),
-            hinhthuc: invoiceData.hinhThuc,
-            ghichu: `${invoiceData.ghiChu}${billNote}`,
-            thoiluong: currentTimePeriod,
-            sobuoihoc: sobuoihocFinal,
-            phuthu: invoiceData.phuthu,
-            studySummary: { ...studySummary, threshold },
-            actualMealRefund,
-            actualTuitionRefund,
-            deductionSum,
-            trutienan_val,
-            trutiennghi_val,
-            monthlyMealFee,
-            workingDaysCount
-         });
-         insertLog(`[THÔNG BÁO] Đã thêm mới Thông báo ${newMaTB} - ${selectedStudent.tenhv} | Lớp: ${activeClass?.tenlop} | Tổng cộng: ${tongCong.toLocaleString('vi-VN')} đ | Thời lượng: ${sobuoihocFinal}`);
-      } catch (err) {
-         console.error(err);
-         showMessage('error', 'Lỗi lưu thông báo: ' + err.message);
-      }
+      const newStart = d.toISOString().split('T')[0];
+      handleFormChange('ngayBatDau', newStart);
+      await loadAttendanceForMonth(newStart);
    };
 
    const handleSaveInvoice = async () => {
@@ -1201,8 +1005,10 @@ export default function InvoiceManager() {
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
             sobuoihoc: sobuoihocFinal,
-            nocu: formatCurrency(noCu),
-            tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee }) : null
+            tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
+            trutienan: formatCurrency(Math.round(actualMealRefund)),
+            sobuoinghiphep: studySummary?.nghiPhep || 0,
+            nhanvien: cashier
          };
 
          const res = await supabase.from('tbl_hd').insert([insertData]);
@@ -1210,7 +1016,7 @@ export default function InvoiceManager() {
 
          // Nếu hóa đơn có tính nợ cũ, sau khi lưu thành công phải cập nhật các hóa đơn/bill cũ của học sinh về nợ = 0
          // vì nợ đó đã được gộp (rollup) vào hóa đơn mới này.
-         if (noCu > 0) {
+         if (noCu !== 0) {
             try {
                // Cập nhật nợ cũ trong tbl_hd (trừ hóa đơn vừa tạo)
                await supabase.from('tbl_hd')
@@ -1226,8 +1032,9 @@ export default function InvoiceManager() {
          if (unpaidBillsTotal > 0) {
             try {
                await supabase.from('tbl_billhanghoa')
-                  .update({ conno: '0', daxacnhan: true })
-                  .eq('mahv', selectedStudent.mahv);
+                  .update({ conno: '0' })
+                  .eq('mahv', selectedStudent.mahv)
+                  .eq('dadong', '0'); // Chỉ cập nhật những bill chưa đóng (đã được gom)
             } catch (err) {
                console.error('Lỗi cập nhật xóa nợ bill hàng hóa:', err);
             }
@@ -1244,7 +1051,7 @@ export default function InvoiceManager() {
             mahd: newMaHD,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
-            sdt: selectedStudent.sdt,
+            sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -1260,17 +1067,12 @@ export default function InvoiceManager() {
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
             phuthu: invoiceData.phuthu,
-            studySummary: { ...studySummary, threshold },
+            studySummary: studySummary,
             actualMealRefund,
             actualTuitionRefund,
-            deductionSum,
             trutienan_val,
-            trutiennghi_val,
-            monthlyMealFee,
-            workingDaysCount
+            trutiennghi_val
          });
-
-         insertLog(`[PHIẾU THU] Đã thêm mới Hóa đơn ${newMaHD} - ${selectedStudent.tenhv} | Lớp: ${activeClass?.tenlop} | Tổng cộng: ${tongCong.toLocaleString('vi-VN')} đ | Thời lượng: ${sobuoihocFinal} | Đã đóng: ${invoiceData.daDong.toLocaleString('vi-VN')} đ`);
 
          // Reload old debt dynamically mimicking real-time refresh
          calculateOldDebt(selectedStudent.mahv);
@@ -1282,25 +1084,63 @@ export default function InvoiceManager() {
          setIsSaving(false);
       }
    };
+
    const filteredStudents = students.filter(s =>
       (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (s.sdt && s.sdt.includes(searchTerm)) ||
       (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
    );
 
-   // Auto fill daDong in InvoiceManager: Default to full payment
+
+
+   const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+
+   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
+   const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+   const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+
+   // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
+   let tuitionRefund = 0;
+   let mealRefund = 0;
+   const p6 = parseFloat(config?.nghi6ngay) || 0;
+   const p12 = parseFloat(config?.nghi12ngay) || 0;
+
+   if (studySummary?.consecutiveLeave) {
+      studySummary.consecutiveLeave.forEach(group => {
+         const count = group.so_ngay_nghi_lien_tuc;
+         if (count >= 12) {
+            tuitionRefund += count * trutiennghi_val * (p12 / 100);
+         } else if (count >= 6) {
+            tuitionRefund += count * trutiennghi_val * (p6 / 100);
+         }
+      });
+   }
+
+   // Hoàn trả tiền ăn: Tổng số ngày nghỉ phép >= 3 ngày
+   if (studySummary?.nghiPhep >= 3) {
+      mealRefund = studySummary.nghiPhep * trutienan_val;
+   }
+
+   // Round to nearest 1000
+   const roundedMealRefund = Math.round(mealRefund / 1000) * 1000;
+   const roundedTuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
+
+   const actualMealRefund = refundOverrides.meal !== null ? refundOverrides.meal : roundedMealRefund;
+   const actualTuitionRefund = refundOverrides.tuition !== null ? refundOverrides.tuition : roundedTuitionRefund;
+
+   const deductionSum = (actualMealRefund || 0) + (actualTuitionRefund || 0);
+
+   const hpVal = Number(invoiceData.hocphi) || 0;
+   const ghpVal = Number(invoiceData.giamHocphi) || 0;
+   const tongCong = (noCu || 0) + (unpaidBillsTotal || 0) + hpVal + (surchargeSum || 0) - ghpVal - (deductionSum || 0);
+
+   // Auto fill daDong in InvoiceManager: Default to full payment (but not less than 0)
    useEffect(() => {
-      setInvoiceData(prev => ({ ...prev, daDong: tongCong }));
+      if (!selectedStudent) return;
+      setInvoiceData(prev => ({ ...prev, daDong: Math.max(0, tongCong) }));
    }, [tongCong, selectedStudent?.mahv, activeClass?.malop]);
 
-   const downloadingInvoiceMealInfo = getMealFeeInfo(
-      downloadingInvoice?.monthlyMealFee ?? downloadingInvoice?.tienan,
-      calculateWorkingDaysInMonth(downloadingInvoice?.ngaybatdau)
-   );
-   const downloadingNoticeMealInfo = getMealFeeInfo(
-      downloadingNotice?.monthlyMealFee ?? downloadingNotice?.tienan,
-      calculateWorkingDaysInMonth(downloadingNotice?.ngaybatdau)
-   );
+   const conLai = tongCong - (Number(invoiceData.daDong) || 0);
 
    return (
       <div className={`invoice-manager animate-fade-in ${showMobileDetails ? 'mobile-show-details' : ''}`}>
@@ -1348,7 +1188,7 @@ export default function InvoiceManager() {
                <div className="im-empty animate-fade-in">
                   <Receipt size={64} className="text-muted" style={{ opacity: 0.3 }} />
                   <h3>Chưa Chọn Học Sinh</h3>
-                  <p>Vui lòng nhấp vào một học sinh từ danh sách bên trái để thực hiện thu học phí.</p>
+                  <p>Vui lòng nhấp vào một học sinh từ danh sách bên trái để tạo hóa đơn thanh toán.</p>
                </div>
             ) : (
                <div className="invoice-details animate-fade-in">
@@ -1378,7 +1218,7 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-field-hz">
                               <label>SĐT:</label>
-                              <div className="val-text text-bold">{selectedStudent.sdt || 'Chưa cung cấp'}</div>
+                              <div className="val-text text-bold">{selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || 'Chưa cung cấp'}</div>
                            </div>
                         </div>
                      </div>
@@ -1445,31 +1285,49 @@ export default function InvoiceManager() {
                                     <span className="ss-num">{studySummary.tongBuoi}</span>
                                     <span className="ss-txt">Tổng buổi</span>
                                  </div>
-                                 <div className="ss-badge ss-consecutive">
-                                    <span className="ss-num">{studySummary.maxConsecutive || 0}</span>
-                                    <span className="ss-txt">Nghỉ liên tiếp</span>
+                                 <div className={`ss-badge ${studySummary.maxConsecutive >= 6 ? 'ss-warning-pulse' : ''}`} style={{ background: studySummary.maxConsecutive >= 6 ? '#fff7ed' : '#f1f5f9', border: studySummary.maxConsecutive >= 6 ? '1.5px solid #f97316' : '1px solid #e2e8f0' }}>
+                                    <span className="ss-num" style={{ color: studySummary.maxConsecutive >= 6 ? '#ea580c' : '#64748b' }}>{studySummary.maxConsecutive}</span>
+                                    <span className="ss-txt" style={{ color: studySummary.maxConsecutive >= 6 ? '#c2410c' : '#64748b' }}>Nghỉ liên tiếp</span>
                                  </div>
                               </div>
-                              {studySummary.consecutiveLeave && studySummary.consecutiveLeave.length > 0 && studySummary.maxConsecutive >= 3 && (
-                                 <div style={{ marginTop: '10px', color: '#d97706', fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <AlertCircle size={16} />
-                                    Có đợt nghỉ dài: {studySummary.maxConsecutive} ngày ({
-                                       (() => {
-                                          const longest = studySummary.consecutiveLeave.reduce((prev, curr) => (prev.so_ngay_nghi_lien_tuc > curr.so_ngay_nghi_lien_tuc) ? prev : curr);
-                                          return `${new Date(longest.ngay_bat_dau_nghi).toLocaleDateString("vi-VN")} → ${new Date(longest.ngay_ket_thuc_nghi).toLocaleDateString("vi-VN")}`;
-                                       })()
-                                    })
+                              {studySummary.consecutiveLeave && studySummary.consecutiveLeave.some(l => l.so_ngay_nghi_lien_tuc >= 3) && (
+                                 <div style={{ marginTop: '5px', fontSize: '0.75rem', color: '#ea580c', fontWeight: 600 }}>
+                                    ⚠️ Có đợt nghỉ dài: {studySummary.consecutiveLeave.filter(l => l.so_ngay_nghi_lien_tuc >= 3).map(l => `${l.so_ngay_nghi_lien_tuc} ngày (${l.ngay_bat_dau_nghi} -> ${l.ngay_ket_thuc_nghi})`).join(', ')}
                                  </div>
                               )}
                               {deductionSum > 0 && (
                                  <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                       <span>Hoàn trả tiền ăn:</span>
-                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(actualMealRefund)}đ</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                       <span>Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
+                                          <span style={{ fontWeight: 700 }}>-</span>
+                                          <input
+                                             type="text"
+                                             value={formatCurrency(actualMealRefund)}
+                                             onChange={(e) => {
+                                                const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                                setRefundOverrides(prev => ({ ...prev, meal: val }));
+                                             }}
+                                             style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
+                                          />
+                                          <span style={{ fontWeight: 700 }}>đ</span>
+                                       </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
                                        <span>Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
-                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(actualTuitionRefund)}đ</span>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
+                                          <span style={{ fontWeight: 700 }}>-</span>
+                                          <input
+                                             type="text"
+                                             value={formatCurrency(actualTuitionRefund)}
+                                             onChange={(e) => {
+                                                const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                                setRefundOverrides(prev => ({ ...prev, tuition: val }));
+                                             }}
+                                             style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
+                                          />
+                                          <span style={{ fontWeight: 700 }}>đ</span>
+                                       </div>
                                     </div>
                                     <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
                                        Tổng hoàn trả từ lịch nghỉ: -{formatCurrency(deductionSum)}đ
@@ -1549,35 +1407,10 @@ export default function InvoiceManager() {
                         <h3 className="im-section-title"><Wallet size={18} /> Quyết Toán Tổng (VNĐ)</h3>
 
                         {/* HÀNG 1: NỢ CŨ, HỌC PHÍ, VOUCHER */}
-                        <div className="im-finance-row grid-4">
+                        <div className="im-finance-row grid-3">
                            <div className="im-fi-item">
-                              <label>Nợ cũ</label>
-                              <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>
-                                 {formatCurrency(noCu)} ₫
-                                 {noCu < 0 && <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>(Tiền dư)</span>}
-                              </div>
-                           </div>
-                           <div className="im-fi-item">
-                              <label>Tiền ăn</label>
-                              <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
-                                 {config?.trutienan && (
-                                    <select
-                                       style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', fontWeight: 700, color: '#2563eb', background: '#f8fafc' }}
-                                       value={invoiceData.selectedTienAnTier ? Object.entries(config.trutienan).find(([k, v]) => v.tru_nghi === invoiceData.selectedTienAnTier.tru_nghi)?.[0] : ''}
-                                       onChange={(e) => {
-                                          const key = e.target.value;
-                                          if (key) {
-                                             setInvoiceData(prev => ({ ...prev, selectedTienAnTier: { amount: parseInt(key), ...config.trutienan[key] } }));
-                                          }
-                                       }}
-                                    >
-                                       {!invoiceData.selectedTienAnTier && <option value="">Chọn mức...</option>}
-                                       {Object.entries(typeof config.trutienan === 'object' ? config.trutienan : {}).map(([key, val]) => (
-                                          <option key={key} value={key}>{formatCurrency(key)} đ</option>
-                                       ))}
-                                    </select>
-                                 )}
-                              </div>
+                              <label>{noCu >= 0 ? 'Nợ cũ' : 'Tiền dư (Credit)'}</label>
+                              <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>{formatCurrency(noCu)} ₫</div>
                            </div>
                            <div className="im-fi-item">
                               <label>Học phí</label>
@@ -1611,9 +1444,9 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item">
                               <label>Giảm HP</label>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '5px' }}>
                                  <div className="fi-input-wrapper">
-                                    <input type="text" placeholder="Nhập % giảm..." value={Object.is(invoiceData.discountPercent, -0) ? '-' : (invoiceData.discountPercent || '')} onChange={handlePercentDiscount} />
+                                    <input type="text" placeholder="%" value={invoiceData.discountPercent > 0 ? invoiceData.discountPercent : ''} onChange={handlePercentDiscount} />
                                     <span className="unit">%</span>
                                  </div>
                                  <div className="fi-input-wrapper">
@@ -1628,7 +1461,7 @@ export default function InvoiceManager() {
                         <div className="im-finance-row grid-3 highlight-row">
                            <div className="im-fi-item">
                               <label>Cần thu</label>
-                              <div className="fi-val-display text-bold text-danger" style={{ fontSize: '1.4rem' }}>{formatCurrency(tongCong)} ₫</div>
+                              <div className={`fi-val-display text-bold ${tongCong > 0 ? 'text-danger' : 'text-success'}`} style={{ fontSize: '1.4rem' }}>{formatCurrency(tongCong)} ₫</div>
                            </div>
                            <div className="im-fi-item">
                               <label>Đã đóng</label>
@@ -1659,23 +1492,39 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item-col">
                               <label>💳 Hình thức thanh toán</label>
-                              <select className="im-select" value={invoiceData.hinhThuc} onChange={e => handleFormChange('hinhThuc', e.target.value)}>
-                                 {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                                 {walletsConfig.map(w => (
-                                    <option key={w.id} value={w.name}>{w.name}</option>
-                                 ))}
-                              </select>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                 <select
+                                    className="im-select"
+                                    value={invoiceData.hinhThuc}
+                                    onChange={e => handleFormChange('hinhThuc', e.target.value)}
+                                    disabled={isHinhThucLocked}
+                                    style={{
+                                       flex: 1,
+                                       opacity: isHinhThucLocked ? 0.7 : 1,
+                                       cursor: isHinhThucLocked ? 'not-allowed' : 'pointer',
+                                       background: isHinhThucLocked ? '#f1f5f9' : 'white'
+                                    }}
+                                 >
+                                    {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                    {walletsConfig.map(w => (
+                                       <option key={w.id} value={w.name}>{w.name}</option>
+                                    ))}
+                                 </select>
+                                 <button
+                                    type="button"
+                                    className={`im-unlock-btn ${isHinhThucLocked ? 'locked' : 'unlocked'}`}
+                                    onClick={() => setIsHinhThucLocked(!isHinhThucLocked)}
+                                 >
+                                    {isHinhThucLocked ? 'Mở' : 'Khóa'}
+                                 </button>
+                              </div>
                            </div>
                         </div>
 
                         <div className="im-actions" style={{ display: 'flex', gap: '10px' }}>
-                           <button className="im-btn-submit" style={{ background: '#3b82f6', borderColor: '#3b82f6' }} onClick={handleExportNotice}>
-                              <MessageSquare size={18} />
-                              Xuất Thông Báo
-                           </button>
                            <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
                               <Receipt size={18} />
-                              {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Thu Học Phí'}
+                              {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}
                            </button>
                         </div>
                      </div>
@@ -1737,12 +1586,37 @@ export default function InvoiceManager() {
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
             <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+               {/* Invoice Template Content ... (remains same) */}
+               <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 0,
+                  opacity: 0.2,
+                  pointerEvents: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'repeat'
+               }} />
+               <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%) rotate(-30deg)',
+                  fontSize: '60pt',
+                  fontWeight: 'bold',
+                  color: 'rgba(0, 102, 204, 0.05)',
+                  zIndex: 0,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  textAlign: 'center',
+                  width: '150%'
+               }}>
+                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
+               </div>
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
                      <div style={{ width: '180px', textAlign: 'left' }}>
-                        {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
-                        {!config?.logo && <div style={{ height: 20 }}></div>}
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
 
                      {/* CENTER: Info */}
@@ -1755,36 +1629,31 @@ export default function InvoiceManager() {
 
                      {/* RIGHT: Invoice info */}
                      <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>Số phiếu: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
                         <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
                      </div>
                   </div>
                   <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     PHIẾU THU HỌC PHÍ
+                     BIÊN LAI THU HỌC PHÍ
                   </div>
                   <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.tenhv}</b></div>
-                        <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.sdt || ""}</b></div>
+                        <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
+                        <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
-                     <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
+                     <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
+                     <div>
+                        Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
+                     </div>
+                     <div style={{ marginTop: '5px' }}>
+                        Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
+                     </div>
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
-                        <div>Hình thức: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
+                        <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
+                        <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
+                        <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
-
-                     {/* FEES BREAKDOWN */}
-                     <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                           <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi} đ</b></div>
-                           <div>Tiền ăn ({downloadingInvoiceMealInfo.days} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingInvoiceMealInfo.amount)} đ</b></div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                           <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi} đ</b></div>
-                           <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.nocu || 0} đ</b></div>
-                        </div>
-                     </div>
-
                      {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
                         <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
                            {downloadingInvoice.phuthu.map((pt, i) => (
@@ -1795,37 +1664,30 @@ export default function InvoiceManager() {
                            ))}
                         </div>
                      )}
-
                      {downloadingInvoice?.deductionSum > 0 && (
-                        <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '5px' }}>
+                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Trừ tiền ăn ({downloadingInvoice.studySummary?.nghiPhep || 0} ngày nghỉ phép):</span>
-                              <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                              <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn học phí (Nghỉ liên tiếp ≥6 ngày):</span>
-                              <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingInvoice?.actualTuitionRefund || 0)} đ</b>
+                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                              <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
                            </div>
                         </div>
                      )}
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginTop: '10px', fontSize: '18pt', background: '#f8fafc' }}>
-                        <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                        <div style={{ color: '#000' }}>{downloadingInvoice?.tongcong} đ</div>
-                     </div>
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14pt", marginTop: '5px' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+                        <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
                         <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
                         <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
                      </div>
-
                      <div style={{ marginTop: '10px' }}>
                         Ghi chú: {downloadingInvoice?.ghichu || ""}
                      </div>
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        Facebook: {config?.tencongty} <br />
+                        Facebook: Trường Lá - E Skills School <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
@@ -1834,7 +1696,7 @@ export default function InvoiceManager() {
                      </div>
                   </div>
                   <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
-                     Lưu ý: Phiếu thu này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
+                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
                   </div>
                </div>
             </div>
@@ -1851,7 +1713,7 @@ export default function InvoiceManager() {
                   {/* CENTER: Info */}
                   <div style={{ flex: 1, textAlign: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        {config?.tencongty || 'E-Skills Academy'}
+                        TRƯỜNG LÁ TAM PHƯỚC
                      </h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
@@ -1872,63 +1734,77 @@ export default function InvoiceManager() {
                {/* INFO */}
                <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tenhv}</b></div>
-                     <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
+                     <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
+                     <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
                   </div>
 
-                  <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
-                  <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
-
-                  {/* FEES BREAKDOWN */}
-                  <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi} đ</b></div>
-                        <div>Tiền ăn ({downloadingNoticeMealInfo.days} ngày): <b style={{ fontWeight: 900 }}>{formatCurrency(downloadingNoticeMealInfo.amount)} đ</b></div>
+                  {/* FEES BOX */}
+                  <div style={{
+                     background: '#f0f9ff',
+                     border: '1px solid #bae6fd',
+                     borderRadius: '16px',
+                     padding: '24px',
+                     marginTop: '15px',
+                     lineHeight: '1.6'
+                  }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 600 }}>Học phí:</div>
+                        <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
                      </div>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Giảm học phí (Học bổng): <b style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi} đ</b></div>
-                        <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatCurrency(noCu)} đ</b></div>
+
+                     {parseInt(String(downloadingNotice?.giamhocphi).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                           <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                           <div style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</div>
+                        </div>
+                     )}
+
+                     {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0) && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualMealRefund} đ</div>
+                              </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund} đ</div>
+                              </div>
+                           )}
+                        </>
+                     )}
+
+                     <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                        <div>TỔNG CỘNG:</div>
+                        <div>{downloadingNotice?.tongcong} VNĐ</div>
                      </div>
                   </div>
 
-                  {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
-                     <div style={{ marginTop: '5px', padding: '10px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                        {downloadingNotice.phuthu.map((pt, i) => (
-                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13pt' }}>
-                              <span>+ {pt.name || 'Phụ thu'}:</span>
-                              <b style={{ fontWeight: 900 }}>{formatCurrency(pt.amount)} đ</b>
-                           </div>
-                        ))}
-                     </div>
-                  )}
-
-                  <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc', marginTop: '10px' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Trừ tiền ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} ngày nghỉ phép):</div>
-                        <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b>
-                     </div>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Hoàn học phí (Nghỉ liên tiếp ≥6 ngày):</div>
-                        <b style={{ fontWeight: 800 }}>-{formatCurrency(downloadingNotice?.actualTuitionRefund || 0)} đ</b>
-                     </div>
+                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
+                     {downloadingNotice?.diemDanhInfo && (
+                        <div style={{ opacity: 0.9 }}>
+                           Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}):
+                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>,
+                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>,
+                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
+                        </div>
+                     )}
+                     {downloadingNotice?.ghichu && (
+                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
+                     )}
                   </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '15px', fontSize: '18pt', background: '#f8fafc' }}>
-                     <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                     <div style={{ color: '#000' }}>{downloadingNotice?.tongcong} đ</div>
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                     Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu || ""}</b>
-                  </div>
-                  <div style={{ fontSize: '14pt' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingNotice?.hinhthuc || "..."}</b></div>
 
                   {/* QR SECTION */}
                   {(() => {
                      const qrUrl = downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig) : null;
                      if (!qrUrl) return (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
-                           <div style={{ fontWeight: '950', fontSize: '14pt' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
                         </div>
                      );
                      return (
@@ -1946,7 +1822,7 @@ export default function InvoiceManager() {
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     <b style={{ fontWeight: 950, fontSize: '17pt' }}>{config?.tencongty || 'E-Skills Academy'} </b><br />
+                     Facebook: Trường Lá - Eskills School
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
                      Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
                   </div>
@@ -1962,7 +1838,7 @@ export default function InvoiceManager() {
                <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
                   <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
                   <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>
-                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ BIÊN LAI
+                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN
                   </p>
                   <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
                   <div style={{ marginTop: '15px', textAlign: 'center' }}>

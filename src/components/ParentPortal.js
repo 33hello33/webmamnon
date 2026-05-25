@@ -8,6 +8,12 @@ import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone } from 'lucide-react';
 
+const buildTuitionNoticeImageKey = (mahv, mahd) => {
+   const safeMahv = String(mahv || '').trim();
+   const safeMahd = String(mahd || '').trim();
+   return `tuition-notices/${safeMahv}/ThongBaoHocPhi_${safeMahv}_${safeMahd}.png`;
+};
+
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
    const [parentTab, setParentTab] = useState('menu');
@@ -756,6 +762,31 @@ function ParentPortal({ parentData, setParentData }) {
       if (!parentData?.latestFee || !parentData?.student?.mahv) return null;
 
       const noticeId = String(parentData.latestFee.mahd || '').trim();
+      const studentId = String(parentData.student.mahv || '').trim();
+
+      if (noticeId) {
+         const { data: noticeData, error: noticeError } = await supabase
+            .from('tbl_thongbao')
+            .select('image_url')
+            .eq('mahv', studentId)
+            .eq('mahd', noticeId)
+            .maybeSingle();
+
+         if (noticeError) {
+            console.warn('Không đọc được image_url từ tbl_thongbao:', noticeError);
+         }
+         if (noticeData?.image_url) return noticeData.image_url;
+
+         const basePublicUrl = (config?.r2_public_url || '').replace(/\/+$/, '');
+         if (config?.r2_enabled && basePublicUrl) {
+            return `${basePublicUrl}/${buildTuitionNoticeImageKey(studentId, noticeId)}`;
+         }
+
+         const storagePath = `chat-images/${buildTuitionNoticeImageKey(studentId, noticeId)}`;
+         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
+         if (publicUrl) return publicUrl;
+      }
+
       const pickLatestImage = (messages = []) => {
          const validMessages = messages.filter(msg => msg?.image_url);
          if (validMessages.length === 0) return null;
