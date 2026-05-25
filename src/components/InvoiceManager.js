@@ -4,6 +4,9 @@ import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, Ch
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
+import { triggerPushNotification } from '../utils/pushNotifications';
 
 
 
@@ -146,8 +149,31 @@ const calculateConsecutiveLeave = (attendance) => {
    }));
 };
 
+const dataUrlToBlob = (dataUrl) => {
+   const [meta, base64] = dataUrl.split(',');
+   const mime = meta.match(/data:(.*?);base64/)?.[1] || 'image/png';
+   const binary = atob(base64);
+   const bytes = new Uint8Array(binary.length);
+   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+   return new Blob([bytes], { type: mime });
+};
+
+const resolveLoggedInManv = async (auth) => {
+   const sessionManv = auth?.user?.manv;
+   if (sessionManv) {
+      const { data } = await supabase.from('tbl_nv').select('manv').eq('manv', sessionManv).maybeSingle();
+      if (data?.manv) return data.manv;
+   }
+   const sessionUsername = auth?.user?.username;
+   if (sessionUsername) {
+      const { data } = await supabase.from('tbl_nv').select('manv').eq('username', sessionUsername).maybeSingle();
+      if (data?.manv) return data.manv;
+   }
+   return null;
+};
+
 export default function InvoiceManager() {
-   const { config } = useConfig();
+   const { config, getTienAnConfig } = useConfig();
    const walletsConfig = (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
       { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -313,6 +339,46 @@ export default function InvoiceManager() {
                      document.body.appendChild(link);
                      link.click();
                      document.body.removeChild(link);
+                  }
+
+                  try {
+                     const loggedInManv = await resolveLoggedInManv(auth);
+                     if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
+                     const fileName = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
+                     const blob = dataUrlToBlob(dataUrl);
+                     const pngFile = new File([blob], fileName, { type: 'image/png' });
+                     const file = await compressImage(pngFile, 150);
+
+                     let imageUrl = '';
+                     if (config?.r2_enabled) {
+                        imageUrl = await uploadToR2(
+                           file,
+                           config.r2_endpoint,
+                           config.r2_access_key_id,
+                           config.r2_secret_access_key,
+                           config.r2_bucket_name,
+                           config.r2_public_url
+                        );
+                     } else {
+                        const path = `chat-images/${downloadingNotice.mahv}_${Date.now()}_${file.name}`;
+                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        if (upErr) throw upErr;
+                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                        imageUrl = publicUrl;
+                     }
+
+                     const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
+                        mahv: downloadingNotice.mahv,
+                        manv: loggedInManv,
+                        content: `Gửi phụ huynh Thông báo học phí ${downloadingNotice.mahd}`,
+                        image_url: imageUrl
+                     }]).select();
+                     if (msgErr) throw msgErr;
+                     if (insertedMessages?.[0]) {
+                        await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
+                     }
+                  } catch (autoSendErr) {
+                     console.error('Auto-send notice error:', autoSendErr);
                   }
                }
             } catch (err) {
@@ -1085,6 +1151,89 @@ export default function InvoiceManager() {
       }
    };
 
+   const handleExportNotice = async () => {
+      if (!selectedStudent || !activeClass) {
+         showMessage('error', 'Vui lòng chọn học sinh trước khi xuất thông báo.');
+         return;
+      }
+
+      try {
+         const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
+         let nextNum = 1;
+         if (recentTB && recentTB.length > 0 && recentTB[0].mahd) {
+            const numPart = recentTB[0].mahd.replace(/\D/g, '');
+            if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
+         }
+
+         const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
+         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+         const currentTimePeriod = calculateThoiluong(invoiceData);
+         const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
+         const combinedNote = `${invoiceData.ghiChu}${billNote}`;
+         const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
+
+         const insertData = {
+            mahd: newMaTB,
+            ngaylap: localNow,
+            mahv: selectedStudent.mahv,
+            tenlop: activeClass?.tenlop || '',
+            ngaybatdau: invoiceData.ngayBatDau || null,
+            ngayketthuc: invoiceData.ngayKetThuc || null,
+            manv: auth.user?.manv || auth.user?.username || '',
+            hocphi: formatCurrency(invoiceData.hocphi),
+            giamhocphi: formatCurrency(invoiceData.giamHocphi),
+            tongcong: formatCurrency(tongCong),
+            dadong: '0',
+            conno: formatCurrency(tongCong),
+            hinhthuc: invoiceData.hinhThuc,
+            ghichu: combinedNote,
+            nocu: formatCurrency(noCu),
+            malop: activeClass?.malop || '',
+            thoiluong: currentTimePeriod,
+            sobuoihoc: sobuoihocFinal,
+            tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
+            trutienan: formatCurrency(Math.round(actualMealRefund)),
+            sobuoinghiphep: studySummary?.nghiPhep || 0,
+            nhanvien: cashier
+         };
+
+         const res = await supabase.from('tbl_thongbao').insert([insertData]);
+         if (res.error) throw res.error;
+
+         setDownloadingNotice({
+            mahd: newMaTB,
+            ngaylap: localNow,
+            mahv: selectedStudent.mahv,
+            tenhv: selectedStudent.tenhv,
+            sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
+            tenlop: activeClass?.tenlop || '',
+            ngaybatdau: invoiceData.ngayBatDau || null,
+            ngayketthuc: invoiceData.ngayKetThuc || null,
+            hocphi: formatCurrency(invoiceData.hocphi),
+            giamhocphi: formatCurrency(invoiceData.giamHocphi),
+            sobuoihoc: sobuoihocFinal,
+            nocu: formatCurrency(noCu),
+            tongcong: formatCurrency(tongCong),
+            conno: formatCurrency(tongCong),
+            hinhthuc: invoiceData.hinhThuc,
+            ghichu: combinedNote,
+            nhanvien: cashier,
+            thoiluong: currentTimePeriod,
+            diemDanhInfo: studySummary ? {
+               diHoc: studySummary.daHoc || 0,
+               nghiPhep: studySummary.nghiPhep || 0,
+               nghiKP: studySummary.nghiKhongPhep || 0,
+               statsPeriod: studySummary.period || currentTimePeriod
+            } : null,
+            actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
+            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0))
+         });
+      } catch (err) {
+         console.error(err);
+         showMessage('error', 'Lỗi xuất thông báo: ' + err.message);
+      }
+   };
+
    const filteredStudents = students.filter(s =>
       (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (s.sdt && s.sdt.includes(searchTerm)) ||
@@ -1096,7 +1245,10 @@ export default function InvoiceManager() {
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const trutienan_val = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+   const tienAnConfig = getTienAnConfig?.(invoiceData.hocphi);
+   const trutienan_val = (tienAnConfig && Number(tienAnConfig.tru_nghi) > 0)
+      ? Number(tienAnConfig.tru_nghi)
+      : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
@@ -1522,6 +1674,10 @@ export default function InvoiceManager() {
                         </div>
 
                         <div className="im-actions" style={{ display: 'flex', gap: '10px' }}>
+                           <button className="im-btn-secondary" onClick={handleExportNotice} disabled={isSaving}>
+                              <MessageSquare size={18} />
+                              Xuất Thông Báo
+                           </button>
                            <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
                               <Receipt size={18} />
                               {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}

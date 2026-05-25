@@ -8,6 +8,9 @@ import {
 
 import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
+import { triggerPushNotification } from '../utils/pushNotifications';
 import './ClassManager.css';
 
 const INITIAL_FORM = {
@@ -149,8 +152,31 @@ const calculateConsecutiveLeave = (attendanceData) => {
   }));
 };
 
+const dataUrlToBlob = (dataUrl) => {
+  const [meta, base64] = dataUrl.split(',');
+  const mime = meta.match(/data:(.*?);base64/)?.[1] || 'image/png';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+};
+
+const resolveLoggedInManv = async (auth) => {
+  const sessionManv = auth?.user?.manv;
+  if (sessionManv) {
+    const { data } = await supabase.from('tbl_nv').select('manv').eq('manv', sessionManv).maybeSingle();
+    if (data?.manv) return data.manv;
+  }
+  const sessionUsername = auth?.user?.username;
+  if (sessionUsername) {
+    const { data } = await supabase.from('tbl_nv').select('manv').eq('username', sessionUsername).maybeSingle();
+    if (data?.manv) return data.manv;
+  }
+  return null;
+};
+
 export default function ClassManager({ students, showMessage, fetchStudents }) {
-  const { config } = useConfig();
+  const { config, getTienAnConfig } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
     { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -168,6 +194,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
   const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
+
+  const getMealRefundRate = useCallback((hocphiAmount) => {
+    const tier = getTienAnConfig?.(hocphiAmount);
+    if (tier && Number(tier.tru_nghi) > 0) {
+      return Number(tier.tru_nghi);
+    }
+    return parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+  }, [config, getTienAnConfig]);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -448,6 +482,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const statsStart = toLocalISO(statsMonth);
       const statsEnd = toLocalISO(new Date(statsMonth.getFullYear(), statsMonth.getMonth() + 1, 0));
       const statsPeriod = `${String(statsMonth.getMonth() + 1).padStart(2, '0')}/${statsMonth.getFullYear()}`;
+      const studentIds = activeStudents.map(s => s.mahv);
 
       const { data: attData } = await supabase
         .from('tbl_diemdanh')
@@ -513,11 +548,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           else if (s.includes('không phép') || s.includes('nghỉ kp')) nghiKP++;
         });
 
-        const groups = calculateConsecutiveLeave(studentAttendance);
+        const groups = calculateConsecutiveLeave(uniqueDayRecords);
         let mealRefund = 0;
         let tuitionRefund = 0;
         let maxLeave = 0;
-        const mealRefundRate = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+        const mealRefundRate = getMealRefundRate(initHocPhi);
         const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
         const p6 = parseFloat(config?.nghi6ngay || '0');
         const p12 = parseFloat(config?.nghi12ngay || '0');
@@ -646,7 +681,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         .lte('ngay', sEnd);
       const attendance = attData || [];
 
-      const mealRefundRate = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
       const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
       const p6 = parseFloat(config?.nghi6ngay || '0');
       const p12 = parseFloat(config?.nghi12ngay || '0');
@@ -667,8 +701,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         });
 
         // Tính lại hoàn tiền
-        const groups = calculateConsecutiveLeave(studentAttendance);
+        const groups = calculateConsecutiveLeave(uniqueDayRecords);
         let mealRefund = 0, tuitionRefund = 0, maxLeave = 0;
+        const mealRefundRate = getMealRefundRate(row.hocphi || 0);
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
@@ -702,6 +737,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     }
   };
 
+  useEffect(() => {
+    if (isBatchNoticeOpen && config && batchNoticeData.ngayBatDau && (batchStudentsData || []).length > 0) {
+      handleBatchMonthChange(0);
+    }
+  }, [config]);
+
   const handleApplyBatchNotice = () => {
     let hpNumber = 0;
     if (batchNoticeData.hocPhiOpt) {
@@ -713,12 +754,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     setBatchStudentsData(prev => (prev || []).map(item => {
       const currentNoCu = parseInt(item.noCu || 0);
-      const tc = Math.max(0, hpNumber + currentNoCu - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.truTienAn || 0) - (item.truHocPhi || 0));
+      const mealRefundRate = getMealRefundRate(hpNumber);
+      const recalculatedMealRefund = (item.diemDanhInfo?.nghiPhep || 0) >= 3
+        ? Math.round((((item.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
+        : 0;
+      const tc = Math.max(0, hpNumber + currentNoCu - (parseInt(batchNoticeData.giamHocphi) || 0) - recalculatedMealRefund - (item.truHocPhi || 0));
 
       return {
         ...item,
         hocphi: hpNumber,
         giamhocphi: batchNoticeData.giamHocphi || 0,
+        truTienAn: recalculatedMealRefund,
         ngaybatdau: batchNoticeData.ngayBatDau,
         ghichu: batchNoticeData.ghiChu,
         tongcong: tc
@@ -734,6 +780,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           cleanVal = parseFormattedNumber(value);
         }
         let newItem = { ...item, [field]: cleanVal };
+        if (field === 'hocphi') {
+          const mealRefundRate = getMealRefundRate(cleanVal);
+          newItem.truTienAn = (newItem.diemDanhInfo?.nghiPhep || 0) >= 3
+            ? Math.round((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
+            : 0;
+        }
         if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'noCu'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
@@ -951,6 +1003,46 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
+
+                  try {
+                    const loggedInManv = await resolveLoggedInManv(auth);
+                    if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
+                    const fileName = `ThongBao_${notice.tenhv}_${notice.mahd}.png`;
+                    const blob = dataUrlToBlob(dataUrl);
+                    const pngFile = new File([blob], fileName, { type: 'image/png' });
+                    const file = await compressImage(pngFile, 150);
+
+                    let imageUrl = '';
+                    if (config?.r2_enabled) {
+                      imageUrl = await uploadToR2(
+                        file,
+                        config.r2_endpoint,
+                        config.r2_access_key_id,
+                        config.r2_secret_access_key,
+                        config.r2_bucket_name,
+                        config.r2_public_url
+                      );
+                    } else {
+                      const path = `chat-images/${notice.mahv}_${Date.now()}_${file.name}`;
+                      const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                      if (upErr) throw upErr;
+                      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                      imageUrl = publicUrl;
+                    }
+
+                    const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
+                      mahv: notice.mahv,
+                      manv: loggedInManv,
+                      content: `Gửi phụ huynh Thông báo học phí ${notice.mahd}`,
+                      image_url: imageUrl
+                    }]).select();
+                    if (msgErr) throw msgErr;
+                    if (insertedMessages?.[0]) {
+                      await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
+                    }
+                  } catch (autoSendErr) {
+                    console.error(`Auto-send notice error for ${notice.tenhv}:`, autoSendErr);
+                  }
                 } else {
                   // Retry nếu lỗi
                   const retryUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
@@ -961,6 +1053,46 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
+
+                    try {
+                      const loggedInManv = await resolveLoggedInManv(auth);
+                      if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
+                      const fileName = `ThongBao_${notice.tenhv}_${notice.mahd}_retry.png`;
+                      const blob = dataUrlToBlob(retryUrl);
+                      const pngFile = new File([blob], fileName, { type: 'image/png' });
+                      const file = await compressImage(pngFile, 150);
+
+                      let imageUrl = '';
+                      if (config?.r2_enabled) {
+                        imageUrl = await uploadToR2(
+                          file,
+                          config.r2_endpoint,
+                          config.r2_access_key_id,
+                          config.r2_secret_access_key,
+                          config.r2_bucket_name,
+                          config.r2_public_url
+                        );
+                      } else {
+                        const path = `chat-images/${notice.mahv}_${Date.now()}_${file.name}`;
+                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        if (upErr) throw upErr;
+                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                        imageUrl = publicUrl;
+                      }
+
+                      const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
+                        mahv: notice.mahv,
+                        manv: loggedInManv,
+                        content: `Gửi phụ huynh Thông báo học phí ${notice.mahd}`,
+                        image_url: imageUrl
+                      }]).select();
+                      if (msgErr) throw msgErr;
+                      if (insertedMessages?.[0]) {
+                        await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
+                      }
+                    } catch (autoSendErr) {
+                      console.error(`Auto-send retry notice error for ${notice.tenhv}:`, autoSendErr);
+                    }
                   }
                 }
               } catch (nodeErr) {
@@ -1604,7 +1736,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {/* Batch Notice Modal */}
       {isBatchNoticeOpen && createPortal(
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
-          <div className="modal-content" style={{ maxWidth: '1200px', width: '98%', height: '90vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className="modal-content" style={{ position: 'relative', maxWidth: '1200px', width: '98%', height: '94vh', maxHeight: '94vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 25px', borderBottom: '1px solid #e2e8f0', background: 'white' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1618,13 +1750,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               <button className="close-btn" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '8px', color: '#94a3b8' }}><X size={24} /></button>
             </div>
 
-            <div className="modal-body" style={{ flex: 1, minHeight: 0, overflowY: 'hidden', padding: '20px', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fcfdfe' }}>
+            <div className="modal-body" style={{ height: 'calc(100% - 118px)', minHeight: 0, overflowY: 'hidden', padding: '16px 20px 0', display: 'flex', flexDirection: 'column', gap: '0.75rem', background: '#fcfdfe' }}>
 
               {/* PHẦN 1: CÀI ĐẶT CHUNG - REARRANGED PER DRAWING */}
-              <div style={{ background: '#ffffff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ flex: '0 0 auto', background: '#ffffff', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
                 {/* Dòng 1: Tiêu đề & Chọn tháng */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', paddingBottom: '10px', borderBottom: '1px dashed #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '8px', borderBottom: '1px dashed #e2e8f0' }}>
                   <h4 style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                     <CalendarDays size={14} /> Cấu hình chung
                   </h4>
@@ -1675,7 +1807,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 </div>
 
                 {/* Dòng 2: Gói HP | Giảm HP | Ghi chú | Nút Áp dụng */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) 140px 1fr 180px', gap: '15px', alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) 140px 1fr 180px', gap: '10px', alignItems: 'end' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GÓI HỌC PHÍ MẪU</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', background: '#f8fafc', padding: '6px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '42px', alignItems: 'center' }}>
@@ -1747,13 +1879,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
 
               {/* PHẦN 3: DANH SÁCH CHI TIẾT */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase' }}>
+              <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.9rem', fontWeight: 800, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase' }}>
                   <Users size={16} /> Danh sách học sinh ({(batchStudentsData || []).filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter).length})
                 </h4>
 
-                <div style={{ flex: 1, minHeight: 0, border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <div className="inline-table batch-notice-table" style={{ height: '100%', overflow: 'auto', scrollbarWidth: 'thin' }}>
+                <div style={{ flex: '1 1 0', minHeight: 0, height: '100%', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                  <div className="inline-table batch-notice-table" style={{ height: '100%', minHeight: 0, maxHeight: 'none', overflow: 'auto', scrollbarWidth: 'thin', border: 'none', borderRadius: 0 }}>
                     <table className="data-table" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                       <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                         <tr style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1856,7 +1988,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '15px 25px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
+            <div className="modal-footer" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, borderTop: '1px solid #e2e8f0', padding: '10px 25px 10px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
               <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
               <button
                 className="btn btn-success"

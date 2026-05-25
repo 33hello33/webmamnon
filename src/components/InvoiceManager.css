@@ -476,6 +476,26 @@
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
+.im-btn-secondary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 10px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.im-btn-secondary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
+}
+
 .im-btn-submit:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
@@ -1167,4 +1187,4 @@
 [data-theme="kindergarten"] .im-finance-row.highlight-row {
   background: #fff1f2 !important;
   border-color: #fecdd3 !important;
-}
+}
