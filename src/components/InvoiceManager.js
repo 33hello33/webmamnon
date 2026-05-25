@@ -124,6 +124,64 @@ const formatMonthYear = (dateStr) => {
    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+const ensureIsoDate = (dStr) => {
+   if (!dStr) return null;
+   const s = String(dStr);
+   if (s.includes('T')) return s.split('T')[0];
+   if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
+   const parts = s.split(/[-/: ]/);
+   if (parts.length >= 3) {
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const y = parseInt(parts[2], 10);
+      if (y > 2000) {
+         return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+   }
+   return s;
+};
+
+const getMonthBoundsFromToken = (monthToken) => {
+   const match = String(monthToken || '').match(/(\d{2})\/(\d{4})/);
+   if (!match) return null;
+
+   const monthIndex = parseInt(match[1], 10) - 1;
+   const year = parseInt(match[2], 10);
+   const start = new Date(year, monthIndex, 1);
+   const end = new Date(year, monthIndex + 1, 0);
+
+   return {
+      statsStart: start.toISOString().split('T')[0],
+      statsEnd: end.toISOString().split('T')[0],
+      periodLabel: `${String(monthIndex + 1).padStart(2, '0')}/${year}`
+   };
+};
+
+const getStudyPeriodFromInvoice = (inv) => {
+   if (!inv?.ngayBatDau) return null;
+
+   const timePeriod = calculateThoiluong(inv);
+   const firstMonthToken = String(timePeriod || '')
+      .split(',')
+      .map(item => item.trim())
+      .find(item => /^\d{2}\/\d{4}$/.test(item));
+
+   if (firstMonthToken) {
+      return getMonthBoundsFromToken(firstMonthToken);
+   }
+
+   const statsStart = ensureIsoDate(inv.ngayBatDau);
+   const statsEnd = ensureIsoDate(inv.ngayKetThuc) || statsStart;
+
+   if (!statsStart || !statsEnd) return null;
+
+   return {
+      statsStart,
+      statsEnd,
+      periodLabel: `${statsStart} - ${statsEnd}`
+   };
+};
+
 const getWorkingDaysInMonth = (dateStr) => {
    if (!dateStr) return 0;
    const d = new Date(dateStr);
@@ -317,6 +375,12 @@ export default function InvoiceManager() {
    const [noCu, setNoCu] = useState(0);
    const [unpaidBills, setUnpaidBills] = useState([]);
    const [unpaidBillsTotal, setUnpaidBillsTotal] = useState(0);
+   const activeMalop = activeClass?.malop || '';
+   const activeSchedule = activeClass?.thoigianbieu || '';
+   const statsNgayBatDau = invoiceData.ngayBatDau;
+   const statsNgayKetThuc = invoiceData.ngayKetThuc;
+   const statsLoaiDong = invoiceData.loaiDong;
+   const statsSoLuong = invoiceData.soLuong;
 
    const fetchBaseData = async () => {
       try {
@@ -589,7 +653,6 @@ export default function InvoiceManager() {
       let endMonthStr = '';
 
       let recentDoc = null;
-      let recentHD = null;
 
       try {
          const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
@@ -604,7 +667,7 @@ export default function InvoiceManager() {
             if (!d) return 0;
             const t = new Date(d).getTime();
             if (!isNaN(t)) return t;
-            const parts = String(d).split(/[\/\- :T]/);
+            const parts = String(d).split(/[-/: T]/);
             if (parts.length >= 3) {
                const p0 = parseInt(parts[0], 10);
                const p1 = parseInt(parts[1], 10) - 1;
@@ -620,9 +683,6 @@ export default function InvoiceManager() {
          let allDocs = [...validHDs, ...validTBs];
          allDocs.sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
          recentDoc = allDocs.length > 0 ? allDocs[0] : null;
-
-         validHDs.sort((a, b) => safeTime(b.ngayketthuc || b.ngaylap) - safeTime(a.ngayketthuc || a.ngaylap));
-         recentHD = validHDs.length > 0 ? validHDs[0] : null;
 
          if (recentDoc) {
             setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
@@ -718,101 +778,102 @@ export default function InvoiceManager() {
          selectedTienAnTier
       });
 
-      try {
-         // Thống kê điểm danh - Chỉ lấy từ hóa đơn/thông báo trước đó
-         const targetForStats = recentHD || (recentDoc?.ngaybatdau ? recentDoc : null);
+   };
 
-         if (targetForStats) {
-            const ensureIsoDate = (dStr) => {
-               if (!dStr) return null;
-               const s = String(dStr);
-               if (s.includes('T')) return s.split('T')[0];
-               if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
-               const parts = s.split(/[\/\- :]/);
-               if (parts.length >= 3) {
-                  const d = parseInt(parts[0], 10);
-                  const m = parseInt(parts[1], 10);
-                  const y = parseInt(parts[2], 10);
-                  if (y > 2000) {
-                     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                  }
-               }
-               return s;
-            };
+   useEffect(() => {
+      let cancelled = false;
 
-            let statsStart = ensureIsoDate(targetForStats.ngaybatdau);
-            let statsEnd = ensureIsoDate(targetForStats.ngayketthuc);
+      const loadStudySummary = async () => {
+         if (!selectedStudent?.mahv || !activeMalop) {
+            setStudySummary(null);
+            return;
+         }
 
-            // Fallback: Nếu không có ngày cụ thể nhưng có chuỗi thời lượng "MM/YYYY"
-            if ((!statsStart || !statsEnd) && targetForStats.thoiluong) {
-               const m = targetForStats.thoiluong.match(/(\d{2})\/(\d{4})/);
-               if (m) {
-                  const mm = parseInt(m[1]) - 1;
-                  const yyyy = parseInt(m[2]);
-                  statsStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
-                  statsEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
+         const periodInfo = getStudyPeriodFromInvoice({
+            ngayBatDau: statsNgayBatDau,
+            ngayKetThuc: statsNgayKetThuc,
+            loaiDong: statsLoaiDong,
+            soLuong: statsSoLuong
+         });
+         if (!periodInfo?.statsStart || !periodInfo?.statsEnd) {
+            setStudySummary(null);
+            return;
+         }
+
+         try {
+            const { statsStart, statsEnd, periodLabel } = periodInfo;
+            const scheduleToUse = activeSchedule;
+
+            let tongBuoi = 0;
+            if (scheduleToUse) {
+               const activeDays = parseScheduleDays(scheduleToUse);
+               let cDate = new Date(`${statsStart}T00:00:00`);
+               const eDate = new Date(`${statsEnd}T23:59:59`);
+               let safeCount = 0;
+
+               while (cDate <= eDate && safeCount < 1000) {
+                  if (activeDays.includes(cDate.getDay())) tongBuoi++;
+                  cDate.setDate(cDate.getDate() + 1);
+                  safeCount++;
                }
             }
 
-            if (statsStart && statsEnd) {
-               let filterLop = malop;
-               let scheduleToUse = enrichedClass?.thoigianbieu;
+            const { data: attendance } = await supabase
+               .from('tbl_diemdanh')
+               .select('*')
+               .eq('mahv', selectedStudent.mahv)
+               .gte('ngay', statsStart)
+               .lte('ngay', statsEnd);
 
-               if (targetForStats.malop) {
-                  filterLop = targetForStats.malop;
-                  if (filterLop !== malop) {
-                     const oldClass = classes.find(c => c.malop === filterLop);
-                     if (oldClass?.thoigianbieu) scheduleToUse = oldClass.thoigianbieu;
-                  }
-               }
+            if (cancelled) return;
 
-               let tongBuoi = 0;
-               if (scheduleToUse) {
-                  const activeDays = parseScheduleDays(scheduleToUse);
-                  let cDate = new Date(`${statsStart}T00:00:00`);
-                  const eDate = new Date(`${statsEnd}T23:59:59`);
-                  let safeCount = 0;
-                  while (cDate <= eDate && safeCount < 1000) {
-                     if (activeDays.includes(cDate.getDay())) tongBuoi++;
-                     cDate.setDate(cDate.getDate() + 1);
-                     safeCount++;
-                  }
-               }
+            const normalizeStatus = (s) => (s || '').trim().toLowerCase();
+            let daHoc = 0;
+            let nghiPhep = 0;
+            let nghiKhongPhep = 0;
 
-               let attendanceQuery = supabase.from('tbl_diemdanh').select('*')
-                  .eq('mahv', student.mahv)
-                  .gte('ngay', statsStart).lte('ngay', statsEnd);
+            (attendance || []).forEach(att => {
+               const s = normalizeStatus(att.trangthai);
+               if (s === 'có mặt') daHoc++;
+               else if (s === 'nghỉ phép') nghiPhep++;
+               else if (s === 'nghỉ không phép') nghiKhongPhep++;
+            });
 
-               const { data: attendance } = await attendanceQuery;
+            const groups = calculateConsecutiveLeave(attendance || []);
+            const maxConsecutive = groups.length > 0 ? Math.max(...groups.map(g => g.so_ngay_nghi_lien_tuc)) : 0;
 
-               const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-               let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
-               (attendance || []).forEach(att => {
-                  const s = normalizeStatus(att.trangthai);
-                  if (s === 'có mặt') daHoc++;
-                  else if (s === 'nghỉ phép') nghiPhep++;
-                  else if (s === 'nghỉ không phép') nghiKhongPhep++;
-               });
-
-               const groups = calculateConsecutiveLeave(attendance || []);
-               const maxConsecutive = groups.length > 0 ? Math.max(...groups.map(g => g.so_ngay_nghi_lien_tuc)) : 0;
-
-               setStudySummary({
-                  daHoc,
-                  nghiPhep,
-                  nghiKhongPhep,
-                  tongBuoi,
-                  consecutiveLeave: groups,
-                  maxConsecutive,
-                  sourceHd: targetForStats.mahd,
-                  period: targetForStats.thoiluong || `${statsStart} - ${statsEnd}`
-               });
+            setStudySummary({
+               daHoc,
+               nghiPhep,
+               nghiKhongPhep,
+               tongBuoi,
+               consecutiveLeave: groups,
+               maxConsecutive,
+               sourceHd: null,
+               period: periodLabel
+            });
+         } catch (err) {
+            if (!cancelled) {
+               console.error('Lỗi tính thống kê điểm danh:', err);
+               setStudySummary(null);
             }
          }
-      } catch (err) {
-         console.error('Lỗi tính thống kê điểm danh:', err);
-      }
-   };
+      };
+
+      loadStudySummary();
+
+      return () => {
+         cancelled = true;
+      };
+   }, [
+      selectedStudent?.mahv,
+      activeMalop,
+      activeSchedule,
+      statsNgayBatDau,
+      statsNgayKetThuc,
+      statsLoaiDong,
+      statsSoLuong
+   ]);
 
    const showMessage = (type, text) => {
       setMessage({ type, text });
@@ -1004,7 +1065,6 @@ export default function InvoiceManager() {
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const { getTruTienAn } = useConfig();
    const trutienan_config = config?.trutienan || {};
 
    // Tìm tier được chọn hoặc tự động (chọn tier có key gần nhất với hocphi nếu tự động, hoặc lấy tier đầu tiên)

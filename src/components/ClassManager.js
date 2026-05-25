@@ -74,6 +74,63 @@ const formatMonthYear = (dateStr) => {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+const ensureIsoDate = (dStr) => {
+  if (!dStr) return null;
+  const s = String(dStr);
+  if (s.includes('T')) return s.split('T')[0];
+  if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
+  const parts = s.split(/[-/: ]/);
+  if (parts.length >= 3) {
+    const d = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const y = parseInt(parts[2], 10);
+    if (y > 2000) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+  return s;
+};
+
+const getMonthBoundsFromToken = (monthToken) => {
+  const match = String(monthToken || '').match(/(\d{2})\/(\d{4})/);
+  if (!match) return null;
+
+  const monthIndex = parseInt(match[1], 10) - 1;
+  const year = parseInt(match[2], 10);
+  const start = new Date(year, monthIndex, 1);
+  const end = new Date(year, monthIndex + 1, 0);
+
+  return {
+    statsStart: start.toISOString().split('T')[0],
+    statsEnd: end.toISOString().split('T')[0],
+    periodLabel: `${String(monthIndex + 1).padStart(2, '0')}/${year}`
+  };
+};
+
+const getBatchStudyPeriod = (noticeData) => {
+  if (!noticeData?.ngayBatDau) return null;
+
+  const timePeriod = calculateThoiluong(noticeData.ngayBatDau, noticeData.soLuong, noticeData.loaiDong);
+  const firstMonthToken = String(timePeriod || '')
+    .split(',')
+    .map(item => item.trim())
+    .find(item => /^\d{2}\/\d{4}$/.test(item));
+
+  if (firstMonthToken) {
+    return getMonthBoundsFromToken(firstMonthToken);
+  }
+
+  const statsStart = ensureIsoDate(noticeData.ngayBatDau);
+  const statsEnd = ensureIsoDate(noticeData.ngayKetThuc) || statsStart;
+  if (!statsStart || !statsEnd) return null;
+
+  return {
+    statsStart,
+    statsEnd,
+    periodLabel: `${statsStart} - ${statsEnd}`
+  };
+};
+
 const getQRUrl = (hoaDon, walletsConfig) => {
   if (!walletsConfig || !hoaDon.hinhthuc) return null;
   const hinhThucTrim = String(hoaDon.hinhthuc).trim();
@@ -300,6 +357,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [transferTargetClassId, setTransferTargetClassId] = useState('');
   const [transferringStudent, setTransferringStudent] = useState(null);
   const isProcessingRef = React.useRef(false);
+  const batchStudentCount = batchStudentsData.length;
+  const batchNgayBatDau = batchNoticeData.ngayBatDau;
+  const batchNgayKetThuc = batchNoticeData.ngayKetThuc;
+  const batchLoaiDong = batchNoticeData.loaiDong;
+  const batchSoLuong = batchNoticeData.soLuong;
 
 
 
@@ -518,24 +580,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
       })();
 
-      // Default stats range: previous month
-      const dNow = new Date();
-      const prevMonthFirst = new Date(dNow.getFullYear(), dNow.getMonth() - 1, 1);
-      const prevMonthLast = new Date(dNow.getFullYear(), dNow.getMonth(), 0);
-      const toLocalISO = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+      const initialNoticeData = {
+        loaiDong: initLoaiDong,
+        soLuong: initLoaiDong === 'Buổi' ? initSoLuong : 1,
+        hocPhiOpt: initHocPhiOpt,
+        hinhThuc: walletsConfig[0]?.name || 'Tiền mặt',
+        ngayBatDau: startStr,
+        ngayKetThuc: '',
+        giamHocphi: 0,
+        phuthu: [],
+        ghiChu: ''
       };
-      const sStatDef = toLocalISO(prevMonthFirst);
-      const eStatDef = toLocalISO(prevMonthLast);
+      const initialStudyPeriod = getBatchStudyPeriod(initialNoticeData);
 
-      // 1. Fetch latest docs to determine attendance range (previous cycle) AND fetch current debt/overpayment
+      // 1. Fetch current debt/overpayment
       const studentIds = activeStudents.map(s => s.mahv);
-      const [{ data: allHDs }, { data: allTBs }, { data: debtHDs }, { data: debtBills }] = await Promise.all([
-        supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
-        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
+      const [{ data: debtHDs }, { data: debtBills }] = await Promise.all([
         supabase.from('tbl_hd').select('mahv, conno, daxoa').in('mahv', studentIds),
         supabase.from('tbl_billhanghoa').select('mahv, conno, daxoa, daxacnhan').in('mahv', studentIds)
       ]);
@@ -548,74 +608,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return isNeg ? -num : num;
       };
 
-      const ensureIsoDate = (dStr) => {
-        if (!dStr) return null;
-        let s = String(dStr);
-        if (s.includes('T')) return s.split('T')[0];
-        if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
-        return s;
-      };
-
-      const safeTime = (d) => {
-        if (!d) return 0;
-        const t = new Date(d).getTime();
-        return isNaN(t) ? 0 : t;
-      };
-
-      const studentRanges = {};
-      activeStudents.forEach(s => {
-        const docs = [
-          ...(allHDs || []).filter(x => x.mahv === s.mahv && (x.daxoa || '').toLowerCase() !== 'đã xóa'),
-          ...(allTBs || []).filter(x => x.mahv === s.mahv && (x.daxoa || '').toLowerCase() !== 'đã xóa')
-        ].sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
-
-        const recent = docs[0];
-        if (recent) {
-          let sStart = ensureIsoDate(recent.ngaybatdau);
-          let sEnd = ensureIsoDate(recent.ngayketthuc);
-
-          // Fallback parsing from thoiluong if dates are missing
-          if ((!sStart || !sEnd) && recent.thoiluong) {
-            const m = recent.thoiluong.match(/(\d{2})\/(\d{4})/);
-            if (m) {
-              const mm = parseInt(m[1]) - 1;
-              const yyyy = parseInt(m[2]);
-              sStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
-              sEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
-            }
-          }
-
-          if (sStart && sEnd) studentRanges[s.mahv] = { start: sStart, end: sEnd };
-        }
-      });
-
-      // 2. Fetch attendance for those ranges
+      // 2. Fetch attendance for current selected period
       let attendance = [];
-      const allStarts = [...Object.values(studentRanges).map(r => r.start), sStatDef].filter(Boolean);
-      const allEnds = [...Object.values(studentRanges).map(r => r.end), eStatDef].filter(Boolean);
-      if (allStarts.length > 0) {
-        const minStart = allStarts.reduce((a, b) => a < b ? a : b);
-        const maxEnd = allEnds.reduce((a, b) => a > b ? a : b);
-        const { data: attData } = await supabase.from('tbl_diemdanh').select('*').in('mahv', studentIds).gte('ngay', minStart).lte('ngay', maxEnd).order('id', { ascending: true });
+      if (initialStudyPeriod?.statsStart && initialStudyPeriod?.statsEnd) {
+        const { data: attData } = await supabase
+          .from('tbl_diemdanh')
+          .select('*')
+          .in('mahv', studentIds)
+          .gte('ngay', initialStudyPeriod.statsStart)
+          .lte('ngay', initialStudyPeriod.statsEnd)
+          .order('id', { ascending: true });
         attendance = attData || [];
       }
 
-      const trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
       setBatchAttendance(attendance || []);
       setBatchNoticeData({
-        loaiDong: initLoaiDong,
-        soLuong: initLoaiDong === 'Buổi' ? initSoLuong : 1,
-        hocPhiOpt: initHocPhiOpt,
-        hinhThuc: walletsConfig[0]?.name || 'Tiền mặt',
-        ngayBatDau: startStr,
-        ngayKetThuc: '',
-        giamHocphi: 0,
-        phuthu: [],
-        ghiChu: '',
-        statsStart: sStatDef,
-        statsEnd: eStatDef
+        ...initialNoticeData,
+        statsStart: initialStudyPeriod?.statsStart || '',
+        statsEnd: initialStudyPeriod?.statsEnd || ''
       });
 
       // Initialize batchStudentsData with per-student end dates
@@ -636,7 +648,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           finalKetThuc = calculateEndDateBySessions(startStr, initSoLuong, activeDays);
         }
 
-        const studentAttendance = (attendance || []).filter(a => a.mahv === s.mahv && a.ngay >= sStatDef && a.ngay <= eStatDef);
+        const studentAttendance = (attendance || []).filter(a =>
+          a.mahv === s.mahv &&
+          (!initialStudyPeriod?.statsStart || a.ngay >= initialStudyPeriod.statsStart) &&
+          (!initialStudyPeriod?.statsEnd || a.ngay <= initialStudyPeriod.statsEnd)
+        );
 
         const normalizeStatus = (st) => (st || '').trim().toLowerCase();
         const uniqueDayRecords = Array.from(new Map(studentAttendance.map(r => [r.ngay, r])).values());
@@ -653,15 +669,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const soNgayNghi = nghiPhep + nghiKP;
         const taCfg = getTienAnConfig(initHocPhi);
         const mealRefund = nghiPhep * taCfg.tru_nghi;
-        const workingDays = calculateWorkingDaysInMonth(startStr);
         const monthlyMealFee = taCfg.amount;
 
         // Tuition refund logic
         const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
         const threshold = thresholdCfg.songaynghilientiep || 7;
+        const percent = thresholdCfg.phantramgiam || 0;
         let tuitionRefund = 0;
         if (maxConsecutive >= threshold) {
-          tuitionRefund = maxConsecutive * trutiennghi_val;
+          tuitionRefund = maxConsecutive * trutiennghi_val * (percent / 100);
         }
 
         // Calculate current old debt
@@ -692,7 +708,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           ngaybatdau: startStr,
           ngayketthuc: finalKetThuc,
           hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
-          phuthu: [],
           phuthu: [],
           ghichu: '',
           thoigianbieu: stSchedRaw
@@ -781,36 +796,73 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     current.setDate(1);
     const startStr = current.toISOString().split('T')[0];
     handleBatchNoticeFieldChange('ngayBatDau', startStr);
-
-    // Also update stats range to the month prior to the new start date
-    const prevMonthFirst = new Date(current.getFullYear(), current.getMonth() - 1, 1);
-    const prevMonthLast = new Date(current.getFullYear(), current.getMonth(), 0);
-    const toLocalISO = (d) => {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-    setBatchNoticeData(prev => ({
-      ...prev,
-      statsStart: toLocalISO(prevMonthFirst),
-      statsEnd: toLocalISO(prevMonthLast)
-    }));
   };
 
-  const handleUpdateStatsRange = async (field, val) => {
-    const newData = { ...batchNoticeData, [field]: val };
-    setBatchNoticeData(newData);
+  useEffect(() => {
+    if (!isBatchNoticeOpen || batchStudentCount === 0) return;
 
-    // Refresh attendance records if requested range is outside current batchAttendance
-    // For simplicity, we just recalculate based on existing batchAttendance if possible, 
-    // but here we should probably re-aggregate batchStudentsData
-    const studentIds = batchStudentsData.map(s => s.mahv);
-    if (studentIds.length === 0) return;
+    const periodInfo = getBatchStudyPeriod({
+      ngayBatDau: batchNgayBatDau,
+      ngayKetThuc: batchNgayKetThuc,
+      loaiDong: batchLoaiDong,
+      soLuong: batchSoLuong
+    });
+    if (!periodInfo?.statsStart || !periodInfo?.statsEnd) return;
 
-    // Recalculate stats for everyone using the new range
+    setBatchNoticeData(prev => {
+      if (prev.statsStart === periodInfo.statsStart && prev.statsEnd === periodInfo.statsEnd) return prev;
+      return {
+        ...prev,
+        statsStart: periodInfo.statsStart,
+        statsEnd: periodInfo.statsEnd
+      };
+    });
+
+    let cancelled = false;
+    const loadAttendance = async () => {
+      const studentIds = batchStudentsData.map(s => s.mahv).filter(Boolean);
+      if (studentIds.length === 0) return;
+
+      const { data } = await supabase
+        .from('tbl_diemdanh')
+        .select('*')
+        .in('mahv', studentIds)
+        .gte('ngay', periodInfo.statsStart)
+        .lte('ngay', periodInfo.statsEnd)
+        .order('id', { ascending: true });
+
+      if (!cancelled) {
+        setBatchAttendance(data || []);
+      }
+    };
+
+    loadAttendance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isBatchNoticeOpen,
+    batchNgayBatDau,
+    batchNgayKetThuc,
+    batchLoaiDong,
+    batchSoLuong,
+    batchStudentCount,
+    batchStudentsData
+  ]);
+
+  useEffect(() => {
+    if (!isBatchNoticeOpen || batchStudentCount === 0) return;
+
+    const thresholdCfg = (config?.nghilientiep
+      ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep)
+      : { songaynghilientiep: 7, phantramgiam: 50 });
+    const threshold = thresholdCfg.songaynghilientiep || 7;
+    const percent = thresholdCfg.phantramgiam || 0;
+    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, ''), 10) || 0;
+
     setBatchStudentsData(prev => prev.map(item => {
-      const stAttendance = batchAttendance.filter(a => a.mahv === item.mahv && a.ngay >= newData.statsStart && a.ngay <= newData.statsEnd);
+      const stAttendance = batchAttendance.filter(a => a.mahv === item.mahv);
       const normalizeStatus = (st) => (st || '').trim().toLowerCase();
       const uniqueDayRecords = Array.from(new Map(stAttendance.map(r => [r.ngay, r])).values());
 
@@ -820,26 +872,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return sStatus.includes('nghỉ phép') && !sStatus.includes('không');
       }).length;
       const nghiKP = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
-
       const consecutiveGroups = calculateConsecutiveLeave(stAttendance);
       const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
-      
-      const taCfg = getTienAnConfig(item.hocphi);
-      const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-      
-      const newTruTienAn = nghiPhep * taCfg.tru_nghi;
-      let newTruTuition = 0;
-      const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
-      if (maxConsecutive >= (thresholdCfg.songaynghilientiep || 7)) {
-        newTruTuition = maxConsecutive * trutiennghi_val;
-      }
 
-      const hp = parseInt(item.hocphi || 0);
-      const ta = getMealFeeInfo(item.tienan).amount;
-      const ghp = parseInt(item.giamhocphi || 0);
-      const nc = parseInt(item.nocu || 0);
-      const ptValue = Array.isArray(item.phuthu) ? item.phuthu.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0) : 0;
-      
+      const taAmount = getMealFeeInfo(item.tienan).amount;
+      const taTier = config?.trutienan ? config.trutienan[String(taAmount)] : null;
+      const tru_nghi_val = taTier ? (parseInt(taTier.tru_nghi, 10) || 0) : getTruTienAn(item.hocphi);
+      const newTruTienAn = nghiPhep * tru_nghi_val;
+      const newTruTuition = maxConsecutive >= threshold
+        ? maxConsecutive * trutiennghi_val * (percent / 100)
+        : 0;
+
+      const hp = parseInt(item.hocphi || 0, 10);
+      const ghp = parseInt(item.giamhocphi || 0, 10);
+      const nc = parseInt(item.nocu || 0, 10);
+      const ptValue = Array.isArray(item.phuthu) ? item.phuthu.reduce((sum, p) => sum + (parseInt(p.amount, 10) || 0), 0) : 0;
+
       return {
         ...item,
         coMat,
@@ -849,10 +897,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         soNgayNghi: nghiPhep + nghiKP,
         trutienan: newTruTienAn,
         trutiennghi: newTruTuition,
-        tongcong: Math.max(0, hp + ta + nc + ptValue - ghp - newTruTienAn - newTruTuition)
+        tongcong: Math.max(0, hp + taAmount + nc + ptValue - ghp - newTruTienAn - newTruTuition)
       };
     }));
-  };
+  }, [
+    isBatchNoticeOpen,
+    batchStudentCount,
+    batchAttendance,
+    config,
+    getTruTienAn
+  ]);
 
   const handleApplyBatchNotice = () => {
     let hpNumber = 0;
@@ -866,10 +920,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       let sobuoi = `${batchNoticeData.soLuong} ${batchNoticeData.loaiDong.toLowerCase()}`;
       const taCfg_apply = getTienAnConfig(hpNumber);
-      const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
       const monthlyMealFee = taCfg_apply.amount;
       const ptTotal = (batchNoticeData.phuthu || []).reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0);
-      const tc = Math.max(0, hpNumber + monthlyMealFee + (item.nocu || 0) + ptTotal - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
+      const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
+      const threshold = thresholdCfg.songaynghilientiep || 7;
+      const percent = thresholdCfg.phantramgiam || 0;
+      const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, ''), 10) || 0;
+      const truTienAn = (item.nghiPhep || 0) * (taCfg_apply.tru_nghi || 0);
+      const truHocPhi = (item.maxConsecutive || 0) >= threshold
+        ? (item.maxConsecutive || 0) * trutiennghi_val * (percent / 100)
+        : 0;
+      const tc = Math.max(0, hpNumber + monthlyMealFee + (item.nocu || 0) + ptTotal - (parseInt(batchNoticeData.giamHocphi) || 0) - truTienAn - truHocPhi);
 
       let finalKetThuc = '';
       const activeDays = parseScheduleDays(item.thoigianbieu);
@@ -900,7 +961,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         ghichu: batchNoticeData.ghiChu,
         tongcong: tc,
         sobuoihoc: sobuoi,
-        phuthu: (batchNoticeData.phuthu || []).map(p => ({ ...p }))
+        phuthu: (batchNoticeData.phuthu || []).map(p => ({ ...p })),
+        trutienan: truTienAn,
+        trutiennghi: truHocPhi
       };
     }));
   };
@@ -933,8 +996,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
           const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
           const threshold = thresholdCfg.songaynghilientiep || 7;
+          const percent = thresholdCfg.phantramgiam || 0;
           if (newItem.maxConsecutive >= threshold) {
-            newItem.trutiennghi = newItem.maxConsecutive * trutiennghi_val;
+            newItem.trutiennghi = newItem.maxConsecutive * trutiennghi_val * (percent / 100);
           } else {
             newItem.trutiennghi = 0;
           }
@@ -1856,14 +1920,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <input 
                       type="date" 
                       value={batchNoticeData.statsStart} 
-                      onChange={e => handleUpdateStatsRange('statsStart', e.target.value)}
+                      readOnly
+                      disabled
                       style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
                     />
                     <span style={{ color: '#9a3412', fontWeight: 900 }}>→</span>
                     <input 
                       type="date" 
                       value={batchNoticeData.statsEnd} 
-                      onChange={e => handleUpdateStatsRange('statsEnd', e.target.value)}
+                      readOnly
+                      disabled
                       style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
                     />
                   </div>
