@@ -367,6 +367,15 @@ export default function InvoiceManager() {
                         imageUrl = publicUrl;
                      }
 
+                     const { error: noticeUpdateErr } = await supabase
+                        .from('tbl_thongbao')
+                        .update({ image_url: imageUrl })
+                        .eq('mahv', downloadingNotice.mahv)
+                        .eq('mahd', downloadingNotice.mahd);
+                     if (noticeUpdateErr) {
+                        console.warn('Không cập nhật được image_url cho thông báo học phí:', noticeUpdateErr);
+                     }
+
                      const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
                         mahv: downloadingNotice.mahv,
                         manv: loggedInManv,

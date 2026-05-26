@@ -1030,6 +1030,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       imageUrl = publicUrl;
                     }
 
+                    const { error: noticeUpdateErr } = await supabase
+                      .from('tbl_thongbao')
+                      .update({ image_url: imageUrl })
+                      .eq('mahv', notice.mahv)
+                      .eq('mahd', notice.mahd);
+                    if (noticeUpdateErr) {
+                      console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
+                    }
+
                     const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
                       mahv: notice.mahv,
                       manv: loggedInManv,
@@ -1078,6 +1087,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         if (upErr) throw upErr;
                         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
                         imageUrl = publicUrl;
+                      }
+
+                      const { error: noticeUpdateErr } = await supabase
+                        .from('tbl_thongbao')
+                        .update({ image_url: imageUrl })
+                        .eq('mahv', notice.mahv)
+                        .eq('mahd', notice.mahd);
+                      if (noticeUpdateErr) {
+                        console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
                       }
 
                       const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
