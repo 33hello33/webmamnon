@@ -148,9 +148,17 @@ function Login() {
 
    const fetchParentPortalData = async (studentRecord) => {
       const mahv = studentRecord.mahv;
-      const { data: feeData } = await supabase.from('tbl_thongbao').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(1).maybeSingle();
-      const { data: invoices } = await supabase.from('tbl_hd').select('*').eq('mahv', mahv).or('daxoa.neq."Đã xóa",daxoa.is.null').order('ngaylap', { ascending: false }).limit(10);
+      const { data: feeRows } = await supabase.from('tbl_thongbao').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(20);
+      const { data: invoiceRows } = await supabase.from('tbl_hd').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(20);
       const { data: attendances } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', mahv).order('ngay', { ascending: false }).limit(30);
+
+      const isDeletedRecord = (record) => {
+         const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
+         return deletedValue === 'đã xóa' || deletedValue === 'da xoa';
+      };
+
+      const feeData = (feeRows || []).find(row => !isDeletedRecord(row)) || null;
+      const invoices = (invoiceRows || []).filter(row => !isDeletedRecord(row));
 
       let teacherManv = null;
       let tenLop = null;

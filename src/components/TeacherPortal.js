@@ -503,6 +503,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return 'Tin nhắn';
    };
 
+   const isTuitionNoticeChatMessage = (message) => {
+      const content = String(message?.content || '').trim();
+      return content.startsWith('Gửi phụ huynh Thông báo học phí ');
+   };
+
    const fetchTeacherAnnouncements = async (type) => {
       if (!type) {
          setTeacherAnnouncements([]);
@@ -1047,7 +1052,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                  <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                               </div>
                            )}
-                           {m.image_url && (
+                           {m.image_url && !isTuitionNoticeChatMessage(m) && (
                               <div style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white' }}>
                                  <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '260px', display: 'block' }} />
                               </div>

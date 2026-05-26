@@ -8,10 +8,9 @@ import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 
-const buildTuitionNoticeImageKey = (mahv, mahd) => {
-   const safeMahv = String(mahv || '').trim();
-   const safeMahd = String(mahd || '').trim();
-   return `tuition-notices/${safeMahv}/ThongBaoHocPhi_${safeMahv}_${safeMahd}.png`;
+const isDeletedRecord = (record) => {
+   const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
+   return deletedValue === 'đã xóa' || deletedValue === 'da xoa';
 };
 
 function ParentPortal({ parentData, setParentData }) {
@@ -71,6 +70,87 @@ function ParentPortal({ parentData, setParentData }) {
       }
       return url;
    };
+
+   const canOpenImageUrl = async (url) => {
+      const resolvedUrl = getDisplayUrl(url);
+      if (!resolvedUrl) return false;
+
+      return new Promise(resolve => {
+         const img = new window.Image();
+         let settled = false;
+         const done = (result) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+         };
+
+         const timer = window.setTimeout(() => done(false), 5000);
+         img.onload = () => {
+            window.clearTimeout(timer);
+            done(true);
+         };
+         img.onerror = () => {
+            window.clearTimeout(timer);
+            done(false);
+         };
+         img.referrerPolicy = 'no-referrer';
+         img.src = resolvedUrl;
+      });
+   };
+
+   const getFirstWorkingImageUrl = async (candidates = []) => {
+      const seen = new Set();
+
+      for (const candidate of candidates) {
+         const resolvedUrl = getDisplayUrl(candidate);
+         if (!resolvedUrl || seen.has(resolvedUrl)) continue;
+         seen.add(resolvedUrl);
+
+         const isWorking = await canOpenImageUrl(resolvedUrl);
+         if (isWorking) return resolvedUrl;
+      }
+
+      return null;
+   };
+
+   const refreshLatestFeeData = React.useCallback(async () => {
+      const studentId = parentData?.student?.mahv;
+      if (!studentId) return;
+
+      try {
+         const [{ data: feeRows, error: feeError }, { data: invoiceRows, error: invoiceError }] = await Promise.all([
+            supabase
+               .from('tbl_thongbao')
+               .select('*')
+               .eq('mahv', studentId)
+               .order('ngaylap', { ascending: false })
+               .limit(20),
+            supabase
+               .from('tbl_hd')
+               .select('*')
+               .eq('mahv', studentId)
+               .order('ngaylap', { ascending: false })
+               .limit(20)
+         ]);
+
+         if (feeError) throw feeError;
+         if (invoiceError) throw invoiceError;
+
+         const latestFee = (feeRows || []).find(row => !isDeletedRecord(row)) || null;
+         const invoices = (invoiceRows || []).filter(row => !isDeletedRecord(row));
+
+         setParentData(prev => {
+            if (!prev) return prev;
+            return {
+               ...prev,
+               latestFee,
+               invoices
+            };
+         });
+      } catch (error) {
+         console.error('Không làm mới được dữ liệu học phí phụ huynh:', error);
+      }
+   }, [parentData?.student?.mahv, setParentData]);
 
    const getStaffDisplayName = (staffId) => {
       if (!staffId) return 'Nhà trường';
@@ -751,33 +831,32 @@ function ParentPortal({ parentData, setParentData }) {
       if (!parentData?.latestFee || !parentData?.student?.mahv) return null;
 
       const noticeId = String(parentData.latestFee.mahd || '').trim();
-      const studentId = String(parentData.student.mahv || '').trim();
+      const candidateUrls = [];
+
+      if (parentData.latestFee.image_url) {
+         candidateUrls.push(parentData.latestFee.image_url);
+      }
 
       if (noticeId) {
          const { data: noticeData, error: noticeError } = await supabase
             .from('tbl_thongbao')
             .select('image_url')
-            .eq('mahv', studentId)
+            .eq('mahv', parentData.student.mahv)
             .eq('mahd', noticeId)
             .maybeSingle();
 
          if (noticeError) {
             console.warn('Không đọc được image_url từ tbl_thongbao:', noticeError);
          }
-         if (noticeData?.image_url) return noticeData.image_url;
-
-         const basePublicUrl = (config?.r2_public_url || '').replace(/\/+$/, '');
-         if (config?.r2_enabled && basePublicUrl) {
-            return `${basePublicUrl}/${buildTuitionNoticeImageKey(studentId, noticeId)}`;
+         if (noticeData?.image_url) {
+            candidateUrls.push(noticeData.image_url);
          }
-
-         const storagePath = `chat-images/${buildTuitionNoticeImageKey(studentId, noticeId)}`;
-         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
-         if (publicUrl) return publicUrl;
       }
 
       const pickLatestImage = (messages = []) => {
-         const validMessages = messages.filter(msg => msg?.image_url);
+         const validMessages = messages
+            .filter(msg => msg?.image_url)
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
          if (validMessages.length === 0) return null;
 
          const exactMatch = noticeId
@@ -795,6 +874,9 @@ function ParentPortal({ parentData, setParentData }) {
       };
 
       let imageUrl = pickLatestImage(chatMessages);
+      if (imageUrl) {
+         candidateUrls.push(imageUrl);
+      }
 
       if (!imageUrl) {
          let query = supabase
@@ -812,6 +894,9 @@ function ParentPortal({ parentData, setParentData }) {
          const { data, error } = await query;
          if (error) throw error;
          imageUrl = pickLatestImage(data || []);
+         if (imageUrl) {
+            candidateUrls.push(imageUrl);
+         }
       }
 
       if (!imageUrl && noticeId) {
@@ -825,9 +910,12 @@ function ParentPortal({ parentData, setParentData }) {
 
          if (error) throw error;
          imageUrl = pickLatestImage(data || []);
+         if (imageUrl) {
+            candidateUrls.push(imageUrl);
+         }
       }
 
-      return imageUrl;
+      return await getFirstWorkingImageUrl(candidateUrls);
    };
 
    const handleOpenTuitionNoticeImage = async () => {
@@ -879,6 +967,11 @@ function ParentPortal({ parentData, setParentData }) {
       return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
    };
 
+   const getFeePeriodLabel = (feeRecord) => {
+      if (!feeRecord) return '';
+      return feeRecord.thoiluong || feeRecord.thang || formatMonthYear(feeRecord.ngaybatdau || feeRecord.ngaylap);
+   };
+
    const tuitionStatus = (() => {
       const latestNotify = parentData?.latestFee;
       const latestInv = parentData?.invoices?.[0];
@@ -889,7 +982,7 @@ function ParentPortal({ parentData, setParentData }) {
       const invTime = latestInv ? new Date(latestInv.ngaylap).getTime() : 0;
 
       if (notifyTime > invTime) {
-         const monthText = latestNotify.thang || formatMonthYear(latestNotify.ngaylap);
+         const monthText = getFeePeriodLabel(latestNotify);
          return {
             text: `Cần thanh toán Học phí tháng ${monthText}`,
             isPaid: false
@@ -1078,6 +1171,12 @@ function ParentPortal({ parentData, setParentData }) {
    useEffect(() => {
       if (!parentData) return;
 
+      refreshLatestFeeData();
+   }, [parentData?.student?.mahv, refreshLatestFeeData]);
+
+   useEffect(() => {
+      if (!parentData) return;
+
       const refreshAnnouncementsForCurrentTab = async () => {
          if (['notices-tab', 'menu-tab', 'chuongtrinhhoc-tab'].includes(parentTab)) {
             await fetchParentNotices();
@@ -1100,11 +1199,16 @@ function ParentPortal({ parentData, setParentData }) {
 
       const noticeChan = supabase.channel(`parent_notices_${parentData.student.mahv}`)
          .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+            await refreshLatestFeeData();
             await fetchUnreads();
             await refreshAnnouncementsForCurrentTab();
             if (payload.eventType !== 'INSERT') return;
             const isTuition = payload.new.tieude?.toLowerCase().includes('học phí');
             showNotification(isTuition ? 'Thông báo học phí' : 'Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
+         })
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hd', filter: `mahv=eq.${parentData.student.mahv}` }, async () => {
+            await refreshLatestFeeData();
+            await fetchUnreads();
          })
          .on('postgres_changes', { event: '*', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, async (payload) => {
             await fetchUnreads();
@@ -1197,7 +1301,7 @@ function ParentPortal({ parentData, setParentData }) {
          supabase.removeChannel(unreadChan);
          supabase.removeChannel(noticeChan);
       };
-   }, [parentData, parentTab, calendarDate]);
+   }, [parentData?.student?.mahv, parentData?.student?.malop, parentTab, calendarDate]);
 
    useEffect(() => {
       if (!parentData) return;
@@ -1262,7 +1366,7 @@ function ParentPortal({ parentData, setParentData }) {
           }
       };
       markAsRead();
-   }, [parentTab, parentData, parentNotices, ngoaiKhoaAnnouncements, healthHistory]);
+   }, [parentTab, parentData?.student?.mahv, parentData?.latestFee?.ngaylap, parentNotices, ngoaiKhoaAnnouncements, healthHistory]);
 
    useEffect(() => {
       if (parentTab === 'chat-tab') {
@@ -1810,7 +1914,7 @@ function ParentPortal({ parentData, setParentData }) {
                            <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                                  <div>
-                                    <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>Học phí tháng {formatMonthYear(parentData.latestFee.ngaylap)}</div>
+                                    <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>Học phí tháng {getFeePeriodLabel(parentData.latestFee)}</div>
                                     <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
                                  </div>
                                  <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
