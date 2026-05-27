@@ -44,6 +44,22 @@ export default function AttendanceManager({ students, showMessage }) {
   const [todayAttendance, setTodayAttendance] = useState([]);
   const today = new Date().toISOString().split('T')[0];
 
+  const fetchTodayAttendance = async () => {
+    try {
+      const now = new Date();
+      const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const { data } = await supabase
+        .from('tbl_diemdanh')
+        .select('malop, mahv')
+        .eq('ngay', todayIso)
+        .eq('trangthai', 'Có mặt');
+
+      if (data) setTodayAttendance(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Fetch classes on mount
   useEffect(() => {
     const fetchClasses = async () => {
@@ -56,14 +72,6 @@ export default function AttendanceManager({ students, showMessage }) {
       try {
         const { data } = await supabase.from('tbl_nv').select('*');
         if (data) setEmployees(data);
-      } catch (err) { console.error(err); }
-    };
-    const fetchTodayAttendance = async () => {
-      try {
-        const now = new Date();
-        const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const { data } = await supabase.from('tbl_diemdanh').select('malop, mahv').eq('ngay', todayIso).eq('trangthai', 'Có mặt');
-        if (data) setTodayAttendance(data);
       } catch (err) { console.error(err); }
     };
 
@@ -160,6 +168,10 @@ export default function AttendanceManager({ students, showMessage }) {
           const filtered = prev.filter(r => !(r.malop === targetMalop && r.ngay === attDate));
           return [...filtered, ...fresh];
         });
+      }
+
+      if (attDate === today) {
+        await fetchTodayAttendance();
       }
     } catch (err) { console.error(err); showMessage('error', 'Lỗi lưu điểm danh'); }
     setLoading(false);
@@ -366,11 +378,13 @@ export default function AttendanceManager({ students, showMessage }) {
 
           const totalCount = classStudents.length;
 
-          // Calculate "present today" count
-          const presentTodayCount = todayAttendance.filter(a =>
-            a.malop === c.malop &&
-            classStudents.some(s => s.mahv === a.mahv)
-          ).length;
+          // Count unique students present today to avoid duplicate attendance rows inflating the headcount
+          const classStudentIds = new Set(classStudents.map(s => s.mahv));
+          const presentTodayCount = new Set(
+            todayAttendance
+              .filter(a => a.malop === c.malop && classStudentIds.has(a.mahv))
+              .map(a => a.mahv)
+          ).size;
 
           // Find teacher
           const teacher = employees.find(e => e.manv === c.manv);

@@ -322,6 +322,28 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (!attSelectedClass) return window.alert('Chưa chọn lớp!');
       setLoading(true);
       try {
+         const existingAttendanceMap = new Map();
+         const studentIds = attStudents.map(st => st.mahv).filter(Boolean);
+
+         if (studentIds.length > 0) {
+            const { data: existingRecords, error: existingError } = await supabase
+               .from('tbl_diemdanh')
+               .select('id, mahv, malop, ngay')
+               .eq('malop', attSelectedClass)
+               .eq('ngay', attDate)
+               .in('mahv', studentIds)
+               .order('id', { ascending: true });
+
+            if (existingError) throw existingError;
+
+            (existingRecords || []).forEach((record) => {
+               const key = `${record.mahv}__${record.malop}__${record.ngay}`;
+               if (!existingAttendanceMap.has(key)) {
+                  existingAttendanceMap.set(key, record.id);
+               }
+            });
+         }
+
          for (const st of attStudents) {
             const rec = attRecords[st.mahv];
             if (!rec || !rec.trangthai) continue;
@@ -330,9 +352,37 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                trangthai: rec.trangthai, ghichu: rec.ghichu || '',
                manv: attendanceUser.manv || attendanceUser.username
             };
-            if (rec.id) await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
-            else await supabase.from('tbl_diemdanh').insert([payload]);
+            const recordKey = `${st.mahv}__${attSelectedClass}__${attDate}`;
+            const existingId = rec.id || existingAttendanceMap.get(recordKey);
+
+            if (existingId) {
+               await supabase.from('tbl_diemdanh').update(payload).eq('id', existingId);
+            } else {
+               const { data: insertedRecords, error: insertError } = await supabase
+                  .from('tbl_diemdanh')
+                  .insert([payload])
+                  .select('id, mahv, malop, ngay');
+
+               if (insertError) throw insertError;
+
+               const insertedRecord = insertedRecords?.[0];
+               if (insertedRecord?.id) {
+                  existingAttendanceMap.set(recordKey, insertedRecord.id);
+               }
+            }
          }
+
+         setAttRecords(prev => {
+            const next = { ...prev };
+            attStudents.forEach((st) => {
+               const recordKey = `${st.mahv}__${attSelectedClass}__${attDate}`;
+               const existingId = existingAttendanceMap.get(recordKey);
+               if (existingId && next[st.mahv]) {
+                  next[st.mahv] = { ...next[st.mahv], id: existingId };
+               }
+            });
+            return next;
+         });
 
          // Lưu nội dung dạy
          const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
