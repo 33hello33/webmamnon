@@ -96,7 +96,7 @@ export default function StudentManager({ activeSubTab }) {
 
   // Form Handlers
   const handleOpenAdd = async () => {
-    const newMaHV = await generateId('tbl_hv', 'mahv', 'HS', 4);
+    const newMaHV = await generateId('tbl_hv', 'mahv', 'HV', 4);
     setFormData({ ...INITIAL_FORM, mahv: newMaHV });
     setIsEditMode(false);
     setIsFormOpen(true);
@@ -138,9 +138,9 @@ export default function StudentManager({ activeSubTab }) {
     if (words.length < 2) words.unshift('');
     const last2 = words.slice(-2).join('');
     let base = last2.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
-    
+
     if (!base) return '';
-    
+
     let suggested = base;
     let counter = 1;
     const existingUsernames = students.map(s => s.username).filter(Boolean);
