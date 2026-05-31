@@ -353,7 +353,7 @@ const ConfigManager = () => {
               <input type="text" value={formData.sdtcongty} onChange={e => setFormData({ ...formData, sdtcongty: e.target.value })} placeholder="0xxx.xxx.xxx" />
             </div>
             <div className="form-group">
-              <label>Số trợ giảng tối đa (1-3)</label>
+              <label>Số giáo viên cùng lớp tối đa (1-3)</label>
               <input type="number" min="1" max="3" value={formData.sonhanvientrogiang} onChange={e => setFormData({ ...formData, sonhanvientrogiang: e.target.value })} />
             </div>
             <div className="form-group">

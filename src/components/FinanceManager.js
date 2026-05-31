@@ -1959,7 +1959,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   {/* TITLE */}
                   <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     PHIẾU LƯƠNG GIẢNG VIÊN
+                     PHIẾU LƯƠNG GIÁO VIÊN
                   </div>
 
                   {/* INFO */}
@@ -1971,7 +1971,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
 
                      <div>
-                        Chức vụ: <b>Giảng Viên / Trợ Giảng</b>
+                        Chức vụ: <b>Giáo viên</b>
                      </div>
 
                      {/* BẢNG LƯƠNG */}

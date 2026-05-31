@@ -184,7 +184,7 @@ const ChatManager = ({ currentUser }) => {
         // Fetch Staff / Teachers
         const { data: nvData } = await supabase.from('tbl_nv').select('manv, tennv, role');
         if (nvData) {
-          setTeachers(nvData.filter(item => ['Giáo viên', 'Trợ giảng'].includes(item.role)));
+          setTeachers(nvData.filter(item => item.role === 'Giáo viên'));
           const nextDirectory = {};
           nvData.forEach((staff) => {
             if (staff?.manv) nextDirectory[staff.manv] = staff.tennv || staff.manv;

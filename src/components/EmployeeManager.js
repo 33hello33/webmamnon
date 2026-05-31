@@ -36,9 +36,9 @@ export default function EmployeeManager({ currentUser }) {
     try {
       let query = supabase.from('tbl_nv').select('*').order('manv', { ascending: true });
       
-      // Phân quyền: Nhân viên VP chỉ quản lý được khối Giáo viên / Trợ giảng
+      // Phân quyền: Nhân viên VP chỉ quản lý được khối Giáo viên
       if (currentUser?.role === 'Nhân viên VP') {
-        query = query.in('role', ['Giáo viên', 'Trợ giảng']);
+        query = query.eq('role', 'Giáo viên');
       }
       
       const { data, error } = await query;
@@ -254,8 +254,7 @@ export default function EmployeeManager({ currentUser }) {
                       <td>
                         <span className={`status-badge ${
                           e.role === 'Quản lý' ? 'danger' : 
-                          e.role === 'Nhân viên VP' ? 'primary' : 
-                          e.role === 'Trợ giảng' ? 'warning' : 'success'
+                          e.role === 'Nhân viên VP' ? 'primary' : 'success'
                         }`}>
                           {e.role}
                         </span>
@@ -302,8 +301,7 @@ export default function EmployeeManager({ currentUser }) {
                     </div>
                     <span className={`status-badge ${
                       e.role === 'Quản lý' ? 'danger' : 
-                      e.role === 'Nhân viên VP' ? 'primary' : 
-                      e.role === 'Trợ giảng' ? 'warning' : 'success'
+                      e.role === 'Nhân viên VP' ? 'primary' : 'success'
                     }`}>
                       {e.role}
                     </span>
@@ -366,7 +364,6 @@ export default function EmployeeManager({ currentUser }) {
                       </>
                     )}
                     <option value="Giáo viên">Giáo viên</option>
-                    <option value="Trợ giảng">Trợ giảng</option>
                   </select>
                 </div>
                 <div className="form-group">

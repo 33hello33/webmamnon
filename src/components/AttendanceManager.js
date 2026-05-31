@@ -557,14 +557,14 @@ export default function AttendanceManager({ students, showMessage }) {
               {viewMode === 'class' && (
                 <div className="attendance-info-section">
                   <div className="im-section">
-                    <h3 className="im-section-title"><Users size={18} /> Thông tin Lớp & Giảng Viên</h3>
+                    <h3 className="im-section-title"><Users size={18} /> Thông tin Lớp & Giáo Viên</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px 0' }}>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
                         <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Tên lớp:</span>
                         <span className="text-primary" style={{ fontWeight: 800 }}>{classes.find(c => c.malop === selectedId)?.tenlop || selectedId}</span>
                       </div>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
-                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Giảng viên:</span>
+                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Giáo viên:</span>
                         <span style={{ color: '#1e293b', fontWeight: 700 }}>
                           {(() => {
                             const cls = classes.find(c => c.malop === selectedId);
