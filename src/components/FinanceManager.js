@@ -1383,7 +1383,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{formatDate(r.ngaylap)}</td>
                                     <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
                                     <td className="fm-desc" style={{ maxWidth: '220px' }}>
-                                       {(function() {
+                                       {(function () {
                                           if (!r.hanghoa) return '';
                                           if (r.hanghoa.includes('Tên Hàng')) {
                                              const parsed = parseNoidung(r.hanghoa);
@@ -1959,7 +1959,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   {/* TITLE */}
                   <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     PHIẾU LƯƠNG GIẢNG VIÊN
+                     PHIẾU LƯƠNG GIÁO VIÊN
                   </div>
 
                   {/* INFO */}
@@ -1971,7 +1971,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
 
                      <div>
-                        Chức vụ: <b>Giảng Viên / Trợ Giảng</b>
+                        Chức vụ: <b>Giáo Viên</b>
                      </div>
 
                      {/* BẢNG LƯƠNG */}

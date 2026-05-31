@@ -89,7 +89,7 @@ export default function AttendanceManager({ students, showMessage }) {
   useEffect(() => {
     const loadMarkingData = async () => {
       if (!markingMode || !selectedId) { setAttStudents([]); setAttRecords({}); return; }
-      
+
       const targetMalop = viewMode === 'class' ? selectedId : markingClassId;
       if (!targetMalop) { setAttStudents([]); setAttRecords({}); return; }
 
@@ -195,7 +195,7 @@ export default function AttendanceManager({ students, showMessage }) {
         let list = [];
         if (std.malop) list.push(std.malop);
         if (Array.isArray(std.malop_list)) list = [...new Set([...list, ...std.malop_list])];
-        
+
         if (list.length === 1) {
           if (markingClassId !== list[0]) setMarkingClassId(list[0]);
         } else if (list.length > 1 && !markingClassId) {
@@ -571,14 +571,14 @@ export default function AttendanceManager({ students, showMessage }) {
               {viewMode === 'class' && (
                 <div className="attendance-info-section">
                   <div className="im-section">
-                    <h3 className="im-section-title"><Users size={18} /> Thông tin Lớp & Giảng Viên</h3>
+                    <h3 className="im-section-title"><Users size={18} /> Thông tin Lớp & Giáo Viên</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px 0' }}>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
                         <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Tên lớp:</span>
                         <span className="text-primary" style={{ fontWeight: 800 }}>{classes.find(c => c.malop === selectedId)?.tenlop || selectedId}</span>
                       </div>
                       <div className="im-field-hz" style={{ display: 'flex', gap: '8px' }}>
-                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Giảng viên:</span>
+                        <span style={{ color: '#64748b', fontWeight: 700, minWidth: '100px' }}>Giáo viên:</span>
                         <span style={{ color: '#1e293b', fontWeight: 700 }}>
                           {(() => {
                             const cls = classes.find(c => c.malop === selectedId);
@@ -670,13 +670,13 @@ export default function AttendanceManager({ students, showMessage }) {
                         let list = [];
                         if (std?.malop) list.push(std.malop);
                         if (Array.isArray(std?.malop_list)) list = [...new Set([...list, ...std.malop_list])];
-                        
+
                         if (list.length > 1) {
                           return (
                             <div style={{ flex: 1, minWidth: '180px' }}>
                               <label className="portal-att-label">Chọn Lớp Để Điểm Danh</label>
-                              <select 
-                                value={markingClassId || ''} 
+                              <select
+                                value={markingClassId || ''}
                                 onChange={e => setMarkingClassId(e.target.value)}
                                 style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px' }}
                               >

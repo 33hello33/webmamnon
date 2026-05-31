@@ -266,7 +266,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const { data } = await supabase
         .from('tbl_nv')
         .select('*')
-        .in('role', ['Giáo viên', 'Trợ giảng'])
+        .eq('role', 'Giáo viên')
         .eq('trangthai', 'Đang Làm');
       if (data) setTeachers(data);
     } catch (err) {
@@ -1382,7 +1382,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         <div className="info-chip">
                           <GraduationCap size={16} />
                           <div className="chip-content">
-                            <label>Giảng viên</label>
+                            <label>Giáo viên</label>
                             <span>{teacherName}</span>
                           </div>
                         </div>
@@ -1397,7 +1397,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             <div className="info-chip" key={taField}>
                               <User size={16} />
                               <div className="chip-content">
-                                <label>Trợ giảng {i + 1}</label>
+                                <label>Giáo viên {i + 1}</label>
                                 <span>{taName}</span>
                               </div>
                             </div>
@@ -1711,9 +1711,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <input type="text" name="tenlop" value={formData.tenlop} onChange={handleChange} required />
               </div>
               <div className="form-group">
-                <label>Giảng viên phụ trách</label>
+                <label>Giáo viên phụ trách</label>
                 <select name="manv" value={formData.manv || ''} onChange={handleChange}>
-                  <option value="">-- Chọn Giảng viên --</option>
+                  <option value="">-- Chọn Giáo viên --</option>
                   {teachers.map(t => (
                     <option key={t.manv} value={t.manv}>{t.tennv || t.manv}</option>
                   ))}
@@ -1724,9 +1724,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 const taField = `manv${i + 1}`;
                 return (
                   <div className="form-group" key={taField}>
-                    <label>Trợ giảng {i + 1}</label>
+                    <label>Giáo viên {i + 1}</label>
                     <select name={taField} value={formData[taField] || ''} onChange={handleChange}>
-                      <option value="">-- Chọn Trợ giảng --</option>
+                      <option value="">-- Chọn Giáo viên --</option>
                       {teachers.map(t => (
                         <option key={t.manv} value={t.manv}>{t.tennv || t.manv}</option>
                       ))}
@@ -1762,7 +1762,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   Xuất Thông Báo Hàng Loạt - <span className="text-primary">{selectedClass?.tenlop}</span>
                 </h3>
                 <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', textAlign: 'left', fontWeight: 500 }}>
-                  <span style={{ fontWeight: 700 }}>Giảng viên:</span> {teachers.find(t => t.manv === selectedClass?.manv)?.tennv || selectedClass?.manv || 'Chưa phân công'}
+                  <span style={{ fontWeight: 700 }}>Giáo viên:</span> {teachers.find(t => t.manv === selectedClass?.manv)?.tennv || selectedClass?.manv || 'Chưa phân công'}
                 </div>
               </div>
               <button className="close-btn" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '8px', color: '#94a3b8' }}><X size={24} /></button>

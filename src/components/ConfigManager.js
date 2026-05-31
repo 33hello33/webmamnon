@@ -353,7 +353,7 @@ const ConfigManager = () => {
               <input type="text" value={formData.sdtcongty} onChange={e => setFormData({ ...formData, sdtcongty: e.target.value })} placeholder="0xxx.xxx.xxx" />
             </div>
             <div className="form-group">
-              <label>Số trợ giảng tối đa (1-3)</label>
+              <label>Số Giáo viên tối đa (1-3)</label>
               <input type="number" min="1" max="3" value={formData.sonhanvientrogiang} onChange={e => setFormData({ ...formData, sonhanvientrogiang: e.target.value })} />
             </div>
             <div className="form-group">
@@ -624,9 +624,9 @@ const ConfigManager = () => {
               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
                 <div className="form-group">
                   <label style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 700 }}>Hạn chót xin nghỉ học (HH:mm)</label>
-                  <input 
-                    type="time" 
-                    value={formData.xinnghitruocmaygio || '08:00'} 
+                  <input
+                    type="time"
+                    value={formData.xinnghitruocmaygio || '08:00'}
                     onChange={e => setFormData({ ...formData, xinnghitruocmaygio: e.target.value })}
                     style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
                   />
@@ -668,10 +668,10 @@ const ConfigManager = () => {
                     {ROLES.map(r => (
                       <td key={r}>
                         <input
-                           type="checkbox"
-                           disabled={formData.phanquyenrole[r]?.full}
-                           checked={formData.phanquyenrole[r]?.full || formData.phanquyenrole[r]?.tabs?.includes(opt.id)}
-                           onChange={() => togglePermission(r, opt.id)}
+                          type="checkbox"
+                          disabled={formData.phanquyenrole[r]?.full}
+                          checked={formData.phanquyenrole[r]?.full || formData.phanquyenrole[r]?.tabs?.includes(opt.id)}
+                          onChange={() => togglePermission(r, opt.id)}
                         />
                       </td>
                     ))}
