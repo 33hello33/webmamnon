@@ -27,6 +27,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
    const [leaveType, setLeaveType] = useState('today');
    const [leaveForm, setLeaveForm] = useState({ from: '', to: '', reason: '' });
+   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
    const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
    const [pickupForm, setPickupForm] = useState({ name: '', phone: '', relation: '', reason: '' });
    const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
@@ -56,6 +57,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
    const [loadingTuitionNoticeImage, setLoadingTuitionNoticeImage] = useState(false);
    const [staffDirectory, setStaffDirectory] = useState({});
+   const leaveSubmitLockRef = useRef(false);
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
 
@@ -464,6 +466,8 @@ function ParentPortal({ parentData, setParentData }) {
 
    const handleLeaveSubmit = async (e) => {
       e.preventDefault();
+      if (leaveSubmitLockRef.current) return;
+
       let fromDateStr = leaveForm.from;
       let toDateStr = leaveForm.to;
 
@@ -478,16 +482,19 @@ function ParentPortal({ parentData, setParentData }) {
          fromDateStr = toDateStr = tomorrow.toISOString().split('T')[0];
       }
 
-      if (!fromDateStr || !toDateStr || !leaveForm.reason) {
+      if (!fromDateStr || !toDateStr || !leaveForm.reason?.trim()) {
          alert('Vui lòng nhập đầy đủ thông tin xin nghỉ.');
          return;
       }
 
-      const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDateStr).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDateStr).toLocaleDateString('vi-VN')}\n- Lý do: ${leaveForm.reason}`;
-      await sendQuickMessage(msg);
-
-      // Insert into tbl_diemdanh
+      leaveSubmitLockRef.current = true;
+      setLeaveSubmitting(true);
       try {
+         const trimmedReason = leaveForm.reason.trim();
+         const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDateStr).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDateStr).toLocaleDateString('vi-VN')}\n- Lý do: ${trimmedReason}`;
+         await sendQuickMessage(msg);
+
+         // Insert into tbl_diemdanh
          const start = new Date(fromDateStr);
          const end = new Date(toDateStr);
          const configTimeStr = config?.xinnghitruocmaygio || '08:00';
@@ -527,7 +534,7 @@ function ParentPortal({ parentData, setParentData }) {
                malop: leaveMalop,
                ngay: currDateStr,
                trangthai,
-               ghichu: leaveForm.reason,
+               ghichu: trimmedReason,
                manv: leaveManv
             };
 
@@ -541,13 +548,16 @@ function ParentPortal({ parentData, setParentData }) {
 
             current.setDate(current.getDate() + 1);
          }
+         setIsLeaveModalOpen(false);
+         setLeaveForm({ from: '', to: '', reason: '' });
+         setLeaveType('today');
       } catch (err) {
-         console.error('Lỗi khi cập nhật điểm danh:', err);
+         console.error('Lỗi khi gửi đơn xin nghỉ:', err);
+         alert('Có lỗi xảy ra khi gửi đơn xin nghỉ.');
+      } finally {
+         leaveSubmitLockRef.current = false;
+         setLeaveSubmitting(false);
       }
-
-      setIsLeaveModalOpen(false);
-      setLeaveForm({ from: '', to: '', reason: '' });
-      setLeaveType('today');
    };
 
    const handlePickupSubmit = async (e) => {
@@ -2185,33 +2195,33 @@ function ParentPortal({ parentData, setParentData }) {
                <div className="modal-content-premium" style={{ width: '100%', maxWidth: '500px', background: 'white', borderRadius: '24px 24px 0 0', padding: '30px 20px', animation: 'slideUp 0.3s ease' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
                      <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#1e293b' }}>Gửi đơn xin nghỉ học</h3>
-                     <button onClick={() => setIsLeaveModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b' }}>
+                     <button type="button" disabled={leaveSubmitting} onClick={() => setIsLeaveModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', opacity: leaveSubmitting ? 0.6 : 1, cursor: leaveSubmitting ? 'not-allowed' : 'pointer' }}>
                         <X size={18} />
                      </button>
                   </div>
                   <form onSubmit={handleLeaveSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button type="button" onClick={() => setLeaveType('today')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: leaveType === 'today' ? '2px solid #ec4899' : '1px solid #e2e8f0', background: leaveType === 'today' ? '#fdf2f8' : 'white', fontWeight: 700, color: leaveType === 'today' ? '#ec4899' : '#64748b' }}>Hôm nay</button>
-                        <button type="button" onClick={() => setLeaveType('tomorrow')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: leaveType === 'tomorrow' ? '2px solid #ec4899' : '1px solid #e2e8f0', background: leaveType === 'tomorrow' ? '#fdf2f8' : 'white', fontWeight: 700, color: leaveType === 'tomorrow' ? '#ec4899' : '#64748b' }}>Ngày mai</button>
-                        <button type="button" onClick={() => setLeaveType('custom')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: leaveType === 'custom' ? '2px solid #ec4899' : '1px solid #e2e8f0', background: leaveType === 'custom' ? '#fdf2f8' : 'white', fontWeight: 700, color: leaveType === 'custom' ? '#ec4899' : '#64748b' }}>Khác</button>
+                        <button type="button" disabled={leaveSubmitting} onClick={() => setLeaveType('today')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: leaveType === 'today' ? '2px solid #ec4899' : '1px solid #e2e8f0', background: leaveType === 'today' ? '#fdf2f8' : 'white', fontWeight: 700, color: leaveType === 'today' ? '#ec4899' : '#64748b', opacity: leaveSubmitting ? 0.6 : 1, cursor: leaveSubmitting ? 'not-allowed' : 'pointer' }}>Hôm nay</button>
+                        <button type="button" disabled={leaveSubmitting} onClick={() => setLeaveType('tomorrow')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: leaveType === 'tomorrow' ? '2px solid #ec4899' : '1px solid #e2e8f0', background: leaveType === 'tomorrow' ? '#fdf2f8' : 'white', fontWeight: 700, color: leaveType === 'tomorrow' ? '#ec4899' : '#64748b', opacity: leaveSubmitting ? 0.6 : 1, cursor: leaveSubmitting ? 'not-allowed' : 'pointer' }}>Ngày mai</button>
+                        <button type="button" disabled={leaveSubmitting} onClick={() => setLeaveType('custom')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: leaveType === 'custom' ? '2px solid #ec4899' : '1px solid #e2e8f0', background: leaveType === 'custom' ? '#fdf2f8' : 'white', fontWeight: 700, color: leaveType === 'custom' ? '#ec4899' : '#64748b', opacity: leaveSubmitting ? 0.6 : 1, cursor: leaveSubmitting ? 'not-allowed' : 'pointer' }}>Khác</button>
                      </div>
                      {leaveType === 'custom' && (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                            <div>
                               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Từ ngày</label>
-                              <input type="date" value={leaveForm.from} onChange={e => setLeaveForm({ ...leaveForm, from: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                              <input type="date" disabled={leaveSubmitting} value={leaveForm.from} onChange={e => setLeaveForm({ ...leaveForm, from: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
                            </div>
                            <div>
                               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Đến ngày</label>
-                              <input type="date" value={leaveForm.to} onChange={e => setLeaveForm({ ...leaveForm, to: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                              <input type="date" disabled={leaveSubmitting} value={leaveForm.to} onChange={e => setLeaveForm({ ...leaveForm, to: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
                            </div>
                         </div>
                      )}
                      <div>
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Lý do xin nghỉ</label>
-                        <textarea placeholder="Nhập lý do bé nghỉ (Sức khỏe, việc riêng...)" value={leaveForm.reason} onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })} rows="3" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }} />
+                        <textarea disabled={leaveSubmitting} placeholder="Nhập lý do bé nghỉ (Sức khỏe, việc riêng...)" value={leaveForm.reason} onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })} rows="3" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }} />
                      </div>
-                     <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', border: 'none', fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.4)' }}>Gửi đơn xin nghỉ</button>
+                     <button type="submit" disabled={leaveSubmitting} style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', border: 'none', fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.4)', opacity: leaveSubmitting ? 0.7 : 1, cursor: leaveSubmitting ? 'not-allowed' : 'pointer' }}>{leaveSubmitting ? 'Đang gửi...' : 'Gửi đơn xin nghỉ'}</button>
                   </form>
                </div>
             </div>
