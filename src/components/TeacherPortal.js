@@ -79,6 +79,25 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return attStaffDirectory[staffId] || staffId;
    };
 
+   const teacherIdentitySet = new Set(
+      [attendanceUser?.manv, attendanceUser?.username, attendanceUser?.tennv, attendanceUser?.id]
+         .map(value => String(value || '').trim())
+         .filter(Boolean)
+   );
+
+   const teacherAssignmentFields = [
+      'manv',
+      ...Array.from({ length: Math.max(0, parseInt(config?.sonhanvientrogiang || '0', 10) || 0) }, (_, index) => `manv${index + 1}`)
+   ];
+
+   const classBelongsToTeacher = (cls) => {
+      if (!cls || teacherIdentitySet.size === 0) return false;
+      return teacherAssignmentFields.some((field) => {
+         const fieldValue = String(cls[field] || '').trim();
+         return fieldValue !== '' && teacherIdentitySet.has(fieldValue);
+      });
+   };
+
    const getTeacherChatSenderName = (message) => {
       if (!message) return '';
       if (message.description === 'PH' || !message.manv) {
@@ -253,9 +272,64 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    useEffect(() => {
-      setAttClasses(initialClasses || []);
-      setAttAllStudents(initialAllStudents || []);
-   }, [initialClasses, initialAllStudents]);
+      let cancelled = false;
+
+      const loadTeacherScope = async () => {
+         if (teacherIdentitySet.size === 0) {
+            setAttClasses(initialClasses || []);
+            setAttAllStudents(initialAllStudents || []);
+            return;
+         }
+
+         try {
+            const { data: allCls, error: classError } = await supabase
+               .from('tbl_lop')
+               .select('*')
+               .or('daxoa.neq."Đã Xóa",daxoa.is.null');
+
+            if (classError) throw classError;
+
+            const teacherClasses = (allCls || []).filter(classBelongsToTeacher);
+            if (cancelled) return;
+
+            setAttClasses(teacherClasses);
+
+            const classIds = teacherClasses.map(cls => cls.malop).filter(Boolean);
+            if (classIds.length === 0) {
+               setAttAllStudents([]);
+               return;
+            }
+
+            const { data: allSts, error: studentError } = await supabase
+               .from('tbl_hv')
+               .select('mahv, tenhv, malop, imgpath')
+               .in('malop', classIds)
+               .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+
+            if (studentError) throw studentError;
+            if (cancelled) return;
+
+            setAttAllStudents(allSts || []);
+         } catch (error) {
+            console.error('Error loading teacher classes:', error);
+            if (cancelled) return;
+            setAttClasses(initialClasses || []);
+            setAttAllStudents(initialAllStudents || []);
+         }
+      };
+
+      loadTeacherScope();
+
+      return () => {
+         cancelled = true;
+      };
+   }, [initialClasses, initialAllStudents, attendanceUser?.manv, attendanceUser?.username, attendanceUser?.tennv, attendanceUser?.id, config?.sonhanvientrogiang]);
+
+   useEffect(() => {
+      if (attSelectedClass && !attClasses.some(cls => cls.malop === attSelectedClass)) {
+         setAttSelectedClass('');
+      }
+   }, [attSelectedClass, attClasses]);
 
    useEffect(() => {
       const loadData = async () => {
@@ -624,15 +698,15 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    useEffect(() => {
       const fetchAllStudentsData = async () => {
-         if (attendanceUser && attTab === 'chat' && attAllStudents.length === 0) {
-            const { data: allCls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
-            if (allCls) {
-               const teacherClasses = allCls.filter(c => c.manv === attendanceUser.manv || c.manv === attendanceUser.username || c.manv === attendanceUser.tennv || c.manv === attendanceUser.id);
-               if (teacherClasses.length > 0) {
-                  const classIds = teacherClasses.map(c => c.malop);
-                  const { data: allSts } = await supabase.from('tbl_hv').select('mahv, tenhv, malop, imgpath').in('malop', classIds).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
-                  if (allSts) setAttAllStudents(allSts);
-               }
+         if (attendanceUser && attTab === 'chat' && attClasses.length > 0 && attAllStudents.length === 0) {
+            const classIds = attClasses.map(c => c.malop).filter(Boolean);
+            if (classIds.length > 0) {
+               const { data: allSts } = await supabase
+                  .from('tbl_hv')
+                  .select('mahv, tenhv, malop, imgpath')
+                  .in('malop', classIds)
+                  .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+               if (allSts) setAttAllStudents(allSts);
             }
          }
       };
@@ -645,7 +719,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             return () => clearInterval(interval);
          }
       }
-   }, [attendanceUser, attTab, attDateFilter, attAllStudents]);
+   }, [attendanceUser, attTab, attDateFilter, attAllStudents, attClasses]);
 
    useEffect(() => {
       if (attendanceUser) {
