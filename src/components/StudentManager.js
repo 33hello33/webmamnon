@@ -11,8 +11,6 @@ import LeaveManager from './LeaveManager';
 import AttendanceToday from './AttendanceToday';
 import NgoaiKhoaManager from './NgoaiKhoaManager';
 import './StudentManager.css';
-import { useConfig } from '../ConfigContext';
-import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 
 const INITIAL_FORM = {
@@ -28,7 +26,6 @@ const INITIAL_FORM = {
 };
 
 export default function StudentManager({ activeSubTab }) {
-  const { config } = useConfig();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
 
@@ -199,32 +196,18 @@ export default function StudentManager({ activeSubTab }) {
       const uploadFile = await compressImage(file, 200);
       const fileExt = uploadFile.name.split('.').pop() || file.name.split('.').pop() || 'jpg';
       const avatarKey = `students/${mahv}.${String(fileExt).toLowerCase()}`;
-      let publicUrl = '';
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(avatarKey, uploadFile, {
+          upsert: true,
+          contentType: uploadFile.type,
+          cacheControl: '0'
+        });
 
-      if (config?.r2_enabled) {
-        publicUrl = await uploadToR2(
-          uploadFile,
-          config.r2_endpoint,
-          config.r2_access_key_id,
-          config.r2_secret_access_key,
-          config.r2_bucket_name,
-          config.r2_public_url,
-          { key: avatarKey }
-        );
-      } else {
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(avatarKey, uploadFile, {
-            upsert: true,
-            contentType: uploadFile.type,
-            cacheControl: '0'
-          });
+      if (uploadError) throw uploadError;
 
-        if (uploadError) throw uploadError;
-
-        const { data } = supabase.storage.from('avatars').getPublicUrl(avatarKey);
-        publicUrl = data?.publicUrl || '';
-      }
+      const { data } = supabase.storage.from('avatars').getPublicUrl(avatarKey);
+      const publicUrl = data?.publicUrl || '';
 
       const nextImgPath = appendCacheBuster(publicUrl);
       setFormData(prev => ({ ...prev, imgpath: nextImgPath }));
