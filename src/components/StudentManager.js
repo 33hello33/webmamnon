@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart, Activity
+  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart
 } from 'lucide-react';
 import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
@@ -11,7 +11,7 @@ import LeaveManager from './LeaveManager';
 import AttendanceToday from './AttendanceToday';
 import NgoaiKhoaManager from './NgoaiKhoaManager';
 import './StudentManager.css';
-import { useConfig } from '../ConfigContext';
+import { compressImage } from '../utils/imageUtils';
 
 const INITIAL_FORM = {
   mahv: '', tenhv: '', sdtba: '', sdtme: '', ghichu: '',
@@ -26,7 +26,6 @@ const INITIAL_FORM = {
 };
 
 export default function StudentManager({ activeSubTab }) {
-  const { config } = useConfig();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
 
@@ -65,6 +64,13 @@ export default function StudentManager({ activeSubTab }) {
   const showMessage = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  };
+
+  const appendCacheBuster = (url) => {
+    if (!url) return '';
+    const cleanUrl = String(url).replace(/([?&])t=\d+(&|$)/, '$1').replace(/[?&]$/, '');
+    const separator = cleanUrl.includes('?') ? '&' : '?';
+    return `${cleanUrl}${separator}t=${Date.now()}`;
   };
 
   const fetchStudents = async () => {
@@ -177,7 +183,7 @@ export default function StudentManager({ activeSubTab }) {
   };
 
   const handleAvatarChange = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) return showMessage('error', 'Chỉ tải lên file hình ảnh');
@@ -185,24 +191,32 @@ export default function StudentManager({ activeSubTab }) {
     const mahv = formData.mahv;
     if (!mahv) return showMessage('error', 'Lỗi: Không tìm thấy Mã HS');
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${mahv}.${fileExt}`;
-
     try {
       setLoading(true);
+      const uploadFile = await compressImage(file, 200);
+      const fileExt = uploadFile.name.split('.').pop() || file.name.split('.').pop() || 'jpg';
+      const avatarKey = `students/${mahv}.${String(fileExt).toLowerCase()}`;
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, { upsert: true });
+        .upload(avatarKey, uploadFile, {
+          upsert: true,
+          contentType: uploadFile.type,
+          cacheControl: '0'
+        });
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      setFormData(prev => ({ ...prev, imgpath: publicUrl }));
+      const { data } = supabase.storage.from('avatars').getPublicUrl(avatarKey);
+      const publicUrl = data?.publicUrl || '';
+
+      const nextImgPath = appendCacheBuster(publicUrl);
+      setFormData(prev => ({ ...prev, imgpath: nextImgPath }));
       showMessage('success', 'Đã tải lên ảnh đại diện');
     } catch (err) {
       console.error(err);
       showMessage('error', 'Lỗi tải ảnh: ' + err.message);
     } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setLoading(false);
     }
   };
@@ -855,7 +869,7 @@ export default function StudentManager({ activeSubTab }) {
                     onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                   >
                     <Camera size={26} />
-                    <input id="avatar-input" type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
+                    <input ref={fileInputRef} id="avatar-input" type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
                   </label>
                 </div>
 
