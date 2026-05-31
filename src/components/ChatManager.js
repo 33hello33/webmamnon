@@ -153,6 +153,16 @@ const ChatManager = ({ currentUser }) => {
     return getStaffDisplayName(message.manv);
   };
 
+  const getParentMessageType = (content) => {
+    const c = (content || '').toLowerCase();
+    if (c.includes('góp ý') || c.includes('hòm thư')) return 'GÓP Ý';
+    if (c.includes('nghỉ') || c.includes('nghi ')) return 'XIN NGHỈ';
+    if (c.includes('thuốc') || c.includes('thuoc')) return 'BÁO THUỐC';
+    if (c.includes('đổi người') || c.includes('doi nguoi')) return 'ĐỔI NGƯỜI ĐÓN';
+    if (c.includes('muộn') || c.includes('trễ') || c.includes('muon') || c.includes('tre ')) return 'XIN VỀ TRỄ';
+    return 'TIN NHẮN';
+  };
+
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = () => setActiveMenu(null);
@@ -281,12 +291,7 @@ const ChatManager = ({ currentUser }) => {
       // Extract notification types from parent messages in the period
       const isPH = m.description === 'PH' || (!m.manv);
       if (isPH) {
-        const c = (m.content || '').toLowerCase();
-        if (c.includes('nghỉ') || c.includes('nghi ')) studentDataMap[m.mahv].types.add('XIN NGHỈ');
-        if (c.includes('thuốc') || c.includes('thuoc')) studentDataMap[m.mahv].types.add('BÁO THUỐC');
-        if (c.includes('đổi người') || c.includes('doi nguoi')) studentDataMap[m.mahv].types.add('ĐỔI NGƯỜI ĐÓN');
-        if (c.includes('muộn') || c.includes('trễ') || c.includes('muon') || c.includes('tre ')) studentDataMap[m.mahv].types.add('XIN VỀ TRỄ');
-        if (c.includes('góp ý') || c.includes('hòm thư')) studentDataMap[m.mahv].types.add('GÓP Ý');
+        studentDataMap[m.mahv].types.add(getParentMessageType(m.content));
       }
     });
 
@@ -336,7 +341,7 @@ const ChatManager = ({ currentUser }) => {
       else if (statFilter === 'DOI_NGUOI') matchesStat = s.allTypes.includes('ĐỔI NGƯỜI ĐÓN');
       else if (statFilter === 'VE_TRE') matchesStat = s.allTypes.includes('XIN VỀ TRỄ');
       else if (statFilter === 'GOP_Y') matchesStat = s.allTypes.includes('GÓP Ý');
-      else if (statFilter === 'GUI_TIN_NHAN') matchesStat = !!s.lastMsg;
+      else if (statFilter === 'GUI_TIN_NHAN') matchesStat = s.allTypes.includes('TIN NHẮN');
 
       return matchesStat;
     }).sort((a, b) => {
@@ -362,7 +367,7 @@ const ChatManager = ({ currentUser }) => {
       xinNghi: baseSummaries.filter(s => s.allTypes.includes('XIN NGHỈ')).length,
       baoThuoc: baseSummaries.filter(s => s.allTypes.includes('BÁO THUỐC')).length,
       doiNguoi: baseSummaries.filter(s => s.allTypes.includes('ĐỔI NGƯỜI ĐÓN')).length,
-      guiTinNhan: baseSummaries.filter(s => !!s.lastMsg).length,
+      guiTinNhan: baseSummaries.filter(s => s.allTypes.includes('TIN NHẮN')).length,
       veTre: baseSummaries.filter(s => s.allTypes.includes('XIN VỀ TRỄ')).length,
       gopY: baseSummaries.filter(s => s.allTypes.includes('GÓP Ý')).length,
     };

@@ -613,30 +613,60 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const fetchAttSummaries = async () => {
       if (!attendanceUser) return;
+      if (attAllStudents.length === 0) {
+         setAttLatestMessages([]);
+         setAttReports({ xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 });
+         return;
+      }
 
       let dateLimit = new Date();
       if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
       else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
       else dateLimit.setMonth(dateLimit.getMonth() - 1);
 
-      const { data: msgs } = await supabase.from('hv_messages').select('*').order('created_at', { ascending: false });
+      const studentIds = [...new Set(attAllStudents.map(student => student?.mahv).filter(Boolean))];
+      if (studentIds.length === 0) {
+         setAttLatestMessages([]);
+         setAttReports({ xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 });
+         return;
+      }
+
+      const { data: msgs } = await supabase
+         .from('hv_messages')
+         .select('*')
+         .in('mahv', studentIds)
+         .order('created_at', { ascending: false });
 
       if (msgs) {
          setAttLatestMessages(msgs);
-         const reps = { xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 };
+         const reportStudents = {
+            xinNghi: new Set(),
+            baoThuoc: new Set(),
+            guiTinNhan: new Set(),
+            doiNguoi: new Set(),
+            veTre: new Set()
+         };
+
          msgs.forEach(m => {
             if (new Date(m.created_at) < dateLimit) return;
             const content = m.content?.toUpperCase() || '';
             const isPH = m.description === 'PH' || (!m.manv);
             if (!isPH) return;
 
-            if (content.includes('XIN NGHỈ') || content.includes('XIN NGHI')) reps.xinNghi++;
-            else if (content.includes('DẶN THUỐC') || content.includes('DAN THUOC')) reps.baoThuoc++;
-            else if (content.includes('ĐỔI NGƯỜI') || content.includes('DOI NGUOI')) reps.doiNguoi++;
-            else if (content.includes('VỀ TRỄ') || content.includes('VE TRE')) reps.veTre++;
-            else reps.guiTinNhan++;
+            if (content.includes('XIN NGHỈ') || content.includes('XIN NGHI')) reportStudents.xinNghi.add(m.mahv);
+            else if (content.includes('DẶN THUỐC') || content.includes('DAN THUOC')) reportStudents.baoThuoc.add(m.mahv);
+            else if (content.includes('ĐỔI NGƯỜI') || content.includes('DOI NGUOI')) reportStudents.doiNguoi.add(m.mahv);
+            else if (content.includes('VỀ TRỄ') || content.includes('VE TRE')) reportStudents.veTre.add(m.mahv);
+            else reportStudents.guiTinNhan.add(m.mahv);
+          });
+
+         setAttReports({
+            xinNghi: reportStudents.xinNghi.size,
+            baoThuoc: reportStudents.baoThuoc.size,
+            guiTinNhan: reportStudents.guiTinNhan.size,
+            doiNguoi: reportStudents.doiNguoi.size,
+            veTre: reportStudents.veTre.size
          });
-         setAttReports(reps);
       }
    };
 
