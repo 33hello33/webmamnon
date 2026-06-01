@@ -14,9 +14,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const getDateLimit = () => {
       const dateLimit = new Date();
-      if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
-      else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
-      else dateLimit.setMonth(dateLimit.getMonth() - 1);
+      dateLimit.setHours(0, 0, 0, 0);
+      if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 6);
+      else if (attDateFilter === 'Tháng này') dateLimit.setDate(1);
       return dateLimit;
    };
 
@@ -174,7 +174,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const attScrollRef = React.useRef();
    const [attChatView, setAttChatView] = useState('dashboard'); // 'dashboard' | 'chat'
    const [attStatFilter, setAttStatFilter] = useState('ALL');
-   const [attDateFilter, setAttDateFilter] = useState('Hôm nay');
+   const [attDateFilter, setAttDateFilter] = useState('Tuần này');
    const [attReports, setAttReports] = useState({ xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 });
    const [uploading, setUploading] = useState(false);
    const [isMobileChatView, setIsMobileChatView] = useState(() => window.innerWidth <= 768);
@@ -596,10 +596,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          return;
       }
 
-      let dateLimit = new Date();
-      if (attDateFilter === 'Hôm nay') dateLimit.setHours(0, 0, 0, 0);
-      else if (attDateFilter === 'Tuần này') dateLimit.setDate(dateLimit.getDate() - 7);
-      else dateLimit.setMonth(dateLimit.getMonth() - 1);
+      const dateLimit = getDateLimit();
 
       const studentIds = [...new Set(attAllStudents.map(student => student?.mahv).filter(Boolean))];
       if (studentIds.length === 0) {
@@ -675,10 +672,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
       setTeacherAnnouncementsLoading(true);
       try {
+         const dateLimit = getDateLimit();
          let query = supabase
             .from('class_announcements')
             .select('*')
             .in('malop', classIds)
+            .gte('created_at', dateLimit.toISOString())
             .order('created_at', { ascending: false })
             .limit(50);
 
@@ -807,7 +806,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       } else {
          setTeacherAnnouncements([]);
       }
-   }, [attTab, attClasses]);
+   }, [attTab, attClasses, attDateFilter]);
 
    const handleAttSendChat = async (e) => {
       e.preventDefault();
