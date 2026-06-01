@@ -12,6 +12,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const { config } = useConfig();
    const [loading, setLoading] = useState(false);
 
+   const normalizeAnnouncementTitle = (title) => String(title || '').trim().toUpperCase();
+
    const getDateLimit = () => {
       const dateLimit = new Date();
       dateLimit.setHours(0, 0, 0, 0);
@@ -673,26 +675,23 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       setTeacherAnnouncementsLoading(true);
       try {
          const dateLimit = getDateLimit();
-         let query = supabase
+         const { data, error } = await supabase
             .from('class_announcements')
             .select('*')
             .in('malop', classIds)
             .gte('created_at', dateLimit.toISOString())
             .order('created_at', { ascending: false })
-            .limit(50);
-
-         if (type === 'curriculum') {
-            query = query.eq('title', 'CHƯƠNG TRÌNH HỌC');
-         } else if (type === 'notices') {
-            query = query
-               .neq('title', 'THỰC ĐƠN')
-               .neq('title', 'NGOẠI KHÓA')
-               .neq('title', 'CHƯƠNG TRÌNH HỌC');
-         }
-
-         const { data, error } = await query;
+            .limit(200);
          if (error) throw error;
-         setTeacherAnnouncements(data || []);
+
+         const filteredData = (data || []).filter((item) => {
+            const title = normalizeAnnouncementTitle(item?.title);
+            if (type === 'curriculum') return title === 'CHƯƠNG TRÌNH HỌC';
+            if (type === 'notices') return title !== 'THỰC ĐƠN' && title !== 'NGOẠI KHÓA' && title !== 'CHƯƠNG TRÌNH HỌC';
+            return true;
+         });
+
+         setTeacherAnnouncements(filteredData.slice(0, 50));
       } catch (error) {
          console.error('Error fetching teacher announcements:', error);
          setTeacherAnnouncements([]);
