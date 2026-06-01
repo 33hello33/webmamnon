@@ -57,17 +57,15 @@ const getQRUrl = (hoaDon, walletsConfig) => {
 
       // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
       const mahv = hoaDon.mahv || '';
-      const tenhv = hoaDon.tenhv || '';
       const mahd = hoaDon.mahd || '';
 
       // Rút gọn tên nếu cần (lấy tối đa 2 từ cuối để vừa độ dài QR nếu quá dài)
-      let shortenedName = tenhv.trim();
       /* 
       const nameParts = shortenedName.split(' ');
       if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
       */
 
-      const info = encodeURIComponent(`${mahd} ${mahv} ${shortenedName}`.trim());
+      const info = encodeURIComponent(`${mahd} ${mahv}`.trim());
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
@@ -309,6 +307,9 @@ export default function InvoiceManager() {
                await new Promise(r => setTimeout(r, 1500));
                const node = document.getElementById('download-notice-node');
                if (node) {
+                  const expectedNoticeId = downloadingNotice.mahd;
+                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig);
+
                   // Capture setup
                   node.style.position = 'fixed';
                   node.style.top = '0';
@@ -317,11 +318,31 @@ export default function InvoiceManager() {
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
 
+                  for (let retry = 0; retry < 20; retry++) {
+                     const qrImg = node.querySelector('[data-role="notice-qr"]');
+                     const noticeId = node.dataset.noticeId;
+                     const qrSrc = qrImg?.getAttribute('src') || '';
+                     if (noticeId === expectedNoticeId && (!expectedQrSrc || qrSrc === expectedQrSrc)) {
+                        break;
+                     }
+                     await new Promise(r => setTimeout(r, 150));
+                  }
+
                   const images = node.querySelectorAll('img');
                   await Promise.all(Array.from(images).map(img => {
                      if (img.complete) return Promise.resolve();
                      return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
                   }));
+                  const qrImg = node.querySelector('[data-role="notice-qr"]');
+                  if (qrImg?.decode) {
+                     try {
+                        await qrImg.decode();
+                     } catch (err) {
+                        // Ignore decode errors and rely on image completeness checks above.
+                     }
+                  }
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(requestAnimationFrame);
                   await new Promise(r => setTimeout(r, 600));
 
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
@@ -398,7 +419,7 @@ export default function InvoiceManager() {
          };
          processPng();
       }
-   }, [downloadingNotice]);
+   }, [downloadingNotice, walletsConfig]);
 
    const calculateOldDebt = async (mahv) => {
       try {
@@ -1228,6 +1249,18 @@ export default function InvoiceManager() {
             ghichu: combinedNote,
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
+            qrUrl: (() => {
+               const base = getQRUrl({
+                  mahd: newMaTB,
+                  mahv: selectedStudent.mahv,
+                  tenhv: selectedStudent.tenhv,
+                  tongcong: formatCurrency(tongCong),
+                  hinhthuc: invoiceData.hinhThuc,
+                  thoiluong: currentTimePeriod,
+                  ngaybatdau: invoiceData.ngayBatDau || null
+               }, walletsConfig);
+               return base ? `${base}&t=${Date.now()}` : null;
+            })(),
             diemDanhInfo: studySummary ? {
                diHoc: studySummary.daHoc || 0,
                nghiPhep: studySummary.nghiPhep || 0,
@@ -1867,7 +1900,7 @@ export default function InvoiceManager() {
             </div>
 
             {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
+            <div id="download-notice-node" data-notice-id={downloadingNotice?.mahd || ''} className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
                {/* HEADER */}
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
@@ -1967,7 +2000,7 @@ export default function InvoiceManager() {
 
                   {/* QR SECTION */}
                   {(() => {
-                     const qrUrl = downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig) : null;
+                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig) : null);
                      if (!qrUrl) return (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
                         </div>
@@ -1976,7 +2009,7 @@ export default function InvoiceManager() {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
                            <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
                            <div style={{ textAlign: 'center' }}>
-                              <img crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                               <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
                               <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                            </div>
                         </div>

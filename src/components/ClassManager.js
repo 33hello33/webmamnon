@@ -39,11 +39,9 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) return null;
   const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
-  const mahv = hoaDon.mahv || '';
-  const tenhv = hoaDon.tenhv || '';
-  const mahd = hoaDon.mahd || '';
-
-  const info = encodeURIComponent(`${mahv}-${tenhv}`.trim());
+  const mahv = String(hoaDon.mahv || '').trim();
+  const mahd = String(hoaDon.mahd || '').trim();
+  const info = encodeURIComponent([mahd, mahv].filter(Boolean).join(' '));
   return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
 };
 const formatTuition = (val) => {
@@ -945,11 +943,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
             setExportingNotice(notice);
 
+            const expectedQrSrc = notice.qrBase64 || notice.qrUrl || '';
             let isUpdated = false;
-            for (let retry = 0; retry < 12; retry++) {
+            for (let retry = 0; retry < 20; retry++) {
               await new Promise(r => setTimeout(r, 500));
               const node = document.getElementById('batch-capture-node');
-              if (node && node.dataset.studentId === notice.mahv) {
+              const qrImg = node?.querySelector('[data-role="notice-qr"]');
+              const noticeId = node?.dataset.noticeId;
+              const qrSrc = qrImg?.getAttribute('src') || '';
+              if (node && node.dataset.studentId === notice.mahv && noticeId === notice.mahd && (!expectedQrSrc || qrSrc === expectedQrSrc)) {
                 isUpdated = true;
                 break;
               }
@@ -978,6 +980,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 });
               })
             );
+            const qrImg = node.querySelector('[data-role="notice-qr"]');
+            if (qrImg?.decode) {
+              try {
+                await qrImg.decode();
+              } catch (err) {
+                // Ignore decode errors and rely on the loaded image already in the DOM.
+              }
+            }
+            await new Promise(requestAnimationFrame);
+            await new Promise(requestAnimationFrame);
 
             // Extra delay for image buffer to paint
             await new Promise(r => setTimeout(r, 1000));
@@ -2029,8 +2041,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {exportingNotice && createPortal(
         <div
           id="batch-capture-node"
-          key={exportingNotice.mahv}
+          key={exportingNotice.mahd}
           data-student-id={exportingNotice.mahv}
+          data-notice-id={exportingNotice.mahd}
           className="print-a5-receipt"
           style={{
             position: 'fixed',
@@ -2134,6 +2147,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               {exportingNotice.qrUrl && (
                 <div style={{ textAlign: 'center' }}>
                   <img
+                    key={exportingNotice.mahd}
+                    data-role="notice-qr"
                     crossOrigin="anonymous"
                     src={exportingNotice.qrBase64 || exportingNotice.qrUrl}
                     alt="Mã QR"
