@@ -87,7 +87,7 @@ const ChatManager = ({ currentUser }) => {
   // Filters
   const [searchParent, setSearchParent] = useState('');
   const [classFilter, setClassFilter] = useState('Tất cả');
-  const [dateFilter, setDateFilter] = useState('Hôm nay'); // 'Hôm nay', 'Tuần này', 'Tháng này', 'Tuỳ chọn'
+  const [dateFilter, setDateFilter] = useState('Tuần này'); // 'Hôm nay', 'Tuần này', 'Tháng này', 'Tuỳ chọn'
   const [customRange, setCustomRange] = useState({
     start: new Date().toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
@@ -244,8 +244,7 @@ const ChatManager = ({ currentUser }) => {
     startDate.setHours(0, 0, 0, 0);
 
     if (dateFilter === 'Tuần này') {
-      const day = startDate.getDay() || 7;
-      startDate.setDate(startDate.getDate() - (day - 1));
+      startDate.setDate(startDate.getDate() - 6);
     } else if (dateFilter === 'Tháng này') {
       startDate.setDate(1);
     } else if (dateFilter === 'tháng trước tới nay') {
