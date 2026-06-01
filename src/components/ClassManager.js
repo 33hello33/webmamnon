@@ -1009,7 +1009,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         currentNotices.push({
           ...row,
           ...insertData,
-          sdt: students.find(s => s.mahv === row.mahv)?.sdt || ''
+          sdt: students.find(s => s.mahv === row.mahv)?.sdt || '',
+          qrUrl: (() => {
+            const base = getQRUrl({
+              ...row,
+              ...insertData,
+              mahd: newMaHD
+            }, walletsConfig);
+            return base ? `${base}&t=${Date.now()}-${i}` : null;
+          })()
         });
       }
 
@@ -1027,7 +1035,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   };
 
   const getNoticeQRUrl = (hoaDon) => {
-    return getQRUrl(hoaDon, walletsConfig);
+    return hoaDon?.qrUrl || getQRUrl(hoaDon, walletsConfig);
   };
 
   useEffect(() => {
@@ -1056,6 +1064,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           for (let i = 0; i < noticesToPrint.length; i++) {
             const node = document.getElementById(`print-notice-${i}`);
             if (node) {
+              const expectedNoticeId = noticesToPrint[i].mahd;
+              const expectedQrSrc = noticesToPrint[i].qrUrl || '';
+
               // Bring it "visually" to the viewport but almost transparent
               node.style.position = 'fixed';
               node.style.top = '0';
@@ -1063,6 +1074,27 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               node.style.zIndex = '9999';
               node.style.opacity = '1';
               node.style.visibility = 'visible';
+
+              for (let retry = 0; retry < 20; retry++) {
+                const qrImg = node.querySelector('[data-role="notice-qr"]');
+                const noticeId = node.dataset.noticeId;
+                const qrSrc = qrImg?.getAttribute('src') || '';
+                if (noticeId === expectedNoticeId && (!expectedQrSrc || qrSrc === expectedQrSrc)) {
+                  break;
+                }
+                await new Promise(r => setTimeout(r, 150));
+              }
+
+              const qrImg = node.querySelector('[data-role="notice-qr"]');
+              if (qrImg?.decode) {
+                try {
+                  await qrImg.decode();
+                } catch (err) {
+                  // Ignore decode errors and rely on image completeness checks above.
+                }
+              }
+              await new Promise(requestAnimationFrame);
+              await new Promise(requestAnimationFrame);
 
               // Small wait before capture
               await new Promise(r => setTimeout(r, 600));
@@ -2131,7 +2163,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {noticesToPrint.length > 0 && (
         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
           {noticesToPrint.map((printHoaDon, idx) => (
-            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
+            <div key={idx} id={`print-notice-${idx}`} data-notice-id={printHoaDon.mahd} className="print-a5-receipt" style={{ width: '800px', background: '#ffffff', padding: '30px', boxSizing: 'border-box', display: 'block', marginBottom: '50px' }}>
               {/* HEADER */}
               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 {/* LEFT: Logo */}
@@ -2235,7 +2267,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
                       <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span></div>
                       <div style={{ textAlign: 'center' }}>
-                        <img crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                        <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
                         <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                       </div>
                     </div>
