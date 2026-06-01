@@ -1722,13 +1722,7 @@ function ParentPortal({ parentData, setParentData }) {
                                        </div>
                                     )}
 
-                                    {notice.file_url && (
-                                       <a href={notice.file_url} target="_blank" rel="noreferrer" style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: '#f8fafc', borderRadius: '8px', textDecoration: 'none', color: '#475569', fontSize: '0.85rem', border: '1px solid #e2e8f0' }}>
-                                          <FileText size={16} />
-                                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{notice.file_name || 'Xem tệp đính kèm'}</span>
-                                          <Download size={16} />
-                                       </a>
-                                    )}
+                                    {notice.file_url && <ChatMediaAttachment fileUrl={notice.file_url} fileName={notice.file_name} mimeType={notice.file_mime_type} />}
                                  </div>
                               )) : (
                                  <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Không có thông báo mới.</div>
