@@ -13,6 +13,57 @@ const isDeletedRecord = (record) => {
    return deletedValue === 'đã xóa' || deletedValue === 'da xoa';
 };
 
+const VN_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const getVietnamDateParts = (date = new Date()) => {
+   const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: VN_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+   }).formatToParts(date);
+
+   const getPart = (type) => parts.find(part => part.type === type)?.value || '';
+   return {
+      year: getPart('year'),
+      month: getPart('month'),
+      day: getPart('day'),
+      hour: getPart('hour'),
+      minute: getPart('minute')
+   };
+};
+
+const getVietnamDateString = (date = new Date()) => {
+   const { year, month, day } = getVietnamDateParts(date);
+   return `${year}-${month}-${day}`;
+};
+
+const getVietnamTimeTotal = (date = new Date()) => {
+   const { hour, minute } = getVietnamDateParts(date);
+   return (parseInt(hour, 10) || 0) * 60 + (parseInt(minute, 10) || 0);
+};
+
+const formatDateStringVi = (dateStr) => {
+   if (!dateStr) return '';
+   const [year, month, day] = String(dateStr).split('-');
+   if (!year || !month || !day) return dateStr;
+   return `${day}/${month}/${year}`;
+};
+
+const addDaysToDateString = (dateStr, days) => {
+   const [year, month, day] = String(dateStr).split('-').map(Number);
+   if (!year || !month || !day) return dateStr;
+   const utcDate = new Date(Date.UTC(year, month - 1, day));
+   utcDate.setUTCDate(utcDate.getUTCDate() + days);
+   const nextYear = utcDate.getUTCFullYear();
+   const nextMonth = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+   const nextDay = String(utcDate.getUTCDate()).padStart(2, '0');
+   return `${nextYear}-${nextMonth}-${nextDay}`;
+};
+
 function ParentPortal({ parentData, setParentData }) {
    const { config } = useConfig();
    const [parentTab, setParentTab] = useState('menu');
@@ -462,13 +513,6 @@ function ParentPortal({ parentData, setParentData }) {
       let fromDateStr = leaveForm.from;
       let toDateStr = leaveForm.to;
 
-      const formatLocalDate = (date) => {
-         const year = date.getFullYear();
-         const month = String(date.getMonth() + 1).padStart(2, '0');
-         const day = String(date.getDate()).padStart(2, '0');
-         return `${year}-${month}-${day}`;
-      };
-
       const getLeaveStatus = (dateStr, todayDateStr, cutoffMinutes) => {
          if (dateStr < todayDateStr) {
             return 'Nghỉ không phép';
@@ -478,20 +522,16 @@ function ParentPortal({ parentData, setParentData }) {
             return 'Nghỉ phép';
          }
 
-         const now = new Date();
-         const currentTimeTotal = now.getHours() * 60 + now.getMinutes();
+         const currentTimeTotal = getVietnamTimeTotal();
          return currentTimeTotal <= cutoffMinutes ? 'Nghỉ phép' : 'Nghỉ không phép';
       };
 
-      const today = new Date();
-      const todayStr = formatLocalDate(today);
+      const todayStr = getVietnamDateString();
 
       if (leaveType === 'today') {
          fromDateStr = toDateStr = todayStr;
       } else if (leaveType === 'tomorrow') {
-         const tomorrow = new Date();
-         tomorrow.setDate(tomorrow.getDate() + 1);
-         fromDateStr = toDateStr = formatLocalDate(tomorrow);
+         fromDateStr = toDateStr = addDaysToDateString(todayStr, 1);
       }
 
       if (!fromDateStr || !toDateStr || !leaveForm.reason?.trim()) {
@@ -499,23 +539,24 @@ function ParentPortal({ parentData, setParentData }) {
          return;
       }
 
+      if (fromDateStr > toDateStr) {
+         alert('Ngày bắt đầu nghỉ không được lớn hơn ngày kết thúc.');
+         return;
+      }
+
       leaveSubmitLockRef.current = true;
       setLeaveSubmitting(true);
       try {
          const trimmedReason = leaveForm.reason.trim();
-         const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${new Date(fromDateStr).toLocaleDateString('vi-VN')}\n- Đến ngày: ${new Date(toDateStr).toLocaleDateString('vi-VN')}\n- Lý do: ${trimmedReason}`;
+         const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${formatDateStringVi(fromDateStr)}\n- Đến ngày: ${formatDateStringVi(toDateStr)}\n- Lý do: ${trimmedReason}`;
          await sendQuickMessage(msg);
 
-         // Insert into tbl_diemdanh
-         const start = new Date(fromDateStr);
-         const end = new Date(toDateStr);
          const configTimeStr = config?.xinnghitruocmaygio || config?.xinghitruocmaygio || '08:00';
          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
-         const cfgTimeTotal = cfgHour * 60 + cfgMin;
+         const cfgTimeTotal = (Number.isFinite(cfgHour) ? cfgHour : 8) * 60 + (Number.isFinite(cfgMin) ? cfgMin : 0);
 
-         let current = new Date(start);
-         while (current <= end) {
-            const currDateStr = formatLocalDate(current);
+         let currDateStr = fromDateStr;
+         while (currDateStr <= toDateStr) {
             const trangthai = getLeaveStatus(currDateStr, todayStr, cfgTimeTotal);
 
             const payload = {
@@ -535,7 +576,7 @@ function ParentPortal({ parentData, setParentData }) {
                await supabase.from('tbl_diemdanh').insert([payload]);
             }
 
-            current.setDate(current.getDate() + 1);
+            currDateStr = addDaysToDateString(currDateStr, 1);
          }
          setIsLeaveModalOpen(false);
          setLeaveForm({ from: '', to: '', reason: '' });

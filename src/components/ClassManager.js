@@ -10,6 +10,7 @@ import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
+import { toLocalISODate } from '../utils/localDate';
 import './ClassManager.css';
 
 const dataUrlToBlob = (dataUrl) => {
@@ -29,6 +30,8 @@ const buildTuitionNoticeImageKey = (mahv, mahd) => {
   const safeMahd = String(mahd || '').trim();
   return `tuition-notices/${safeMahv}/ThongBaoHocPhi_${safeMahv}_${safeMahd}.png`;
 };
+
+const toLocalISO = (date) => toLocalISODate(date);
 
 const syncTuitionNoticeImage = async ({ file, mahv, mahd, config }) => {
   const objectKey = buildTuitionNoticeImageKey(mahv, mahd);
@@ -101,8 +104,8 @@ const getMonthBoundsFromToken = (monthToken) => {
   const end = new Date(year, monthIndex + 1, 0);
 
   return {
-    statsStart: start.toISOString().split('T')[0],
-    statsEnd: end.toISOString().split('T')[0],
+    statsStart: toLocalISO(start),
+    statsEnd: toLocalISO(end),
     periodLabel: `${String(monthIndex + 1).padStart(2, '0')}/${year}`
   };
 };
@@ -232,7 +235,7 @@ const calculateEndDateBySessions = (startDateStr, numSessions, activeDays) => {
     maxDaysToCheck--;
   }
   if (sessionsFound > 0) {
-    return current.toISOString().split('T')[0];
+    return toLocalISO(current);
   }
   return '';
 };
@@ -341,7 +344,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     soLuong: 1,
     hocPhiOpt: '',
     hinhThuc: (config && (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name)) ? (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name) : 'Tiền mặt',
-    ngayBatDau: new Date().toISOString().split('T')[0],
+    ngayBatDau: toLocalISODate(),
     ngayKetThuc: '',
     ghiChu: '',
     statsStart: '',
@@ -510,7 +513,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const startStr = (() => {
         const now = new Date();
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-        return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        return toLocalISO(firstDay);
       })();
 
       const initialNoticeData = {
@@ -572,11 +575,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (initLoaiDong === 'Tháng' || initLoaiDong === 'Khóa') {
           const d = new Date(startStr);
           d.setMonth(d.getMonth() + initSoLuong);
-          finalKetThuc = d.toISOString().split('T')[0];
+          finalKetThuc = toLocalISO(d);
         } else if (initLoaiDong === 'Tuần') {
           const d = new Date(startStr);
           d.setDate(d.getDate() + initSoLuong * 7);
-          finalKetThuc = d.toISOString().split('T')[0];
+          finalKetThuc = toLocalISO(d);
         } else if (initLoaiDong === 'Buổi' && activeDays.length > 0) {
           finalKetThuc = calculateEndDateBySessions(startStr, initSoLuong, activeDays);
         }
@@ -704,7 +707,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const startD = new Date(newNotice.ngayBatDau);
         if (!isNaN(startD.getTime())) {
           startD.setMonth(startD.getMonth() + (parseInt(newNotice.soLuong) || 1));
-          newNotice.ngayKetThuc = startD.toISOString().split('T')[0];
+          newNotice.ngayKetThuc = toLocalISO(startD);
         }
       } else if (unit.includes('buổi') && newNotice.ngayBatDau && newNotice.soLuong && selectedClass?.thoigianbieu) {
         const activeDays = parseScheduleDays(selectedClass.thoigianbieu);
@@ -715,7 +718,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const startD = new Date(newNotice.ngayBatDau);
         if (!isNaN(startD.getTime())) {
           startD.setDate(startD.getDate() + (parseInt(newNotice.soLuong) || 1) * 7);
-          newNotice.ngayKetThuc = startD.toISOString().split('T')[0];
+          newNotice.ngayKetThuc = toLocalISO(startD);
         }
       }
     }
@@ -727,7 +730,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (isNaN(current.getTime())) return;
     current.setMonth(current.getMonth() + offset);
     current.setDate(1);
-    const startStr = current.toISOString().split('T')[0];
+    const startStr = toLocalISO(current);
     handleBatchNoticeFieldChange('ngayBatDau', startStr);
   };
 
@@ -872,11 +875,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       if (unit.includes('tháng') || unit.includes('khóa')) {
         const d = new Date(batchNoticeData.ngayBatDau);
         d.setMonth(d.getMonth() + (parseInt(batchNoticeData.soLuong) || 1));
-        finalKetThuc = d.toISOString().split('T')[0];
+        finalKetThuc = toLocalISO(d);
       } else if (unit.includes('tuần')) {
         const d = new Date(batchNoticeData.ngayBatDau);
         d.setDate(d.getDate() + (parseInt(batchNoticeData.soLuong) || 1) * 7);
-        finalKetThuc = d.toISOString().split('T')[0];
+        finalKetThuc = toLocalISO(d);
       } else if (unit.includes('buổi') && activeDays.length > 0) {
         finalKetThuc = calculateEndDateBySessions(batchNoticeData.ngayBatDau, (parseInt(batchNoticeData.soLuong) || 1), activeDays);
       } else {

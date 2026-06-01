@@ -12,16 +12,17 @@ import AttendanceToday from './AttendanceToday';
 import NgoaiKhoaManager from './NgoaiKhoaManager';
 import './StudentManager.css';
 import { compressImage } from '../utils/imageUtils';
+import { toLocalISODate } from '../utils/localDate';
 
 const INITIAL_FORM = {
   mahv: '', tenhv: '', sdtba: '', sdtme: '', ghichu: '',
-  trangthai: 'Đang Học', imgpath: '', ngaynhaphoc: new Date().toISOString().split('T')[0], ngaynghihoc: '',
+  trangthai: 'Đang Học', imgpath: '', ngaynhaphoc: toLocalISODate(), ngaynghihoc: '',
   diachi: '', tenme: '', hotenba: '', malop: '',
-  ngaysinh: new Date().toISOString().split('T')[0],
+  ngaysinh: toLocalISODate(),
   gioitinh: 'Nam', cccd: '', tinhtrangsk: '',
   nghenghiepba: '', nghenghiepme: '',
-  ngaysinhba: new Date().toISOString().split('T')[0],
-  ngaysinhme: new Date().toISOString().split('T')[0],
+  ngaysinhba: toLocalISODate(),
+  ngaysinhme: toLocalISODate(),
   username: '', password: ''
 };
 
@@ -281,7 +282,7 @@ export default function StudentManager({ activeSubTab }) {
       const currentGhichu = student?.ghichu || '';
       const newGhichu = currentGhichu ? `${currentGhichu} | Lý do nghỉ: ${deleteReason}` : `Lý do nghỉ: ${deleteReason}`;
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalISODate();
       const { error } = await supabase.from('tbl_hv').update({
         trangthai: 'Đã Nghỉ',
         ngaynghihoc: today,
@@ -472,7 +473,7 @@ export default function StudentManager({ activeSubTab }) {
                       d = new Date(val);
                     }
                     if (!isNaN(d.getTime())) {
-                      val = d.toISOString().split('T')[0];
+                      val = toLocalISODate(d);
                     } else {
                       val = null;
                     }
