@@ -49,7 +49,9 @@ export default function AttendanceManager({ students, showMessage }) {
     const fetchClasses = async () => {
       try {
         const { data } = await supabase.from('tbl_lop').select('*').order('tenlop');
-        if (data) setClasses(data);
+        if (data) {
+          setClasses(data.filter(c => String(c?.daxoa || '').trim().toLowerCase() === 'đang học'));
+        }
       } catch (err) { console.error(err); }
     };
     const fetchEmployees = async () => {
@@ -656,6 +658,7 @@ export default function AttendanceManager({ students, showMessage }) {
                         let list = [];
                         if (std?.malop) list.push(std.malop);
                         if (Array.isArray(std?.malop_list)) list = [...new Set([...list, ...std.malop_list])];
+                        list = list.filter(ml => classes.some(c => c.malop === ml));
                         
                         if (list.length > 1) {
                           return (
