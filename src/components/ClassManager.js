@@ -11,6 +11,7 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import { toLocalISODate } from '../utils/localDate';
 import './ClassManager.css';
 
 const INITIAL_FORM = {
@@ -22,12 +23,7 @@ const formatMonthYear = (dateStr) => {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
-const toLocalISO = (d) => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+const toLocalISO = (d) => toLocalISODate(d);
 
 const getQRUrl = (hoaDon, walletsConfig) => {
   if (!walletsConfig || !hoaDon.hinhthuc) {
@@ -211,7 +207,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     soLuong: 1,
     hocPhiOpt: '',
     hinhThuc: (config && (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name)) ? (config.vi1?.name || config.vi2?.name || config.vi3?.name || config.vi4?.name) : 'Tiền mặt',
-    ngayBatDau: new Date().toISOString().split('T')[0],
+    ngayBatDau: toLocalISODate(),
     ngayKetThuc: '',
     ghiChu: '',
     statsPeriod: ''

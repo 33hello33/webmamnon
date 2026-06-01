@@ -7,6 +7,7 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import { toLocalISODate } from '../utils/localDate';
 
 
 
@@ -88,7 +89,7 @@ const calculateEndDateBySessions = (startDateStr, numSessions, activeDays) => {
       maxDaysToCheck--;
    }
    if (sessionsFound > 0) {
-      return current.toISOString().split('T')[0];
+      return toLocalISODate(current);
    }
    return '';
 };
@@ -141,8 +142,8 @@ const calculateConsecutiveLeave = (attendance) => {
 
 
    return groups.map(g => ({
-      ngay_bat_dau_nghi: g[0].toISOString().split('T')[0],
-      ngay_ket_thuc_nghi: g[g.length - 1].toISOString().split('T')[0],
+      ngay_bat_dau_nghi: toLocalISODate(g[0]),
+      ngay_ket_thuc_nghi: toLocalISODate(g[g.length - 1]),
       so_ngay_nghi_lien_tuc: g.length
    }));
 };
@@ -206,7 +207,7 @@ export default function InvoiceManager() {
       ngayBatDau: (() => {
          const now = new Date();
          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-         return new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+         return toLocalISODate(firstDay);
       })(),
       ngayKetThuc: '',
       hocphi: 0,
@@ -533,7 +534,7 @@ export default function InvoiceManager() {
       // Load recent HD or Thong bao for student + specific class
       const now = new Date();
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      let startStr = new Date(firstDay.getTime() - firstDay.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      let startStr = toLocalISODate(firstDay);
       let endMonthStr = '';
 
       let recentDoc = null;
@@ -608,7 +609,7 @@ export default function InvoiceManager() {
                if (!isNaN(ketThucDate.getTime())) {
                   // Tháng tiếp theo: lấy đầu tháng sau ngayketthuc
                   const nextMonth = new Date(ketThucDate.getFullYear(), ketThucDate.getMonth() + 1, 1);
-                  startStr = nextMonth.toISOString().split('T')[0];
+                  startStr = toLocalISODate(nextMonth);
                   nextStartComputed = true;
                }
             }
@@ -621,7 +622,7 @@ export default function InvoiceManager() {
                   const mm = parseInt(mMatch[1], 10) - 1;
                   const yyyy = parseInt(mMatch[2], 10);
                   const nextMonth = new Date(yyyy, mm + 1, 1);
-                  startStr = nextMonth.toISOString().split('T')[0];
+                  startStr = toLocalISODate(nextMonth);
                   nextStartComputed = true;
                }
             }
@@ -630,7 +631,7 @@ export default function InvoiceManager() {
                const batDauDate = new Date(recentDoc.ngaybatdau);
                if (!isNaN(batDauDate.getTime())) {
                   const nextMonth = new Date(batDauDate.getFullYear(), batDauDate.getMonth() + 1, 1);
-                  startStr = nextMonth.toISOString().split('T')[0];
+                  startStr = toLocalISODate(nextMonth);
                }
             }
             endMonthStr = ''; // Recalculate based on new startStr and quantity
@@ -675,7 +676,7 @@ export default function InvoiceManager() {
             const tempDate = new Date(startStr);
             if (!isNaN(tempDate.getTime())) {
                tempDate.setMonth(tempDate.getMonth() + (parseInt(soLuong) || 1));
-               endMonthStr = tempDate.toISOString().split('T')[0];
+               endMonthStr = toLocalISODate(tempDate);
             }
          } else if (unit.includes('buổi') && enrichedClass?.thoigianbieu) {
             const activeDays = parseScheduleDays(enrichedClass.thoigianbieu);
@@ -686,14 +687,14 @@ export default function InvoiceManager() {
             const startD = new Date(startStr);
             if (!isNaN(startD.getTime())) {
                startD.setDate(startD.getDate() + (parseInt(soLuong) || 1) * 7);
-               endMonthStr = startD.toISOString().split('T')[0];
+               endMonthStr = toLocalISODate(startD);
             }
          }
          if (!endMonthStr) {
             const nextM = new Date(startStr);
             if (!isNaN(nextM.getTime())) {
                nextM.setMonth(nextM.getMonth() + 1);
-               endMonthStr = nextM.toISOString().split('T')[0];
+               endMonthStr = toLocalISODate(nextM);
             }
          }
       }
@@ -741,8 +742,8 @@ export default function InvoiceManager() {
                   const lastMatch = allMonthMatches[allMonthMatches.length - 1];
                   const mm = parseInt(lastMatch[1]) - 1;
                   const yyyy = parseInt(lastMatch[2]);
-                  statsStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
-                  statsEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
+                  statsStart = toLocalISODate(new Date(yyyy, mm, 1));
+                  statsEnd = toLocalISODate(new Date(yyyy, mm + 1, 0));
                }
             }
 
@@ -913,7 +914,7 @@ export default function InvoiceManager() {
          const startD = new Date(newInv.ngayBatDau);
          if (!isNaN(startD.getTime())) {
             startD.setMonth(startD.getMonth() + (parseInt(newInv.soLuong) || 1));
-            newInv.ngayKetThuc = startD.toISOString().split('T')[0];
+            newInv.ngayKetThuc = toLocalISODate(startD);
          }
       } else if (unit.includes('buổi') && newInv.ngayBatDau && newInv.soLuong && activeClass?.thoigianbieu) {
          const activeDays = parseScheduleDays(activeClass.thoigianbieu);
@@ -924,7 +925,7 @@ export default function InvoiceManager() {
          const startD = new Date(newInv.ngayBatDau);
          if (!isNaN(startD.getTime())) {
             startD.setDate(startD.getDate() + (parseInt(newInv.soLuong) || 1) * 7);
-            newInv.ngayKetThuc = startD.toISOString().split('T')[0];
+            newInv.ngayKetThuc = toLocalISODate(startD);
          }
       }
 
@@ -947,7 +948,7 @@ export default function InvoiceManager() {
             const startD = new Date(newInv.ngayBatDau);
             if (!isNaN(startD.getTime())) {
                startD.setMonth(startD.getMonth() + (parseInt(newInv.soLuong) || 1));
-               newInv.ngayKetThuc = startD.toISOString().split('T')[0];
+               newInv.ngayKetThuc = toLocalISODate(startD);
             }
          } else if (unit.includes('buổi') && newInv.ngayBatDau && newInv.soLuong && activeClass?.thoigianbieu) {
             const activeDays = parseScheduleDays(activeClass.thoigianbieu);
@@ -958,7 +959,7 @@ export default function InvoiceManager() {
             const startD = new Date(newInv.ngayBatDau);
             if (!isNaN(startD.getTime())) {
                startD.setDate(startD.getDate() + (parseInt(newInv.soLuong) || 1) * 7);
-               newInv.ngayKetThuc = startD.toISOString().split('T')[0];
+               newInv.ngayKetThuc = toLocalISODate(startD);
             }
          }
       }
@@ -973,8 +974,8 @@ export default function InvoiceManager() {
          const billingDate = new Date(billingStartStr);
          if (isNaN(billingDate.getTime())) return;
          const prevMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() - 1, 1);
-         const statsStart = prevMonth.toISOString().split('T')[0];
-         const statsEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).toISOString().split('T')[0];
+         const statsStart = toLocalISODate(prevMonth);
+         const statsEnd = toLocalISODate(new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0));
 
          const malop = selectedStudent.malop_list?.[0] || null;
          let scheduleToUse = activeClass?.thoigianbieu;
@@ -1034,7 +1035,7 @@ export default function InvoiceManager() {
       const d = new Date(invoiceData.ngayBatDau);
       if (isNaN(d.getTime())) return;
       d.setMonth(d.getMonth() + delta);
-      const newStart = d.toISOString().split('T')[0];
+      const newStart = toLocalISODate(d);
       handleFormChange('ngayBatDau', newStart);
       await loadAttendanceForMonth(newStart);
    };

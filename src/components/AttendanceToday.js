@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { Users, Loader2, Search, Calendar, MessageCircle } from 'lucide-react';
+import { toLocalISODate } from '../utils/localDate';
 
 export default function AttendanceToday({ students, classes: allAvailableClasses }) {
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ export default function AttendanceToday({ students, classes: allAvailableClasses
   const fetchTodayData = async () => {
     setLoading(true);
     try {
-      const todayIso = new Date().toISOString().split('T')[0];
+      const todayIso = toLocalISODate();
 
       // 1. Fetch attendance marked as "Có mặt" for today
       const { data: attendanceData, error: attErr } = await supabase
