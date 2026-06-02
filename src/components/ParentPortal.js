@@ -1679,11 +1679,11 @@ function ParentPortal({ parentData, setParentData }) {
 
          {parentTab !== 'menu' && (
             <div className={parentTab === 'chat-tab' ? 'premium-tab-container chat-mode' : 'premium-tab-container'}>
-               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px', padding: parentTab === 'chat-tab' ? 'calc(12px + env(safe-area-inset-top, 0px)) 16px 12px' : '20px 20px 10px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '24px 24px 0 0', flexShrink: 0 }}>
-                  <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f' }}>
+               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: parentTab === 'chat-tab' ? '10px' : '15px', padding: parentTab === 'chat-tab' ? 'calc(12px + env(safe-area-inset-top, 0px)) 12px 12px' : '20px 20px 10px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '24px 24px 0 0', flexShrink: 0, width: '100%', maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
+                  <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', minWidth: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f', flexShrink: 0 }}>
                      <ArrowLeft size={20} />
                   </button>
-                  <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
+                  <h2 style={{ margin: 0, fontSize: parentTab === 'chat-tab' ? '1rem' : '1.2rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                      {parentTab === 'notices-tab' ? 'Bảng tin' :
                         parentTab === 'attendance-tab' ? 'Điểm danh' :
                            parentTab === 'fee-tab' ? 'Học phí' :
@@ -1694,7 +1694,7 @@ function ParentPortal({ parentData, setParentData }) {
                   </h2>
                </div>
 
-               <div className="premium-tab-content-wrapper" style={{ padding: parentTab === 'chat-tab' ? '0' : '20px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '0 0 24px 24px', minHeight: parentTab === 'chat-tab' ? '0' : 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', flex: 1 }}>
+               <div className="premium-tab-content-wrapper" style={{ padding: parentTab === 'chat-tab' ? '0' : '20px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '0 0 24px 24px', minHeight: parentTab === 'chat-tab' ? '0' : 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'hidden' }}>
                   {parentTab === 'notices-tab' && (
                      <div id="notices-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div className="notices-section">
@@ -2128,29 +2128,29 @@ function ParentPortal({ parentData, setParentData }) {
                   )}
 
                   {parentTab === 'chat-tab' && (
-                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', background: '#f8fafc', borderRadius: '0', overflow: 'hidden' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 99 }}>
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', width: '100%', maxWidth: '100%', minWidth: 0, background: '#f8fafc', borderRadius: '0', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '12px', background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 99, width: '100%', maxWidth: '100%', minWidth: 0 }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
                               <div style={{ position: 'relative' }}>
                                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                                     {parentData.teacherInfo?.tennv?.charAt(0) || 'G'}
                                  </div>
                                  <span style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '12px', height: '12px', background: '#22c55e', border: '2px solid white', borderRadius: '50%' }}></span>
                               </div>
-                              <div>
-                                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>GV {parentData.teacherInfo?.tennv}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>GV {parentData.teacherInfo?.tennv}</div>
                                  <div style={{ fontSize: '0.75rem', color: '#22c55e', fontWeight: 600 }}>Đang hoạt động</div>
                               </div>
                            </div>
-                           <div style={{ display: 'flex', gap: '5px' }}>
-                              <button style={{ padding: '8px', background: '#f1f5f9', border: 'none', borderRadius: '10px', color: '#64748b' }} onClick={() => setShowChatInfo(!showChatInfo)}>
+                           <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                              <button style={{ padding: '8px', background: '#f1f5f9', border: 'none', borderRadius: '10px', color: '#64748b', minWidth: '36px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowChatInfo(!showChatInfo)}>
                                  {showChatInfo ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                               </button>
                            </div>
                         </div>
 
                         {showChatInfo && (
-                           <div style={{ padding: '12px 16px', background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
+                           <div style={{ padding: '12px', background: '#fff7ed', borderBottom: '1px solid #fed7aa', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                               <div style={{ fontSize: '0.82rem', lineHeight: 1.55, color: '#9a3412', fontWeight: 600 }}>
                                  <div style={{ marginBottom: '6px' }}>Lưu ý: Khung giờ thuận tiện giáo viên trả lời tin nhắn là</div>
                                  <div>✅ trước 8h sáng</div>
@@ -2160,7 +2160,7 @@ function ParentPortal({ parentData, setParentData }) {
                            </div>
                         )}
 
-                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                            {isLoadMoreChat && (
                               <div style={{ display: 'flex', justifyContent: 'center', padding: '10px' }}><Loader2 size={16} className="spinner" /></div>
                            )}
@@ -2178,12 +2178,12 @@ function ParentPortal({ parentData, setParentData }) {
                                  const isMe = m.description === 'PH';
                                  const senderName = getParentChatSenderName(m);
                                  return (
-                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', minWidth: 0, alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
                                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
                                           {senderName}
                                        </div>
                                        {m.content && (
-                                          <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                          <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: '100%' }}>
                                              <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                                           </div>
                                        )}
@@ -2206,9 +2206,9 @@ function ParentPortal({ parentData, setParentData }) {
                            <div ref={chatEndRef} />
                         </div>
 
-                        <div style={{ padding: '15px 16px calc(15px + env(safe-area-inset-bottom, 0px))', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0', zIndex: 99 }}>
-                           <form onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{ display: 'flex', gap: '5px' }}>
+                        <div style={{ padding: '12px calc(12px + env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px))', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0', zIndex: 99, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+                           <form onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '100%', minWidth: 0 }}>
+                              <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                                  <label style={{ cursor: 'pointer', padding: '8px', color: '#64748b' }}>
                                     <Image size={22} />
                                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'image')} disabled={uploading} />
@@ -2218,10 +2218,10 @@ function ParentPortal({ parentData, setParentData }) {
                                     <input type="file" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'file')} disabled={uploading} />
                                  </label>
                               </div>
-                              <div style={{ flex: 1, position: 'relative' }}>
+                              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                                  <input type="text" placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={uploading} style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none' }} />
                               </div>
-                              <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1 }}>
+                              <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', minWidth: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1, flexShrink: 0 }}>
                                  {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
                               </button>
                            </form>
