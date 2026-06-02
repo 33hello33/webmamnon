@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { uploadToR2 } from '../utils/cloudflareR2';
-import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
+import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
@@ -183,11 +183,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [attStaffDirectory, setAttStaffDirectory] = useState({});
    const [isClassBroadcastOpen, setIsClassBroadcastOpen] = useState(false);
    const [classBroadcastText, setClassBroadcastText] = useState('');
-   const [classBroadcastImage, setClassBroadcastImage] = useState(null);
+   const [classBroadcastMedia, setClassBroadcastMedia] = useState([]);
    const [classBroadcastClassId, setClassBroadcastClassId] = useState('');
    const [attLatestHealthDate, setAttLatestHealthDate] = useState('');
    const [teacherAnnouncements, setTeacherAnnouncements] = useState([]);
    const [teacherAnnouncementsLoading, setTeacherAnnouncementsLoading] = useState(false);
+   const [teacherChatDropActive, setTeacherChatDropActive] = useState(false);
 
    const syncAppBadge = (count) => {
       const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -807,6 +808,70 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
    }, [attTab, attClasses, attDateFilter]);
 
+   const mergeBroadcastFiles = (incomingFiles) => {
+      setClassBroadcastMedia((prev) => mergeFileLists(prev, toFileArray(incomingFiles)));
+   };
+
+   const handleTeacherChatAttachmentUpload = async (selectedFiles, forcedType = null) => {
+      const files = toFileArray(selectedFiles);
+      if (!files.length || !attChatSelectedStudent || !attendanceUser) return;
+
+      setUploading(true);
+      try {
+         const insertedMessages = [];
+         const documentPayloads = [];
+
+         for (const file of files) {
+            const upload = await uploadManagedFile({
+               file,
+               config,
+               supabase,
+               prefix: attChatSelectedStudent.mahv
+            });
+
+            const attachmentType = forcedType || (upload.isImage ? 'image' : 'file');
+            const msgPayload = {
+               mahv: attChatSelectedStudent.mahv,
+               manv: attendanceUser.manv || attendanceUser.username,
+               content: '',
+               image_url: attachmentType === 'image' ? upload.url : null,
+               file_url: attachmentType !== 'image' ? upload.url : null,
+               file_name: upload.fileName,
+               file_mime_type: upload.mimeType
+            };
+
+            const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
+            if (error) throw error;
+            if (data?.[0]) {
+               insertedMessages.push(data[0]);
+               documentPayloads.push({
+                  mahv: attChatSelectedStudent.mahv,
+                  name: upload.fileName,
+                  category: attachmentType === 'image' ? 'Ảnh' : 'Tài liệu',
+                  file_url: upload.url,
+                  mime_type: upload.mimeType
+               });
+            }
+         }
+
+         for (const message of insertedMessages) {
+            await triggerPushNotification(supabase, 'hv_messages', message);
+         }
+
+         if (documentPayloads.length > 0) {
+            const { data: docData, error: docError } = await supabase.from('documents').insert(documentPayloads).select();
+            if (docError) throw docError;
+            if (docData?.length) setAttChatDocuments(prev => [...docData, ...prev]);
+         }
+
+         setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+      } catch (err) {
+         alert('Lỗi: ' + err.message);
+      } finally {
+         setUploading(false);
+      }
+   };
+
    const handleAttSendChat = async (e) => {
       e.preventDefault();
       if (!attChatInput.trim() || !attChatSelectedStudent || !attendanceUser) return;
@@ -824,55 +889,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    const handleAttFileUpload = async (e, type) => {
-      const fileInput = e.target.files[0];
-      if (!fileInput || !attChatSelectedStudent || !attendanceUser) return;
-
-      setUploading(true);
-      try {
-         let file = fileInput;
-         if (type === 'image') { try { file = await compressImage(fileInput, 150); } catch (err) { } }
-
-         let finalUrl = '';
-         if (config.r2_enabled) {
-            finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-         } else {
-            const fileName = `${attChatSelectedStudent.mahv}_${Date.now()}_${file.name}`;
-            const folder = type === 'image' ? 'chat-images' : 'chat-files';
-            const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
-            if (error) throw error;
-            const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
-            finalUrl = publicUrl;
-         }
-
-         const msgPayload = {
-            mahv: attChatSelectedStudent.mahv,
-            manv: attendanceUser.manv || attendanceUser.username,
-            content: '',
-            image_url: type === 'image' ? finalUrl : null,
-            file_url: type !== 'image' ? finalUrl : null,
-            file_name: file.name,
-            file_mime_type: file.type
-         };
-
-         const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-         if (data) {
-            await triggerPushNotification(supabase, 'hv_messages', data[0]);
-            setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
-         }
-
-         const newDoc = {
-            mahv: attChatSelectedStudent.mahv,
-            name: file.name,
-            category: type === 'image' ? 'Ảnh' : 'Tài liệu',
-            file_url: finalUrl,
-            mime_type: file.type
-         };
-         await supabase.from('documents').insert([newDoc]);
-      } catch (err) {
-         alert('Lỗi: ' + err.message);
-      } finally {
-         setUploading(false);
-      }
+      const files = toFileArray(e.target.files);
+      e.target.value = '';
+      await handleTeacherChatAttachmentUpload(files, type);
    };
 
    const getBroadcastClassOptions = () => {
@@ -903,14 +922,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const closeClassBroadcastModal = () => {
       setIsClassBroadcastOpen(false);
       setClassBroadcastText('');
-      setClassBroadcastImage(null);
+      setClassBroadcastMedia([]);
       setClassBroadcastClassId('');
-   };
-
-   const handleClassBroadcastImageChange = (e) => {
-      const selectedFile = e.target.files?.[0] || null;
-      setClassBroadcastImage(selectedFile);
-      e.target.value = '';
    };
 
    const handleBroadcastToClass = async (e) => {
@@ -918,18 +931,14 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (!attendanceUser) return;
 
       const messageText = classBroadcastText.trim();
-      if (false && !messageText && !classBroadcastImage) {
+      const hasBroadcastMedia = classBroadcastMedia.length > 0;
+      if (!messageText && !hasBroadcastMedia) {
          window.alert('Vui lòng nhập nội dung hoặc chọn hình để gửi.');
          return;
       }
 
-      if (!messageText && !classBroadcastImage) {
-         window.alert('Vui l\u00f2ng nh\u1eadp n\u1ed9i dung ho\u1eb7c ch\u1ecdn h\u00ecnh \u0111\u1ec3 g\u1eedi.');
-         return;
-      }
-
       if (!classBroadcastClassId) {
-         window.alert('Vui l\u00f2ng ch\u1ecdn l\u1edbp c\u1ea7n g\u1eedi.');
+         window.alert('Vui lòng chọn lớp cần gửi.');
          return;
       }
 
@@ -938,46 +947,34 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       );
 
       if (classStudents.length === 0) {
-         window.alert('Kh\u00f4ng t\u00ecm th\u1ea5y h\u1ecdc sinh n\u00e0o trong l\u1edbp n\u00e0y.');
+         window.alert('Không tìm thấy học sinh nào trong lớp này.');
          return;
       }
+
       setUploading(true);
       try {
-         let uploadedImageUrl = null;
-         let uploadedImageName = null;
-         let uploadedImageType = null;
+         const staffId = attendanceUser.manv || attendanceUser.username;
+         const uploadedMedia = [];
 
-         if (classBroadcastImage) {
-            let file = classBroadcastImage;
-            try {
-               file = await compressImage(classBroadcastImage, 150);
-            } catch (err) { }
-
-            if (config.r2_enabled) {
-               uploadedImageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-            } else {
-               const fileName = `${classBroadcastClassId || 'class'}_${Date.now()}_${file.name}`;
-               const { error } = await supabase.storage.from('assets').upload(`chat-images/${fileName}`, file);
-               if (error) throw error;
-               const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`chat-images/${fileName}`);
-               uploadedImageUrl = publicUrl;
-            }
-
-            uploadedImageName = classBroadcastImage.name;
-            uploadedImageType = classBroadcastImage.type;
+         for (const file of classBroadcastMedia) {
+            uploadedMedia.push(await uploadManagedFile({
+               file,
+               config,
+               supabase,
+               prefix: classBroadcastClassId || 'class'
+            }));
          }
 
-         const staffId = attendanceUser.manv || attendanceUser.username;
-         const payloads = [{
+         const payloads = (uploadedMedia.length > 0 ? uploadedMedia : [null]).map((attachment) => ({
             malop: classBroadcastClassId,
             manv: staffId,
             title: 'THÔNG BÁO',
             content: messageText,
-            image_url: uploadedImageUrl,
-            file_url: null,
-            file_name: uploadedImageName,
-            file_mime_type: uploadedImageType
-         }];
+            image_url: attachment?.isImage ? attachment.url : null,
+            file_url: attachment && !attachment.isImage ? attachment.url : null,
+            file_name: attachment?.fileName || '',
+            file_mime_type: attachment?.mimeType || ''
+         }));
 
          const { data: insertedAnnouncements, error: insertError } = await supabase.from('class_announcements').insert(payloads).select();
          if (insertError) throw insertError;
@@ -986,23 +983,14 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             await triggerPushNotification(supabase, 'class_announcements', announcement);
          }
 
-         if (false && uploadedImageUrl) {
-            const documentPayloads = classStudents.map((student) => ({
-               mahv: student.mahv,
-               name: uploadedImageName || 'Thong bao lop',
-               category: 'Ảnh',
-               file_url: uploadedImageUrl,
-               mime_type: uploadedImageType
-            }));
-            await supabase.from('documents').insert(documentPayloads);
-         }
-
          closeClassBroadcastModal();
          setTimeout(() => {
             if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
          }, 100);
+         return;
       } catch (err) {
-         window.alert('L\u1ed7i khi g\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp: ' + err.message);
+         window.alert('Lỗi khi gửi thông báo cả lớp: ' + err.message);
+         return;
       } finally {
          setUploading(false);
       }
@@ -1215,15 +1203,50 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
 
             <div style={{ padding: '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe' }}>
-               <form onSubmit={handleAttSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '8px 10px' }}>
+               <form
+                  onSubmit={handleAttSendChat}
+                  onDragEnter={(e) => {
+                     e.preventDefault();
+                     setTeacherChatDropActive(true);
+                  }}
+                  onDragOver={(e) => {
+                     e.preventDefault();
+                     setTeacherChatDropActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                     e.preventDefault();
+                     if (e.currentTarget.contains(e.relatedTarget)) return;
+                     setTeacherChatDropActive(false);
+                  }}
+                  onDrop={async (e) => {
+                     e.preventDefault();
+                     setTeacherChatDropActive(false);
+                     const droppedFiles = toFileArray(e.dataTransfer.files);
+                     if (!droppedFiles.length) return;
+                     const { images, files } = splitFilesByKind(droppedFiles);
+                     if (images.length > 0) await handleTeacherChatAttachmentUpload(images, 'image');
+                     if (files.length > 0) await handleTeacherChatAttachmentUpload(files, 'file');
+                  }}
+                  style={{
+                     display: 'flex',
+                     alignItems: 'center',
+                     gap: '8px',
+                     width: '100%',
+                     background: '#f8fafc',
+                     border: '1px solid #e2e8f0',
+                     borderRadius: '18px',
+                     padding: '8px 10px',
+                     ...(teacherChatDropActive ? { borderColor: '#0f172a', boxShadow: '0 0 0 3px rgba(15, 23, 42, 0.08)' } : {})
+                  }}
+               >
                   <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                      <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Image size={18} />
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'image')} disabled={uploading} />
+                        <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'image')} disabled={uploading} />
                      </label>
                      <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Paperclip size={18} />
-                        <input type="file" style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
+                        <input type="file" multiple style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                      </label>
                   </div>
                   <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: '15px', outline: 'none', color: '#0f172a' }} />
@@ -1596,22 +1619,27 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      />
 
                      <div style={{ display: 'grid', gap: '0.75rem' }}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', padding: '0.85rem 1rem', borderRadius: '14px', border: '1px dashed #f9a8d4', background: '#fdf2f8', color: '#be185d', cursor: 'pointer', fontWeight: 700 }}>
-                           <Image size={18} />
-                           <span>{'Ch\u1ecdn h\u00ecnh th\u00f4ng b\u00e1o'}</span>
-                           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleClassBroadcastImageChange} disabled={uploading} />
-                        </label>
+                        <FileDropZone
+                           files={classBroadcastMedia}
+                           onFilesChange={mergeBroadcastFiles}
+                           accept="image/*"
+                           icon={Image}
+                           accentColor="#be185d"
+                           borderColor="#f9a8d4"
+                           activeBorderColor="#ec4899"
+                           background="#fdf2f8"
+                           textColor="#be185d"
+                           subTextColor="#9a3412"
+                           emptyTitle={'Ch\u1ecdn h\u00ecnh th\u00f4ng b\u00e1o'}
+                           selectedHint={'H\u00ecnh \u0111\u00e3 ch\u1ecdn'}
+                           style={{ padding: '0.85rem 1rem', borderRadius: '14px' }}
+                           disabled={uploading}
+                        />
 
-                        {classBroadcastImage && (
-                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.75rem 0.9rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fed7aa', color: '#9a3412' }}>
-                              <div style={{ minWidth: 0 }}>
-                                 <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>{'H\u00ecnh \u0111\u00e3 ch\u1ecdn'}</div>
-                                 <div style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{classBroadcastImage.name}</div>
-                              </div>
-                              <button type="button" onClick={() => setClassBroadcastImage(null)} style={{ border: 'none', background: 'transparent', color: '#9a3412', cursor: 'pointer', fontWeight: 700 }}>
-                                 {'B\u1ecf'}
-                              </button>
-                           </div>
+                        {classBroadcastMedia.length > 0 && (
+                           <button type="button" onClick={() => setClassBroadcastMedia([])} style={{ border: '1px solid #fed7aa', background: '#fff7ed', color: '#9a3412', cursor: 'pointer', fontWeight: 700, borderRadius: '12px', padding: '0.75rem 0.9rem' }}>
+                              {'B\u1ecf'}
+                           </button>
                         )}
                      </div>
 
@@ -1621,8 +1649,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         </button>
                         <button
                            type="submit"
-                           disabled={uploading || (!classBroadcastText.trim() && !classBroadcastImage)}
-                           style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && !classBroadcastImage) ? 0.65 : 1 }}
+                           disabled={uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0)}
+                           style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0) ? 0.65 : 1 }}
                         >
                            {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                            <span>{'G\u1eedi t\u1edbi c\u1ea3 l\u1edbp'}</span>
@@ -1637,3 +1665,4 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 }
 
 export default TeacherPortal;
+

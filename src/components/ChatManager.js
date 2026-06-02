@@ -2,8 +2,9 @@
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { uploadToR2, deleteFromR2 } from '../utils/cloudflareR2';
+import { deleteFromR2 } from '../utils/cloudflareR2';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import {
@@ -37,7 +38,7 @@ import {
   Utensils,
   Upload
 } from 'lucide-react';
-import { compressImage } from '../utils/imageUtils';
+import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 import './ChatManager.css';
 
 const ChatManager = ({ currentUser }) => {
@@ -112,17 +113,17 @@ const ChatManager = ({ currentUser }) => {
   const [forwardSearch, setForwardSearch] = useState('');
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState({ content: '', type: 'all', selectedClasses: [] });
-  const [announcementFiles, setAnnouncementFiles] = useState({ image: null, file: null });
+  const [announcementFiles, setAnnouncementFiles] = useState({ images: [], files: [] });
 
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
-  const [menuFiles, setMenuFiles] = useState({ image: null });
+  const [menuFiles, setMenuFiles] = useState({ attachments: [] });
   const [menuForm, setMenuForm] = useState({ type: 'all', selectedClasses: [] });
   
   const [isNgoaiKhoaModalOpen, setIsNgoaiKhoaModalOpen] = useState(false);
   const [isChuongTrinhHocModalOpen, setIsChuongTrinhHocModalOpen] = useState(false);
-  const [chuongTrinhHocFiles, setChuongTrinhHocFiles] = useState({ image: null });
+  const [chuongTrinhHocFiles, setChuongTrinhHocFiles] = useState({ attachments: [] });
   const [chuongTrinhHocForm, setChuongTrinhHocForm] = useState({ type: 'all', selectedClasses: [] });
-  const [ngoaiKhoaFiles, setNgoaiKhoaFiles] = useState({ image: null });
+  const [ngoaiKhoaFiles, setNgoaiKhoaFiles] = useState({ attachments: [] });
   const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({ 
     type: 'all', 
     selectedClasses: [],
@@ -136,8 +137,94 @@ const ChatManager = ({ currentUser }) => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyNotices, setHistoryNotices] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [chatDropActive, setChatDropActive] = useState(false);
   
   const scrollRef = useRef();
+
+  const mergeStateFiles = (setter, key, incomingFiles) => {
+    setter(prev => ({
+      ...prev,
+      [key]: mergeFileLists(prev[key] || [], toFileArray(incomingFiles))
+    }));
+  };
+
+  const buildAnnouncementTargets = (formState) => {
+    if (formState.type === 'all') return classes.map(c => c.malop);
+    return formState.selectedClasses;
+  };
+
+  const uploadAttachments = async (files, prefix) => {
+    const uploads = [];
+    for (const file of files) {
+      uploads.push(await uploadManagedFile({
+        file,
+        config,
+        supabase,
+        prefix
+      }));
+    }
+    return uploads;
+  };
+
+  const handleChatAttachmentUpload = async (selectedFiles, forcedType = null) => {
+    const files = toFileArray(selectedFiles);
+    if (!files.length || !selectedStudent) return;
+
+    setUploading(true);
+    try {
+      const insertedMessages = [];
+      const documentPayloads = [];
+
+      for (const file of files) {
+        const upload = await uploadManagedFile({
+          file,
+          config,
+          supabase,
+          prefix: selectedStudent.mahv
+        });
+
+        const attachmentType = forcedType || (upload.isImage ? 'image' : 'file');
+        const msgPayload = {
+          mahv: selectedStudent.mahv,
+          manv: currentUser.manv || currentUser.username,
+          content: '',
+          image_url: attachmentType === 'image' ? upload.url : null,
+          file_url: attachmentType !== 'image' ? upload.url : null,
+          file_name: upload.fileName,
+          file_mime_type: upload.mimeType
+        };
+
+        const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
+        if (error) throw error;
+        if (data?.[0]) {
+          insertedMessages.push(data[0]);
+          documentPayloads.push({
+            mahv: selectedStudent.mahv,
+            name: upload.fileName,
+            category: attachmentType === 'image' ? 'Ảnh' : 'Tài liệu',
+            file_url: upload.url,
+            mime_type: upload.mimeType
+          });
+        }
+      }
+
+      for (const message of insertedMessages) {
+        await triggerPushNotification(supabase, 'hv_messages', message);
+      }
+
+      if (documentPayloads.length > 0) {
+        const { data: docData, error: docError } = await supabase.from('documents').insert(documentPayloads).select();
+        if (docError) throw docError;
+        if (docData?.length) setDocuments(prev => [...docData, ...prev]);
+      }
+
+      setTimeout(scrollToBottom, 50);
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const getStaffDisplayName = (staffId) => {
     if (!staffId) return 'Nhà trường';
@@ -498,70 +585,9 @@ const ChatManager = ({ currentUser }) => {
   };
 
   const handleFileUpload = async (e, type) => {
-    const file = e.target.files[0];
-    if (!file || !selectedStudent) return;
-
-    setUploading(true);
-    try {
-      let fileToUpload = file;
-      if (type === 'image') {
-        try {
-          const compressed = await compressImage(file, 150);
-          fileToUpload = compressed;
-        } catch (err) {
-          console.error('Compression failed, using original file:', err);
-        }
-      }
-
-      let finalUrl = '';
-      if (config.r2_enabled) {
-        finalUrl = await uploadToR2(
-          fileToUpload,
-          config.r2_endpoint,
-          config.r2_access_key_id,
-          config.r2_secret_access_key,
-          config.r2_bucket_name,
-          config.r2_public_url
-        );
-      } else {
-        const fileName = `${selectedStudent.mahv}_${Date.now()}_${fileToUpload.name}`;
-        const folder = type === 'image' ? 'chat-images' : 'chat-files';
-        const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, fileToUpload);
-        if (error) throw error;
-        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
-        finalUrl = publicUrl;
-      }
-
-      const msgPayload = {
-        mahv: selectedStudent.mahv,
-        manv: currentUser.manv || currentUser.username,
-        content: '',
-        image_url: type === 'image' ? finalUrl : null,
-        file_url: type !== 'image' ? finalUrl : null,
-        file_name: fileToUpload.name,
-        file_mime_type: fileToUpload.type
-      };
-
-      const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-      if (data) {
-        await triggerPushNotification(supabase, 'hv_messages', data[0]);
-      }
-
-      const newDoc = {
-        mahv: selectedStudent.mahv,
-        name: file.name,
-        category: type === 'image' ? 'Ảnh' : 'Tài liệu',
-        file_url: finalUrl,
-        mime_type: file.type
-      };
-
-      const { data: docData } = await supabase.from('documents').insert([newDoc]).select();
-      if (docData) setDocuments(prev => [docData[0], ...prev]);
-    } catch (err) {
-      alert('Lỗi: ' + err.message);
-    } finally {
-      setUploading(false);
-    }
+    const files = toFileArray(e.target.files);
+    e.target.value = '';
+    await handleChatAttachmentUpload(files, type);
   };
 
   const formatTime = (date) => {
@@ -729,7 +755,7 @@ const ChatManager = ({ currentUser }) => {
   };
 
   const handlePostAnnouncement = async () => {
-    if (!announcementForm.content.trim() && !announcementFiles.image && !announcementFiles.file) {
+    if (!announcementForm.content.trim() && announcementFiles.images.length === 0 && announcementFiles.files.length === 0) {
       alert('Vui lòng nhập nội dung hoặc chọn tệp tin thông báo.');
       return;
     }
@@ -741,45 +767,29 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
-      let imageUrl = null;
-      let fileUrl = null;
-      let fileName = '';
-      let mimeType = '';
-
-      // Handle Uploads
-      if (announcementFiles.image) {
-         imageUrl = await uploadToR2(announcementFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-         fileName = announcementFiles.image.name;
-         mimeType = announcementFiles.image.type;
-      }
-      if (announcementFiles.file) {
-         fileUrl = await uploadToR2(announcementFiles.file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-         fileName = announcementFiles.file.name;
-         mimeType = announcementFiles.file.type;
-      }
-
-      // Target classes
-      let targetClasses = [];
-      if (announcementForm.type === 'all') {
-        targetClasses = classes.map(c => c.malop);
-      } else {
-        targetClasses = announcementForm.selectedClasses;
-      }
+      const targetClasses = buildAnnouncementTargets(announcementForm);
 
       if (targetClasses.length === 0) {
         alert('Không tìm thấy lớp nào để đăng thông báo.');
         return;
       }
 
-      const payloads = targetClasses.map(malop => ({
-        malop,
-        manv: currentUser.manv || currentUser.username,
-        content: announcementForm.content,
-        image_url: imageUrl,
-        file_url: fileUrl,
-        file_name: fileName,
-        file_mime_type: mimeType
-      }));
+      const uploadedAttachments = await uploadAttachments(
+        [...announcementFiles.images, ...announcementFiles.files],
+        'announcement'
+      );
+      const attachmentItems = uploadedAttachments.length > 0 ? uploadedAttachments : [null];
+      const payloads = targetClasses.flatMap(malop =>
+        attachmentItems.map(attachment => ({
+          malop,
+          manv: currentUser.manv || currentUser.username,
+          content: announcementForm.content,
+          image_url: attachment?.isImage ? attachment.url : null,
+          file_url: attachment && !attachment.isImage ? attachment.url : null,
+          file_name: attachment?.fileName || '',
+          file_mime_type: attachment?.mimeType || ''
+        }))
+      );
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -792,7 +802,7 @@ const ChatManager = ({ currentUser }) => {
       alert(`Đã đăng bảng tin thành công tới ${targetClasses.length} lớp học.`);
       setIsAnnouncementModalOpen(false);
       setAnnouncementForm({ content: '', type: 'all', selectedClasses: [] });
-      setAnnouncementFiles({ image: null, file: null });
+      setAnnouncementFiles({ images: [], files: [] });
     } catch (err) {
       alert('Lỗi: ' + err.message);
     } finally {
@@ -801,7 +811,7 @@ const ChatManager = ({ currentUser }) => {
   };
 
   const handlePostMenu = async () => {
-    if (!menuFiles.image) {
+    if (menuFiles.attachments.length === 0) {
       alert('Vui lòng chọn hình ảnh thực đơn.');
       return;
     }
@@ -813,29 +823,23 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
-      // 1. Upload Image
-      const imageUrl = await uploadToR2(menuFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-
-      // 2. Target classes
-      let targetClasses = [];
-      if (menuForm.type === 'all') {
-        targetClasses = classes.map(c => c.malop);
-      } else {
-        targetClasses = menuForm.selectedClasses;
-      }
+      const targetClasses = buildAnnouncementTargets(menuForm);
 
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
-      // 3. Insert into class_announcements
-      const payloads = targetClasses.map(malop => ({
-        malop,
-        manv: currentUser.manv || currentUser.username,
-        title: 'THỰC ĐƠN',
-        content: 'Thực đơn hàng tuần / hàng ngày',
-        image_url: imageUrl,
-        file_name: menuFiles.image.name,
-        file_mime_type: menuFiles.image.type
-      }));
+      const uploadedAttachments = await uploadAttachments(menuFiles.attachments, 'menu');
+      const payloads = targetClasses.flatMap(malop =>
+        uploadedAttachments.map(attachment => ({
+          malop,
+          manv: currentUser.manv || currentUser.username,
+          title: 'THỰC ĐƠN',
+          content: 'Thực đơn hàng tuần / hàng ngày',
+          image_url: attachment.isImage ? attachment.url : null,
+          file_url: attachment.isImage ? null : attachment.url,
+          file_name: attachment.fileName,
+          file_mime_type: attachment.mimeType
+        }))
+      );
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -847,7 +851,7 @@ const ChatManager = ({ currentUser }) => {
 
       alert(`Đã gửi thực đơn thành công tới ${targetClasses.length} lớp.`);
       setIsMenuModalOpen(false);
-      setMenuFiles({ image: null });
+      setMenuFiles({ attachments: [] });
     } catch (err) {
       alert('Lỗi khi gửi thực đơn: ' + err.message);
     } finally {
@@ -856,7 +860,7 @@ const ChatManager = ({ currentUser }) => {
   };
 
   const handlePostChuongTrinhHoc = async () => {
-    if (!chuongTrinhHocFiles.image) {
+    if (chuongTrinhHocFiles.attachments.length === 0) {
       alert('Vui lòng chọn hình ảnh chương trình học.');
       return;
     }
@@ -868,26 +872,23 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
-      const imageUrl = await uploadToR2(chuongTrinhHocFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-
-      let targetClasses = [];
-      if (chuongTrinhHocForm.type === 'all') {
-        targetClasses = classes.map(c => c.malop);
-      } else {
-        targetClasses = chuongTrinhHocForm.selectedClasses;
-      }
+      const targetClasses = buildAnnouncementTargets(chuongTrinhHocForm);
 
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
-      const payloads = targetClasses.map(malop => ({
-        malop,
-        manv: currentUser.manv || currentUser.username,
-        title: 'CHƯƠNG TRÌNH HỌC',
-        content: 'Chương trình học',
-        image_url: imageUrl,
-        file_name: chuongTrinhHocFiles.image.name,
-        file_mime_type: chuongTrinhHocFiles.image.type
-      }));
+      const uploadedAttachments = await uploadAttachments(chuongTrinhHocFiles.attachments, 'curriculum');
+      const payloads = targetClasses.flatMap(malop =>
+        uploadedAttachments.map(attachment => ({
+          malop,
+          manv: currentUser.manv || currentUser.username,
+          title: 'CHƯƠNG TRÌNH HỌC',
+          content: 'Chương trình học',
+          image_url: attachment.isImage ? attachment.url : null,
+          file_url: attachment.isImage ? null : attachment.url,
+          file_name: attachment.fileName,
+          file_mime_type: attachment.mimeType
+        }))
+      );
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -899,7 +900,7 @@ const ChatManager = ({ currentUser }) => {
 
       alert(`Đã gửi chương trình học thành công tới ${targetClasses.length} lớp.`);
       setIsChuongTrinhHocModalOpen(false);
-      setChuongTrinhHocFiles({ image: null });
+      setChuongTrinhHocFiles({ attachments: [] });
     } catch (err) {
       alert('Lỗi khi gửi chương trình học: ' + err.message);
     } finally {
@@ -908,7 +909,7 @@ const ChatManager = ({ currentUser }) => {
   };
 
   const handlePostNgoaiKhoa = async () => {
-    if (!ngoaiKhoaFiles.image) {
+    if (ngoaiKhoaFiles.attachments.length === 0) {
       alert('Vui lòng chọn hình ảnh hoạt động ngoại khóa.');
       return;
     }
@@ -920,14 +921,7 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
-      const imageUrl = await uploadToR2(ngoaiKhoaFiles.image, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-
-      let targetClasses = [];
-      if (ngoaiKhoaForm.type === 'all') {
-        targetClasses = classes.map(c => c.malop);
-      } else {
-        targetClasses = ngoaiKhoaForm.selectedClasses;
-      }
+      const targetClasses = buildAnnouncementTargets(ngoaiKhoaForm);
 
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
@@ -949,15 +943,19 @@ const ChatManager = ({ currentUser }) => {
 ${ngoaiKhoaForm.content}
 `.trim();
 
-      const payloads = targetClasses.map(malop => ({
-        malop,
-        manv: currentUser.manv || currentUser.username,
-        title: 'NGOẠI KHÓA',
-        content: combinedContent,
-        image_url: imageUrl,
-        file_name: ngoaiKhoaFiles.image.name,
-        file_mime_type: ngoaiKhoaFiles.image.type
-      }));
+      const uploadedAttachments = await uploadAttachments(ngoaiKhoaFiles.attachments, 'trip');
+      const payloads = targetClasses.flatMap(malop =>
+        uploadedAttachments.map(attachment => ({
+          malop,
+          manv: currentUser.manv || currentUser.username,
+          title: 'NGOẠI KHÓA',
+          content: combinedContent,
+          image_url: attachment.isImage ? attachment.url : null,
+          file_url: attachment.isImage ? null : attachment.url,
+          file_name: attachment.fileName,
+          file_mime_type: attachment.mimeType
+        }))
+      );
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -969,7 +967,7 @@ ${ngoaiKhoaForm.content}
 
       alert(`Đã gửi hoạt động ngoại khóa thành công tới ${targetClasses.length} lớp.`);
       setIsNgoaiKhoaModalOpen(false);
-      setNgoaiKhoaFiles({ image: null });
+      setNgoaiKhoaFiles({ attachments: [] });
       setNgoaiKhoaForm({ 
         type: 'all', 
         selectedClasses: [],
@@ -1154,15 +1152,41 @@ ${ngoaiKhoaForm.content}
                   <button onClick={() => { setEditingMessage(null); setInputText(''); }}><X size={14} /></button>
                 </div>
               )}
-              <form className="chat-input-toolbar" onSubmit={handleSendMessage}>
+              <form
+                className="chat-input-toolbar"
+                onSubmit={handleSendMessage}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setChatDropActive(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setChatDropActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  if (e.currentTarget.contains(e.relatedTarget)) return;
+                  setChatDropActive(false);
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setChatDropActive(false);
+                  const droppedFiles = toFileArray(e.dataTransfer.files);
+                  if (!droppedFiles.length) return;
+                  const { images, files } = splitFilesByKind(droppedFiles);
+                  if (images.length > 0) await handleChatAttachmentUpload(images, 'image');
+                  if (files.length > 0) await handleChatAttachmentUpload(files, 'file');
+                }}
+                style={chatDropActive ? { borderColor: '#10b981', boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.12)' } : undefined}
+              >
                 <div className="toolbar-left">
                    <label className="toolbar-btn">
                       <ImageIcon size={20} />
-                      <input type="file" accept="image/*" hidden onChange={(e) => handleFileUpload(e, 'image')} />
+                      <input type="file" accept="image/*" multiple hidden onChange={(e) => handleFileUpload(e, 'image')} />
                    </label>
                    <label className="toolbar-btn">
                       <Paperclip size={20} />
-                      <input type="file" hidden onChange={(e) => handleFileUpload(e, 'file')} />
+                      <input type="file" multiple hidden onChange={(e) => handleFileUpload(e, 'file')} />
                    </label>
                 </div>
                 <input 
@@ -1721,47 +1745,35 @@ ${ngoaiKhoaForm.content}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                    <div>
                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><ImageIcon size={16} /> Đính kèm ảnh:</label>
-                      <label style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        gap: '8px', 
-                        padding: '12px', 
-                        borderRadius: '10px', 
-                        border: '2px dashed #e2e8f0', 
-                        background: '#f8fafc', 
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        overflow: 'hidden'
-                      }} onMouseOver={e => e.currentTarget.style.borderColor = '#8b5cf6'} onMouseOut={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                        <ImageIcon size={18} style={{ color: '#8b5cf6' }} />
-                        <span style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                           {announcementFiles.image ? announcementFiles.image.name : 'Chọn ảnh thông báo...'}
-                        </span>
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setAnnouncementFiles({...announcementFiles, image: e.target.files[0]})} />
-                      </label>
+                      <FileDropZone
+                        files={announcementFiles.images}
+                        onFilesChange={(files) => mergeStateFiles(setAnnouncementFiles, 'images', files)}
+                        accept="image/*"
+                        filterFiles={(file) => String(file?.type || '').toLowerCase().startsWith('image/')}
+                        icon={ImageIcon}
+                        accentColor="#8b5cf6"
+                        textColor="#4c1d95"
+                        subTextColor="#64748b"
+                        emptyTitle="Chọn ảnh thông báo..."
+                        selectedHint="Chọn ảnh thông báo..."
+                        style={{ padding: '12px', borderRadius: '10px', background: '#f8fafc' }}
+                        listStyle={{ maxHeight: '92px' }}
+                      />
                    </div>
                    <div>
                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><File size={16} /> Đính kèm File:</label>
-                      <label style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        gap: '8px', 
-                        padding: '12px', 
-                        borderRadius: '10px', 
-                        border: '2px dashed #e2e8f0', 
-                        background: '#f8fafc', 
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        overflow: 'hidden'
-                      }} onMouseOver={e => e.currentTarget.style.borderColor = '#8b5cf6'} onMouseOut={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                        <Paperclip size={18} style={{ color: '#8b5cf6' }} />
-                        <span style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                           {announcementFiles.file ? announcementFiles.file.name : 'Chọn tệp đính kèm...'}
-                        </span>
-                        <input type="file" style={{ display: 'none' }} onChange={e => setAnnouncementFiles({...announcementFiles, file: e.target.files[0]})} />
-                      </label>
+                      <FileDropZone
+                        files={announcementFiles.files}
+                        onFilesChange={(files) => mergeStateFiles(setAnnouncementFiles, 'files', files)}
+                        icon={Paperclip}
+                        accentColor="#8b5cf6"
+                        textColor="#4c1d95"
+                        subTextColor="#64748b"
+                        emptyTitle="Chọn tệp đính kèm..."
+                        selectedHint="Chọn tệp đính kèm..."
+                        style={{ padding: '12px', borderRadius: '10px', background: '#f8fafc' }}
+                        listStyle={{ maxHeight: '92px' }}
+                      />
                    </div>
                 </div>
              </div>
@@ -1856,34 +1868,21 @@ ${ngoaiKhoaForm.content}
 
                 <div>
                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh thực đơn:</label>
-                   <label style={{ 
-                     display: 'flex', 
-                     flexDirection: 'column',
-                     alignItems: 'center', 
-                     justifyContent: 'center', 
-                     gap: '12px', 
-                     padding: '30px', 
-                     borderRadius: '16px', 
-                     border: '2px dashed #10b981', 
-                     background: '#f0fdf4', 
-                     cursor: 'pointer',
-                     transition: 'all 0.2s'
-                   }}>
-                     {menuFiles.image ? (
-                        <div style={{ textAlign: 'center' }}>
-                           <ImageIcon size={40} style={{ color: '#10b981', marginBottom: '10px' }} />
-                           <div style={{ fontWeight: 700, color: '#065f46' }}>{menuFiles.image.name}</div>
-                           <div style={{ fontSize: '0.8rem', color: '#059669' }}>Nhấn để thay đổi ảnh</div>
-                        </div>
-                     ) : (
-                        <>
-                           <Upload size={40} style={{ color: '#10b981' }} />
-                           <span style={{ fontWeight: 700, color: '#065f46' }}>Chọn hoặc kéo thả ảnh thực đơn vào đây</span>
-                           <span style={{ fontSize: '0.8rem', color: '#059669' }}>Chấp nhận định dạng JPG, PNG, WEBP</span>
-                        </>
-                     )}
-                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setMenuFiles({image: e.target.files[0]})} />
-                   </label>
+                   <FileDropZone
+                     files={menuFiles.attachments}
+                     onFilesChange={(files) => mergeStateFiles(setMenuFiles, 'attachments', files)}
+                     icon={Upload}
+                     accentColor="#10b981"
+                     borderColor="#10b981"
+                     activeBorderColor="#059669"
+                     background="#f0fdf4"
+                     textColor="#065f46"
+                     subTextColor="#059669"
+                     emptyTitle="Chọn hoặc kéo thả ảnh thực đơn vào đây"
+                     emptySubtitle="Chấp nhận định dạng JPG, PNG, WEBP"
+                     selectedHint="Nhấn để thay đổi ảnh"
+                     style={{ padding: '30px' }}
+                   />
                 </div>
              </div>
              <div className="modal-footer">
@@ -1891,7 +1890,7 @@ ${ngoaiKhoaForm.content}
                 <button 
                   className="btn-forward-submit" 
                   style={{ background: '#10b981' }}
-                  disabled={uploading || !menuFiles.image}
+                  disabled={uploading || menuFiles.attachments.length === 0}
                   onClick={handlePostMenu}
                 >
                    {uploading ? <Loader2 size={18} className="spinner" /> : <Utensils size={18} />}
@@ -1977,34 +1976,21 @@ ${ngoaiKhoaForm.content}
 
                 <div>
                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh chương trình học:</label>
-                   <label style={{ 
-                     display: 'flex', 
-                     flexDirection: 'column',
-                     alignItems: 'center', 
-                     justifyContent: 'center', 
-                     gap: '12px', 
-                     padding: '30px', 
-                     borderRadius: '16px', 
-                     border: '2px dashed #0ea5e9', 
-                     background: '#e0f2fe', 
-                     cursor: 'pointer',
-                     transition: 'all 0.2s'
-                   }}>
-                     {chuongTrinhHocFiles.image ? (
-                        <div style={{ textAlign: 'center' }}>
-                           <ImageIcon size={40} style={{ color: '#0ea5e9', marginBottom: '10px' }} />
-                           <div style={{ fontWeight: 700, color: '#0369a1' }}>{chuongTrinhHocFiles.image.name}</div>
-                           <div style={{ fontSize: '0.8rem', color: '#0284c7' }}>Nhấn để thay đổi ảnh</div>
-                        </div>
-                     ) : (
-                        <>
-                           <Upload size={40} style={{ color: '#0ea5e9' }} />
-                           <span style={{ fontWeight: 700, color: '#0369a1' }}>Chọn hoặc kéo thả ảnh vào đây</span>
-                           <span style={{ fontSize: '0.8rem', color: '#0284c7' }}>Chấp nhận định dạng JPG, PNG, WEBP</span>
-                        </>
-                     )}
-                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setChuongTrinhHocFiles({image: e.target.files[0]})} />
-                   </label>
+                   <FileDropZone
+                     files={chuongTrinhHocFiles.attachments}
+                     onFilesChange={(files) => mergeStateFiles(setChuongTrinhHocFiles, 'attachments', files)}
+                     icon={Upload}
+                     accentColor="#0ea5e9"
+                     borderColor="#0ea5e9"
+                     activeBorderColor="#0284c7"
+                     background="#e0f2fe"
+                     textColor="#0369a1"
+                     subTextColor="#0284c7"
+                     emptyTitle="Chọn hoặc kéo thả ảnh vào đây"
+                     emptySubtitle="Chấp nhận định dạng JPG, PNG, WEBP"
+                     selectedHint="Nhấn để thay đổi ảnh"
+                     style={{ padding: '30px' }}
+                   />
                 </div>
              </div>
              <div className="modal-footer">
@@ -2012,7 +1998,7 @@ ${ngoaiKhoaForm.content}
                 <button 
                   className="btn-forward-submit" 
                   style={{ background: '#0ea5e9' }}
-                  disabled={uploading || !chuongTrinhHocFiles.image}
+                  disabled={uploading || chuongTrinhHocFiles.attachments.length === 0}
                   onClick={handlePostChuongTrinhHoc}
                 >
                    {uploading ? <Loader2 size={18} className="spinner" /> : <FileText size={18} />}
@@ -2155,33 +2141,20 @@ ${ngoaiKhoaForm.content}
 
                 <div>
                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh hoạt động:</label>
-                   <label style={{ 
-                     display: 'flex', 
-                     flexDirection: 'column',
-                     alignItems: 'center', 
-                     justifyContent: 'center', 
-                     gap: '12px', 
-                     padding: '20px', 
-                     borderRadius: '16px', 
-                     border: '2px dashed #ec4899', 
-                     background: '#fdf2f8', 
-                     cursor: 'pointer',
-                     transition: 'all 0.2s'
-                   }}>
-                     {ngoaiKhoaFiles.image ? (
-                        <div style={{ textAlign: 'center' }}>
-                           <ImageIcon size={40} style={{ color: '#ec4899', marginBottom: '10px' }} />
-                           <div style={{ fontWeight: 700, color: '#9d174d' }}>{ngoaiKhoaFiles.image.name}</div>
-                           <div style={{ fontSize: '0.8rem', color: '#be185d' }}>Nhấn để thay đổi ảnh</div>
-                        </div>
-                     ) : (
-                        <>
-                           <Upload size={40} style={{ color: '#ec4899' }} />
-                           <span style={{ fontWeight: 700, color: '#9d174d' }}>Chọn ảnh ngoại khóa</span>
-                        </>
-                     )}
-                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setNgoaiKhoaFiles({image: e.target.files[0]})} />
-                   </label>
+                   <FileDropZone
+                     files={ngoaiKhoaFiles.attachments}
+                     onFilesChange={(files) => mergeStateFiles(setNgoaiKhoaFiles, 'attachments', files)}
+                     icon={Upload}
+                     accentColor="#ec4899"
+                     borderColor="#ec4899"
+                     activeBorderColor="#be185d"
+                     background="#fdf2f8"
+                     textColor="#9d174d"
+                     subTextColor="#be185d"
+                     emptyTitle="Chọn ảnh ngoại khóa"
+                     selectedHint="Nhấn để thay đổi ảnh"
+                     style={{ padding: '20px' }}
+                   />
                 </div>
              </div>
              <div className="modal-footer">
@@ -2189,7 +2162,7 @@ ${ngoaiKhoaForm.content}
                 <button 
                   className="btn-forward-submit" 
                   style={{ background: '#ec4899' }}
-                  disabled={uploading || !ngoaiKhoaFiles.image}
+                  disabled={uploading || ngoaiKhoaFiles.attachments.length === 0}
                   onClick={handlePostNgoaiKhoa}
                 >
                    {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
