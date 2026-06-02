@@ -138,6 +138,8 @@ const ChatManager = ({ currentUser }) => {
   const [historyNotices, setHistoryNotices] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [chatDropActive, setChatDropActive] = useState(false);
+  const [isMobileChatView, setIsMobileChatView] = useState(() => window.innerWidth <= 768);
+  const mobileChatPanelHeight = '90dvh';
   
   const scrollRef = useRef();
 
@@ -258,6 +260,12 @@ const ChatManager = ({ currentUser }) => {
     }
     return () => window.removeEventListener('click', handleClickOutside);
   }, [activeMenu]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileChatView(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // ----- Initial Data Fetching -----
   useEffect(() => {
@@ -1022,8 +1030,11 @@ ${ngoaiKhoaForm.content}
 
   if (view === 'chat' && selectedStudent) {
     return (
-      <div className="chat-manager-layout chat-thread-view">
-        <div className="chat-col chat-main-col" style={{ flex: 1 }}>
+      <div
+        className={`chat-manager-layout chat-thread-view ${isMobileChatView ? 'chat-thread-mobile' : ''}`}
+        style={isMobileChatView ? { height: mobileChatPanelHeight, minHeight: mobileChatPanelHeight, maxHeight: mobileChatPanelHeight } : undefined}
+      >
+        <div className="chat-col chat-main-col" style={{ flex: 1, minHeight: 0 }}>
           <div className="chat-main-header">
             <div className="header-left">
               <button className="back-to-dashboard" onClick={() => setView('dashboard')}>
@@ -1203,75 +1214,77 @@ ${ngoaiKhoaForm.content}
           </div>
         </div>
 
-        <div className="chat-col details-col" style={{ width: '300px' }}>
-          <div className="details-header">
-             <div className="large-avatar-circle" style={{ backgroundColor: '#ec4899' }}>
-               {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <span>{getInitials(selectedStudent.tenhv)}</span>}
-             </div>
-             <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtme || '--'} - {selectedStudent.className}</h3>
-          </div>
-          
-          <div className="details-body scrollable">
-             <div className="details-section">
-                <h4 className="section-header-title"><LayoutGrid size={18} /> Thông tin khách hàng</h4>
-                <div className="info-list-modern">
-                   <div className="info-item-modern"><User size={16} /> <span>{selectedStudent.tenhv}</span></div>
-                   <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtme || '--'}</span></div>
-                   <div className="info-item-modern"><MapPin size={16} /> <span>{selectedStudent.diachi || 'N/A'}</span></div>
-                   <div className="info-item-modern"><FileText size={16} /> <span>{selectedStudent.className}</span></div>
-                </div>
-             </div>
+        {!isMobileChatView && (
+          <div className="chat-col details-col" style={{ width: '300px' }}>
+            <div className="details-header">
+               <div className="large-avatar-circle" style={{ backgroundColor: '#ec4899' }}>
+                 {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <span>{getInitials(selectedStudent.tenhv)}</span>}
+               </div>
+               <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtme || '--'} - {selectedStudent.className}</h3>
+            </div>
+            
+            <div className="details-body scrollable">
+               <div className="details-section">
+                  <h4 className="section-header-title"><LayoutGrid size={18} /> Thông tin khách hàng</h4>
+                  <div className="info-list-modern">
+                     <div className="info-item-modern"><User size={16} /> <span>{selectedStudent.tenhv}</span></div>
+                     <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtme || '--'}</span></div>
+                     <div className="info-item-modern"><MapPin size={16} /> <span>{selectedStudent.diachi || 'N/A'}</span></div>
+                     <div className="info-item-modern"><FileText size={16} /> <span>{selectedStudent.className}</span></div>
+                  </div>
+               </div>
 
-             <div className="details-divider"></div>
+               <div className="details-divider"></div>
 
-              <div className="details-section">
-                <h4 className="section-header-title"><File size={18} /> Kho lưu trữ</h4>
-                <div className="storage-tabs-modern">
-                   <button 
-                     className={`storage-tab ${storageTab === 'image' ? 'active' : ''}`}
-                     onClick={() => setStorageTab('image')}
-                   >
-                     Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})
-                   </button>
-                   <button 
-                     className={`storage-tab ${storageTab === 'file' ? 'active' : ''}`}
-                     onClick={() => setStorageTab('file')}
-                   >
-                     File ({documents.filter(d => d.category !== 'Ảnh').length})
-                   </button>
-                </div>
-                
-                <div className="storage-content-modern scrollable" style={{ maxHeight: '300px', marginTop: '12px' }}>
-                   {storageTab === 'image' ? (
-                     <div className="image-grid-storage">
-                        {documents.filter(d => d.category === 'Ảnh').length > 0 ? (
-                           documents.filter(d => d.category === 'Ảnh').map(img => (
-                             <div key={img.id} className="storage-img-item" onClick={() => setPreviewImage(img.file_url)}>
-                                <img src={getDisplayUrl(img.file_url)} alt={img.name} referrerPolicy="no-referrer" />
-                             </div>
-                           ))
-                        ) : (
-                          <div className="empty-storage-msg">Chưa có hình ảnh nào</div>
-                        )}
-                     </div>
-                   ) : (
-                     <div className="file-list-storage">
-                        {documents.filter(d => d.category !== 'Ảnh').length > 0 ? (
-                           documents.filter(d => d.category !== 'Ảnh').map(f => (
-                             <div key={f.id} className="storage-file-item" onClick={() => window.open(f.file_url)}>
-                                <FileText size={16} />
-                                <span className="file-name-truncated" title={f.name}>{f.name}</span>
-                             </div>
-                           ))
-                        ) : (
-                          <div className="empty-storage-msg">Chưa có file nào</div>
-                        )}
-                     </div>
-                   )}
-                </div>
-             </div>
+                <div className="details-section">
+                  <h4 className="section-header-title"><File size={18} /> Kho lưu trữ</h4>
+                  <div className="storage-tabs-modern">
+                     <button 
+                       className={`storage-tab ${storageTab === 'image' ? 'active' : ''}`}
+                       onClick={() => setStorageTab('image')}
+                     >
+                       Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})
+                     </button>
+                     <button 
+                       className={`storage-tab ${storageTab === 'file' ? 'active' : ''}`}
+                       onClick={() => setStorageTab('file')}
+                     >
+                       File ({documents.filter(d => d.category !== 'Ảnh').length})
+                     </button>
+                  </div>
+                  
+                  <div className="storage-content-modern scrollable" style={{ maxHeight: '300px', marginTop: '12px' }}>
+                     {storageTab === 'image' ? (
+                       <div className="image-grid-storage">
+                          {documents.filter(d => d.category === 'Ảnh').length > 0 ? (
+                             documents.filter(d => d.category === 'Ảnh').map(img => (
+                               <div key={img.id} className="storage-img-item" onClick={() => setPreviewImage(img.file_url)}>
+                                  <img src={getDisplayUrl(img.file_url)} alt={img.name} referrerPolicy="no-referrer" />
+                               </div>
+                             ))
+                          ) : (
+                            <div className="empty-storage-msg">Chưa có hình ảnh nào</div>
+                          )}
+                       </div>
+                     ) : (
+                       <div className="file-list-storage">
+                          {documents.filter(d => d.category !== 'Ảnh').length > 0 ? (
+                             documents.filter(d => d.category !== 'Ảnh').map(f => (
+                               <div key={f.id} className="storage-file-item" onClick={() => window.open(f.file_url)}>
+                                  <FileText size={16} />
+                                  <span className="file-name-truncated" title={f.name}>{f.name}</span>
+                               </div>
+                             ))
+                          ) : (
+                            <div className="empty-storage-msg">Chưa có file nào</div>
+                          )}
+                       </div>
+                     )}
+                  </div>
+               </div>
+            </div>
           </div>
-        </div>
+        )}
         
         {previewImage && (
           <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
