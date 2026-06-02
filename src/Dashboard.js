@@ -44,8 +44,8 @@ const ALL_TABS = [
     label: 'Quản lý thu chi',
     icon: Wallet,
     subTabs: [
-      { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'hoadon', label: 'QL phiếu thu HP' },
+      { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
     ]
@@ -92,7 +92,7 @@ function Dashboard() {
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [employeesMap, setEmployeesMap] = useState({});
-   useEffect(() => {
+  useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
@@ -109,7 +109,7 @@ function Dashboard() {
 
   const getVisibleTabs = () => {
     if (!user) return [];
-    
+
     // First apply global config flags
     let filtered = ALL_TABS;
     if (config) {
@@ -141,7 +141,7 @@ function Dashboard() {
     const handleLog = (e) => {
       const mota = e.detail?.mota || '';
       if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
-      
+
       const newLog = { ...e.detail, isLocal: true };
       setLogs(prev => {
         // Avoid local duplicate if id matches something later, wait simple push
@@ -209,7 +209,7 @@ function Dashboard() {
           .from('tbl_lop')
           .select('malop')
           .or(`manv.eq.${user.manv},manv.eq.${user.username},manv.eq.${user.tennv}`);
-        
+
         if (teacherClasses && teacherClasses.length > 0) {
           const classIds = teacherClasses.map(c => c.malop);
           const { data: myStudents } = await supabase
@@ -231,13 +231,13 @@ function Dashboard() {
         .from('hv_messages')
         .select('content, manv, description, mahv')
         .is('is_read', false);
-      
+
       if (studentIds) {
         query = query.in('mahv', studentIds);
       }
-        
+
       const { data } = await query;
-        
+
       if (data) {
         let count = 0;
         data.forEach(d => {
@@ -256,10 +256,10 @@ function Dashboard() {
         }
       }
     };
-    
+
     if (user) {
       fetchUnreadChatCount();
-      
+
       const chatChannel = supabase.channel('global_chat_unread')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
           const isPH = payload.new.description === 'PH' || (!payload.new.manv);
@@ -281,7 +281,7 @@ function Dashboard() {
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => fetchUnreadChatCount())
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => fetchUnreadChatCount())
         .subscribe();
-        
+
       return () => {
         window.removeEventListener('app_log_inserted', handleLog);
         if (channel) supabase.removeChannel(channel);
@@ -434,11 +434,11 @@ function Dashboard() {
                                   let actionLabel = actionType.includes('nhập mới') ? 'Đã thêm' : (actionType.includes('sửa') ? 'Đã cập nhật' : (actionType.includes('xóa') ? 'Đã xóa' : actionType));
                                   let tableLabel = tableNames[table] || table;
                                   let res = `${actionLabel} ${tableLabel.toLowerCase()}`;
-                                  
+
                                   // Add detail if available in our new format
                                   const detailMatch = m.match(/\| Chi tiết: (.*?)(?: \||$|\()/);
                                   if (detailMatch) res += `: ${detailMatch[1]}`;
-                                  
+
                                   return res;
                                 }
                                 return m;
