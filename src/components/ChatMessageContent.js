@@ -112,6 +112,7 @@ const LinkPreviewCard = ({ url, isOwnMessage }) => {
           border: isOwnMessage ? '1px solid rgba(255,255,255,0.25)' : '1px solid #e2e8f0',
           borderRadius: '14px',
           overflow: 'hidden',
+          width: '100%',
           maxWidth: '320px'
         }}
       >
@@ -184,6 +185,7 @@ const LinkPreviewCard = ({ url, isOwnMessage }) => {
         background: isOwnMessage ? 'rgba(255,255,255,0.14)' : '#f8fafc',
         border: isOwnMessage ? '1px solid rgba(255,255,255,0.25)' : '1px solid #e2e8f0',
         borderRadius: '14px',
+        width: '100%',
         maxWidth: '320px'
       }}
     >
@@ -238,8 +240,8 @@ function ChatMessageContent({ content, isOwnMessage = false }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', minWidth: 0 }}>
+      <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0 }}>
         {segments.map((segment, index) => {
           if (segment.type === 'link') {
             return (

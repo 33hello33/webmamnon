@@ -23,6 +23,7 @@ function ChatMediaAttachment({ fileUrl, fileName, mimeType, isOwnMessage = false
           overflow: 'hidden',
           border: '1px solid rgba(148, 163, 184, 0.3)',
           background: '#0f172a',
+          width: '100%',
           maxWidth: '100%'
         }}
       >
@@ -31,7 +32,7 @@ function ChatMediaAttachment({ fileUrl, fileName, mimeType, isOwnMessage = false
           controls
           playsInline
           preload="metadata"
-          style={{ display: 'block', width: '100%', maxWidth: '320px', maxHeight: '360px', background: '#000' }}
+          style={{ display: 'block', width: '100%', height: 'auto', maxWidth: '320px', maxHeight: '360px', background: '#000', objectFit: 'contain' }}
         />
         <a
           href={fileUrl}
@@ -42,6 +43,7 @@ function ChatMediaAttachment({ fileUrl, fileName, mimeType, isOwnMessage = false
             alignItems: 'center',
             gap: '8px',
             padding: '10px 12px',
+            width: '100%',
             color: 'white',
             textDecoration: 'none',
             background: 'rgba(15, 23, 42, 0.92)',
@@ -50,7 +52,7 @@ function ChatMediaAttachment({ fileUrl, fileName, mimeType, isOwnMessage = false
           }}
         >
           <Download size={16} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {fileName || 'Mở video ở tab mới'}
           </span>
         </a>
@@ -73,11 +75,13 @@ function ChatMediaAttachment({ fileUrl, fileName, mimeType, isOwnMessage = false
         color: isOwnMessage ? 'white' : '#1e293b',
         borderRadius: '12px',
         textDecoration: 'none',
-        fontSize: '0.85rem'
+        fontSize: '0.85rem',
+        width: '100%',
+        maxWidth: '100%'
       }}
     >
       <FileText size={18} />
-      <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {fileName || 'Tài liệu'}
       </span>
       <Download size={16} />

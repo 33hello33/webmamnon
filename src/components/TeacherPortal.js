@@ -1327,7 +1327,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
                      const senderName = getTeacherChatSenderName(m);
                      return (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', width: '100%', maxWidth: isMobileChatView ? '96%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', overflowX: 'hidden', minWidth: 0 }}>
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isMobileChatView ? '100%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', minWidth: 0 }}>
                            <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800, lineHeight: 1.35, wordBreak: 'break-word' }}>
                               {senderName}
                            </div>
@@ -1341,17 +1341,20 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                  boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
                                  fontSize: isMobileChatView ? '0.9rem' : '0.92rem',
                                  lineHeight: 1.5,
+                                 width: 'fit-content',
                                  maxWidth: '100%',
+                                 whiteSpace: 'pre-wrap',
+                                 wordBreak: 'break-word',
                                  overflowWrap: 'anywhere'
                               }}>
                                  <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                               </div>
-                           )}
-                           {m.image_url && !isTuitionNoticeChatMessage(m) && (
-                              <div style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white' }}>
-                                 <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '260px', display: 'block' }} />
+                            )}
+                            {m.image_url && !isTuitionNoticeChatMessage(m) && (
+                               <div style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', width: 'fit-content' }}>
+                                 <img src={m.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
                               </div>
-                           )}
+                            )}
                            {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
                            <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
                               {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
