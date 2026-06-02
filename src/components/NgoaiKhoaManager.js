@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
-import { Search, Filter, FileSpreadsheet, Download, RefreshCw, UserCheck, UserX, Clock } from 'lucide-react';
+import { supabase, insertLog } from '../supabase';
+import { Search, Filter, Download, RefreshCw, UserCheck, UserX, Clock, Edit2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-export default function NgoaiKhoaManager() {
+export default function NgoaiKhoaManager({ currentUser }) {
   const [loading, setLoading] = useState(false);
+  const [savingStudent, setSavingStudent] = useState(null);
+  const [editingStudent, setEditingStudent] = useState(null);
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [registrations, setRegistrations] = useState([]);
+  const [drafts, setDrafts] = useState({});
   const [classFilter, setClassFilter] = useState('');
   const [responseFilter, setResponseFilter] = useState('all'); // 'all' | 'registered' | 'not_registered' | 'no_response'
   const [searchTerm, setSearchTerm] = useState('');
 
   const [lastAnnouncementDate, setLastAnnouncementDate] = useState(null);
+  const canManageNgoaiKhoa = currentUser?.role === 'Quản lý';
 
   useEffect(() => {
     fetchData();
@@ -93,11 +97,107 @@ export default function NgoaiKhoaManager() {
     return matchClass && matchSearch && matchResponse;
   });
 
+  const getDraft = (item) => {
+    const existingDraft = drafts[item.mahv];
+    if (existingDraft) return existingDraft;
+
+    return {
+      status: !item.hasResponded ? 'no_response' : (item.codangky ? 'registered' : 'not_registered'),
+      note: item.lydo || ''
+    };
+  };
+
+  const updateDraft = (mahv, patch) => {
+    setDrafts(prev => ({
+      ...prev,
+      [mahv]: {
+        ...(prev[mahv] || {}),
+        ...patch
+      }
+    }));
+  };
+
+  const handleSaveRegistration = async (item) => {
+    const draft = getDraft(item);
+    const note = (draft.note || '').trim();
+    const nextStatus = draft.status;
+
+    if (nextStatus === 'no_response') {
+      window.alert('Please choose registered or not registered before saving.');
+      return;
+    }
+
+    setSavingStudent(item.mahv);
+    try {
+      const payload = {
+        mahv: item.mahv,
+        codangky: nextStatus === 'registered',
+        lydo: note,
+        ngaydangky: new Date().toISOString()
+      };
+
+      let result;
+      if (item.hasResponded && item.ngaydangky) {
+        result = await supabase
+          .from('dangkyngoaikhoa')
+          .update(payload)
+          .eq('mahv', item.mahv)
+          .eq('ngaydangky', item.ngaydangky);
+      } else {
+        result = await supabase
+          .from('dangkyngoaikhoa')
+          .insert([payload]);
+      }
+
+      if (result.error) throw result.error;
+
+      insertLog(`[NGOẠI KHÓA] Cập nhật đăng ký cho học sinh: ${item.mahv}`);
+      setEditingStudent(null);
+      await fetchData();
+    } catch (error) {
+      console.error('Error saving extracurricular registration:', error);
+      window.alert('Save failed.');
+    } finally {
+      setSavingStudent(null);
+    }
+  };
+
   const stats = {
     total: filteredData.length,
     registered: filteredData.filter(i => i.codangky === true).length,
     notRegistered: filteredData.filter(i => i.codangky === false).length,
     noResponse: filteredData.filter(i => !i.hasResponded).length
+  };
+
+  const getStatusMeta = (itemOrStatus) => {
+    const status = typeof itemOrStatus === 'string'
+      ? itemOrStatus
+      : (!itemOrStatus.hasResponded ? 'no_response' : (itemOrStatus.codangky ? 'registered' : 'not_registered'));
+
+    if (status === 'registered') {
+      return {
+        label: 'Đã đăng ký',
+        background: '#dcfce7',
+        color: '#166534',
+        border: '#86efac'
+      };
+    }
+
+    if (status === 'not_registered') {
+      return {
+        label: 'Không tham gia',
+        background: '#fee2e2',
+        color: '#991b1b',
+        border: '#fca5a5'
+      };
+    }
+
+    return {
+      label: 'Chưa phản hồi',
+      background: '#e5e7eb',
+      color: '#374151',
+      border: '#cbd5e1'
+    };
   };
 
   const handleExport = () => {
@@ -224,24 +324,101 @@ export default function NgoaiKhoaManager() {
               </tr>
             ) : filteredData.map((item) => (
               <tr key={item.mahv} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                {(() => {
+                  const isEditing = editingStudent === item.mahv;
+                  const draft = getDraft(item);
+                  const statusMeta = getStatusMeta(isEditing ? draft.status : item);
+
+                  return (
+                    <>
                 <td style={{ padding: '15px' }}>{item.mahv}</td>
                 <td style={{ padding: '15px', fontWeight: 600 }}>{item.tenhv}</td>
                 <td style={{ padding: '15px' }}>{item.className}</td>
                 <td style={{ padding: '15px' }}>
-                  {!item.hasResponded ? (
-                    <span style={{ padding: '4px 10px', borderRadius: '20px', background: '#fef3c7', color: '#92400e', fontSize: '12px', fontWeight: 600 }}>Chưa phản hồi</span>
-                  ) : item.codangky ? (
-                    <span style={{ padding: '4px 10px', borderRadius: '20px', background: '#dcfce7', color: '#166534', fontSize: '12px', fontWeight: 600 }}>Đã đăng ký</span>
+                  {canManageNgoaiKhoa && isEditing ? (
+                    <select
+                      value={draft.status}
+                      onChange={(e) => updateDraft(item.mahv, { status: e.target.value })}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        border: `1px solid ${statusMeta.border}`,
+                        minWidth: '150px',
+                        background: statusMeta.background,
+                        color: statusMeta.color,
+                        fontWeight: 600
+                      }}
+                    >
+                      <option value="no_response">Chưa phản hồi</option>
+                      <option value="registered">Đã đăng ký</option>
+                      <option value="not_registered">Không tham gia</option>
+                    </select>
                   ) : (
-                    <span style={{ padding: '4px 10px', borderRadius: '20px', background: '#fee2e2', color: '#991b1b', fontSize: '12px', fontWeight: 600 }}>Không tham gia</span>
+                    <span
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        background: statusMeta.background,
+                        color: statusMeta.color,
+                        border: `1px solid ${statusMeta.border}`,
+                        fontSize: '12px',
+                        fontWeight: 600
+                      }}
+                    >
+                      {statusMeta.label}
+                    </span>
                   )}
                 </td>
                 <td style={{ padding: '15px', fontSize: '13px', color: '#64748b' }}>
                   {item.ngaydangky ? new Date(item.ngaydangky).toLocaleString('vi-VN') : '-'}
                 </td>
                 <td style={{ padding: '15px', fontSize: '13px', color: '#475569', fontStyle: 'italic' }}>
-                  {item.lydo || '-'}
+                  {canManageNgoaiKhoa && isEditing ? (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={draft.note}
+                        onChange={(e) => updateDraft(item.mahv, { note: e.target.value })}
+                        style={{ flex: 1, minWidth: '180px', padding: '8px 10px', borderRadius: '10px', border: '1px solid #dbe2ea', fontStyle: 'normal' }}
+                      />
+                      <button
+                        onClick={() => handleSaveRegistration(item)}
+                        disabled={savingStudent === item.mahv}
+                        style={{ padding: '8px 12px', borderRadius: '10px', border: 'none', background: '#16a34a', color: 'white', cursor: savingStudent === item.mahv ? 'not-allowed' : 'pointer', opacity: savingStudent === item.mahv ? 0.7 : 1, fontStyle: 'normal' }}
+                      >
+                        {savingStudent === item.mahv ? 'Đang lưu...' : 'Lưu'}
+                      </button>
+                      <button
+                        onClick={() => setEditingStudent(null)}
+                        disabled={savingStudent === item.mahv}
+                        style={{ padding: '8px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', cursor: savingStudent === item.mahv ? 'not-allowed' : 'pointer', opacity: savingStudent === item.mahv ? 0.7 : 1, fontStyle: 'normal' }}
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  ) : canManageNgoaiKhoa ? (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{item.lydo || '-'}</span>
+                      <button
+                        onClick={() => {
+                          updateDraft(item.mahv, {
+                            status: !item.hasResponded ? 'no_response' : (item.codangky ? 'registered' : 'not_registered'),
+                            note: item.lydo || ''
+                          });
+                          setEditingStudent(item.mahv);
+                        }}
+                        style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontStyle: 'normal', fontWeight: 600 }}
+                      >
+                        <Edit2 size={14} /> Edit
+                      </button>
+                    </div>
+                  ) : (
+                    item.lydo || '-'
+                  )}
                 </td>
+                    </>
+                  );
+                })()}
               </tr>
             ))}
           </tbody>

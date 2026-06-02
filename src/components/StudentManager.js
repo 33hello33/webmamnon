@@ -28,7 +28,7 @@ const INITIAL_FORM = {
   hinhthucdong: 'Tiền mặt'
 };
 
-export default function StudentManager({ activeSubTab }) {
+export default function StudentManager({ activeSubTab, currentUser }) {
   const { config } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '' },
@@ -854,7 +854,7 @@ export default function StudentManager({ activeSubTab }) {
         {activeSubTab === 'attendance_today' && <AttendanceToday students={students} classes={classes} />}
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}
-        {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager />}
+        {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager currentUser={currentUser} />}
       </div>
 
       {/* Form Modal */}
