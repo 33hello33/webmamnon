@@ -1049,21 +1049,19 @@ function ParentPortal({ parentData, setParentData }) {
 
       if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true };
 
-      const notifyTime = latestNotify ? new Date(latestNotify.ngaylap).getTime() : 0;
-      const invTime = latestInv ? new Date(latestInv.ngaylap).getTime() : 0;
-
-      if (notifyTime > invTime) {
-         const monthText = getFeePeriodLabel(latestNotify);
+      if (latestInv) {
+         const monthText = getFeePeriodLabel(latestInv);
          return {
-            text: `Cần thanh toán Học phí tháng ${monthText}`,
-            isPaid: false
-         };
-      } else {
-         return {
-            text: 'Học phí đã thanh toán',
+            text: `Học phí đã thanh toán tháng ${monthText}`,
             isPaid: true
          };
       }
+
+      const monthText = getFeePeriodLabel(latestNotify);
+      return {
+         text: `Học phí cần thanh toán tháng ${monthText}`,
+         isPaid: false
+      };
    })();
 
    const fetchHealthHistory = async () => {
