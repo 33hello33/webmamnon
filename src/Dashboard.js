@@ -549,8 +549,8 @@ function Dashboard() {
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}
             {currentTab?.id === 'sales' && activeSubTab === 'products' && <ProductManager currentUser={user} />}
             {currentTab?.id === 'tasks' && <TaskManager />}
-            {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" />}
-            {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} />}
+            {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" currentUser={user} />}
+            {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
             {currentTab?.id === 'system_logs' && <SystemLogs />}

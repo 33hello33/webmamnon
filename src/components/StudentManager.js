@@ -26,7 +26,7 @@ const INITIAL_FORM = {
   username: '', password: ''
 };
 
-export default function StudentManager({ activeSubTab }) {
+export default function StudentManager({ activeSubTab, currentUser }) {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
 
@@ -829,7 +829,7 @@ export default function StudentManager({ activeSubTab }) {
         {activeSubTab === 'attendance_today' && <AttendanceToday students={students} classes={classes} />}
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}
-        {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager />}
+        {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager currentUser={currentUser} />}
       </div>
 
       {/* Form Modal */}
