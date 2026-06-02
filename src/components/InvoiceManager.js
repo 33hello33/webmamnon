@@ -229,20 +229,23 @@ const calculateThoiluong = (inv) => {
    return `${String(start.getMonth() + 1).padStart(2, '0')}/${start.getFullYear()}`;
 };
 
+const getShortStudentName = (name) => {
+   const normalized = String(name || '').trim().replace(/\s+/g, ' ');
+   if (!normalized) return '';
+   const parts = normalized.split(' ');
+   if (parts.length <= 2) return normalized;
+   return parts.slice(-2).join(' ');
+};
+
 const getQRUrl = (hoaDon, walletsConfig) => {
    if (!walletsConfig || !hoaDon.hinhthuc) return null;
    const hinhThucTrim = String(hoaDon.hinhthuc).trim();
    const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-
-      let suffix = '';
-      if (hoaDon.tenhv) {
-         const parts = hoaDon.tenhv.trim().split(' ');
-         suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
-      }
-
-      const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
+      const mahv = String(hoaDon.mahv || '').trim();
+      const shortName = getShortStudentName(hoaDon.tenhv);
+      const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;

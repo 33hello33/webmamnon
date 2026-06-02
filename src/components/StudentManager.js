@@ -171,6 +171,10 @@ export default function StudentManager({ activeSubTab }) {
     const { name, value } = e.target;
     setFormData(prev => {
       const next = { ...prev, [name]: value };
+      if (name === 'trangthai' && value === 'Đã Nghỉ') {
+        next.username = '';
+        next.password = '';
+      }
       if (!isEditMode) {
         if (name === 'tenhv') {
           next.username = generateUsername(value);
@@ -236,6 +240,11 @@ export default function StudentManager({ activeSubTab }) {
       if (!dataToSave.ngaynhaphoc) dataToSave.ngaynhaphoc = null;
       if (!dataToSave.ngaysinhba) dataToSave.ngaysinhba = null;
       if (!dataToSave.ngaysinhme) dataToSave.ngaysinhme = null;
+
+      if (String(dataToSave.trangthai || '').trim() === 'Đã Nghỉ') {
+        dataToSave.username = null;
+        dataToSave.password = null;
+      }
 
       if (isEditMode) {
         const { error } = await supabase.from('tbl_hv').update(dataToSave).eq('mahv', dataToSave.mahv);
