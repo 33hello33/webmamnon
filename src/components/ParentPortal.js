@@ -1637,11 +1637,11 @@ function ParentPortal({ parentData, setParentData }) {
 
          {parentTab !== 'menu' && (
             <div className={parentTab === 'chat-tab' ? 'premium-tab-container chat-mode' : 'premium-tab-container'}>
-               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px', padding: '20px 20px 10px', background: 'white', borderRadius: '24px 24px 0 0' }}>
-                  <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f' }}>
+               <div className="premium-tab-pane-header" style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center', gap: parentTab === 'chat-tab' ? '10px' : '15px', padding: parentTab === 'chat-tab' ? 'calc(12px + env(safe-area-inset-top, 0px)) 12px 12px' : '20px 20px 10px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '24px 24px 0 0', flexShrink: 0, width: '100%', maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
+                  <button onClick={() => setParentTab('menu')} style={{ background: '#f2f2f7', border: 'none', width: '36px', height: '36px', minWidth: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f', flexShrink: 0 }}>
                      <ArrowLeft size={20} />
                   </button>
-                  <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
+                  <h2 style={{ margin: 0, fontSize: parentTab === 'chat-tab' ? '1rem' : '1.2rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                      {parentTab === 'notices-tab' ? 'Bảng tin' :
                         parentTab === 'attendance-tab' ? 'Điểm danh' :
                            parentTab === 'fee-tab' ? 'Học phí' :
@@ -1652,7 +1652,7 @@ function ParentPortal({ parentData, setParentData }) {
                   </h2>
                </div>
 
-               <div className="premium-tab-content-wrapper" style={{ padding: parentTab === 'chat-tab' ? '0' : '20px', background: 'white', borderRadius: '0 0 24px 24px', minHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
+               <div className="premium-tab-content-wrapper" style={{ padding: parentTab === 'chat-tab' ? '0' : '20px', background: 'white', borderRadius: parentTab === 'chat-tab' ? '0' : '0 0 24px 24px', minHeight: parentTab === 'chat-tab' ? '0' : 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'hidden' }}>
                   {parentTab === 'notices-tab' && (
                      <div id="notices-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div className="notices-section">
@@ -2131,12 +2131,12 @@ function ParentPortal({ parentData, setParentData }) {
                                  const isMe = m.description === 'PH';
                                  const senderName = getParentChatSenderName(m);
                                  return (
-                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', minWidth: 0, alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
                                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
                                           {senderName}
                                        </div>
                                        {m.content && (
-                                          <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                          <div style={{ padding: '10px 14px', borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px', background: isMe ? '#ec4899' : 'white', color: isMe ? 'white' : '#1e293b', boxShadow: isMe ? '0 4px 6px -1px rgba(236, 72, 153, 0.2)' : '0 1px 2px 0 rgba(0,0,0,0.05)', fontSize: '0.92rem', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: '100%' }}>
                                              <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                                           </div>
                                        )}
@@ -2159,9 +2159,9 @@ function ParentPortal({ parentData, setParentData }) {
                            <div ref={chatEndRef} />
                         </div>
 
-                        <div style={{ padding: '15px 16px calc(15px + env(safe-area-inset-bottom, 0px))', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0', zIndex: 99 }}>
-                           <form onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{ display: 'flex', gap: '5px' }}>
+                        <div style={{ padding: '12px calc(12px + env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px))', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0', zIndex: 99, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+                           <form onSubmit={handleSendChat} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '100%', minWidth: 0 }}>
+                              <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                                  <label style={{ cursor: 'pointer', padding: '8px', color: '#64748b' }}>
                                     <Image size={22} />
                                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'image')} disabled={uploading} />
@@ -2171,10 +2171,10 @@ function ParentPortal({ parentData, setParentData }) {
                                     <input type="file" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'file')} disabled={uploading} />
                                  </label>
                               </div>
-                              <div style={{ flex: 1, position: 'relative' }}>
-                                 <input type="text" placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={uploading} style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '0.9rem', outline: 'none' }} />
+                              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                                  <input type="text" placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={uploading} style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '0.9rem', outline: 'none' }} />
                               </div>
-                              <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1 }}>
+                              <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', minWidth: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1, flexShrink: 0 }}>
                                  {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
                               </button>
                            </form>
