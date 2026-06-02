@@ -237,6 +237,17 @@ export default function StudentManager({ activeSubTab }) {
       if (!dataToSave.ngaysinhba) dataToSave.ngaysinhba = null;
       if (!dataToSave.ngaysinhme) dataToSave.ngaysinhme = null;
 
+      // Nếu học sinh đã nghỉ học thì xóa username, password và cập nhật ngày nghỉ học
+      if (dataToSave.trangthai === 'Đã Nghỉ') {
+        dataToSave.username = null;
+        dataToSave.password = null;
+        if (!dataToSave.ngaynghihoc) {
+          dataToSave.ngaynghihoc = toLocalISODate();
+        }
+      } else {
+        dataToSave.ngaynghihoc = null;
+      }
+
       if (isEditMode) {
         const { error } = await supabase.from('tbl_hv').update(dataToSave).eq('mahv', dataToSave.mahv);
         if (error) throw error;
@@ -526,6 +537,17 @@ export default function StudentManager({ activeSubTab }) {
 
             if (listMaLop.length > 0) {
               studentData.malop = listMaLop[0];
+            }
+
+            // Nếu học sinh đã nghỉ học thì xóa username, password và cập nhật ngày nghỉ học
+            if (studentData.trangthai === 'Đã Nghỉ') {
+              studentData.username = null;
+              studentData.password = null;
+              if (!studentData.ngaynghihoc) {
+                studentData.ngaynghihoc = toLocalISODate();
+              }
+            } else {
+              studentData.ngaynghihoc = null;
             }
 
             const { error: stUpsertError } = await supabase.from('tbl_hv').upsert(studentData);
