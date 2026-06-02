@@ -44,9 +44,8 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
   const mahv = String(hoaDon.mahv || '').trim();
-  const mahd = String(hoaDon.mahd || '').trim();
   const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || hoaDon.hoten || '');
-  const info = encodeURIComponent([mahd, mahv, shortName].filter(Boolean).join(' '));
+  const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
   return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
 };
 const formatTuition = (val) => {
@@ -847,8 +846,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             const base = getQRUrl({
               ...row,
               mahv: studentId,
-              tenhv: masterStudent.tenhv || row.tenhv,
-              mahd: newMaHD
+              tenhv: masterStudent.tenhv || row.tenhv
             }, walletsConfig);
             const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
             return finalUrl;
