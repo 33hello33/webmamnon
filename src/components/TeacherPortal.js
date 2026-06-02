@@ -192,6 +192,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [teacherAnnouncements, setTeacherAnnouncements] = useState([]);
    const [teacherAnnouncementsLoading, setTeacherAnnouncementsLoading] = useState(false);
    const [teacherChatDropActive, setTeacherChatDropActive] = useState(false);
+   const mobileChatPanelHeight = '90dvh';
 
    const syncAppBadge = (count) => {
       const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -1295,28 +1296,28 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    const renderTeacherChatThread = () => (
-      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', height: '680px', background: '#ffffff', borderRadius: '24px', overflow: 'hidden', overflowX: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
-         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
-            <div style={{ padding: '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
-               <button onClick={() => { setAttChatSelectedStudent(null); setAttChatView('dashboard'); }} style={{ background: 'white', border: '1px solid #dbeafe', width: '36px', height: '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', cursor: 'pointer', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.08)' }}>
+      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', height: isMobileChatView ? '100%' : '680px', minHeight: isMobileChatView ? 0 : '680px', maxHeight: isMobileChatView ? '100%' : '680px', background: '#ffffff', borderRadius: isMobileChatView ? '20px' : '24px', overflow: 'hidden', overflowX: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+            <div style={{ padding: isMobileChatView ? '0.85rem 0.8rem' : '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'flex-start', gap: isMobileChatView ? '10px' : '12px', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+               <button onClick={() => { setAttChatSelectedStudent(null); setAttChatView('dashboard'); }} style={{ background: 'white', border: '1px solid #dbeafe', width: isMobileChatView ? '34px' : '36px', height: isMobileChatView ? '34px' : '36px', minWidth: isMobileChatView ? '34px' : '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', cursor: 'pointer', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.08)' }}>
                   <ArrowLeft size={18} />
                </button>
-               <div style={{ width: '44px', height: '44px', borderRadius: '16px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+               <div style={{ width: isMobileChatView ? '40px' : '44px', height: isMobileChatView ? '40px' : '44px', minWidth: isMobileChatView ? '40px' : '44px', borderRadius: isMobileChatView ? '14px' : '16px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
                   {attChatSelectedStudent.tenhv?.charAt(0)}
                </div>
-               <div style={{ flex: 1, minWidth: 0 }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>{attChatSelectedStudent.tenhv}</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+               <div style={{ flex: 1, minWidth: 0, paddingTop: isMobileChatView ? '1px' : 0 }}>
+                  <h4 style={{ margin: 0, fontSize: isMobileChatView ? '0.96rem' : '1rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.35, overflowWrap: 'anywhere' }}>{attChatSelectedStudent.tenhv}</h4>
+                  <div style={{ display: 'flex', alignItems: isMobileChatView ? 'flex-start' : 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
                      <span style={{ fontSize: '0.74rem', color: '#2563eb', background: 'white', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '4px 8px', fontWeight: 700 }}>Lớp {getClassDisplayName(attChatSelectedStudent.malop)}</span>
-                     <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>Phụ huynh đang trao đổi</span>
+                     <span style={{ fontSize: isMobileChatView ? '0.7rem' : '0.74rem', color: '#64748b', fontWeight: 700, lineHeight: 1.35 }}>Phụ huynh đang trao đổi</span>
                   </div>
                </div>
-               <button style={{ padding: '9px', background: 'white', border: '1px solid #dbeafe', borderRadius: '12px', color: '#2563eb', cursor: 'pointer' }}>
+               <button style={{ padding: isMobileChatView ? '8px' : '9px', background: 'white', border: '1px solid #dbeafe', borderRadius: '12px', color: '#2563eb', cursor: 'pointer', alignSelf: 'center', flexShrink: 0 }}>
                   <Phone size={18} />
                </button>
             </div>
 
-            <div ref={attScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)', width: '100%', maxWidth: '100%', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+            <div ref={attScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: isMobileChatView ? '0.85rem 0.75rem' : '1rem', display: 'flex', flexDirection: 'column', gap: isMobileChatView ? '12px' : '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)', width: '100%', maxWidth: '100%', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                {attChatLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
                ) : attChatMessages.length === 0 ? (
@@ -1326,20 +1327,22 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
                      const senderName = getTeacherChatSenderName(m);
                      return (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', width: '100%', maxWidth: '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', overflowX: 'hidden' }}>
-                           <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800 }}>
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', width: '100%', maxWidth: isMobileChatView ? '96%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', overflowX: 'hidden', minWidth: 0 }}>
+                           <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800, lineHeight: 1.35, wordBreak: 'break-word' }}>
                               {senderName}
                            </div>
                            {m.content && (
                               <div style={{
-                                 padding: '11px 14px',
+                                 padding: isMobileChatView ? '10px 12px' : '11px 14px',
                                  borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                                  background: isMe ? 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)' : 'white',
                                  color: isMe ? 'white' : '#1e293b',
                                  border: isMe ? 'none' : '1px solid #e2e8f0',
                                  boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
-                                 fontSize: '0.92rem',
-                                 lineHeight: 1.5
+                                 fontSize: isMobileChatView ? '0.9rem' : '0.92rem',
+                                 lineHeight: 1.5,
+                                 maxWidth: '100%',
+                                 overflowWrap: 'anywhere'
                               }}>
                                  <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                               </div>
@@ -1359,7 +1362,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                )}
             </div>
 
-            <div style={{ padding: '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+            <div style={{ padding: isMobileChatView ? '0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px))' : '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                <form
                   onSubmit={handleAttSendChat}
                   onDragEnter={(e) => {
@@ -1387,29 +1390,29 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   style={{
                      display: 'flex',
                      alignItems: 'center',
-                     gap: '8px',
+                     gap: isMobileChatView ? '6px' : '8px',
                      width: '100%',
                      maxWidth: '100%',
                      background: '#f8fafc',
                      border: '1px solid #e2e8f0',
                      borderRadius: '18px',
-                     padding: '8px 10px',
+                     padding: isMobileChatView ? '7px 8px' : '8px 10px',
                      overflowX: 'hidden',
                      ...(teacherChatDropActive ? { borderColor: '#0f172a', boxShadow: '0 0 0 3px rgba(15, 23, 42, 0.08)' } : {})
                   }}
                >
                   <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                     <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     <label style={{ cursor: 'pointer', width: isMobileChatView ? '32px' : '34px', height: isMobileChatView ? '32px' : '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Image size={18} />
                         <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'image')} disabled={uploading} />
                      </label>
-                     <label style={{ cursor: 'pointer', width: '34px', height: '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     <label style={{ cursor: 'pointer', width: isMobileChatView ? '32px' : '34px', height: isMobileChatView ? '32px' : '34px', borderRadius: '10px', background: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Paperclip size={18} />
                         <input type="file" multiple style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                      </label>
                   </div>
-                  <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: '16px', outline: 'none', color: '#0f172a' }} />
-                  <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: '40px', height: '40px', minWidth: '40px', flexShrink: 0, borderRadius: '14px', background: '#0f172a', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1, boxShadow: '0 10px 18px rgba(15, 23, 42, 0.18)' }}>
+                  <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: isMobileChatView ? '0.65rem 0.55rem' : '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: isMobileChatView ? '14px' : '16px', outline: 'none', color: '#0f172a' }} />
+                  <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: isMobileChatView ? '38px' : '40px', height: isMobileChatView ? '38px' : '40px', minWidth: isMobileChatView ? '38px' : '40px', flexShrink: 0, borderRadius: '14px', background: '#0f172a', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1, boxShadow: '0 10px 18px rgba(15, 23, 42, 0.18)' }}>
                      {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                   </button>
                </form>
@@ -1420,30 +1423,32 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    return (
       <div className="attendance-portal" style={{ textAlign: 'left', animation: 'fadeIn 0.3s ease' }}>
-         <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-            <div>
-               <h2 style={{ fontSize: '1.4rem', margin: 0 }}>
-                  {attTab === 'menu' ? 'Cổng Giáo Viên'
-                     : attTab === 'attendance' ? 'Điểm Danh Lớp Học'
-                        : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
-                           : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
-                              : attTab === 'curriculum' ? 'Chương Trình Học'
-                                 : 'Trung Tâm Tin Nhắn'}
-               </h2>
-               <p style={{ color: '#64748b', margin: 0, marginTop: '5px' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
+         {attTab !== 'chat' && (
+            <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobileChatView ? 'flex-start' : 'center', flexWrap: isMobileChatView ? 'wrap' : 'nowrap', gap: isMobileChatView ? '0.85rem' : 0, marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+               <div style={{ minWidth: 0, flex: 1 }}>
+                  <h2 style={{ fontSize: isMobileChatView ? '1.2rem' : '1.4rem', margin: 0, lineHeight: 1.25 }}>
+                     {attTab === 'menu' ? 'Cổng Giáo Viên'
+                        : attTab === 'attendance' ? 'Điểm Danh Lớp Học'
+                           : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
+                              : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
+                                 : attTab === 'curriculum' ? 'Chương Trình Học'
+                                    : 'Trung Tâm Tin Nhắn'}
+                  </h2>
+                  <p style={{ color: '#64748b', margin: 0, marginTop: '5px', lineHeight: 1.4, wordBreak: 'break-word' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
+               </div>
+               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  <button onClick={subscribeTeacherPushNotifications} title="Bật thông báo PWA" style={{ width: '36px', height: '36px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
+                     <Bell size={18} />
+                  </button>
+                  <button onClick={() => setIsChangePassOpen(true)} title="Đổi mật khẩu" style={{ width: '36px', height: '36px', background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
+                     <Key size={18} />
+                  </button>
+                  <button onClick={onLogout} title="Đăng xuất" style={{ width: '36px', height: '36px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fee2e2', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
+                     <LogOut size={18} />
+                  </button>
+               </div>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-               <button onClick={subscribeTeacherPushNotifications} title="Bật thông báo PWA" style={{ width: '36px', height: '36px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
-                  <Bell size={18} />
-               </button>
-               <button onClick={() => setIsChangePassOpen(true)} title="Đổi mật khẩu" style={{ width: '36px', height: '36px', background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
-                  <Key size={18} />
-               </button>
-               <button onClick={onLogout} title="Đăng xuất" style={{ width: '36px', height: '36px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fee2e2', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
-                  <LogOut size={18} />
-               </button>
-            </div>
-         </div>
+         )}
 
          {attTab === 'menu' && (
             <div style={{ marginBottom: '1.5rem' }}>
@@ -1492,7 +1497,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {attTab !== 'menu' && (
+         {attTab !== 'menu' && attTab !== 'chat' && (
             <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '12px', padding: '0.75rem 0.2rem' }}>
                <button onClick={() => setAttTab('menu')} style={{ background: '#f1f5f9', border: 'none', width: '34px', height: '34px', borderRadius: '999px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155', cursor: 'pointer' }}>
                   <ArrowLeft size={18} />
@@ -1731,7 +1736,21 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          )}
 
          {attTab === 'chat' && (
-            <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: '600px', width: '100%', maxWidth: '100%', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+            <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: isMobileChatView ? mobileChatPanelHeight : '600px', height: isMobileChatView ? mobileChatPanelHeight : 'auto', display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px', padding: isMobileChatView ? '0 0.1rem' : '0 0.2rem', flexShrink: 0 }}>
+                  <button
+                     type="button"
+                     onClick={() => {
+                        setAttChatSelectedStudent(null);
+                        setAttChatView('dashboard');
+                        setAttTab('menu');
+                     }}
+                     style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: isMobileChatView ? '0.65rem 0.85rem' : '0.7rem 0.95rem', borderRadius: '999px', border: '1px solid #dbeafe', background: 'white', color: '#334155', cursor: 'pointer', fontWeight: 700, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)' }}
+                  >
+                     <ArrowLeft size={16} />
+                     <span>Quay lại</span>
+                  </button>
+               </div>
                {attChatView === 'dashboard' ? renderTeacherChatDashboard() : renderTeacherChatThread()}
             </div>
          )}
