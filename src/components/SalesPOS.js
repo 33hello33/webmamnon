@@ -116,7 +116,7 @@ export default function SalesPOS() {
    const tongCongBill = thanhTien + noCu;
 
    useEffect(() => {
-      setDaDong('0');
+      setDaDong(fCur(tongCongBill));
    }, [tongCongBill]);
 
    const conLai = tongCongBill - pCur(daDong);
