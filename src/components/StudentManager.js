@@ -13,6 +13,7 @@ import NgoaiKhoaManager from './NgoaiKhoaManager';
 import './StudentManager.css';
 import { compressImage } from '../utils/imageUtils';
 import { toLocalISODate } from '../utils/localDate';
+import { useConfig } from '../ConfigContext';
 
 const INITIAL_FORM = {
   mahv: '', tenhv: '', sdtba: '', sdtme: '', ghichu: '',
@@ -23,10 +24,19 @@ const INITIAL_FORM = {
   nghenghiepba: '', nghenghiepme: '',
   ngaysinhba: toLocalISODate(),
   ngaysinhme: toLocalISODate(),
-  username: '', password: ''
+  username: '', password: '',
+  hinhthucdong: 'Tiền mặt'
 };
 
 export default function StudentManager({ activeSubTab }) {
+  const { config } = useConfig();
+  const walletsConfig = React.useMemo(() => (config ? [
+    { id: 'vi1', name: config.vi1?.name || '' },
+    { id: 'vi2', name: config.vi2?.name || '' },
+    { id: 'vi3', name: config.vi3?.name || '' },
+    { id: 'vi4', name: config.vi4?.name || '' }
+  ].filter(w => w.name && w.name.trim() !== '') : []), [config]);
+
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
 
@@ -399,6 +409,7 @@ export default function StudentManager({ activeSubTab }) {
         'Mã Lớp': s.malop,
         'Tên Lớp': classes.find(c => c.malop === s.malop)?.tenlop || s.malop || '',
         'Trạng Thái': s.trangthai,
+        'Hình thức đóng': s.hinhthucdong || 'Tiền mặt',
         'Họ Tên Ba': s.hotenba,
         'SĐT Ba': s.sdtba,
         'Ngày Sinh Ba': s.ngaysinhba,
@@ -446,6 +457,7 @@ export default function StudentManager({ activeSubTab }) {
             'Giới Tính': 'gioitinh',
             'Mã Lớp': 'malop',
             'Trạng Thái': 'trangthai',
+            'Hình thức đóng': 'hinhthucdong',
             'Họ Tên Ba': 'hotenba',
             'SĐT Ba': 'sdtba',
             'Ngày Sinh Ba': 'ngaysinhba',
@@ -934,6 +946,13 @@ export default function StudentManager({ activeSubTab }) {
                     <select name="trangthai" value={formData.trangthai} onChange={handleChange} style={{ fontWeight: 600 }}>
                       <option value="Đang Học">Đang Học</option>
                       <option value="Đã Nghỉ">Đã Nghỉ</option>
+                    </select>
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hình thức thanh toán</label>
+                    <select name="hinhthucdong" value={formData.hinhthucdong || (walletsConfig[0]?.name || 'Tiền mặt')} onChange={handleChange} style={{ fontWeight: 600 }}>
+                      {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                      {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
                   </div>
 

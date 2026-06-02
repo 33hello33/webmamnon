@@ -49,6 +49,14 @@ const calculateThoiluong = (inv) => {
    return `${String(start.getMonth() + 1).padStart(2, '0')}/${start.getFullYear()}`;
 };
 
+const getShortStudentName = (name) => {
+   const normalized = String(name || '').trim().replace(/\s+/g, ' ');
+   if (!normalized) return '';
+   const parts = normalized.split(' ');
+   if (parts.length <= 2) return normalized;
+   return parts.slice(-2).join(' ');
+};
+
 const getQRUrl = (hoaDon, walletsConfig) => {
    if (!walletsConfig || !hoaDon.hinhthuc) return null;
    const hinhThucTrim = String(hoaDon.hinhthuc).trim();
@@ -59,14 +67,8 @@ const getQRUrl = (hoaDon, walletsConfig) => {
       // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
       const mahv = hoaDon.mahv || '';
       const mahd = hoaDon.mahd || '';
-
-      // Rút gọn tên nếu cần (lấy tối đa 2 từ cuối để vừa độ dài QR nếu quá dài)
-      /* 
-      const nameParts = shortenedName.split(' ');
-      if (nameParts.length > 2) shortenedName = nameParts.slice(-2).join(' ');
-      */
-
-      const info = encodeURIComponent(`${mahd} ${mahv}`.trim());
+      const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || hoaDon.hoten || '');
+      const info = encodeURIComponent([mahd, mahv, shortName].filter(Boolean).join(' '));
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;

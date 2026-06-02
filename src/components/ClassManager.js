@@ -25,6 +25,14 @@ const formatMonthYear = (dateStr) => {
 
 const toLocalISO = (d) => toLocalISODate(d);
 
+const getShortStudentName = (name) => {
+  const normalized = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  const parts = normalized.split(' ');
+  if (parts.length <= 2) return normalized;
+  return parts.slice(-2).join(' ');
+};
+
 const getQRUrl = (hoaDon, walletsConfig) => {
   if (!walletsConfig || !hoaDon.hinhthuc) {
     return null;
@@ -37,7 +45,8 @@ const getQRUrl = (hoaDon, walletsConfig) => {
 
   const mahv = String(hoaDon.mahv || '').trim();
   const mahd = String(hoaDon.mahd || '').trim();
-  const info = encodeURIComponent([mahd, mahv].filter(Boolean).join(' '));
+  const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || hoaDon.hoten || '');
+  const info = encodeURIComponent([mahd, mahv, shortName].filter(Boolean).join(' '));
   return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
 };
 const formatTuition = (val) => {
