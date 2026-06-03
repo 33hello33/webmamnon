@@ -24,6 +24,7 @@ import {
   FileText,
   File,
   Loader2,
+  Heart,
   Calendar,
   Phone,
   MapPin,
@@ -619,6 +620,30 @@ const ChatManager = ({ currentUser }) => {
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
+  const toggleMessageReaction = async (message) => {
+    if (!message?.id) return;
+    const nextReaction = !Boolean(message.reaction);
+
+    setMessages(prev => prev.map(m => m.id === message.id ? { ...m, reaction: nextReaction } : m));
+
+    const { data, error } = await supabase
+      .from('hv_messages')
+      .update({ reaction: nextReaction })
+      .eq('id', message.id)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Lỗi cập nhật reaction:', error);
+      setMessages(prev => prev.map(m => m.id === message.id ? { ...m, reaction: Boolean(message.reaction) } : m));
+      return;
+    }
+
+    if (data) {
+      setMessages(prev => prev.map(m => m.id === message.id ? data : m));
+    }
+  };
+
   const getInitials = (name) => {
     if (!name) return '??';
     const parts = name.split(' ');
@@ -1130,7 +1155,25 @@ ${ngoaiKhoaForm.content}
                              </div>
                            )}
                            {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMine} />}
-                           <div className="msg-time">{formatTime(new Date(m.created_at))}</div>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                             <button
+                               type="button"
+                               onClick={() => toggleMessageReaction(m)}
+                               style={{
+                                 border: 'none',
+                                 background: 'transparent',
+                                 padding: 0,
+                                 cursor: 'pointer',
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 color: m.reaction ? '#e11d48' : '#94a3b8'
+                               }}
+                               title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
+                             >
+                               <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
+                             </button>
+                             <div className="msg-time" style={{ marginTop: 0 }}>{formatTime(new Date(m.created_at))}</div>
+                           </div>
                         </div>
 
                         <div className="message-actions-trigger" onClick={e => e.stopPropagation()}>
