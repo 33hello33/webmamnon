@@ -38,7 +38,7 @@ export default function EmployeeManager({ currentUser }) {
       
       // Phân quyền: Nhân viên VP chỉ quản lý được khối Giáo viên
       if (currentUser?.role === 'Nhân viên VP') {
-        query = query.eq('role', 'Giáo viên');
+        query = query.in('role', ['Giáo viên', 'Giáo viên BM']);
       }
       
       const { data, error } = await query;
@@ -154,7 +154,7 @@ export default function EmployeeManager({ currentUser }) {
   });
 
   const activeCount = employees.filter(e => e.trangthai === 'Đang Làm').length;
-  const teacherCount = employees.filter(e => e.role === 'Giáo viên' && e.trangthai === 'Đang Làm').length;
+  const teacherCount = employees.filter(e => ['Giáo viên', 'Giáo viên BM'].includes(e.role) && e.trangthai === 'Đang Làm').length;
   
   return (
     <div className="employee-manager animate-fade-in">
@@ -364,6 +364,7 @@ export default function EmployeeManager({ currentUser }) {
                       </>
                     )}
                     <option value="Giáo viên">Giáo viên</option>
+                    <option value="Giáo viên BM">Giáo viên BM</option>
                   </select>
                 </div>
                 <div className="form-group">
