@@ -192,6 +192,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const [teachers, setTeachers] = useState([]);
+  const [subjectTeachers, setSubjectTeachers] = useState([]);
   const [contracts, setContracts] = useState([]);
 
   const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -268,9 +269,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const { data } = await supabase
         .from('tbl_nv')
         .select('*')
-        .eq('role', 'Giáo viên')
+        .in('role', ['Giáo viên', 'Giáo viên BM'])
         .eq('trangthai', 'Đang Làm');
-      if (data) setTeachers(data);
+      if (data) {
+        setTeachers(data.filter(item => item.role === 'Giáo viên'));
+        setSubjectTeachers(data.filter(item => item.role === 'Giáo viên BM'));
+      }
     } catch (err) {
       console.error(err);
     }
@@ -1419,6 +1423,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           );
                         })}
 
+                        {(() => {
+                          const subjectTeacherId = selectedClass.manv4;
+                          const subjectTeacher = subjectTeachers.find(t => t.manv === subjectTeacherId);
+                          const subjectTeacherName = subjectTeacher && subjectTeacher.tennv ? subjectTeacher.tennv : subjectTeacherId;
+                          if (!subjectTeacherName) return null;
+                          return (
+                            <div className="info-chip">
+                              <User size={16} />
+                              <div className="chip-content">
+                                <label>Giáo viên BM</label>
+                                <span>{subjectTeacherName}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="info-chip full-span">
                           <DollarSign size={16} />
                           <div className="chip-content">
@@ -1749,6 +1769,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   </div>
                 );
               })}
+
+              <div className="form-group">
+                <label>Giáo viên BM</label>
+                <select name="manv4" value={formData.manv4 || ''} onChange={handleChange}>
+                  <option value="">-- Chọn Giáo viên BM --</option>
+                  {subjectTeachers.map(t => (
+                    <option key={t.manv} value={t.manv}>{t.tennv || t.manv}</option>
+                  ))}
+                </select>
+              </div>
 
               <div className="form-group full-width" style={{ gridColumn: 'span 2' }}>
                 <label>Học phí - Định mức thu</label>

@@ -11,6 +11,7 @@ import TeacherPortal from './components/TeacherPortal';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_MONTH_MS = 30 * ONE_DAY_MS;
+const TEACHER_PORTAL_ROLES = ['Giáo viên', 'Giáo viên BM'];
 
 function Login() {
    const [username, setUsername] = useState('');
@@ -40,7 +41,7 @@ function Login() {
       username: user?.username || '',
       password: user?.password || '',
       loginTime: Date.now(),
-      loginType: user?.role === 'Giáo viên' ? 'attendance' : 'dashboard'
+      loginType: TEACHER_PORTAL_ROLES.includes(user?.role) ? 'attendance' : 'dashboard'
    });
 
    const persistAuthSession = (user) => {
@@ -67,8 +68,19 @@ function Login() {
          .select('*')
          .or('daxoa.neq."Đã Xóa",daxoa.is.null');
 
-      const teacherClasses = (allCls || []).filter(
-         c => c.manv === user.manv || c.manv === user.username || c.manv === user.tennv || c.manv === user.id
+      const teacherIds = [user?.manv, user?.username, user?.tennv, user?.id]
+         .map(value => String(value || '').trim())
+         .filter(Boolean);
+      const teacherFields = [
+         'manv',
+         ...Array.from({ length: Math.max(0, parseInt(config?.sonhanvientrogiang || '0', 10) || 0) }, (_, index) => `manv${index + 1}`),
+         'manv4'
+      ];
+      const teacherClasses = (allCls || []).filter((c) =>
+         teacherFields.some((field) => {
+            const fieldValue = String(c?.[field] || '').trim();
+            return fieldValue !== '' && teacherIds.includes(fieldValue);
+         })
       );
       setAttClasses(teacherClasses);
 
@@ -104,7 +116,7 @@ function Login() {
       const { showSuccessMessage = true } = options;
       persistAuthSession(user);
 
-      if (user.role === 'Giáo viên') {
+      if (TEACHER_PORTAL_ROLES.includes(user?.role)) {
          await preloadTeacherData(user);
          if (showSuccessMessage) {
             setMessage({ type: 'success', text: 'Đăng nhập thành công!' });
@@ -284,7 +296,7 @@ function Login() {
             const currentTime = Date.now();
 
             if (currentTime - session.loginTime < ONE_DAY_MS) {
-               if (session.loginType === 'attendance' || session.user?.role === 'Giáo viên') {
+               if (session.loginType === 'attendance' || TEACHER_PORTAL_ROLES.includes(session.user?.role)) {
                   if (!isCancelled) {
                      await preloadTeacherData(session.user);
                   }

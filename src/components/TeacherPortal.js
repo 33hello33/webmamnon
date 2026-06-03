@@ -13,6 +13,7 @@ import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
    const [loading, setLoading] = useState(false);
+   const isBoMonTeacher = attendanceUser?.role === 'Giáo viên BM';
 
    const normalizeAnnouncementTitle = (title) => String(title || '').trim().toUpperCase();
 
@@ -91,7 +92,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const teacherAssignmentFields = [
       'manv',
-      ...Array.from({ length: Math.max(0, parseInt(config?.sonhanvientrogiang || '0', 10) || 0) }, (_, index) => `manv${index + 1}`)
+      ...Array.from({ length: Math.max(0, parseInt(config?.sonhanvientrogiang || '0', 10) || 0) }, (_, index) => `manv${index + 1}`),
+      'manv4'
    ];
 
    const classBelongsToTeacher = (cls) => {
@@ -715,6 +717,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          const filteredData = (data || []).filter((item) => {
             const title = normalizeAnnouncementTitle(item?.title);
             if (type === 'curriculum') return title === 'CHƯƠNG TRÌNH HỌC';
+            if (type === 'ngoaikhoa') return title === 'NGOẠI KHÓA';
             if (type === 'notices') return title !== 'THỰC ĐƠN' && title !== 'NGOẠI KHÓA' && title !== 'CHƯƠNG TRÌNH HỌC';
             return true;
          });
@@ -837,6 +840,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          fetchTeacherAnnouncements('notices');
       } else if (attTab === 'curriculum') {
          fetchTeacherAnnouncements('curriculum');
+      } else if (attTab === 'ngoaikhoa') {
+         fetchTeacherAnnouncements('ngoaikhoa');
       } else {
          setTeacherAnnouncements([]);
       }
@@ -1472,8 +1477,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         : attTab === 'attendance' ? 'Điểm Danh Lớp Học'
                            : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
                               : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
-                                 : attTab === 'curriculum' ? 'Chương Trình Học'
-                                    : 'Trung Tâm Tin Nhắn'}
+                                 : attTab === 'ngoaikhoa' ? 'Ngoại Khóa'
+                                    : attTab === 'curriculum' ? 'Chương Trình Học'
+                                       : 'Trung Tâm Tin Nhắn'}
                   </h2>
                   <p style={{ color: '#64748b', margin: 0, marginTop: '5px', lineHeight: 1.4, wordBreak: 'break-word' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
                </div>
@@ -1495,12 +1501,14 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             <div style={{ marginBottom: '1.5rem' }}>
                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Nhóm dịch vụ</div>
                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
+                  {!isBoMonTeacher && (
                   <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <CalendarCheck size={24} />
                      </div>
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
                   </div>
+                  )}
 
                   <div onClick={() => setAttTab('notices')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1516,13 +1524,30 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Chương trình<br />học</div>
                   </div>
 
+                  <div onClick={() => setAttTab('ngoaikhoa')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fef3c7', border: '3px solid #fde68a', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Image size={24} />
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Ngoại khóa</div>
+                  </div>
+
+                  {!isBoMonTeacher && (
                   <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Heart size={24} />
                      </div>
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Hồ sơ<br />sức khỏe</div>
                   </div>
+                  )}
 
+                  {isBoMonTeacher ? (
+                  <div onClick={openClassBroadcastModal} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <MessageSquare size={24} />
+                     </div>
+                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Gửi thông báo<br />cả lớp</div>
+                  </div>
+                  ) : (
                   <div onClick={() => setAttTab('chat')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                         <MessageSquare size={24} />
@@ -1534,6 +1559,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </div>
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc PH</div>
                   </div>
+                  )}
                </div>
             </div>
          )}
@@ -1547,8 +1573,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   {attTab === 'attendance' ? 'Điểm danh'
                      : attTab === 'health' ? 'Sức khỏe'
                         : attTab === 'notices' ? 'Bảng tin'
-                           : attTab === 'curriculum' ? 'Chương trình học'
-                              : 'Liên lạc PH'}
+                           : attTab === 'ngoaikhoa' ? 'Ngoại khóa'
+                              : attTab === 'curriculum' ? 'Chương trình học'
+                                 : 'Liên lạc PH'}
                </div>
             </div>
          )}
@@ -1727,11 +1754,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {(attTab === 'notices' || attTab === 'curriculum') && (
+         {(attTab === 'notices' || attTab === 'curriculum' || attTab === 'ngoaikhoa') && (
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
                {attClasses.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                     Chưa có lớp phân công để xem {attTab === 'notices' ? 'bảng tin' : 'chương trình học'}.
+                     Chưa có lớp phân công để xem {attTab === 'notices' ? 'bảng tin' : (attTab === 'curriculum' ? 'chương trình học' : 'ngoại khóa')}.
                   </div>
                ) : teacherAnnouncementsLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
@@ -1741,10 +1768,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                      {teacherAnnouncements.map((item) => (
                         <div key={item.id} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)' }}>
-                           <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: attTab === 'notices' ? '#eff6ff' : '#f0f9ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                           <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: attTab === 'notices' ? '#eff6ff' : (attTab === 'curriculum' ? '#f0f9ff' : '#fff7ed'), display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                               <div style={{ minWidth: 0 }}>
-                                 <div style={{ fontWeight: 800, color: attTab === 'notices' ? '#2563eb' : '#0f766e' }}>
-                                    {item.title || (attTab === 'notices' ? 'Thông báo lớp' : 'Chương trình học')}
+                                 <div style={{ fontWeight: 800, color: attTab === 'notices' ? '#2563eb' : (attTab === 'curriculum' ? '#0f766e' : '#c2410c') }}>
+                                    {item.title || (attTab === 'notices' ? 'Thông báo lớp' : (attTab === 'curriculum' ? 'Chương trình học' : 'Ngoại khóa'))}
                                  </div>
                                  <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, marginTop: '4px' }}>
                                     Lớp: {getClassDisplayName(item.malop)}
@@ -1770,7 +1797,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   </div>
                ) : (
                   <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                     Chưa có {attTab === 'notices' ? 'bảng tin' : 'chương trình học'} nào trong các lớp được phân công.
+                     Chưa có {attTab === 'notices' ? 'bảng tin' : (attTab === 'curriculum' ? 'chương trình học' : 'ngoại khóa')} nào trong các lớp được phân công.
                   </div>
                )}
             </div>
