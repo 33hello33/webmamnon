@@ -8,6 +8,8 @@ import ChatMediaAttachment from './ChatMediaAttachment';
 import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 
+const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
+
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
    const [loading, setLoading] = useState(false);
@@ -779,7 +781,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
          const fetchDocs = async () => {
             const { data } = await supabase.from('documents').select('*').eq('mahv', attChatSelectedStudent.mahv).order('created_at', { ascending: false });
-            if (data) setAttChatDocuments(data);
+            if (data) setAttChatDocuments(data.filter(doc => doc.category !== tuitionTransferProofCategory));
          };
 
          fetchMessages();

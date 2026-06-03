@@ -353,7 +353,7 @@ const calculateConsecutiveLeave = (attendance) => {
    }));
 };
 
-export default function InvoiceManager() {
+export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }) {
    const { config } = useConfig();
    const walletsConfig = (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
@@ -369,6 +369,7 @@ export default function InvoiceManager() {
    const [selectedStudent, setSelectedStudent] = useState(null);
    const [activeClass, setActiveClass] = useState(null);
    const [classTeacher, setClassTeacher] = useState(null);
+   const handleSelectStudentRef = useRef(null);
 
    const [isSaving, setIsSaving] = useState(false);
    const [message, setMessage] = useState({ type: '', text: '' });
@@ -671,6 +672,8 @@ export default function InvoiceManager() {
       const firstMalop = st.malop_list && st.malop_list.length > 0 ? st.malop_list[0] : null;
       await updateClassContext(firstMalop, st);
    };
+
+   handleSelectStudentRef.current = handleSelectStudent;
 
    const updateClassContext = async (malop, student) => {
       if (!student) return;
@@ -1493,6 +1496,23 @@ export default function InvoiceManager() {
       (s.sdt && s.sdt.includes(searchTerm)) ||
       (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
    );
+
+   useEffect(() => {
+      if (!focusStudentId || students.length === 0) return;
+      if (selectedStudent?.mahv === focusStudentId) {
+         if (typeof onFocusStudentHandled === 'function') onFocusStudentHandled();
+         return;
+      }
+      const matchedStudent = students.find(student => student.mahv === focusStudentId);
+      if (!matchedStudent) {
+         if (typeof onFocusStudentHandled === 'function') onFocusStudentHandled();
+         return;
+      }
+
+      setSearchTerm('');
+      handleSelectStudentRef.current?.(matchedStudent);
+      if (typeof onFocusStudentHandled === 'function') onFocusStudentHandled();
+   }, [focusStudentId, students, selectedStudent, onFocusStudentHandled]);
 
    // Auto fill daDong in InvoiceManager: Default to full payment
    useEffect(() => {

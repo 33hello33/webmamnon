@@ -85,6 +85,7 @@ const ALL_TABS = [
 function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSubTab, setActiveSubTab] = useState('students');
+  const [invoiceFocusStudentId, setInvoiceFocusStudentId] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(null);
@@ -543,9 +544,22 @@ function Dashboard() {
           }}>
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'statistics' && <Statistics />}
-            {currentTab?.id === 'chat' && <ChatManager currentUser={user} />}
+            {currentTab?.id === 'chat' && (
+              <ChatManager
+                currentUser={user}
+                onOpenInvoiceForStudent={(studentId) => {
+                  setInvoiceFocusStudentId(studentId || null);
+                  setActiveTab('invoices');
+                }}
+              />
+            )}
             {currentTab?.id === 'finances' && <FinanceManager activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
-            {currentTab?.id === 'invoices' && <InvoiceManager />}
+            {currentTab?.id === 'invoices' && (
+              <InvoiceManager
+                focusStudentId={invoiceFocusStudentId}
+                onFocusStudentHandled={() => setInvoiceFocusStudentId(null)}
+              />
+            )}
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}
             {currentTab?.id === 'sales' && activeSubTab === 'products' && <ProductManager currentUser={user} />}
             {currentTab?.id === 'tasks' && <TaskManager />}

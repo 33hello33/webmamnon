@@ -37,12 +37,14 @@ import {
   Share2,
   Bell,
   Utensils,
-  Upload
+  Upload,
+  CreditCard
 } from 'lucide-react';
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 import './ChatManager.css';
 
-const ChatManager = ({ currentUser }) => {
+const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
+  const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
   const { config } = useConfig();
 
   const getClassName = (malop) => {
@@ -83,6 +85,7 @@ const ChatManager = ({ currentUser }) => {
   const [staffDirectory, setStaffDirectory] = useState({});
   const [students, setStudents] = useState([]);
   const [latestMessages, setLatestMessages] = useState([]);
+  const [paymentProofDocs, setPaymentProofDocs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   
@@ -311,6 +314,9 @@ const ChatManager = ({ currentUser }) => {
         fetchUnreads();
         fetchSummaries(); // Also refresh standard latest messages
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => {
+        fetchPaymentProofs();
+      })
       .subscribe();
 
     return () => supabase.removeChannel(badgeChannel);
@@ -368,8 +374,44 @@ const ChatManager = ({ currentUser }) => {
     if (msgs) setLatestMessages(msgs);
   };
 
+  const fetchPaymentProofs = async () => {
+    let startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+
+    if (dateFilter === 'Tuần này') {
+      startDate.setDate(startDate.getDate() - 6);
+    } else if (dateFilter === 'Tháng này') {
+      startDate.setDate(1);
+    } else if (dateFilter === 'tháng trước tới nay') {
+      startDate.setMonth(startDate.getMonth() - 1);
+      startDate.setDate(1);
+    } else if (dateFilter === 'Tuỳ chọn') {
+      startDate = new Date(customRange.start);
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    let query = supabase
+      .from('documents')
+      .select('*')
+      .eq('category', tuitionTransferProofCategory)
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (dateFilter === 'Tuỳ chọn') {
+      const endDate = new Date(customRange.end);
+      endDate.setHours(23, 59, 59, 999);
+      query = query.lte('created_at', endDate.toISOString());
+    }
+
+    const { data } = await query;
+    if (data) setPaymentProofDocs(data);
+  };
+
   useEffect(() => {
-    if (view === 'dashboard') fetchSummaries();
+    if (view === 'dashboard') {
+      fetchSummaries();
+      fetchPaymentProofs();
+    }
   }, [dateFilter, view, customRange]);
 
   // ----- Table Data Computation -----
@@ -428,6 +470,20 @@ const ChatManager = ({ currentUser }) => {
     });
   }, [students, classes, teachers, latestMessages, searchParent, classFilter]);
 
+  const paymentProofMessages = useMemo(() => {
+    const latestByStudent = new Map();
+
+    paymentProofDocs.forEach(doc => {
+      if (!doc?.mahv || !doc?.file_url) return;
+      const existing = latestByStudent.get(doc.mahv);
+      if (!existing || new Date(doc.created_at) > new Date(existing.created_at)) {
+        latestByStudent.set(doc.mahv, doc);
+      }
+    });
+
+    return Array.from(latestByStudent.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [paymentProofDocs]);
+
   const parentSummaries = useMemo(() => {
     return baseSummaries.filter(s => {
       let matchesStat = true;
@@ -436,16 +492,16 @@ const ChatManager = ({ currentUser }) => {
       else if (statFilter === 'DOI_NGUOI') matchesStat = s.allTypes.includes('ĐỔI NGƯỜI ĐÓN');
       else if (statFilter === 'VE_TRE') matchesStat = s.allTypes.includes('XIN VỀ TRỄ');
       else if (statFilter === 'GOP_Y') matchesStat = s.allTypes.includes('GÓP Ý');
+      else if (statFilter === 'DA_CHUYEN_KHOAN') matchesStat = paymentProofMessages.some(doc => doc.mahv === s.mahv);
       else if (statFilter === 'GUI_TIN_NHAN') matchesStat = s.allTypes.includes('TIN NHẮN');
 
       return matchesStat;
     }).sort((a, b) => {
-      // Sort by newest message first
       if (!a.lastTime) return 1;
       if (!b.lastTime) return -1;
       return b.lastTime - a.lastTime;
     });
-  }, [baseSummaries, statFilter]);
+  }, [baseSummaries, statFilter, paymentProofMessages]);
   
   const suggestionMessages = useMemo(() => {
     return latestMessages.filter(m => {
@@ -465,8 +521,20 @@ const ChatManager = ({ currentUser }) => {
       guiTinNhan: baseSummaries.filter(s => s.allTypes.includes('TIN NHẮN')).length,
       veTre: baseSummaries.filter(s => s.allTypes.includes('XIN VỀ TRỄ')).length,
       gopY: baseSummaries.filter(s => s.allTypes.includes('GÓP Ý')).length,
+      daChuyenKhoan: paymentProofMessages.length,
     };
-  }, [baseSummaries]);
+  }, [baseSummaries, paymentProofMessages]);
+
+  const handleOpenInvoiceForStudent = (studentId) => {
+    if (!studentId || typeof onOpenInvoiceForStudent !== 'function') return;
+    onOpenInvoiceForStudent(studentId);
+  };
+
+  const getMessagePreviewText = (message) => {
+    if (!message) return '...';
+    const content = String(message.content || '');
+    return content || (message.image_url ? '📷 [Hình ảnh]' : (message.file_url ? '📎 [Tài liệu]' : '...'));
+  };
 
   // ----- Chat Logic -----
   useEffect(() => {
@@ -511,7 +579,7 @@ const ChatManager = ({ currentUser }) => {
         .select('*')
         .eq('mahv', selectedStudent.mahv)
         .order('created_at', { ascending: false });
-      if (data) setDocuments(data);
+      if (data) setDocuments(data.filter(doc => doc.category !== tuitionTransferProofCategory));
     };
 
     fetchMessages();
@@ -1618,6 +1686,20 @@ ${ngoaiKhoaForm.content}
             <span className="report-value" style={{ color: 'white' }}>{String(reports.gopY).padStart(2, '0')}</span>
           </div>
         )}
+        <div
+          className="report-card"
+          onClick={() => setStatFilter(statFilter === 'DA_CHUYEN_KHOAN' ? 'ALL' : 'DA_CHUYEN_KHOAN')}
+          style={{
+            cursor: 'pointer',
+            background: '#0f766e',
+            color: 'white',
+            outline: statFilter === 'DA_CHUYEN_KHOAN' ? '3px solid #115e59' : 'none',
+            opacity: statFilter !== 'ALL' && statFilter !== 'DA_CHUYEN_KHOAN' ? 0.6 : 1
+          }}
+        >
+          <span className="report-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Đã chuyển khoản</span>
+          <span className="report-value" style={{ color: 'white' }}>{String(reports.daChuyenKhoan).padStart(2, '0')}</span>
+        </div>
       </div>
 
       {/* Main Table Section */}
@@ -1628,6 +1710,16 @@ ${ngoaiKhoaForm.content}
               <tr>
                 <th style={{ width: '75%' }}>Nội dung góp ý</th>
                 <th style={{ width: '25%' }}>Thời gian</th>
+              </tr>
+            ) : statFilter === 'DA_CHUYEN_KHOAN' ? (
+              <tr>
+                <th style={{ width: '20%' }}>Họ và tên</th>
+                <th style={{ width: '15%' }}>Số điện thoại</th>
+                <th style={{ width: '10%' }}>Lớp</th>
+                <th style={{ width: '20%' }}>Giáo viên</th>
+                <th style={{ width: '15%' }}>Ảnh chuyển khoản</th>
+                <th style={{ width: '10%' }}>Thời gian</th>
+                <th style={{ width: '10%' }}>Thao tác</th>
               </tr>
             ) : (
               <tr>
@@ -1642,7 +1734,7 @@ ${ngoaiKhoaForm.content}
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="6" className="no-results"><Loader2 size={24} className="spinner" /> Đang tải dữ liệu...</td></tr>
+              <tr><td colSpan={statFilter === 'GOP_Y' ? 2 : (statFilter === 'DA_CHUYEN_KHOAN' ? 7 : 6)} className="no-results"><Loader2 size={24} className="spinner" /> Đang tải dữ liệu...</td></tr>
             ) : statFilter === 'GOP_Y' ? (
               suggestionMessages.length === 0 ? (
                 <tr><td colSpan="2" className="no-results">Chưa có góp ý nào</td></tr>
@@ -1658,6 +1750,48 @@ ${ngoaiKhoaForm.content}
                     </td>
                     <td className="time-cell" style={{ verticalAlign: 'top', paddingTop: '15px' }}>
                       {new Date(m.created_at).toLocaleString('vi-VN')}
+                    </td>
+                  </tr>
+                );
+              })
+            ) : statFilter === 'DA_CHUYEN_KHOAN' ? (
+              paymentProofMessages.length === 0 ? (
+                <tr><td colSpan="7" className="no-results">Chưa có học viên upload ảnh chuyển khoản</td></tr>
+              ) : paymentProofMessages.map(m => {
+                const s = students.find(hv => hv.mahv === m.mahv);
+                const cls = classes.find(c => c.malop === s?.malop);
+                const teacher = teachers.find(t => t.manv === cls?.manv);
+                return (
+                  <tr key={m.id}>
+                    <td className="student-name-cell">{s?.tenhv || m.mahv}</td>
+                    <td className="phone-cell">{s?.sdtme || s?.sdt || '--'}</td>
+                    <td>{cls?.tenlop || s?.malop || 'Chưa xếp lớp'}</td>
+                    <td>{teacher?.tennv || cls?.giaovien || 'Chưa cập nhật'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewImage(m.file_url);
+                        }}
+                        style={{ border: '1px solid #cbd5e1', background: 'white', color: '#0f172a', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Xem ảnh
+                      </button>
+                    </td>
+                    <td className="time-cell">{new Date(m.created_at).toLocaleString('vi-VN')}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenInvoiceForStudent(m.mahv);
+                        }}
+                        style={{ border: 'none', background: '#0f766e', color: 'white', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <CreditCard size={14} />
+                        Xuất HĐ
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1689,9 +1823,9 @@ ${ngoaiKhoaForm.content}
                           textOverflow: 'ellipsis', 
                           whiteSpace: 'nowrap' 
                         }} 
-                        title={s.lastMsg.content}
+                        title={getMessagePreviewText(s.lastMsg)}
                       >
-                        {s.lastMsg.content || (s.lastMsg.image_url ? '📷 [Hình ảnh]' : (s.lastMsg.file_url ? '📎 [Tài liệu]' : '...'))}
+                        {getMessagePreviewText(s.lastMsg)}
                       </div>
                     ) : <span style={{color: '#cbd5e1'}}>--</span>}
                   </td>
