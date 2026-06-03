@@ -713,6 +713,24 @@ export default function InvoiceManager() {
 
          if (recentDoc) {
             setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
+
+            const ensureIsoDate = (dStr) => {
+               if (!dStr) return null;
+               const s = String(dStr);
+               if (s.includes('T')) return s.split('T')[0];
+               if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
+               const parts = s.split(/[\/\- :]/);
+               if (parts.length >= 3) {
+                  const d = parseInt(parts[0], 10);
+                  const m = parseInt(parts[1], 10);
+                  const y = parseInt(parts[2], 10);
+                  if (y > 2000) {
+                     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                  }
+               }
+               return s;
+            };
+
             hocphi = parseAmount(recentDoc.hocphi);
             giamHocphi = parseAmount(recentDoc.giamhocphi);
             hinhThuc = recentDoc.hinhthuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
@@ -720,10 +738,35 @@ export default function InvoiceManager() {
                hinhThuc = walletsConfig[0].name;
             }
             ghiChu = recentDoc.ghichu || '';
-            if (recentDoc.ngaybatdau) {
-               startStr = recentDoc.ngaybatdau;
-               endMonthStr = ''; // Recalculate based on start and loaded quantity
+
+            const docStart = ensureIsoDate(recentDoc.ngaybatdau);
+            const docEnd = ensureIsoDate(recentDoc.ngayketthuc);
+            let loadedPeriodFromDoc = false;
+
+            if (docStart) {
+               startStr = docStart;
+               loadedPeriodFromDoc = true;
             }
+            if (docEnd) {
+               endMonthStr = docEnd;
+               loadedPeriodFromDoc = true;
+            }
+
+            if (!loadedPeriodFromDoc && recentDoc.thoiluong) {
+               const monthMatches = [...String(recentDoc.thoiluong).matchAll(/(\d{1,2})\/(\d{4})/g)];
+               if (monthMatches.length > 0) {
+                  const firstMatch = monthMatches[0];
+                  const lastMatch = monthMatches[monthMatches.length - 1];
+                  const startMonth = parseInt(firstMatch[1], 10) - 1;
+                  const startYear = parseInt(firstMatch[2], 10);
+                  const endMonth = parseInt(lastMatch[1], 10) - 1;
+                  const endYear = parseInt(lastMatch[2], 10);
+
+                  startStr = toLocalISODate(new Date(startYear, startMonth, 1));
+                  endMonthStr = toLocalISODate(new Date(endYear, endMonth + 1, 0));
+               }
+            }
+
             if (recentDoc.phuthu) {
                try {
                   phuthu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
