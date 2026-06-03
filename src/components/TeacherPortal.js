@@ -793,6 +793,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   markTeacherThreadAsRead(attChatSelectedStudent.mahv);
                }
                setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
+               setAttChatMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
             }).subscribe();
 
          return () => supabase.removeChannel(threadChannel);
@@ -886,6 +889,30 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setAttChatInput('');
          setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+      }
+   };
+
+   const toggleAttChatReaction = async (message) => {
+      if (!message?.id) return;
+      const nextReaction = !Boolean(message.reaction);
+
+      setAttChatMessages(prev => prev.map(m => m.id === message.id ? { ...m, reaction: nextReaction } : m));
+
+      const { data, error } = await supabase
+         .from('hv_messages')
+         .update({ reaction: nextReaction })
+         .eq('id', message.id)
+         .select()
+         .maybeSingle();
+
+      if (error) {
+         console.error('Lỗi cập nhật reaction:', error);
+         setAttChatMessages(prev => prev.map(m => m.id === message.id ? { ...m, reaction: Boolean(message.reaction) } : m));
+         return;
+      }
+
+      if (data) {
+         setAttChatMessages(prev => prev.map(m => m.id === message.id ? data : m));
       }
    };
 
@@ -1197,9 +1224,19 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                               </div>
                            )}
                            {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
-                           <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
-                              {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                           </span>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                              <button
+                                 type="button"
+                                 onClick={() => toggleAttChatReaction(m)}
+                                 style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: m.reaction ? '#e11d48' : '#94a3b8' }}
+                                 title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
+                              >
+                                 <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
+                              </button>
+                              <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: 0 }}>
+                                 {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                           </div>
                         </div>
                      );
                   })
