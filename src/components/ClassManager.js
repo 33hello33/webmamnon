@@ -1129,7 +1129,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     const blob = dataUrlToBlob(dataUrl);
                     const pngFile = new File([blob], fileName, { type: 'image/png' });
                     const file = await compressImage(pngFile, 150);
-                    
+
                     const imageUrl = await syncTuitionNoticeImage({
                       file,
                       mahv: noticesToPrint[i].mahv,
@@ -1165,7 +1165,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       const blob = dataUrlToBlob(retryUrl);
                       const pngFile = new File([blob], fileName, { type: 'image/png' });
                       const file = await compressImage(pngFile, 150);
-                      
+
                       const imageUrl = await syncTuitionNoticeImage({
                         file,
                         mahv: noticesToPrint[i].mahv,
@@ -1885,17 +1885,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                   <div className="flex-center" style={{ gap: '10px', background: '#fff7ed', padding: '5px 15px', borderRadius: '12px', border: '1px solid #ffedd5' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#9a3412' }}>HẠN THỐNG KÊ NGHỈ:</span>
-                    <input 
-                      type="date" 
-                      value={batchNoticeData.statsStart} 
+                    <input
+                      type="date"
+                      value={batchNoticeData.statsStart}
                       readOnly
                       disabled
                       style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
                     />
                     <span style={{ color: '#9a3412', fontWeight: 900 }}>→</span>
-                    <input 
-                      type="date" 
-                      value={batchNoticeData.statsEnd} 
+                    <input
+                      type="date"
+                      value={batchNoticeData.statsEnd}
                       readOnly
                       disabled
                       style={{ border: '1px solid #fdba74', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', fontWeight: 600, color: '#c2410c' }}
@@ -2099,16 +2099,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             </td>
                             <td>
                               <div style={{ position: 'relative' }}>
-                                 <input
-                                   type="text"
-                                   value={formatTuition(row.nocu)}
-                                   onChange={e => handleBatchStudentChange(row.mahv, 'nocu', e.target.value)}
-                                   className="td-input"
-                                   style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: row.nocu > 0 ? '#dc2626' : (row.nocu < 0 ? '#16a34a' : 'inherit') }}
-                                 />
-                                 {row.nocu < 0 && <span style={{ position: 'absolute', right: '4px', top: '-10px', fontSize: '0.6rem', color: '#16a34a', fontWeight: 700 }}>Tiền dư</span>}
-                               </div>
-                             </td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.nocu)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'nocu', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: row.nocu > 0 ? '#dc2626' : (row.nocu < 0 ? '#16a34a' : 'inherit') }}
+                                />
+                                {row.nocu < 0 && <span style={{ position: 'absolute', right: '4px', top: '-10px', fontSize: '0.6rem', color: '#16a34a', fontWeight: 700 }}>Tiền dư</span>}
+                              </div>
+                            </td>
                             <td>
                               <input type="text" value={row.coMat} onChange={e => handleBatchStudentChange(row.mahv, 'coMat', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', fontWeight: 600, textAlign: 'center', color: '#16a34a' }} />
                             </td>
@@ -2207,7 +2207,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 </div>
 
                 <div>
-                  Khóa học: <b style={{ fontWeight: 900 }}>{printHoaDon.tenlop}</b>
+                  Lớp học: <b style={{ fontWeight: 900 }}>{printHoaDon.tenlop}</b>
                 </div>
 
                 <div>

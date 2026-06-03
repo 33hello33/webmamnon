@@ -1383,7 +1383,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{formatDate(r.ngaylap)}</td>
                                     <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
                                     <td className="fm-desc" style={{ maxWidth: '220px' }}>
-                                       {(function() {
+                                       {(function () {
                                           if (!r.hanghoa) return '';
                                           if (r.hanghoa.includes('Tên Hàng')) {
                                              const parsed = parseNoidung(r.hanghoa);
@@ -2078,7 +2078,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
                         <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
                      </div>
-                     <div>Khóa học: <b>{printHoaDon.tenlop}</b></div>
+                     <div>Lớp học: <b>{printHoaDon.tenlop}</b></div>
                      <div>
                         Tháng đóng học phí/Thời lượng: <b>{printHoaDon.thoiluong || "..."}</b>
                      </div>

@@ -64,59 +64,59 @@ const syncTuitionNoticeImage = async ({ file, mahv, mahd, config }) => {
 
 
 const parseScheduleDays = (tgb) => {
-  if (!tgb) return [];
-  const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
-  const days = [];
-  if (normalized.includes('t2')) days.push(1);
+   if (!tgb) return [];
+   const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
+   const days = [];
+   if (normalized.includes('t2')) days.push(1);
    if (normalized.includes('t3')) days.push(2);
    if (normalized.includes('t4')) days.push(3);
    if (normalized.includes('t5')) days.push(4);
    if (normalized.includes('t6')) days.push(5);
    if (normalized.includes('t7')) days.push(6);
-  if (normalized.includes('cn')) days.push(0);
-  return days;
+   if (normalized.includes('cn')) days.push(0);
+   return days;
 };
 
 const getMealFeeInfo = (value, fallbackDays = 0) => {
-  if (value === null || value === undefined || value === '') {
-    return { amount: 0, days: fallbackDays };
-  }
+   if (value === null || value === undefined || value === '') {
+      return { amount: 0, days: fallbackDays };
+   }
 
-  let parsedValue = value;
+   let parsedValue = value;
 
-  if (typeof parsedValue === 'string') {
-    const trimmed = parsedValue.trim();
-    if (!trimmed) return { amount: 0, days: fallbackDays };
+   if (typeof parsedValue === 'string') {
+      const trimmed = parsedValue.trim();
+      if (!trimmed) return { amount: 0, days: fallbackDays };
 
-    if (trimmed.startsWith('{')) {
-      try {
-        parsedValue = JSON.parse(trimmed);
-      } catch (error) {
-        parsedValue = trimmed;
+      if (trimmed.startsWith('{')) {
+         try {
+            parsedValue = JSON.parse(trimmed);
+         } catch (error) {
+            parsedValue = trimmed;
+         }
+      } else {
+         return {
+            amount: parseInt(trimmed.replace(/[^\d-]/g, ''), 10) || 0,
+            days: fallbackDays
+         };
       }
-    } else {
+   }
+
+   if (typeof parsedValue === 'number') {
+      return { amount: parsedValue, days: fallbackDays };
+   }
+
+   if (parsedValue && typeof parsedValue === 'object') {
       return {
-        amount: parseInt(trimmed.replace(/[^\d-]/g, ''), 10) || 0,
-        days: fallbackDays
+         amount: parseInt(parsedValue.amount, 10) || 0,
+         days: parseInt(parsedValue.days, 10) || fallbackDays
       };
-    }
-  }
+   }
 
-  if (typeof parsedValue === 'number') {
-    return { amount: parsedValue, days: fallbackDays };
-  }
-
-  if (parsedValue && typeof parsedValue === 'object') {
-    return {
-      amount: parseInt(parsedValue.amount, 10) || 0,
-      days: parseInt(parsedValue.days, 10) || fallbackDays
-    };
-  }
-
-  return {
-    amount: parseInt(String(parsedValue).replace(/[^\d-]/g, ''), 10) || 0,
-    days: fallbackDays
-  };
+   return {
+      amount: parseInt(String(parsedValue).replace(/[^\d-]/g, ''), 10) || 0,
+      days: fallbackDays
+   };
 };
 
 const formatMonthYear = (dateStr) => {
@@ -455,7 +455,7 @@ export default function InvoiceManager() {
                         const blob = dataUrlToBlob(dataUrl);
                         const pngFile = new File([blob], fileName, { type: 'image/png' });
                         const file = await compressImage(pngFile, 150);
-                        
+
                         let imageUrl = '';
                         if (config?.r2_enabled) {
                            imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
@@ -1881,7 +1881,7 @@ export default function InvoiceManager() {
                         <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.tenhv}</b></div>
                         <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
-                     <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
+                     <div>Lớp học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
                         <div>Hình thức: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
@@ -1990,7 +1990,7 @@ export default function InvoiceManager() {
                      <div>SĐT: <b style={{ fontWeight: 900 }}>{downloadingNotice?.sdt || ""}</b></div>
                   </div>
 
-                  <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                  <div>Lớp học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
                   <div>Tháng đóng học phí: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
 
                   {/* FEES BREAKDOWN */}

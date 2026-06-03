@@ -468,7 +468,7 @@ export default function DebtManager() {
           <div className="debt-header">
             <div className="debt-title">
               <Clock size={20} className="text-danger" />
-              <h3>Báo động trễ hạn đóng học phí (Quá hạn khóa học)</h3>
+              <h3>Báo động trễ hạn đóng học phí (Quá hạn đóng)</h3>
             </div>
             <span className="debt-badge danger">{overdueList.length} Học sinh</span>
           </div>
@@ -659,7 +659,7 @@ export default function DebtManager() {
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
                 <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingPayment?.tenhv}</b></div>
               </div>
-              <div>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingPayment?.tenlop}</b></div>
+              <div>Lớp học: <b style={{ fontWeight: 900 }}>{downloadingPayment?.tenlop}</b></div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <div>Hình thức: <b style={{ fontWeight: 900 }}>{downloadingPayment?.hinhthuc || "..."}</b></div>
               </div>
