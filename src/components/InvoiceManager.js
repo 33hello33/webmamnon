@@ -641,6 +641,23 @@ export default function InvoiceManager() {
             const isFromTB = recentDoc.mahd?.startsWith('TB');
             setRecentSourceText(isFromTB ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
 
+            const ensureIsoDate = (dStr) => {
+               if (!dStr) return null;
+               const s = String(dStr);
+               if (s.includes('T')) return s.split('T')[0];
+               if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
+               const parts = s.split(/[\/\- :]/);
+               if (parts.length >= 3) {
+                  const d = parseInt(parts[0], 10);
+                  const m = parseInt(parts[1], 10);
+                  const y = parseInt(parts[2], 10);
+                  if (y > 2000) {
+                     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                  }
+               }
+               return s;
+            };
+
             const parseCur = (v) => {
                const s = String(v || 0).trim();
                const isNegative = s.startsWith('-');
@@ -663,40 +680,35 @@ export default function InvoiceManager() {
             }
             ghiChu = recentDoc.ghichu || '';
 
-            // --- THỜI LƯỢNG ĐÓNG = THÁNG LIỀN SAU KỲ HD/TB GẦN NHẤT ---
-            // Tính startStr từ ngayketthuc hoặc thoiluong của recentDoc (không dùng ngaybatdau)
-            let nextStartComputed = false;
-            if (recentDoc.ngayketthuc) {
-               const ketThucDate = new Date(recentDoc.ngayketthuc);
-               if (!isNaN(ketThucDate.getTime())) {
-                  // Tháng tiếp theo: lấy đầu tháng sau ngayketthuc
-                  const nextMonth = new Date(ketThucDate.getFullYear(), ketThucDate.getMonth() + 1, 1);
-                  startStr = toLocalISODate(nextMonth);
-                  nextStartComputed = true;
+            // Nạp đúng kỳ của chứng từ gần nhất, không tự nhảy sang tháng tiếp theo.
+            const docStart = ensureIsoDate(recentDoc.ngaybatdau);
+            const docEnd = ensureIsoDate(recentDoc.ngayketthuc);
+            let loadedPeriodFromDoc = false;
+
+            if (docStart) {
+               startStr = docStart;
+               loadedPeriodFromDoc = true;
+            }
+            if (docEnd) {
+               endMonthStr = docEnd;
+               loadedPeriodFromDoc = true;
+            }
+
+            if (!loadedPeriodFromDoc && recentDoc.thoiluong) {
+               const monthMatches = [...String(recentDoc.thoiluong).matchAll(/(\d{1,2})\/(\d{4})/g)];
+               if (monthMatches.length > 0) {
+                  const firstMatch = monthMatches[0];
+                  const lastMatch = monthMatches[monthMatches.length - 1];
+                  const startMonth = parseInt(firstMatch[1], 10) - 1;
+                  const startYear = parseInt(firstMatch[2], 10);
+                  const endMonth = parseInt(lastMatch[1], 10) - 1;
+                  const endYear = parseInt(lastMatch[2], 10);
+
+                  startStr = toLocalISODate(new Date(startYear, startMonth, 1));
+                  endMonthStr = toLocalISODate(new Date(endYear, endMonth + 1, 0));
+                  loadedPeriodFromDoc = true;
                }
             }
-            if (!nextStartComputed && recentDoc.thoiluong) {
-               // Fallback: parse thoiluong dạng "MM/YYYY" hoặc cuối cùng trong chuỗi
-               const thoiluongParts = (recentDoc.thoiluong || '').split(',').map(s => s.trim()).filter(Boolean);
-               const lastPart = thoiluongParts[thoiluongParts.length - 1];
-               const mMatch = lastPart && lastPart.match(/(\d{1,2})\/(\d{4})/);
-               if (mMatch) {
-                  const mm = parseInt(mMatch[1], 10) - 1;
-                  const yyyy = parseInt(mMatch[2], 10);
-                  const nextMonth = new Date(yyyy, mm + 1, 1);
-                  startStr = toLocalISODate(nextMonth);
-                  nextStartComputed = true;
-               }
-            }
-            if (!nextStartComputed && recentDoc.ngaybatdau) {
-               // Fallback cuối: dùng ngaybatdau + 1 tháng
-               const batDauDate = new Date(recentDoc.ngaybatdau);
-               if (!isNaN(batDauDate.getTime())) {
-                  const nextMonth = new Date(batDauDate.getFullYear(), batDauDate.getMonth() + 1, 1);
-                  startStr = toLocalISODate(nextMonth);
-               }
-            }
-            endMonthStr = ''; // Recalculate based on new startStr and quantity
 
             if (recentDoc.phuthu) {
                try {
