@@ -107,6 +107,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
    const [loadingTuitionNoticeImage, setLoadingTuitionNoticeImage] = useState(false);
+   const [loadingInvoiceImage, setLoadingInvoiceImage] = useState(false);
    const [staffDirectory, setStaffDirectory] = useState({});
    const leaveSubmitLockRef = useRef(false);
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
@@ -315,10 +316,10 @@ function ParentPortal({ parentData, setParentData }) {
          }
 
          const registration = await navigator.serviceWorker.ready;
-         
+
          // In a real app, replace this with your VAPID public key
-         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || ''; 
-         
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
+
          // Convert VAPID key to Uint8Array
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -728,7 +729,7 @@ function ParentPortal({ parentData, setParentData }) {
             if (existingWindow) existingWindow.close();
             const separator = resolvedImageUrl.includes('?') ? '&' : '?';
             const downloadUrl = `${resolvedImageUrl}${separator}download=`;
-            
+
             const link = document.createElement('a');
             link.href = downloadUrl;
             document.body.appendChild(link);
@@ -836,9 +837,9 @@ function ParentPortal({ parentData, setParentData }) {
                      if (existingWindow) existingWindow.close();
                      return;
                   }
-                } catch (error) {
+               } catch (error) {
                   console.warn('Web Share failed, falling back to image preview', error);
-                }
+               }
 
                try {
                   await navigator.share({
@@ -1032,6 +1033,132 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
+   const fetchInvoiceImageUrl = async () => {
+      const invoiceRecord = tuitionStatus?.record;
+      if (!tuitionStatus?.isPaid || !invoiceRecord || !parentData?.student?.mahv) return null;
+
+      const invoiceId = String(invoiceRecord.mahd || '').trim();
+      const studentId = String(parentData.student.mahv || '').trim();
+      const candidateUrls = [];
+
+      if (invoiceRecord.image_url) {
+         candidateUrls.push(invoiceRecord.image_url);
+      }
+
+      if (invoiceId) {
+         const { data: invoiceData, error: invoiceError } = await supabase
+            .from('tbl_hd')
+            .select('image_url')
+            .eq('mahv', studentId)
+            .eq('mahd', invoiceId)
+            .maybeSingle();
+
+         if (invoiceError) {
+            console.warn('Không đọc được image_url từ tbl_hd:', invoiceError);
+         }
+         if (invoiceData?.image_url) {
+            candidateUrls.push(invoiceData.image_url);
+         }
+      }
+
+      if (!invoiceId) {
+         return await getFirstWorkingImageUrl(candidateUrls);
+      }
+
+      const pickExactInvoiceImage = (messages = []) => {
+         const validMessages = messages
+            .filter(msg => msg?.image_url)
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+         if (validMessages.length === 0) return null;
+
+         const exactMatch = validMessages.find(msg => String(msg.content || '').includes(invoiceId));
+         return exactMatch?.image_url || null;
+      };
+
+      let imageUrl = pickExactInvoiceImage(chatMessages);
+      if (imageUrl) {
+         candidateUrls.push(imageUrl);
+      }
+
+      if (!imageUrl) {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', studentId)
+            .not('image_url', 'is', null)
+            .ilike('content', `%${invoiceId}%`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+         if (error) throw error;
+         imageUrl = pickExactInvoiceImage(data || []);
+         if (imageUrl) {
+            candidateUrls.push(imageUrl);
+         }
+      }
+
+      if (!imageUrl) {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', studentId)
+            .not('image_url', 'is', null)
+            .ilike('content', `%${invoiceId}%`)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+         if (error) throw error;
+         imageUrl = pickExactInvoiceImage(data || []);
+         if (imageUrl) {
+            candidateUrls.push(imageUrl);
+         }
+      }
+
+      return await getFirstWorkingImageUrl(candidateUrls);
+   };
+
+   const handleOpenInvoiceImage = async () => {
+      setLoadingInvoiceImage(true);
+      try {
+         const imageUrl = await fetchInvoiceImageUrl();
+         if (imageUrl) {
+            setPreviewImage(imageUrl);
+         } else {
+            alert('Chưa tìm thấy hình hóa đơn học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         console.error('Error loading invoice image:', error);
+         alert('Không tải được hình hóa đơn học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingInvoiceImage(false);
+      }
+   };
+
+   const handleDownloadInvoiceImage = async () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      let newWindow = null;
+      if (!isMobileDevice) {
+         newWindow = window.open('', '_blank');
+      }
+
+      setLoadingInvoiceImage(true);
+      try {
+         const imageUrl = await fetchInvoiceImageUrl();
+         if (imageUrl) {
+            const invoiceId = tuitionStatus?.record?.mahd || parentData?.student?.mahv || 'invoice';
+            await handleDownloadImage(imageUrl, `hoa-don-hoc-phi-${invoiceId}.jpg`, newWindow);
+         } else {
+            if (newWindow) newWindow.close();
+            alert('Chưa tìm thấy hình hóa đơn học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         if (newWindow) newWindow.close();
+         console.error('Error downloading invoice image:', error);
+         alert('Không tải được hình hóa đơn học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingInvoiceImage(false);
+      }
+   };
+
    const formatMonthYear = (dateStr) => {
       if (!dateStr) return '';
       const d = new Date(dateStr);
@@ -1170,102 +1297,102 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
-    const fetchUnreads = async () => {
-       if (!parentData) return;
-       
-       let totalUnread = 0;
+   const fetchUnreads = async () => {
+      if (!parentData) return;
 
-       // 1. Fetch Chat Unreads
-       const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
-       let chatCount = 0;
-       if (chatData) {
-          chatData.forEach(d => {
-             const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-             if (isTeacher) chatCount++;
-          });
-          setUnreadChatCount(chatCount);
-          totalUnread += chatCount;
-       }
+      let totalUnread = 0;
 
-       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
-       const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
-       const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(20);
+      // 1. Fetch Chat Unreads
+      const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
+      let chatCount = 0;
+      if (chatData) {
+         chatData.forEach(d => {
+            const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+            if (isTeacher) chatCount++;
+         });
+         setUnreadChatCount(chatCount);
+         totalUnread += chatCount;
+      }
 
-       // Notices (General + Class excluding Menu/NgoaiKhoa)
-       const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
-       const latestGenNotice = generalNotices?.[0];
-       const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
-       const latestClassNotice = classNotices?.[0];
-       
-       const currentLatestNoticeTime = Math.max(
-          0, /* General notices excluded */
-          latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
-       );
-       if (currentLatestNoticeTime > lastNoticeTime) {
-          setUnreadNotices(1);
-          totalUnread += 1;
-       } else {
-          setUnreadNotices(0);
-       }
+      // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
+      const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
+      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(20);
 
-       // Menu
-       const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
-       const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
-       const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
-       if (currentLatestMenuTime > lastMenuTime) {
-          setUnreadMenu(1);
-          totalUnread += 1;
-       } else {
-          setUnreadMenu(0);
-       }
+      // Notices (General + Class excluding Menu/NgoaiKhoa)
+      const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
+      const latestGenNotice = generalNotices?.[0];
+      const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
+      const latestClassNotice = classNotices?.[0];
 
-       // Ngoai Khoa
-       const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
-       const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
-       const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
-       if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
-          setUnreadNgoaiKhoa(1);
-          totalUnread += 1;
-       } else {
-          setUnreadNgoaiKhoa(0);
-       }
+      const currentLatestNoticeTime = Math.max(
+         0, /* General notices excluded */
+         latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
+      );
+      if (currentLatestNoticeTime > lastNoticeTime) {
+         setUnreadNotices(1);
+         totalUnread += 1;
+      } else {
+         setUnreadNotices(0);
+      }
 
-       // Chuong trinh hoc
-       const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
-       const latestChuongTrinhHoc = (classAnnouncements || []).find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
-       const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
-       if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
-          setUnreadChuongTrinhHoc(1);
-          totalUnread += 1;
-       } else {
-          setUnreadChuongTrinhHoc(0);
-       }
+      // Menu
+      const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
+      const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
+      const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
+      if (currentLatestMenuTime > lastMenuTime) {
+         setUnreadMenu(1);
+         totalUnread += 1;
+      } else {
+         setUnreadMenu(0);
+      }
 
-       // 3. Fetch Health Unreads
-       const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
-       const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
-       const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
-       if (currentLatestHealthTime > lastHealthTime) {
-          setUnreadHealth(1);
-          totalUnread += 1;
-       } else {
-          setUnreadHealth(0);
-       }
+      // Ngoai Khoa
+      const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
+      const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
+      const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
+      if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
+         setUnreadNgoaiKhoa(1);
+         totalUnread += 1;
+      } else {
+         setUnreadNgoaiKhoa(0);
+      }
 
-       // 4. Fetch Tuition (latestFee) Unreads
-       const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${parentData.student.mahv}`) || '0');
-       const latestFee = parentData?.latestFee;
-       if (latestFee) {
-          const currentFeeTime = new Date(latestFee.ngaylap).getTime();
-          if (currentFeeTime > lastFeeTime) {
-             // Only count as unread if it hasn't been paid (if we can detect that)
-             // For now, any new fee notification counts as +1
-             totalUnread += 1;
-          }
-       }
+      // Chuong trinh hoc
+      const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
+      const latestChuongTrinhHoc = (classAnnouncements || []).find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
+      const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
+      if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
+         setUnreadChuongTrinhHoc(1);
+         totalUnread += 1;
+      } else {
+         setUnreadChuongTrinhHoc(0);
+      }
 
-       syncAppBadge(totalUnread);
-    };
+      // 3. Fetch Health Unreads
+      const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
+      const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
+      const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
+      if (currentLatestHealthTime > lastHealthTime) {
+         setUnreadHealth(1);
+         totalUnread += 1;
+      } else {
+         setUnreadHealth(0);
+      }
+
+      // 4. Fetch Tuition (latestFee) Unreads
+      const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${parentData.student.mahv}`) || '0');
+      const latestFee = parentData?.latestFee;
+      if (latestFee) {
+         const currentFeeTime = new Date(latestFee.ngaylap).getTime();
+         if (currentFeeTime > lastFeeTime) {
+            // Only count as unread if it hasn't been paid (if we can detect that)
+            // For now, any new fee notification counts as +1
+            totalUnread += 1;
+         }
+      }
+
+      syncAppBadge(totalUnread);
+   };
 
    useEffect(() => {
       if (!parentData) return;
@@ -1453,20 +1580,20 @@ function ParentPortal({ parentData, setParentData }) {
             }
             setUnreadChuongTrinhHoc(0);
          } else if (parentTab === 'health-tab') {
-             if (healthHistory.length > 0) {
-                const time = new Date(healthHistory[0].ngay).getTime();
-                localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
-             }
-             setUnreadHealth(0);
-             fetchUnreads();
-          } else if (parentTab === 'fee-tab') {
-             const latestFee = parentData?.latestFee;
-             if (latestFee) {
-                const time = new Date(latestFee.ngaylap).getTime();
-                localStorage.setItem(`last_fee_time_${parentData.student.mahv}`, String(time));
-             }
-             fetchUnreads();
-          }
+            if (healthHistory.length > 0) {
+               const time = new Date(healthHistory[0].ngay).getTime();
+               localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
+            }
+            setUnreadHealth(0);
+            fetchUnreads();
+         } else if (parentTab === 'fee-tab') {
+            const latestFee = parentData?.latestFee;
+            if (latestFee) {
+               const time = new Date(latestFee.ngaylap).getTime();
+               localStorage.setItem(`last_fee_time_${parentData.student.mahv}`, String(time));
+            }
+            fetchUnreads();
+         }
       };
       markAsRead();
    }, [parentTab, parentData?.student?.mahv, parentData?.latestFee?.ngaylap, parentNotices, ngoaiKhoaAnnouncements, healthHistory]);
@@ -1811,19 +1938,19 @@ function ParentPortal({ parentData, setParentData }) {
                                           <span style={{ fontSize: '0.8rem', color: '#be185d', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
                                        </div>
                                        <div style={{ padding: '15px' }}>
-                                           <div style={{ 
-                                              color: '#475569', 
-                                              fontSize: '0.95rem', 
-                                              lineHeight: '1.7', 
-                                              whiteSpace: 'pre-wrap',
-                                              background: '#f8fafc',
-                                              padding: '15px',
-                                              borderRadius: '12px',
-                                              border: '1px solid #f1f5f9',
-                                              marginBottom: '15px'
-                                           }}>
-                                              {item.content}
-                                           </div>
+                                          <div style={{
+                                             color: '#475569',
+                                             fontSize: '0.95rem',
+                                             lineHeight: '1.7',
+                                             whiteSpace: 'pre-wrap',
+                                             background: '#f8fafc',
+                                             padding: '15px',
+                                             borderRadius: '12px',
+                                             border: '1px solid #f1f5f9',
+                                             marginBottom: '15px'
+                                          }}>
+                                             {item.content}
+                                          </div>
                                           {item.image_url && (
                                              <div
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
@@ -1915,10 +2042,10 @@ function ParentPortal({ parentData, setParentData }) {
                                           <span style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
                                        </div>
                                        <div style={{ padding: '15px' }}>
-                                          <div style={{ 
-                                             color: '#475569', 
-                                             fontSize: '0.95rem', 
-                                             lineHeight: '1.7', 
+                                          <div style={{
+                                             color: '#475569',
+                                             fontSize: '0.95rem',
+                                             lineHeight: '1.7',
                                              whiteSpace: 'pre-wrap',
                                              marginBottom: item.image_url ? '15px' : '0'
                                           }}>
@@ -2027,31 +2154,37 @@ function ParentPortal({ parentData, setParentData }) {
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         {parentData.latestFee ? (
                            <>
-                           {!tuitionStatus.isPaid && (
-                              <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
-                                 {tuitionStatus.text}
-                              </div>
-                           )}
-                           <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                                 <div>
-                                    <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>{tuitionStatus.text}</div>
-                                    <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
+                              {!tuitionStatus.isPaid && (
+                                 <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
+                                    {tuitionStatus.text}
                                  </div>
-                                 <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
-                                    <CreditCard size={24} />
-                                 </div>
-                              </div>
-                              <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                 <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
-                                 {!tuitionStatus.isPaid && (
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                       <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
-                                       <button onClick={handleDownloadTuitionImage} disabled={loadingTuitionNoticeImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                              )}
+                              <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                                    <div>
+                                       <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>{tuitionStatus.text}</div>
+                                       <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
                                     </div>
-                                 )}
+                                    <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
+                                       <CreditCard size={24} />
+                                    </div>
+                                 </div>
+                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
+                                    {!tuitionStatus.isPaid && (
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                          <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
+                                          <button onClick={handleDownloadTuitionImage} disabled={loadingTuitionNoticeImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                                       </div>
+                                    )}
+                                    {tuitionStatus.isPaid && (
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                          <button onClick={handleOpenInvoiceImage} disabled={loadingInvoiceImage} style={{ background: 'white', color: '#15803d', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingInvoiceImage ? 'wait' : 'pointer', opacity: loadingInvoiceImage ? 0.8 : 1 }}>{loadingInvoiceImage ? 'Đang tải...' : 'Xem hóa đơn'}</button>
+                                          <button onClick={handleDownloadInvoiceImage} disabled={loadingInvoiceImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingInvoiceImage ? 'wait' : 'pointer', opacity: loadingInvoiceImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                                       </div>
+                                    )}
+                                 </div>
                               </div>
-                           </div>
                            </>
                         ) : (
                            <div className="fee-card-empty" style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', padding: '30px', borderRadius: '20px', textAlign: 'center', color: '#94a3b8', marginBottom: '20px' }}>
@@ -2407,10 +2540,10 @@ function ParentPortal({ parentData, setParentData }) {
                      <X size={20} />
                   </button>
                </div>
-               <img 
-                  src={getDisplayUrl(previewImage)} 
-                  alt="Preview" 
-                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} 
+               <img
+                  src={getDisplayUrl(previewImage)}
+                  alt="Preview"
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}
                   referrerPolicy="no-referrer"
                   onClick={e => e.stopPropagation()}
                />

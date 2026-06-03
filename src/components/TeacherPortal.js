@@ -683,9 +683,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return 'Tin nhắn';
    };
 
-   const isTuitionNoticeChatMessage = (message) => {
+   const isHiddenSystemChatMessage = (message) => {
       const content = String(message?.content || '').trim();
-      return content.startsWith('Gửi phụ huynh Thông báo học phí ');
+      return content.startsWith('Gửi phụ huynh Thông báo học phí ') || content.startsWith('Gửi phụ huynh Hóa đơn học phí ');
    };
 
    const fetchTeacherAnnouncements = async (type) => {
@@ -1324,6 +1324,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontSize: '0.9rem', background: 'white', border: '1px dashed #cbd5e1', borderRadius: '18px', padding: '1.5rem 1.25rem' }}>Bắt đầu trò chuyện với phụ huynh của {attChatSelectedStudent.tenhv}</div>
                ) : (
                   attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
+                     if (isHiddenSystemChatMessage(m)) return null;
                      const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
                      const senderName = getTeacherChatSenderName(m);
                      return (
@@ -1350,7 +1351,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                  <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                               </div>
                             )}
-                            {m.image_url && !isTuitionNoticeChatMessage(m) && (
+                            {m.image_url && (
                                <div style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', width: 'fit-content' }}>
                                  <img src={m.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
                               </div>

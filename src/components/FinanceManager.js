@@ -2078,9 +2078,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
                         <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
                      </div>
-                     <div>Khóa học: <b>{printHoaDon.tenlop}</b></div>
+                     <div>Lớp: <b>{printHoaDon.tenlop}</b></div>
                      <div>
-                        Tháng đóng học phí/Thời lượng: <b>{printHoaDon.thoiluong || "..."}</b>
+                        Thời lượng đóng: <b>{printHoaDon.thoiluong || "..."}</b>
                      </div>
                      <div style={{ marginTop: '5px' }}>
                         Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>

@@ -257,9 +257,11 @@ export default function InvoiceManager() {
       if (downloadingInvoice) {
          const processPng = async () => {
             try {
-               await new Promise(r => setTimeout(r, 1000));
+               await new Promise(r => setTimeout(r, 1500));
                const node = document.getElementById('download-invoice-node');
                if (node) {
+                  const expectedInvoiceId = downloadingInvoice.mahd;
+
                   // Capture setup: force visible and at top
                   node.style.position = 'fixed';
                   node.style.top = '0';
@@ -268,12 +270,22 @@ export default function InvoiceManager() {
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
 
+                  for (let retry = 0; retry < 20; retry++) {
+                     const invoiceId = downloadingInvoice.mahd;
+                     if (invoiceId === expectedInvoiceId) {
+                        break;
+                     }
+                     await new Promise(r => setTimeout(r, 150));
+                  }
+
                   const images = node.querySelectorAll('img');
                   await Promise.all(Array.from(images).map(img => {
                      if (img.complete) return Promise.resolve();
                      return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
                   }));
-                  await new Promise(r => setTimeout(r, 500));
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(r => setTimeout(r, 600));
 
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
 
@@ -291,6 +303,55 @@ export default function InvoiceManager() {
                      link.click();
                      document.body.removeChild(link);
                   }
+
+                  try {
+                     const loggedInManv = await resolveLoggedInManv(auth);
+                     if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
+                     const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
+                     const blob = dataUrlToBlob(dataUrl);
+                     const pngFile = new File([blob], fileName, { type: 'image/png' });
+                     const file = await compressImage(pngFile, 150);
+
+                     let imageUrl = '';
+                     if (config?.r2_enabled) {
+                        imageUrl = await uploadToR2(
+                           file,
+                           config.r2_endpoint,
+                           config.r2_access_key_id,
+                           config.r2_secret_access_key,
+                           config.r2_bucket_name,
+                           config.r2_public_url
+                        );
+                     } else {
+                        const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${file.name}`;
+                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        if (upErr) throw upErr;
+                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                        imageUrl = publicUrl;
+                     }
+
+                     const { error: invoiceUpdateErr } = await supabase
+                        .from('tbl_hd')
+                        .update({ image_url: imageUrl })
+                        .eq('mahv', downloadingInvoice.mahv)
+                        .eq('mahd', downloadingInvoice.mahd);
+                     if (invoiceUpdateErr) {
+                        console.warn('Không cập nhật được image_url cho hóa đơn học phí:', invoiceUpdateErr);
+                     }
+
+                     const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
+                        mahv: downloadingInvoice.mahv,
+                        manv: loggedInManv,
+                        content: `Gửi phụ huynh Hóa đơn học phí ${downloadingInvoice.mahd}`,
+                        image_url: imageUrl
+                     }]).select();
+                     if (msgErr) throw msgErr;
+                     if (insertedMessages?.[0]) {
+                        await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
+                     }
+                  } catch (autoSendErr) {
+                     console.error('Auto-send invoice error:', autoSendErr);
+                  }
                }
             } catch (err) {
                console.error('Lỗi xuất PNG:', err);
@@ -300,7 +361,7 @@ export default function InvoiceManager() {
          };
          processPng();
       }
-   }, [downloadingInvoice]);
+   }, [downloadingInvoice, config, auth]);
 
    useEffect(() => {
       if (downloadingNotice) {
@@ -1147,6 +1208,7 @@ export default function InvoiceManager() {
 
          setDownloadingInvoice({
             mahd: newMaHD,
+            mahv: selectedStudent.mahv,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
             sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
