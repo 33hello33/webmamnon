@@ -182,18 +182,31 @@ const getStudyPeriodFromInvoice = (inv) => {
       .find(item => /^\d{2}\/\d{4}$/.test(item));
 
    if (firstMonthToken) {
-      return getMonthBoundsFromToken(firstMonthToken);
+      const match = String(firstMonthToken).match(/(\d{2})\/(\d{4})/);
+      if (match) {
+         const monthIndex = parseInt(match[1], 10) - 1;
+         const year = parseInt(match[2], 10);
+         const prevMonth = new Date(year, monthIndex - 1, 1);
+         return {
+            statsStart: toLocalISODate(prevMonth),
+            statsEnd: toLocalISODate(new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0)),
+            periodLabel: `${String(prevMonth.getMonth() + 1).padStart(2, '0')}/${prevMonth.getFullYear()}`
+         };
+      }
    }
 
-   const statsStart = ensureIsoDate(inv.ngayBatDau);
-   const statsEnd = ensureIsoDate(inv.ngayKetThuc) || statsStart;
+   const billingStart = ensureIsoDate(inv.ngayBatDau);
+   if (!billingStart) return null;
 
-   if (!statsStart || !statsEnd) return null;
+   const billingDate = new Date(billingStart);
+   if (isNaN(billingDate.getTime())) return null;
+
+   const prevMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() - 1, 1);
 
    return {
-      statsStart,
-      statsEnd,
-      periodLabel: `${statsStart} - ${statsEnd}`
+      statsStart: toLocalISODate(prevMonth),
+      statsEnd: toLocalISODate(new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0)),
+      periodLabel: `${String(prevMonth.getMonth() + 1).padStart(2, '0')}/${prevMonth.getFullYear()}`
    };
 };
 
