@@ -65,6 +65,7 @@ const addDaysToDateString = (dateStr, days) => {
 };
 
 function ParentPortal({ parentData, setParentData }) {
+   const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
    const { config } = useConfig();
    const [parentTab, setParentTab] = useState('menu');
    const [chatMessages, setChatMessages] = useState([]);
@@ -104,6 +105,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [ngoaiKhoaReason, setNgoaiKhoaReason] = useState('');
    const chatEndRef = useRef(null);
    const chatContainerRef = useRef(null);
+   const tuitionTransferInputRef = useRef(null);
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
    const [loadingTuitionNoticeImage, setLoadingTuitionNoticeImage] = useState(false);
@@ -1504,7 +1506,7 @@ function ParentPortal({ parentData, setParentData }) {
       // Rest of the tab-specific data fetching
       const fetchChatDocs = async () => {
          const { data } = await supabase.from('documents').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: false });
-         if (data) setChatDocuments(data || []);
+         if (data) setChatDocuments((data || []).filter(doc => doc.category !== tuitionTransferProofCategory));
       };
       const fetchMonthlyAttendance = async () => {
          if (!parentData) return;
@@ -1674,7 +1676,8 @@ function ParentPortal({ parentData, setParentData }) {
       setUploading(true);
       try {
          let file = fileInput;
-         if (type === 'image') {
+         const isImageUpload = type === 'image' || type === 'transfer-proof';
+         if (isImageUpload) {
             try { file = await compressImage(fileInput, 150); } catch (err) { console.error('Compression failed:', err); }
          }
 
@@ -1683,43 +1686,35 @@ function ParentPortal({ parentData, setParentData }) {
             finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
          } else {
             const fileName = `${parentData.student.mahv}_${Date.now()}_${file.name}`;
-            const folder = type === 'image' ? 'chat-images' : 'chat-files';
+            const folder = isImageUpload ? 'chat-images' : 'chat-files';
             const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
             if (error) throw error;
             const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
             finalUrl = publicUrl;
          }
 
-         const msgPayload = {
-            mahv: parentData.student.mahv,
-            manv: parentData.teacherManv,
-            content: '',
-            image_url: type === 'image' ? finalUrl : null,
-            file_url: type !== 'image' ? finalUrl : null,
-            file_name: file.name,
-            file_mime_type: file.type,
-            description: 'PH'
-         };
-
-         const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-         if (data) {
-            await triggerPushNotification(supabase, 'hv_messages', data[0]);
-         }
-
          const newDoc = {
             mahv: parentData.student.mahv,
             name: file.name,
-            category: type === 'image' ? 'Ảnh' : 'Tài liệu',
+            category: type === 'transfer-proof' ? tuitionTransferProofCategory : (isImageUpload ? 'Ảnh' : 'Tài liệu'),
             file_url: finalUrl,
             mime_type: file.type
          };
          await supabase.from('documents').insert([newDoc]);
+         if (type === 'transfer-proof') {
+            alert('Đã upload ảnh chuyển khoản thành công.');
+         }
       } catch (err) {
          alert('Lỗi: ' + err.message);
       } finally {
          setUploading(false);
          if (inputElement) inputElement.value = '';
       }
+   };
+
+   const handleTuitionTransferUploadClick = () => {
+      if (uploading) return;
+      tuitionTransferInputRef.current?.click();
    };
 
    return (
@@ -2199,9 +2194,11 @@ function ParentPortal({ parentData, setParentData }) {
                                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
                                     {!tuitionStatus.isPaid && (
-                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                           <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
                                           <button onClick={handleDownloadTuitionImage} disabled={loadingTuitionNoticeImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                                          <button onClick={handleTuitionTransferUploadClick} disabled={uploading} style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fdba74', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.8 : 1 }}>Upload ảnh chuyển khoản</button>
+                                          <input ref={tuitionTransferInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'transfer-proof')} disabled={uploading} />
                                        </div>
                                     )}
                                     {tuitionStatus.isPaid && (
