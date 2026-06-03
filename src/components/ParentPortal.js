@@ -1043,24 +1043,54 @@ function ParentPortal({ parentData, setParentData }) {
       return feeRecord.thoiluong || feeRecord.thang || formatMonthYear(feeRecord.ngaybatdau || feeRecord.ngaylap);
    };
 
+   const normalizeFeePeriod = (feeRecord) => {
+      return getFeePeriodLabel(feeRecord).trim().toLowerCase();
+   };
+
+   const getRecordTime = (record) => {
+      if (!record?.ngaylap) return 0;
+      const time = new Date(record.ngaylap).getTime();
+      return Number.isFinite(time) ? time : 0;
+   };
+
    const tuitionStatus = (() => {
       const latestNotify = parentData?.latestFee;
-      const latestInv = parentData?.invoices?.[0];
+      const invoices = parentData?.invoices || [];
+      const latestInv = invoices[0] || null;
 
       if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true };
 
-      if (latestInv) {
+      if (!latestNotify && latestInv) {
          const monthText = getFeePeriodLabel(latestInv);
          return {
             text: `Học phí đã thanh toán tháng ${monthText}`,
-            isPaid: true
+            isPaid: true,
+            record: latestInv,
+            activeNotice: null
          };
       }
 
+      const noticePeriod = normalizeFeePeriod(latestNotify);
+      const matchedInvoice = invoices.find(inv => normalizeFeePeriod(inv) === noticePeriod) || null;
+      const notifyTime = getRecordTime(latestNotify);
+      const matchedInvoiceTime = getRecordTime(matchedInvoice);
+      const isPaid = Boolean(matchedInvoice && matchedInvoiceTime >= notifyTime);
       const monthText = getFeePeriodLabel(latestNotify);
+
+      if (isPaid) {
+         return {
+            text: `Học phí đã thanh toán tháng ${monthText}`,
+            isPaid: true,
+            record: matchedInvoice || latestNotify,
+            activeNotice: latestNotify
+         };
+      }
+
       return {
          text: `Học phí cần thanh toán tháng ${monthText}`,
-         isPaid: false
+         isPaid: false,
+         record: latestNotify,
+         activeNotice: latestNotify
       };
    })();
 
@@ -1996,11 +2026,17 @@ function ParentPortal({ parentData, setParentData }) {
                   {parentTab === 'fee-tab' && (
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         {parentData.latestFee ? (
+                           <>
+                           {!tuitionStatus.isPaid && (
+                              <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
+                                 {tuitionStatus.text}
+                              </div>
+                           )}
                            <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                                  <div>
-                                    <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>Học phí tháng {getFeePeriodLabel(parentData.latestFee)}</div>
-                                    <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
+                                    <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>{tuitionStatus.text}</div>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
                                  </div>
                                  <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
                                     <CreditCard size={24} />
@@ -2016,6 +2052,7 @@ function ParentPortal({ parentData, setParentData }) {
                                  )}
                               </div>
                            </div>
+                           </>
                         ) : (
                            <div className="fee-card-empty" style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', padding: '30px', borderRadius: '20px', textAlign: 'center', color: '#94a3b8', marginBottom: '20px' }}>
                               <Wallet size={32} style={{ marginBottom: '10px', opacity: 0.5 }} />
