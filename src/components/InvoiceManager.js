@@ -202,6 +202,7 @@ export default function InvoiceManager() {
    const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
+   const invoiceExportLockRef = useRef(null);
    const initialInvoiceData = {
       loaiDong: 'Tháng',
       soLuong: 1,
@@ -224,6 +225,10 @@ export default function InvoiceManager() {
    const [invoiceData, setInvoiceData] = useState(initialInvoiceData);
 
    const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+   const authRef = useRef(auth);
+   authRef.current = auth;
+   const configRef = useRef(config);
+   configRef.current = config;
    const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
 
    const [noCu, setNoCu] = useState(0);
@@ -255,6 +260,9 @@ export default function InvoiceManager() {
 
    useEffect(() => {
       if (downloadingInvoice) {
+         if (invoiceExportLockRef.current === downloadingInvoice.mahd) return;
+         invoiceExportLockRef.current = downloadingInvoice.mahd;
+
          const processPng = async () => {
             try {
                await new Promise(r => setTimeout(r, 1500));
@@ -305,7 +313,7 @@ export default function InvoiceManager() {
                   }
 
                   try {
-                     const loggedInManv = await resolveLoggedInManv(auth);
+                     const loggedInManv = await resolveLoggedInManv(authRef.current);
                      if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
                      const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
                      const blob = dataUrlToBlob(dataUrl);
@@ -313,14 +321,14 @@ export default function InvoiceManager() {
                      const file = await compressImage(pngFile, 150);
 
                      let imageUrl = '';
-                     if (config?.r2_enabled) {
+                     if (configRef.current?.r2_enabled) {
                         imageUrl = await uploadToR2(
                            file,
-                           config.r2_endpoint,
-                           config.r2_access_key_id,
-                           config.r2_secret_access_key,
-                           config.r2_bucket_name,
-                           config.r2_public_url
+                           configRef.current.r2_endpoint,
+                           configRef.current.r2_access_key_id,
+                           configRef.current.r2_secret_access_key,
+                           configRef.current.r2_bucket_name,
+                           configRef.current.r2_public_url
                         );
                      } else {
                         const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${file.name}`;
@@ -356,12 +364,15 @@ export default function InvoiceManager() {
             } catch (err) {
                console.error('Lỗi xuất PNG:', err);
             } finally {
+               if (invoiceExportLockRef.current === downloadingInvoice.mahd) {
+                  invoiceExportLockRef.current = null;
+               }
                setDownloadingInvoice(null);
             }
          };
          processPng();
       }
-   }, [downloadingInvoice, config, auth]);
+   }, [downloadingInvoice]);
 
    useEffect(() => {
       if (downloadingNotice) {
