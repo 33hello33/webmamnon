@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, insertLog } from '../supabase';
 import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -59,6 +59,20 @@ const syncTuitionNoticeImage = async ({ file, mahv, mahd, config }) => {
    }
 
    return imageUrl;
+};
+
+const resolveLoggedInManv = async (auth) => {
+   const sessionManv = auth?.user?.manv;
+   if (sessionManv) {
+      const { data } = await supabase.from('tbl_nv').select('manv').eq('manv', sessionManv).maybeSingle();
+      if (data?.manv) return data.manv;
+   }
+   const sessionUsername = auth?.user?.username;
+   if (sessionUsername) {
+      const { data } = await supabase.from('tbl_nv').select('manv').eq('username', sessionUsername).maybeSingle();
+      if (data?.manv) return data.manv;
+   }
+   return null;
 };
 
 
@@ -353,6 +367,7 @@ export default function InvoiceManager() {
    const [studySummary, setStudySummary] = useState(null);
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
+   const invoiceExportLockRef = useRef(null);
    const [invoiceData, setInvoiceData] = useState({
       loaiDong: 'Tháng',
       soLuong: 1,
@@ -374,6 +389,10 @@ export default function InvoiceManager() {
    });
 
    const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+   const authRef = useRef(auth);
+   authRef.current = auth;
+   const configRef = useRef(config);
+   configRef.current = config;
    const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
 
    const [noCu, setNoCu] = useState(0);
@@ -411,6 +430,9 @@ export default function InvoiceManager() {
 
    useEffect(() => {
       if (downloadingInvoice) {
+         if (invoiceExportLockRef.current === downloadingInvoice.mahd) return;
+         invoiceExportLockRef.current = downloadingInvoice.mahd;
+
          const processPng = async () => {
             try {
                await new Promise(r => setTimeout(r, 1000));
@@ -451,14 +473,16 @@ export default function InvoiceManager() {
                   // Auto-send to student chat
                   const autoSend = async () => {
                      try {
+                        const loggedInManv = await resolveLoggedInManv(authRef.current);
+                        if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
                         const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
                         const blob = dataUrlToBlob(dataUrl);
                         const pngFile = new File([blob], fileName, { type: 'image/png' });
                         const file = await compressImage(pngFile, 150);
 
                         let imageUrl = '';
-                        if (config?.r2_enabled) {
-                           imageUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                        if (configRef.current?.r2_enabled) {
+                           imageUrl = await uploadToR2(file, configRef.current.r2_endpoint, configRef.current.r2_access_key_id, configRef.current.r2_secret_access_key, configRef.current.r2_bucket_name, configRef.current.r2_public_url);
                         } else {
                            const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${file.name}`;
                            const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
@@ -467,9 +491,18 @@ export default function InvoiceManager() {
                            imageUrl = publicUrl;
                         }
 
+                        const { error: invoiceUpdateErr } = await supabase
+                           .from('tbl_hd')
+                           .update({ image_url: imageUrl })
+                           .eq('mahv', downloadingInvoice.mahv)
+                           .eq('mahd', downloadingInvoice.mahd);
+                        if (invoiceUpdateErr) {
+                           console.warn('Không cập nhật được image_url cho hóa đơn học phí:', invoiceUpdateErr);
+                        }
+
                         await supabase.from('hv_messages').insert([{
                            mahv: downloadingInvoice.mahv,
-                           manv: auth.user?.manv || auth.user?.username || 'admin',
+                           manv: loggedInManv,
                            content: `Gửi phụ huynh Hóa đơn học phí ${downloadingInvoice.mahd}`,
                            image_url: imageUrl
                         }]);
@@ -483,6 +516,9 @@ export default function InvoiceManager() {
             } catch (err) {
                console.error('Lỗi xuất PNG:', err);
             } finally {
+               if (invoiceExportLockRef.current === downloadingInvoice.mahd) {
+                  invoiceExportLockRef.current = null;
+               }
                setDownloadingInvoice(null);
             }
          };
