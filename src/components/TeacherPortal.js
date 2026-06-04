@@ -1459,7 +1459,17 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         <input type="file" multiple style={{ display: 'none' }} onChange={(e) => handleAttFileUpload(e, 'file')} disabled={uploading} />
                      </label>
                   </div>
-                  <input type="text" placeholder="Nhập tin nhắn..." value={attChatInput} onChange={(e) => setAttChatInput(e.target.value)} style={{ flex: 1, minWidth: 0, width: 0, padding: isMobileChatView ? '0.65rem 0.55rem' : '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: isMobileChatView ? '14px' : '16px', outline: 'none', color: '#0f172a' }} />
+                  <textarea
+                     placeholder="Nhập tin nhắn..."
+                     value={attChatInput}
+                     onChange={(e) => {
+                        setAttChatInput(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                     }}
+                     rows={1}
+                     style={{ flex: 1, minWidth: 0, width: 0, padding: isMobileChatView ? '0.65rem 0.55rem' : '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: isMobileChatView ? '14px' : '16px', outline: 'none', color: '#0f172a', resize: 'none', minHeight: isMobileChatView ? '38px' : '40px', maxHeight: '120px', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'auto' }}
+                  />
                   <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: isMobileChatView ? '38px' : '40px', height: isMobileChatView ? '38px' : '40px', minWidth: isMobileChatView ? '38px' : '40px', flexShrink: 0, borderRadius: '14px', background: '#0f172a', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1, boxShadow: '0 10px 18px rgba(15, 23, 42, 0.18)' }}>
                      {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                   </button>

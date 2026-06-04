@@ -2421,7 +2421,18 @@ function ParentPortal({ parentData, setParentData }) {
                                  </label>
                               </div>
                               <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                                 <input type="text" placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={uploading} style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none' }} />
+                                 <textarea
+                                    placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."}
+                                    value={chatInput}
+                                    onChange={(e) => {
+                                       setChatInput(e.target.value);
+                                       e.target.style.height = 'auto';
+                                       e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                                    }}
+                                    disabled={uploading}
+                                    rows={1}
+                                    style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none', resize: 'none', minHeight: '42px', maxHeight: '120px', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'auto' }}
+                                 />
                               </div>
                               <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', minWidth: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1, flexShrink: 0 }}>
                                  {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
