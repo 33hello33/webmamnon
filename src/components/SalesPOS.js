@@ -473,10 +473,10 @@ export default function SalesPOS() {
                               background: isHinhThucLocked ? '#f1f5f9' : 'white'
                            }}
                         >
-                        {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                        {walletsConfig.map(w => (
-                           <option key={w.id} value={w.name}>{w.name}</option>
-                        ))}
+                           {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                           {walletsConfig.map(w => (
+                              <option key={w.id} value={w.name}>{w.name}</option>
+                           ))}
                         </select>
                         <button
                            type="button"
@@ -622,7 +622,7 @@ export default function SalesPOS() {
                   </div>
 
                   <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
-                     Cảm ơn quý khách đã tin dùng dịch vụ của chúng tôi!
+                     Facebook:  {config?.tencongty || 'Tên Công ty'}
                   </div>
                </div>
             </div>

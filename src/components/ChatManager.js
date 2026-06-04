@@ -1167,6 +1167,45 @@ ${ngoaiKhoaForm.content}
       if (error) throw error;
 
       if (data) {
+        const { data: classStudents } = await supabase
+          .from('tbl_hv')
+          .select('mahv')
+          .eq('malop', data.malop)
+          .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+
+        const chatPayloads = (classStudents || []).filter(student => student?.mahv).map((student) => ({
+          mahv: student.mahv,
+          manv: data.manv || currentUser.manv || currentUser.username,
+          content: data.content || '',
+          image_url: data.image_url || null,
+          file_url: data.file_url || null,
+          file_name: data.file_name || '',
+          file_mime_type: data.file_mime_type || ''
+        }));
+
+        if (chatPayloads.length > 0) {
+          const { data: insertedMessages, error: chatInsertError } = await supabase.from('hv_messages').insert(chatPayloads).select();
+          if (chatInsertError) throw chatInsertError;
+
+          for (const message of insertedMessages || []) {
+            await triggerPushNotification(supabase, 'hv_messages', message);
+          }
+        }
+
+        if (data.image_url || data.file_url) {
+          const documentPayloads = (classStudents || []).filter(student => student?.mahv).map((student) => ({
+            mahv: student.mahv,
+            name: data.file_name || 'Thong bao lop',
+            category: data.image_url ? 'Ảnh' : 'Tài liệu',
+            file_url: data.image_url || data.file_url,
+            mime_type: data.file_mime_type || ''
+          }));
+
+          if (documentPayloads.length > 0) {
+            await supabase.from('documents').insert(documentPayloads);
+          }
+        }
+
         await triggerPushNotification(supabase, 'class_announcements', data);
         setHistoryNotices(prev => prev.map(item => item.id === notice.id ? data : item));
       }
