@@ -1022,6 +1022,48 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          }
 
+         if (!isBoMonTeacher && insertedAnnouncements?.length) {
+            const chatPayloads = [];
+            const documentPayloads = [];
+
+            classStudents.forEach((student) => {
+               insertedAnnouncements.forEach((announcement) => {
+                  chatPayloads.push({
+                     mahv: student.mahv,
+                     manv: staffId,
+                     content: announcement.content || '',
+                     image_url: announcement.image_url || null,
+                     file_url: announcement.file_url || null,
+                     file_name: announcement.file_name || '',
+                     file_mime_type: announcement.file_mime_type || ''
+                  });
+
+                  if (announcement.image_url || announcement.file_url) {
+                     documentPayloads.push({
+                        mahv: student.mahv,
+                        name: announcement.file_name || 'Thong bao lop',
+                        category: announcement.image_url ? 'Ảnh' : 'Tài liệu',
+                        file_url: announcement.image_url || announcement.file_url,
+                        mime_type: announcement.file_mime_type || ''
+                     });
+                  }
+               });
+            });
+
+            if (chatPayloads.length > 0) {
+               const { data: insertedMessages, error: chatInsertError } = await supabase.from('hv_messages').insert(chatPayloads).select();
+               if (chatInsertError) throw chatInsertError;
+
+               for (const message of insertedMessages || []) {
+                  await triggerPushNotification(supabase, 'hv_messages', message);
+               }
+            }
+
+            if (documentPayloads.length > 0) {
+               await supabase.from('documents').insert(documentPayloads);
+            }
+         }
+
          closeClassBroadcastModal();
          setTimeout(() => {
             if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
