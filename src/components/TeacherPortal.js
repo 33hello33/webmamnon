@@ -9,6 +9,7 @@ import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
+import { buildGroupedMessageDescription, createMessageGroupId } from '../utils/chatMessageGrouping';
 
 const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
 
@@ -1081,6 +1082,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       try {
          const staffId = attendanceUser.manv || attendanceUser.username;
          const uploadedMedia = [];
+         const broadcastGroupId = classBroadcastMedia.length > 1 ? createMessageGroupId('class') : '';
+         const broadcastDescription = buildGroupedMessageDescription('THONG_BAO', broadcastGroupId);
 
          for (const file of classBroadcastMedia) {
             uploadedMedia.push(await uploadManagedFile({
@@ -1125,7 +1128,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      image_url: announcement.image_url || null,
                      file_url: announcement.file_url || null,
                      file_name: announcement.file_name || '',
-                     file_mime_type: announcement.file_mime_type || ''
+                     file_mime_type: announcement.file_mime_type || '',
+                     description: broadcastDescription
                   });
 
                   if (announcement.image_url || announcement.file_url) {

@@ -246,7 +246,8 @@ export default function SalesPOS() {
             dadong: pCur(daDong),
             conno: conLai,
             nhanvien: cashier,
-            hinhthuc: hinhThuc
+            hinhthuc: hinhThuc,
+            noidung: ghiChu
          };
          setPosPrintData(finalPrintData);
 
@@ -602,6 +603,11 @@ export default function SalesPOS() {
                         <div>Tổng bill: <b style={{ fontSize: '14pt' }}>{fCur(posPrintData?.tongcong_bill)}</b></div>
                         <div style={{ color: '#0ea5e9', fontWeight: 'bold' }}>Hình thức: {posPrintData?.hinhthuc}</div>
                      </div>
+                     {posPrintData?.noidung && (
+                        <div style={{ fontSize: '11.5pt', lineHeight: 1.6 }}>
+                           Ghi chÃº: <b>{posPrintData.noidung}</b>
+                        </div>
+                     )}
                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5pt", paddingTop: '8px', borderTop: '1px dashed #ddd', fontWeight: 'bold' }}>
                         <div style={{ color: '#16a34a' }}>Đã trả: {fCur(posPrintData?.dadong)}</div>
                         <div style={{ color: (posPrintData?.conno > 0 ? '#ef4444' : '#16a34a') }}>
