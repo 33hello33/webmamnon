@@ -10,7 +10,6 @@ import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { triggerPushNotification } from '../utils/pushNotifications';
 import { toLocalISODate } from '../utils/localDate';
 import './ClassManager.css';
 
@@ -161,20 +160,6 @@ const dataUrlToBlob = (dataUrl) => {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: mime });
-};
-
-const resolveLoggedInManv = async (auth) => {
-  const sessionManv = auth?.user?.manv;
-  if (sessionManv) {
-    const { data } = await supabase.from('tbl_nv').select('manv').eq('manv', sessionManv).maybeSingle();
-    if (data?.manv) return data.manv;
-  }
-  const sessionUsername = auth?.user?.username;
-  if (sessionUsername) {
-    const { data } = await supabase.from('tbl_nv').select('manv').eq('username', sessionUsername).maybeSingle();
-    if (data?.manv) return data.manv;
-  }
-  return null;
 };
 
 export default function ClassManager({ students, showMessage, fetchStudents }) {
@@ -1024,8 +1009,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   document.body.removeChild(link);
 
                   try {
-                    const loggedInManv = await resolveLoggedInManv(auth);
-                    if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
                     const fileName = `ThongBao_${notice.tenhv}_${notice.mahd}.png`;
                     const blob = dataUrlToBlob(dataUrl);
                     const pngFile = new File([blob], fileName, { type: 'image/png' });
@@ -1058,18 +1041,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
                     }
 
-                    const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
-                      mahv: notice.mahv,
-                      manv: loggedInManv,
-                      content: `Gửi phụ huynh Thông báo học phí ${notice.mahd}`,
-                      image_url: imageUrl
-                    }]).select();
-                    if (msgErr) throw msgErr;
-                    if (insertedMessages?.[0]) {
-                      await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
-                    }
                   } catch (autoSendErr) {
-                    console.error(`Auto-send notice error for ${notice.tenhv}:`, autoSendErr);
+                    console.error(`Notice image save error for ${notice.tenhv}:`, autoSendErr);
                   }
                 } else {
                   // Retry nếu lỗi
@@ -1083,8 +1056,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     document.body.removeChild(link);
 
                     try {
-                      const loggedInManv = await resolveLoggedInManv(auth);
-                      if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
                       const fileName = `ThongBao_${notice.tenhv}_${notice.mahd}_retry.png`;
                       const blob = dataUrlToBlob(retryUrl);
                       const pngFile = new File([blob], fileName, { type: 'image/png' });
@@ -1117,18 +1088,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
                       }
 
-                      const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
-                        mahv: notice.mahv,
-                        manv: loggedInManv,
-                        content: `Gửi phụ huynh Thông báo học phí ${notice.mahd}`,
-                        image_url: imageUrl
-                      }]).select();
-                      if (msgErr) throw msgErr;
-                      if (insertedMessages?.[0]) {
-                        await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
-                      }
                     } catch (autoSendErr) {
-                      console.error(`Auto-send retry notice error for ${notice.tenhv}:`, autoSendErr);
+                      console.error(`Retry notice image save error for ${notice.tenhv}:`, autoSendErr);
                     }
                   }
                 }

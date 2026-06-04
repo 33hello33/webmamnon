@@ -6,7 +6,6 @@ import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { triggerPushNotification } from '../utils/pushNotifications';
 import { toLocalISODate } from '../utils/localDate';
 
 
@@ -158,20 +157,6 @@ const dataUrlToBlob = (dataUrl) => {
    return new Blob([bytes], { type: mime });
 };
 
-const resolveLoggedInManv = async (auth) => {
-   const sessionManv = auth?.user?.manv;
-   if (sessionManv) {
-      const { data } = await supabase.from('tbl_nv').select('manv').eq('manv', sessionManv).maybeSingle();
-      if (data?.manv) return data.manv;
-   }
-   const sessionUsername = auth?.user?.username;
-   if (sessionUsername) {
-      const { data } = await supabase.from('tbl_nv').select('manv').eq('username', sessionUsername).maybeSingle();
-      if (data?.manv) return data.manv;
-   }
-   return null;
-};
-
 export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }) {
    const { config, getTienAnConfig } = useConfig();
    const walletsConfig = (config ? [
@@ -314,8 +299,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }
 
                   try {
-                     const loggedInManv = await resolveLoggedInManv(authRef.current);
-                     if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
                      const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
                      const blob = dataUrlToBlob(dataUrl);
                      const pngFile = new File([blob], fileName, { type: 'image/png' });
@@ -348,18 +331,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         console.warn('Không cập nhật được image_url cho hóa đơn học phí:', invoiceUpdateErr);
                      }
 
-                     const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
-                        mahv: downloadingInvoice.mahv,
-                        manv: loggedInManv,
-                        content: `Gửi phụ huynh Hóa đơn học phí ${downloadingInvoice.mahd}`,
-                        image_url: imageUrl
-                     }]).select();
-                     if (msgErr) throw msgErr;
-                     if (insertedMessages?.[0]) {
-                        await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
-                     }
                   } catch (autoSendErr) {
-                     console.error('Auto-send invoice error:', autoSendErr);
+                     console.error('Invoice image save error:', autoSendErr);
                   }
                }
             } catch (err) {
@@ -438,8 +411,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }
 
                   try {
-                     const loggedInManv = await resolveLoggedInManv(auth);
-                     if (!loggedInManv) throw new Error('Không tìm thấy manv đăng nhập');
                      const fileName = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
                      const blob = dataUrlToBlob(dataUrl);
                      const pngFile = new File([blob], fileName, { type: 'image/png' });
@@ -472,18 +443,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         console.warn('Không cập nhật được image_url cho thông báo học phí:', noticeUpdateErr);
                      }
 
-                     const { data: insertedMessages, error: msgErr } = await supabase.from('hv_messages').insert([{
-                        mahv: downloadingNotice.mahv,
-                        manv: loggedInManv,
-                        content: `Gửi phụ huynh Thông báo học phí ${downloadingNotice.mahd}`,
-                        image_url: imageUrl
-                     }]).select();
-                     if (msgErr) throw msgErr;
-                     if (insertedMessages?.[0]) {
-                        await triggerPushNotification(supabase, 'hv_messages', insertedMessages[0]);
-                     }
                   } catch (autoSendErr) {
-                     console.error('Auto-send notice error:', autoSendErr);
+                     console.error('Notice image save error:', autoSendErr);
                   }
                }
             } catch (err) {
