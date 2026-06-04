@@ -416,6 +416,7 @@ function ParentPortal({ parentData, setParentData }) {
          .from('class_announcements')
          .select('*')
          .eq('malop', parentData.student.malop)
+         .eq('approved', true)
          .eq('title', title)
          .order('created_at', { ascending: false })
          .limit(limit);
@@ -451,6 +452,7 @@ function ParentPortal({ parentData, setParentData }) {
          .from('class_announcements')
          .select('*')
          .eq('malop', parentData.student.malop)
+         .eq('approved', true)
          .order('created_at', { ascending: false })
          .limit(10);
 
@@ -1342,7 +1344,7 @@ function ParentPortal({ parentData, setParentData }) {
 
       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
       const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
-      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).order('created_at', { ascending: false }).limit(20);
+      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).eq('approved', true).order('created_at', { ascending: false }).limit(20);
 
       // Notices (General + Class excluding Menu/NgoaiKhoa)
       const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
@@ -1465,7 +1467,10 @@ function ParentPortal({ parentData, setParentData }) {
          .on('postgres_changes', { event: '*', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, async (payload) => {
             await fetchUnreads();
             await refreshAnnouncementsForCurrentTab();
-            if (payload.eventType !== 'INSERT') return;
+            const approvedNow = payload.new?.approved !== false;
+            const justApproved = payload.eventType === 'UPDATE' && payload.old?.approved === false && payload.new?.approved === true;
+            if (payload.eventType === 'INSERT' && !approvedNow) return;
+            if (payload.eventType !== 'INSERT' && !justApproved) return;
             const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })

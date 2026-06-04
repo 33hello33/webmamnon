@@ -859,6 +859,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   };
 
   const handlePostAnnouncement = async () => {
+    const autoApprove = currentUser?.role !== 'Giáo viên BM';
     if (!announcementForm.content.trim() && announcementFiles.images.length === 0 && announcementFiles.files.length === 0) {
       alert('Vui lòng nhập nội dung hoặc chọn tệp tin thông báo.');
       return;
@@ -892,7 +893,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           image_url: attachment?.isImage ? attachment.url : null,
           file_url: attachment && !attachment.isImage ? attachment.url : null,
           file_name: attachment?.fileName || '',
-          file_mime_type: attachment?.mimeType || ''
+          file_mime_type: attachment?.mimeType || '',
+          approved: autoApprove
         }))
       ));
 
@@ -900,7 +902,9 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       if (error) throw error;
       if (insertedData) {
         for (const record of insertedData) {
-          await triggerPushNotification(supabase, 'class_announcements', record);
+          if (record?.approved !== false) {
+            await triggerPushNotification(supabase, 'class_announcements', record);
+          }
         }
       }
 
@@ -916,6 +920,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   };
 
   const handlePostMenu = async () => {
+    const autoApprove = currentUser?.role !== 'Giáo viên BM';
     if (menuFiles.attachments.length === 0) {
       alert('Vui lòng chọn hình ảnh thực đơn.');
       return;
@@ -942,7 +947,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           image_url: attachment.isImage ? attachment.url : null,
           file_url: attachment.isImage ? null : attachment.url,
           file_name: attachment.fileName,
-          file_mime_type: attachment.mimeType
+          file_mime_type: attachment.mimeType,
+          approved: autoApprove
         }))
       ));
 
@@ -950,7 +956,9 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       if (error) throw error;
       if (insertedData) {
         for (const record of insertedData) {
-          await triggerPushNotification(supabase, 'class_announcements', record);
+          if (record?.approved !== false) {
+            await triggerPushNotification(supabase, 'class_announcements', record);
+          }
         }
       }
 
@@ -965,6 +973,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   };
 
   const handlePostChuongTrinhHoc = async () => {
+    const autoApprove = currentUser?.role !== 'Giáo viên BM';
     if (chuongTrinhHocFiles.attachments.length === 0) {
       alert('Vui lòng chọn hình ảnh chương trình học.');
       return;
@@ -991,7 +1000,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           image_url: attachment.isImage ? attachment.url : null,
           file_url: attachment.isImage ? null : attachment.url,
           file_name: attachment.fileName,
-          file_mime_type: attachment.mimeType
+          file_mime_type: attachment.mimeType,
+          approved: autoApprove
         }))
       ));
 
@@ -999,7 +1009,9 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       if (error) throw error;
       if (insertedData) {
         for (const record of insertedData) {
-          await triggerPushNotification(supabase, 'class_announcements', record);
+          if (record?.approved !== false) {
+            await triggerPushNotification(supabase, 'class_announcements', record);
+          }
         }
       }
 
@@ -1014,6 +1026,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   };
 
   const handlePostNgoaiKhoa = async () => {
+    const autoApprove = currentUser?.role !== 'Giáo viên BM';
     if (ngoaiKhoaFiles.attachments.length === 0) {
       alert('Vui lòng chọn hình ảnh hoạt động ngoại khóa.');
       return;
@@ -1058,7 +1071,8 @@ ${ngoaiKhoaForm.content}
           image_url: attachment.isImage ? attachment.url : null,
           file_url: attachment.isImage ? null : attachment.url,
           file_name: attachment.fileName,
-          file_mime_type: attachment.mimeType
+          file_mime_type: attachment.mimeType,
+          approved: autoApprove
         }))
       ));
 
@@ -1066,7 +1080,9 @@ ${ngoaiKhoaForm.content}
       if (error) throw error;
       if (insertedData) {
         for (const record of insertedData) {
-          await triggerPushNotification(supabase, 'class_announcements', record);
+          if (record?.approved !== false) {
+            await triggerPushNotification(supabase, 'class_announcements', record);
+          }
         }
       }
 
@@ -1107,18 +1123,74 @@ ${ngoaiKhoaForm.content}
     }
   };
 
-  const handleRevokeNotice = async (id) => {
+  const deleteAnnouncementAsset = async (url) => {
+    if (!url) return;
+
+    if (config.r2_enabled) {
+      try {
+        await deleteFromR2(
+          url,
+          config.r2_endpoint,
+          config.r2_access_key_id,
+          config.r2_secret_access_key,
+          config.r2_bucket_name,
+          config.r2_public_url
+        );
+      } catch (err) {
+        console.warn('Could not delete announcement file from R2:', err);
+      }
+      return;
+    }
+
+    if (url.includes('/storage/v1/object/public/assets/')) {
+      const path = url.split('/assets/')[1];
+      if (!path) return;
+      try {
+        await supabase.storage.from('assets').remove([path]);
+      } catch (err) {
+        console.warn('Could not delete announcement file from Supabase Storage:', err);
+      }
+    }
+  };
+
+  const handleApproveNotice = async (notice) => {
+    if (!notice?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('class_announcements')
+        .update({ approved: true })
+        .eq('id', notice.id)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        await triggerPushNotification(supabase, 'class_announcements', data);
+        setHistoryNotices(prev => prev.map(item => item.id === notice.id ? data : item));
+      }
+    } catch (err) {
+      alert('Lỗi khi duyệt: ' + err.message);
+    }
+  };
+
+  const handleRevokeNotice = async (notice) => {
+    if (!notice?.id) return;
     if (!window.confirm('Bạn có chắc chắn muốn thu hồi (xoá) bản tin này? Phụ huynh sẽ không còn thấy nội dung này nữa.')) return;
     
     try {
       const { error } = await supabase
         .from('class_announcements')
         .delete()
-        .eq('id', id);
+        .eq('id', notice.id);
       
       if (error) throw error;
+
+      await deleteAnnouncementAsset(notice.image_url);
+      await deleteAnnouncementAsset(notice.file_url);
       
-      setHistoryNotices(prev => prev.filter(n => n.id !== id));
+      setHistoryNotices(prev => prev.filter(n => n.id !== notice.id));
       alert('Đã thu hồi bản tin thành công.');
     } catch (err) {
       alert('Lỗi khi thu hồi: ' + err.message);
@@ -2395,16 +2467,21 @@ ${ngoaiKhoaForm.content}
                       return (
                       <div key={notice.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '15px', position: 'relative' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ 
-                            fontSize: '0.75rem', 
-                            fontWeight: 700, 
-                            padding: '4px 10px', 
-                            borderRadius: '6px',
-                            background: noticeTitle === 'TH?C ??N' ? '#f0fdf4' : noticeTitle === 'NGO?I KH?A' ? '#fdf2f8' : '#f5f3ff',
-                            color: noticeTitle === 'TH?C ??N' ? '#10b981' : noticeTitle === 'NGO?I KH?A' ? '#ec4899' : '#8b5cf6'
-                          }}>
-                            {noticeTitle}
-                          </span>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span style={{ 
+                              fontSize: '0.75rem', 
+                              fontWeight: 700, 
+                              padding: '4px 10px', 
+                              borderRadius: '6px',
+                              background: noticeTitle === 'TH?C ??N' ? '#f0fdf4' : noticeTitle === 'NGO?I KH?A' ? '#fdf2f8' : '#f5f3ff',
+                              color: noticeTitle === 'TH?C ??N' ? '#10b981' : noticeTitle === 'NGO?I KH?A' ? '#ec4899' : '#8b5cf6'
+                            }}>
+                              {noticeTitle}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', background: notice.approved === false ? '#fff7ed' : '#ecfdf5', color: notice.approved === false ? '#c2410c' : '#047857' }}>
+                              {notice.approved === false ? 'pending' : 'approved'}
+                            </span>
+                          </div>
                           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{new Date(notice.created_at).toLocaleString('vi-VN')}</span>
                         </div>
                         <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '5px' }}>Lớp: {getClassName(notice.malop)}</div>
@@ -2416,12 +2493,22 @@ ${ngoaiKhoaForm.content}
                           </div>
                         )}
 
-                        <button 
-                          onClick={() => handleRevokeNotice(notice.id)}
-                          style={{ position: 'absolute', right: '15px', bottom: '15px', padding: '6px 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                        >
-                          <Trash2 size={14} /> Thu hồi
-                        </button>
+                        <div style={{ position: 'absolute', right: '15px', bottom: '15px', display: 'flex', gap: '8px' }}>
+                          {notice.approved === false && (
+                            <button 
+                              onClick={() => handleApproveNotice(notice)}
+                              style={{ padding: '6px 12px', background: '#dcfce7', color: '#15803d', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Approve
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => handleRevokeNotice(notice)}
+                            style={{ padding: '6px 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <Trash2 size={14} /> Thu hồi
+                          </button>
+                        </div>
                       </div>
                     )})}
                   </div>
