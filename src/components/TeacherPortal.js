@@ -685,6 +685,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             .from('class_announcements')
             .select('*')
             .in('malop', classIds)
+            .eq('approved', true)
             .gte('created_at', dateLimit.toISOString())
             .order('created_at', { ascending: false })
             .limit(200);
@@ -1008,14 +1009,17 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             image_url: attachment?.isImage ? attachment.url : null,
             file_url: attachment && !attachment.isImage ? attachment.url : null,
             file_name: attachment?.fileName || '',
-            file_mime_type: attachment?.mimeType || ''
+            file_mime_type: attachment?.mimeType || '',
+            approved: !isBoMonTeacher
          }));
 
          const { data: insertedAnnouncements, error: insertError } = await supabase.from('class_announcements').insert(payloads).select();
          if (insertError) throw insertError;
 
          for (const announcement of insertedAnnouncements || []) {
-            await triggerPushNotification(supabase, 'class_announcements', announcement);
+            if (announcement?.approved !== false) {
+               await triggerPushNotification(supabase, 'class_announcements', announcement);
+            }
          }
 
          closeClassBroadcastModal();
