@@ -605,7 +605,7 @@ export default function SalesPOS() {
                      </div>
                      {posPrintData?.noidung && (
                         <div style={{ fontSize: '11.5pt', lineHeight: 1.6 }}>
-                           Ghi chÃº: <b>{posPrintData.noidung}</b>
+                           Ghi chú: <b>{posPrintData.noidung}</b>
                         </div>
                      )}
                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5pt", paddingTop: '8px', borderTop: '1px dashed #ddd', fontWeight: 'bold' }}>
