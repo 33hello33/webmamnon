@@ -27,6 +27,7 @@ export default function SalesPOS() {
    const [giamGia, setGiamGia] = useState('');
    const [daDong, setDaDong] = useState('0');
    const [hinhThuc, setHinhThuc] = useState(walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
+   const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [ghiChu, setGhiChu] = useState('');
    const [noCu, setNoCu] = useState(0);
 
@@ -72,6 +73,7 @@ export default function SalesPOS() {
 
    const handleSelectStudent = (st) => {
       setSelectedStudent(st);
+      setIsHinhThucLocked(true);
       calculateOldDebt(st.mahv);
       if (window.innerWidth <= 991) setCurrentStep(2);
    };
@@ -269,6 +271,7 @@ export default function SalesPOS() {
                   setDaDong('');
                   setGiamGia('');
                   setGhiChu('');
+                  setIsHinhThucLocked(true);
                   setSelectedStudent(null);
                   setPosPrintData(null);
                   if (window.innerWidth <= 991) setCurrentStep(1);
@@ -459,12 +462,30 @@ export default function SalesPOS() {
                <div className="sp-co-config mt-2">
                   <div className="cfg-item">
                      <label>Hình thức thanh toán</label>
-                     <select value={hinhThuc} onChange={e => setHinhThuc(e.target.value)} disabled={!!selectedStudent}>
+                     <div className="sp-payment-lock-row">
+                        <select
+                           value={hinhThuc}
+                           onChange={e => setHinhThuc(e.target.value)}
+                           disabled={isHinhThucLocked}
+                           style={{
+                              opacity: isHinhThucLocked ? 0.7 : 1,
+                              cursor: isHinhThucLocked ? 'not-allowed' : 'pointer',
+                              background: isHinhThucLocked ? '#f1f5f9' : 'white'
+                           }}
+                        >
                         {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
                         {walletsConfig.map(w => (
                            <option key={w.id} value={w.name}>{w.name}</option>
                         ))}
-                     </select>
+                        </select>
+                        <button
+                           type="button"
+                           className={`sp-unlock-btn ${isHinhThucLocked ? 'locked' : 'unlocked'}`}
+                           onClick={() => setIsHinhThucLocked(!isHinhThucLocked)}
+                        >
+                           {isHinhThucLocked ? 'Mở' : 'Khóa'}
+                        </button>
+                     </div>
                   </div>
                   <div className="cfg-item flex-2">
                      <label>GHI CHÚ BIÊN LAI</label>

@@ -391,6 +391,37 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
+.sp-payment-lock-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.sp-payment-lock-row select {
+  flex: 1;
+}
+
+.sp-unlock-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+  white-space: nowrap;
+}
+
+.sp-unlock-btn.locked {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.sp-unlock-btn.unlocked {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 /* Inputs in grid */
 .sp-input-wrap {
   position: relative;
@@ -796,4 +827,4 @@
 [data-theme="kindergarten"] .sp-btn-checkout {
   background: #f43f5e !important;
   border-radius: 12px !important;
-}
+}
