@@ -1,13 +1,33 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
 import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { Loader2, Key, X, LogOut, Download, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
+import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
-import { buildGroupedMessageDescription, createMessageGroupId } from '../utils/chatMessageGrouping';
+import { buildGroupedMessageDescription, createMessageGroupId, groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
+import { getActiveNgoaiKhoaAnnouncements } from '../utils/ngoaiKhoaUtils';
+
+const resizeChatTextarea = (textarea, maxLines = 3) => {
+   if (!textarea) return;
+
+   textarea.style.height = 'auto';
+
+   const computedStyle = window.getComputedStyle(textarea);
+   const lineHeight = parseFloat(computedStyle.lineHeight) || 16;
+   const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+   const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+   const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
+   const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
+   const maxHeight = Math.ceil((lineHeight * maxLines) + paddingTop + paddingBottom + borderTop + borderBottom);
+
+   textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+   textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+};
 
 const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
 
@@ -162,6 +182,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [attSelectedClass, setAttSelectedClass] = useState('');
    const [attStudents, setAttStudents] = useState([]);
    const [attRecords, setAttRecords] = useState({});
+   const [lessonContent, setLessonContent] = useState('');
    const [isChangePassOpen, setIsChangePassOpen] = useState(false);
    const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
    const [changePassLoading, setChangePassLoading] = useState(false);
@@ -187,6 +208,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [isMobileChatView, setIsMobileChatView] = useState(() => window.innerWidth <= 768);
    const [attStaffDirectory, setAttStaffDirectory] = useState({});
    const [isClassBroadcastOpen, setIsClassBroadcastOpen] = useState(false);
+   const [classBroadcastMode, setClassBroadcastMode] = useState('notice');
    const [classBroadcastText, setClassBroadcastText] = useState('');
    const [classBroadcastMedia, setClassBroadcastMedia] = useState([]);
    const [classBroadcastClassId, setClassBroadcastClassId] = useState('');
@@ -195,6 +217,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [teacherAnnouncementsLoading, setTeacherAnnouncementsLoading] = useState(false);
    const [teacherChatDropActive, setTeacherChatDropActive] = useState(false);
    const mobileChatPanelHeight = '90dvh';
+   const attChatInputRef = React.useRef(null);
+
+   useEffect(() => {
+      resizeChatTextarea(attChatInputRef.current, 3);
+   }, [attChatInput]);
 
    const syncAppBadge = (count) => {
       const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -234,7 +261,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
 
          const registration = await navigator.serviceWorker.ready;
-         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -253,13 +280,22 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
 
-         const teacherId = attendanceUser.manv || attendanceUser.username;
-         const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+         const teacherIds = [...new Set([
+            attendanceUser.manv,
+            attendanceUser.username,
+            attendanceUser.tennv
+         ].map(value => String(value || '').trim()).filter(Boolean))];
+
+         const payloads = teacherIds.map((teacherId) => ({
             user_id: teacherId,
             role: 'teacher',
             subscription,
             updated_at: new Date().toISOString()
-         }, { onConflict: 'user_id' });
+         }));
+
+         const { error: dbError } = await supabase
+            .from('push_subscriptions')
+            .upsert(payloads, { onConflict: 'user_id' });
 
          if (dbError) throw dbError;
 
@@ -335,6 +371,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          if (!attSelectedClass) {
             setAttStudents([]);
             setAttRecords({});
+            setLessonContent('');
             setAttLatestHealthDate('');
             return;
          }
@@ -378,6 +415,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          });
          setAttRecords(rMap);
+
+         // Tải nội dung dạy
+         const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
+         setLessonContent(nd ? nd.noidungday : '');
       };
       if (attendanceUser) loadData();
    }, [attSelectedClass, attDate, attendanceUser]);
@@ -452,7 +493,15 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             return next;
          });
 
-         window.alert('Lưu điểm danh thành công!');
+         // Lưu nội dung dạy
+         const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
+         if (exists) {
+            await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
+         } else {
+            await supabase.from('tbl_noidungday').insert([{ malop: attSelectedClass, ngay: attDate, noidungday: lessonContent }]);
+         }
+
+         window.alert('Lưu điểm danh & nội dung dạy thành công!');
       } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
       setLoading(false);
    };
@@ -641,7 +690,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             else if (content.includes('ĐỔI NGƯỜI') || content.includes('DOI NGUOI')) reportStudents.doiNguoi.add(m.mahv);
             else if (content.includes('VỀ TRỄ') || content.includes('VE TRE')) reportStudents.veTre.add(m.mahv);
             else reportStudents.guiTinNhan.add(m.mahv);
-          });
+         });
+
          setAttReports({
             xinNghi: reportStudents.xinNghi.size,
             baoThuoc: reportStudents.baoThuoc.size,
@@ -682,23 +732,32 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       setTeacherAnnouncementsLoading(true);
       try {
          const dateLimit = getDateLimit();
-         const { data, error } = await supabase
+         let query = supabase
             .from('class_announcements')
             .select('*')
             .in('malop', classIds)
-            .eq('approved', true)
             .gte('created_at', dateLimit.toISOString())
             .order('created_at', { ascending: false })
             .limit(200);
+
+         if (type !== 'curriculum') {
+            query = query.eq('approved', true);
+         }
+
+         const { data, error } = await query;
          if (error) throw error;
 
-         const filteredData = (data || []).filter((item) => {
+         let filteredData = (data || []).filter((item) => {
             const title = normalizeAnnouncementTitle(item?.title);
             if (type === 'curriculum') return title === 'CHƯƠNG TRÌNH HỌC';
             if (type === 'ngoaikhoa') return title === 'NGOẠI KHÓA';
             if (type === 'notices') return title !== 'THỰC ĐƠN' && title !== 'NGOẠI KHÓA' && title !== 'CHƯƠNG TRÌNH HỌC';
             return true;
          });
+
+         if (type === 'ngoaikhoa') {
+            filteredData = getActiveNgoaiKhoaAnnouncements(filteredData);
+         }
 
          setTeacherAnnouncements(filteredData.slice(0, 50));
       } catch (error) {
@@ -714,7 +773,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          if (attendanceUser && attTab === 'chat' && attClasses.length > 0 && attAllStudents.length === 0) {
             const classIds = attClasses.map(c => c.malop).filter(Boolean);
             if (classIds.length > 0) {
-               const { data: allSts } = await supabase.from('tbl_hv').select('mahv, tenhv, malop, imgpath').in('malop', classIds).or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+               const { data: allSts } = await supabase
+                  .from('tbl_hv')
+                  .select('mahv, tenhv, malop, imgpath')
+                  .in('malop', classIds)
+                  .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
                if (allSts) setAttAllStudents(allSts);
             }
          }
@@ -743,12 +806,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      if (Notification.permission === 'granted') {
                         if ('serviceWorker' in navigator) {
                            navigator.serviceWorker.ready.then(registration => {
-                              registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                              registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                            }).catch(() => {
-                              new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                              new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                            });
                         } else {
-                           new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/logo192.png' });
+                           new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                         }
                      }
                   }
@@ -764,7 +827,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             .subscribe();
          return () => supabase.removeChannel(channel);
       }
-   }, [attendanceUser, attDateFilter]);
+   }, [attendanceUser, attDateFilter, attAllStudents]);
 
    useEffect(() => {
       if (attTab === 'chat' && attChatSelectedStudent) {
@@ -831,6 +894,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
       setUploading(true);
       try {
+         const groupId = files.length > 1 ? createMessageGroupId(`chat-${attChatSelectedStudent.mahv}`) : '';
          const insertedMessages = [];
          const documentPayloads = [];
 
@@ -850,7 +914,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                image_url: attachmentType === 'image' ? upload.url : null,
                file_url: attachmentType !== 'image' ? upload.url : null,
                file_name: upload.fileName,
-               file_mime_type: upload.mimeType
+               file_mime_type: upload.mimeType,
+               description: buildGroupedMessageDescription('', groupId)
             };
 
             const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -877,7 +942,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             if (docData?.length) setAttChatDocuments(prev => [...docData, ...prev]);
          }
 
-         setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+         setTimeout(() => {
+            if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
+         }, 100);
       } catch (err) {
          alert('Lỗi: ' + err.message);
       } finally {
@@ -929,6 +996,60 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       const files = toFileArray(e.target.files);
       e.target.value = '';
       await handleTeacherChatAttachmentUpload(files, type);
+      const legacyUploadFlow = false;
+      if (legacyUploadFlow) {
+         const inputElement = e.target;
+         const fileInput = e.target.files[0];
+         if (!fileInput || !attChatSelectedStudent || !attendanceUser) return;
+
+         setUploading(true);
+         try {
+            let file = fileInput;
+            if (type === 'image') { try { file = await compressImage(fileInput, 150); } catch (err) { } }
+
+            let finalUrl = '';
+            if (config.r2_enabled) {
+               finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+            } else {
+               const fileName = `${attChatSelectedStudent.mahv}_${Date.now()}_${file.name}`;
+               const folder = type === 'image' ? 'chat-images' : 'chat-files';
+               const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+               if (error) throw error;
+               const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+               finalUrl = publicUrl;
+            }
+
+            const msgPayload = {
+               mahv: attChatSelectedStudent.mahv,
+               manv: attendanceUser.manv || attendanceUser.username,
+               content: '',
+               image_url: type === 'image' ? finalUrl : null,
+               file_url: type !== 'image' ? finalUrl : null,
+               file_name: file.name,
+               file_mime_type: file.type
+            };
+
+            const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
+            if (data) {
+               await triggerPushNotification(supabase, 'hv_messages', data[0]);
+               setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+            }
+
+            const newDoc = {
+               mahv: attChatSelectedStudent.mahv,
+               name: file.name,
+               category: type === 'image' ? 'Ảnh' : 'Tài liệu',
+               file_url: finalUrl,
+               mime_type: file.type
+            };
+            await supabase.from('documents').insert([newDoc]);
+         } catch (err) {
+            alert('Lỗi: ' + err.message);
+         } finally {
+            setUploading(false);
+            if (inputElement) inputElement.value = '';
+         }
+      }
    };
 
    const getBroadcastClassOptions = () => {
@@ -945,19 +1066,21 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return Array.from(classMap.values());
    };
 
-   const openClassBroadcastModal = () => {
+   const openClassBroadcastModal = (mode = 'notice') => {
       const classOptions = getBroadcastClassOptions();
       if (classOptions.length === 0) {
-         window.alert('Kh\u00f4ng c\u00f3 l\u1edbp n\u00e0o \u0111\u1ec3 g\u1eedi th\u00f4ng b\u00e1o.');
+         window.alert(mode === 'curriculum' ? 'Không có lớp nào để gửi chương trình học.' : 'Không có lớp nào để gửi thông báo.');
          return;
       }
 
+      setClassBroadcastMode(mode);
       setClassBroadcastClassId(attChatSelectedStudent?.malop || classBroadcastClassId || classOptions[0].malop);
       setIsClassBroadcastOpen(true);
    };
 
    const closeClassBroadcastModal = () => {
       setIsClassBroadcastOpen(false);
+      setClassBroadcastMode('notice');
       setClassBroadcastText('');
       setClassBroadcastMedia([]);
       setClassBroadcastClassId('');
@@ -969,13 +1092,18 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
       const messageText = classBroadcastText.trim();
       const hasBroadcastMedia = classBroadcastMedia.length > 0;
-      if (!messageText && !hasBroadcastMedia) {
+      if (false && !messageText && !hasBroadcastMedia) {
          window.alert('Vui lòng nhập nội dung hoặc chọn hình để gửi.');
          return;
       }
 
+      if (!messageText && !hasBroadcastMedia) {
+         window.alert('Vui l\u00f2ng nh\u1eadp n\u1ed9i dung ho\u1eb7c ch\u1ecdn h\u00ecnh \u0111\u1ec3 g\u1eedi.');
+         return;
+      }
+
       if (!classBroadcastClassId) {
-         window.alert('Vui lòng chọn lớp cần gửi.');
+         window.alert('Vui l\u00f2ng ch\u1ecdn l\u1edbp c\u1ea7n g\u1eedi.');
          return;
       }
 
@@ -984,13 +1112,13 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       );
 
       if (classStudents.length === 0) {
-         window.alert('Không tìm thấy học sinh nào trong lớp này.');
+         window.alert('Kh\u00f4ng t\u00ecm th\u1ea5y h\u1ecdc sinh n\u00e0o trong l\u1edbp n\u00e0y.');
          return;
       }
-
       setUploading(true);
       try {
          const staffId = attendanceUser.manv || attendanceUser.username;
+         const isCurriculumBroadcast = classBroadcastMode === 'curriculum';
          const uploadedMedia = [];
          const broadcastGroupId = classBroadcastMedia.length > 1 ? createMessageGroupId('class') : '';
          const broadcastDescription = buildGroupedMessageDescription('THONG_BAO', broadcastGroupId);
@@ -1016,6 +1144,14 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             approved: !isBoMonTeacher
          }));
 
+         if (isCurriculumBroadcast) {
+            payloads.forEach((payload) => {
+               payload.title = 'CHƯƠNG TRÌNH HỌC';
+               payload.content = messageText || 'Chương trình học';
+               payload.approved = false;
+            });
+         }
+
          const { data: insertedAnnouncements, error: insertError } = await supabase.from('class_announcements').insert(payloads).select();
          if (insertError) throw insertError;
 
@@ -1025,7 +1161,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          }
 
-         if (!isBoMonTeacher && insertedAnnouncements?.length) {
+         if (!isCurriculumBroadcast && !isBoMonTeacher && insertedAnnouncements?.length) {
             const chatPayloads = [];
             const documentPayloads = [];
 
@@ -1069,13 +1205,83 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
 
          closeClassBroadcastModal();
+         if (isCurriculumBroadcast) {
+            window.alert('Đã gửi chương trình học và chờ admin duyệt.');
+         }
          setTimeout(() => {
             if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
          }, 100);
-         return;
+         const legacyUploadFlow = false;
+         if (legacyUploadFlow) {
+
+            let uploadedMediaUrl = null;
+            let uploadedMediaName = null;
+            let uploadedMediaType = null;
+            let uploadedMediaIsImage = false;
+
+            if (classBroadcastMedia) {
+               let file = classBroadcastMedia;
+               const mediaType = String(classBroadcastMedia.type || '').toLowerCase();
+               uploadedMediaIsImage = mediaType.startsWith('image/');
+
+               if (uploadedMediaIsImage) {
+                  try {
+                     file = await compressImage(classBroadcastMedia, 150);
+                  } catch (err) { }
+               }
+
+               if (config.r2_enabled) {
+                  uploadedMediaUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+               } else {
+                  const fileName = `${classBroadcastClassId || 'class'}_${Date.now()}_${file.name}`;
+                  const folder = uploadedMediaIsImage ? 'chat-images' : 'chat-files';
+                  const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+                  if (error) throw error;
+                  const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+                  uploadedMediaUrl = publicUrl;
+               }
+
+               uploadedMediaName = classBroadcastMedia.name;
+               uploadedMediaType = classBroadcastMedia.type;
+            }
+
+            const staffId = attendanceUser.manv || attendanceUser.username;
+            const payloads = [{
+               malop: classBroadcastClassId,
+               manv: staffId,
+               title: 'THÔNG BÁO',
+               content: messageText,
+               image_url: uploadedMediaIsImage ? uploadedMediaUrl : null,
+               file_url: uploadedMediaUrl && !uploadedMediaIsImage ? uploadedMediaUrl : null,
+               file_name: uploadedMediaName,
+               file_mime_type: uploadedMediaType
+            }];
+
+            const { data: insertedAnnouncements, error: insertError } = await supabase.from('class_announcements').insert(payloads).select();
+            if (insertError) throw insertError;
+
+            for (const announcement of insertedAnnouncements || []) {
+               await triggerPushNotification(supabase, 'class_announcements', announcement);
+            }
+
+            if (false && uploadedMediaUrl) {
+               const documentPayloads = classStudents.map((student) => ({
+                  mahv: student.mahv,
+                  name: uploadedMediaName || 'Thong bao lop',
+                  category: uploadedMediaIsImage ? 'Ảnh' : 'Tài liệu',
+                  file_url: uploadedMediaUrl,
+                  mime_type: uploadedMediaType
+               }));
+               await supabase.from('documents').insert(documentPayloads);
+            }
+
+            closeClassBroadcastModal();
+            setTimeout(() => {
+               if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
+            }, 100);
+         }
       } catch (err) {
-         window.alert('Lỗi khi gửi thông báo cả lớp: ' + err.message);
-         return;
+         window.alert((classBroadcastMode === 'curriculum' ? 'Lỗi khi gửi chương trình học: ' : 'L\u1ed7i khi g\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp: ') + err.message);
       } finally {
          setUploading(false);
       }
@@ -1223,9 +1429,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    const renderTeacherChatThread = () => (
-      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', height: isMobileChatView ? '100%' : '680px', minHeight: isMobileChatView ? 0 : '680px', maxHeight: isMobileChatView ? '100%' : '680px', background: '#ffffff', borderRadius: isMobileChatView ? '20px' : '24px', overflow: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}>
-         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-            <div style={{ padding: isMobileChatView ? '0.85rem 0.8rem' : '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'flex-start', gap: isMobileChatView ? '10px' : '12px' }}>
+      <div className="teacher-chat-container" style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', height: isMobileChatView ? '100%' : '680px', minHeight: isMobileChatView ? 0 : '680px', maxHeight: isMobileChatView ? '100%' : '680px', background: '#ffffff', borderRadius: isMobileChatView ? '20px' : '24px', overflow: 'hidden', overflowX: 'hidden', border: '1px solid #dbeafe', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+            <div style={{ padding: isMobileChatView ? '0.85rem 0.8rem' : '1rem 1.1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 70%)', borderBottom: '1px solid #dbeafe', display: 'flex', alignItems: 'flex-start', gap: isMobileChatView ? '10px' : '12px', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                <button onClick={() => { setAttChatSelectedStudent(null); setAttChatView('dashboard'); }} style={{ background: 'white', border: '1px solid #dbeafe', width: isMobileChatView ? '34px' : '36px', height: isMobileChatView ? '34px' : '36px', minWidth: isMobileChatView ? '34px' : '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', cursor: 'pointer', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.08)' }}>
                   <ArrowLeft size={18} />
                </button>
@@ -1244,18 +1450,20 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                </button>
             </div>
 
-            <div ref={attScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: isMobileChatView ? '0.85rem 0.75rem' : '1rem', display: 'flex', flexDirection: 'column', gap: isMobileChatView ? '12px' : '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)' }}>
+            <div ref={attScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: isMobileChatView ? '0.85rem 0.75rem' : '1rem', display: 'flex', flexDirection: 'column', gap: isMobileChatView ? '12px' : '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)', width: '100%', maxWidth: '100%', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                {attChatLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
                ) : attChatMessages.length === 0 ? (
                   <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontSize: '0.9rem', background: 'white', border: '1px dashed #cbd5e1', borderRadius: '18px', padding: '1.5rem 1.25rem' }}>Bắt đầu trò chuyện với phụ huynh của {attChatSelectedStudent.tenhv}</div>
                ) : (
-                  attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
+                  groupMessagesForDisplay(attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]'))).map((m, idx) => {
                      if (isHiddenSystemChatMessage(m)) return null;
                      const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
                      const senderName = getTeacherChatSenderName(m);
+                     const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
+                     const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
                      return (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isMobileChatView ? '96%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', minWidth: 0 }}>
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isMobileChatView ? '100%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', minWidth: 0 }}>
                            <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800, lineHeight: 1.35, wordBreak: 'break-word' }}>
                               {senderName}
                            </div>
@@ -1269,18 +1477,23 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                  boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
                                  fontSize: isMobileChatView ? '0.9rem' : '0.92rem',
                                  lineHeight: 1.5,
+                                 width: 'fit-content',
                                  maxWidth: '100%',
+                                 whiteSpace: 'pre-wrap',
+                                 wordBreak: 'break-word',
                                  overflowWrap: 'anywhere'
                               }}>
                                  <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                               </div>
                            )}
-                           {m.image_url && (
-                              <div style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white' }}>
-                                 <img src={m.image_url} alt="chat" style={{ maxWidth: '100%', maxHeight: '260px', display: 'block' }} />
+                           {imageAttachments.map((attachment, attachmentIndex) => (
+                              <div key={attachment.id || `${idx}-image-${attachmentIndex}`} style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', width: 'fit-content' }}>
+                                 <img src={attachment.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
                               </div>
-                           )}
-                           {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
+                           ))}
+                           {fileAttachments.map((attachment, attachmentIndex) => (
+                              <ChatMediaAttachment key={attachment.id || `${idx}-file-${attachmentIndex}`} fileUrl={attachment.file_url} fileName={attachment.file_name} mimeType={attachment.file_mime_type} isOwnMessage={isMe} />
+                           ))}
                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                               <button
                                  type="button"
@@ -1300,7 +1513,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                )}
             </div>
 
-            <div style={{ padding: isMobileChatView ? '0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px))' : '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe' }}>
+            <div style={{ padding: isMobileChatView ? '0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px))' : '0.9rem 1rem', background: 'white', borderTop: '1px solid #dbeafe', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                <form
                   onSubmit={handleAttSendChat}
                   onDragEnter={(e) => {
@@ -1330,10 +1543,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      alignItems: 'center',
                      gap: isMobileChatView ? '6px' : '8px',
                      width: '100%',
+                     maxWidth: '100%',
                      background: '#f8fafc',
                      border: '1px solid #e2e8f0',
                      borderRadius: '18px',
                      padding: isMobileChatView ? '7px 8px' : '8px 10px',
+                     overflowX: 'hidden',
                      ...(teacherChatDropActive ? { borderColor: '#0f172a', boxShadow: '0 0 0 3px rgba(15, 23, 42, 0.08)' } : {})
                   }}
                >
@@ -1348,15 +1563,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </label>
                   </div>
                   <textarea
+                     ref={attChatInputRef}
                      placeholder="Nhập tin nhắn..."
                      value={attChatInput}
-                     onChange={(e) => {
-                        setAttChatInput(e.target.value);
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                     }}
+                     onChange={(e) => setAttChatInput(e.target.value)}
                      rows={1}
-                     style={{ flex: 1, minWidth: 0, width: 0, padding: isMobileChatView ? '0.65rem 0.55rem' : '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: isMobileChatView ? '14px' : '15px', outline: 'none', color: '#0f172a', resize: 'none', minHeight: isMobileChatView ? '38px' : '40px', maxHeight: '120px', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'auto' }}
+                     style={{ flex: 1, minWidth: 0, width: 0, padding: isMobileChatView ? '0.65rem 0.55rem' : '0.72rem 0.85rem', background: 'transparent', border: 'none', borderRadius: '14px', fontSize: isMobileChatView ? '14px' : '16px', outline: 'none', color: '#0f172a', resize: 'none', minHeight: isMobileChatView ? '38px' : '40px', maxHeight: 'calc(1.45em * 3 + 1.5rem)', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'hidden' }}
                   />
                   <button type="submit" disabled={!attChatInput.trim() && !uploading} style={{ width: isMobileChatView ? '38px' : '40px', height: isMobileChatView ? '38px' : '40px', minWidth: isMobileChatView ? '38px' : '40px', flexShrink: 0, borderRadius: '14px', background: '#0f172a', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (!attChatInput.trim() && !uploading) ? 0.5 : 1, boxShadow: '0 10px 18px rgba(15, 23, 42, 0.18)' }}>
                      {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
@@ -1402,12 +1614,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Nhóm dịch vụ</div>
                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
                   {!isBoMonTeacher && (
-                  <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <CalendarCheck size={24} />
+                     <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                        <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                           <CalendarCheck size={24} />
+                        </div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
                      </div>
-                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
-                  </div>
                   )}
 
                   <div onClick={() => setAttTab('notices')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
@@ -1432,33 +1644,33 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   </div>
 
                   {!isBoMonTeacher && (
-                  <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Heart size={24} />
+                     <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                        <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                           <Heart size={24} />
+                        </div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Hồ sơ<br />sức khỏe</div>
                      </div>
-                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Hồ sơ<br />sức khỏe</div>
-                  </div>
                   )}
 
                   {isBoMonTeacher ? (
-                  <div onClick={openClassBroadcastModal} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <MessageSquare size={24} />
+                     <div onClick={openClassBroadcastModal} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                        <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                           <MessageSquare size={24} />
+                        </div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Gửi thông báo<br />cả lớp</div>
                      </div>
-                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Gửi thông báo<br />cả lớp</div>
-                  </div>
                   ) : (
-                  <div onClick={() => setAttTab('chat')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
-                     <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                        <MessageSquare size={24} />
-                        {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0) > 0 && (
-                           <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
-                              +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
-                           </span>
-                        )}
+                     <div onClick={() => setAttTab('chat')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                        <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                           <MessageSquare size={24} />
+                           {Object.values(attUnreadCounts).reduce((a, b) => a + b, 0) > 0 && (
+                              <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
+                                 +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
+                              </span>
+                           )}
+                        </div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc PH</div>
                      </div>
-                     <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc GV</div>
-                  </div>
                   )}
                </div>
             </div>
@@ -1475,7 +1687,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         : attTab === 'notices' ? 'Bảng tin'
                            : attTab === 'ngoaikhoa' ? 'Ngoại khóa'
                               : attTab === 'curriculum' ? 'Chương trình học'
-                                 : 'Liên lạc GV'}
+                                 : 'Liên lạc PH'}
                </div>
             </div>
          )}
@@ -1656,6 +1868,18 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
          {(attTab === 'notices' || attTab === 'curriculum' || attTab === 'ngoaikhoa') && (
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
+               {attClasses.length > 0 && attTab === 'curriculum' && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
+                     <button
+                        type="button"
+                        onClick={() => openClassBroadcastModal('curriculum')}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1rem', borderRadius: '14px', border: 'none', background: '#0f766e', color: 'white', cursor: 'pointer', fontWeight: 700, boxShadow: '0 10px 24px rgba(15, 118, 110, 0.18)' }}
+                     >
+                        <FileText size={16} />
+                        <span>Gửi chương trình học</span>
+                     </button>
+                  </div>
+               )}
                {attClasses.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
                      Chưa có lớp phân công để xem {attTab === 'notices' ? 'bảng tin' : (attTab === 'curriculum' ? 'chương trình học' : 'ngoại khóa')}.
@@ -1666,7 +1890,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   </div>
                ) : teacherAnnouncements.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                     {teacherAnnouncements.map((item) => (
+                     {groupAnnouncementsForDisplay(teacherAnnouncements).map((item) => (
                         <div key={item.id} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)' }}>
                            <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: attTab === 'notices' ? '#eff6ff' : (attTab === 'curriculum' ? '#f0f9ff' : '#fff7ed'), display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                               <div style={{ minWidth: 0 }}>
@@ -1677,25 +1901,29 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                     Lớp: {getClassDisplayName(item.malop)}
                                  </div>
                               </div>
-                              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                 {new Date(item.created_at).toLocaleDateString('vi-VN')}
-                              </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                                 {attTab === 'curriculum' && (
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', background: item.approved === false ? '#fff7ed' : '#ecfdf5', color: item.approved === false ? '#c2410c' : '#047857' }}>
+                                       {item.approved === false ? 'Chờ duyệt' : 'Đã duyệt'}
+                                    </span>
+                                 )}
+                                 <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                                 </span>
+                              </div>
                            </div>
                            <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                               <div style={{ color: '#475569', fontSize: '0.95rem', lineHeight: '1.7', whiteSpace: 'pre-wrap', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                                  {item.content || 'Chưa có nội dung chi tiết.'}
                               </div>
-                              {item.image_url && (
-                                 <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                    <img src={item.image_url} alt={item.title || 'announcement'} style={{ width: '100%', display: 'block' }} />
+                              {(item._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
+                                 <div key={attachment.id || `${item.id || 'announcement'}-image-${attachmentIndex}`} style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                    <img src={attachment.image_url} alt={item.title || 'announcement'} style={{ width: '100%', display: 'block' }} />
                                  </div>
-                              )}
-                              {item.file_url && (
-                                 <a href={item.file_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: '#f8fafc', borderRadius: '10px', textDecoration: 'none', color: '#475569', border: '1px solid #e2e8f0' }}>
-                                    <Download size={16} />
-                                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file_name || 'Xem tệp đính kèm'}</span>
-                                 </a>
-                              )}
+                              ))}
+                              {(item._attachments || []).filter((attachment) => attachment.file_url).map((attachment, attachmentIndex) => (
+                                 <ChatMediaAttachment key={attachment.id || `${item.id || 'announcement'}-file-${attachmentIndex}`} fileUrl={attachment.file_url} fileName={attachment.file_name} mimeType={attachment.file_mime_type} />
+                              ))}
                            </div>
                         </div>
                      ))}
@@ -1709,7 +1937,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          )}
 
          {attTab === 'chat' && (
-            <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: isMobileChatView ? mobileChatPanelHeight : '600px', height: isMobileChatView ? mobileChatPanelHeight : 'auto', display: 'flex', flexDirection: 'column' }}>
+            <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: isMobileChatView ? mobileChatPanelHeight : '600px', height: isMobileChatView ? mobileChatPanelHeight : 'auto', display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px', padding: isMobileChatView ? '0 0.1rem' : '0 0.2rem', flexShrink: 0 }}>
                   <button
                      type="button"
@@ -1733,7 +1961,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                <div style={{ width: '100%', maxWidth: '520px', background: 'white', borderRadius: '20px', boxShadow: '0 25px 50px rgba(15, 23, 42, 0.25)', overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
                      <div>
-                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{'G\u1eedi th\u00f4ng b\u00e1o c\u1ea3 l\u1edbp'}</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{classBroadcastMode === 'curriculum' ? 'Gửi chương trình học' : 'Gửi thông báo cả lớp'}</h3>
                         <div style={{ marginTop: '0.25rem', fontSize: '0.82rem', color: '#64748b' }}>
                            {'L\u1edbp'} {getClassDisplayName(classBroadcastClassId)} {'\u2022'} {attAllStudents.filter(student => student?.mahv && student.malop === classBroadcastClassId).length} {'h\u1ecdc sinh'}
                         </div>
@@ -1759,7 +1987,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      <textarea
                         value={classBroadcastText}
                         onChange={(e) => setClassBroadcastText(e.target.value)}
-                        placeholder={'Nh\u1eadp n\u1ed9i dung th\u00f4ng b\u00e1o cho c\u1ea3 l\u1edbp...'}
+                        placeholder={classBroadcastMode === 'curriculum' ? 'Nhập nội dung chương trình học cho lớp...' : 'Nh\u1eadp n\u1ed9i dung th\u00f4ng b\u00e1o cho c\u1ea3 l\u1edbp...'}
                         rows={5}
                         style={{ width: '100%', resize: 'vertical', minHeight: '130px', padding: '0.9rem 1rem', borderRadius: '16px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', lineHeight: 1.5, fontFamily: 'inherit' }}
                      />
@@ -1768,7 +1996,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         <FileDropZone
                            files={classBroadcastMedia}
                            onFilesChange={mergeBroadcastFiles}
-                           accept="image/*"
                            icon={Image}
                            accentColor="#be185d"
                            borderColor="#f9a8d4"
@@ -1776,7 +2003,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            background="#fdf2f8"
                            textColor="#be185d"
                            subTextColor="#9a3412"
-                           emptyTitle={'Ch\u1ecdn h\u00ecnh th\u00f4ng b\u00e1o'}
+                           emptyTitle={classBroadcastMode === 'curriculum' ? 'Chọn tệp chương trình học' : 'Ch\u1ecdn h\u00ecnh th\u00f4ng b\u00e1o'}
                            selectedHint={'H\u00ecnh \u0111\u00e3 ch\u1ecdn'}
                            style={{ padding: '0.85rem 1rem', borderRadius: '14px' }}
                            disabled={uploading}
@@ -1793,13 +2020,13 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         <button type="button" onClick={closeClassBroadcastModal} disabled={uploading} style={{ padding: '0.8rem 1.1rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', cursor: 'pointer', fontWeight: 700 }}>
                            {'H\u1ee7y'}
                         </button>
-                        <button
-                           type="submit"
-                           disabled={uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0)}
-                           style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0) ? 0.65 : 1 }}
-                        >
+                           <button
+                              type="submit"
+                              disabled={uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0)}
+                              style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: classBroadcastMode === 'curriculum' ? '#0f766e' : '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0) ? 0.65 : 1 }}
+                           >
                            {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
-                           <span>{'G\u1eedi t\u1edbi c\u1ea3 l\u1edbp'}</span>
+                           <span>{classBroadcastMode === 'curriculum' ? 'Gửi chương trình học' : 'G\u1eedi t\u1edbi c\u1ea3 l\u1edbp'}</span>
                         </button>
                      </div>
                   </form>
@@ -1811,4 +2038,3 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 }
 
 export default TeacherPortal;
-

@@ -7,7 +7,7 @@ import { triggerPushNotification } from '../utils/pushNotifications';
 import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { buildGroupedMessageDescription, createMessageGroupId, getBaseMessageDescription } from '../utils/chatMessageGrouping';
+import { buildGroupedMessageDescription, createMessageGroupId, getBaseMessageDescription, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import {
   MessageSquare,
   Send,
@@ -61,7 +61,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       let id = '';
       if (url.includes('id=')) id = url.split('id=')[1]?.split('&')[0];
       else if (url.includes('/d/')) id = url.split('/d/')[1]?.split('/')[0];
-      
+
       if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
     }
     return url;
@@ -71,15 +71,15 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     if (!value) return '';
     // Nếu là chuỗi đã có chữ (như "Miễn phí"), giữ nguyên
     if (/[a-zA-Z]/.test(value) && !value.includes('VNĐ')) return value;
-    
+
     const num = value.toString().replace(/\D/g, '');
     if (!num) return value; // Trả về giá trị gốc nếu không có số
     return num.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
-  
+
   // Views
   const [view, setView] = useState('dashboard'); // 'dashboard' or 'chat'
-  
+
   // Data
   const [classes, setClasses] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -89,7 +89,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const [paymentProofDocs, setPaymentProofDocs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
-  
+
   // Filters
   const [searchParent, setSearchParent] = useState('');
   const [classFilter, setClassFilter] = useState('Tất cả');
@@ -99,7 +99,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     end: new Date().toISOString().split('T')[0]
   });
   const [statFilter, setStatFilter] = useState('ALL'); // 'ALL', 'XIN_NGHI', 'BAO_THUOC', 'GUI_TIN_NHAN', 'DOI_NGUOI', 'VE_TRE'
-  
+
   // Chat State
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -123,14 +123,14 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [menuFiles, setMenuFiles] = useState({ attachments: [] });
   const [menuForm, setMenuForm] = useState({ type: 'all', selectedClasses: [] });
-  
+
   const [isNgoaiKhoaModalOpen, setIsNgoaiKhoaModalOpen] = useState(false);
   const [isChuongTrinhHocModalOpen, setIsChuongTrinhHocModalOpen] = useState(false);
   const [chuongTrinhHocFiles, setChuongTrinhHocFiles] = useState({ attachments: [] });
   const [chuongTrinhHocForm, setChuongTrinhHocForm] = useState({ type: 'all', selectedClasses: [] });
   const [ngoaiKhoaFiles, setNgoaiKhoaFiles] = useState({ attachments: [] });
-  const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({ 
-    type: 'all', 
+  const [ngoaiKhoaForm, setNgoaiKhoaForm] = useState({
+    type: 'all',
     selectedClasses: [],
     content: '',
     time: '',
@@ -145,7 +145,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const [chatDropActive, setChatDropActive] = useState(false);
   const [isMobileChatView, setIsMobileChatView] = useState(() => window.innerWidth <= 768);
   const mobileChatPanelHeight = '90dvh';
-  
+
   const scrollRef = useRef();
 
   const mergeStateFiles = (setter, key, incomingFiles) => {
@@ -246,6 +246,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
     setUploading(true);
     try {
+      const groupId = files.length > 1 ? createMessageGroupId(`chat-${selectedStudent.mahv}`) : '';
       const insertedMessages = [];
       const documentPayloads = [];
 
@@ -265,7 +266,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           image_url: attachmentType === 'image' ? upload.url : null,
           file_url: attachmentType !== 'image' ? upload.url : null,
           file_name: upload.fileName,
-          file_mime_type: upload.mimeType
+          file_mime_type: upload.mimeType,
+          description: buildGroupedMessageDescription('', groupId)
         };
 
         const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -365,7 +367,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
         // Fetch Latest Messages
         await fetchSummaries();
-        
+
         // Fetch Unreads
         await fetchUnreads();
       } catch (err) {
@@ -399,10 +401,10 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     if (data) {
       const counts = {};
       data.forEach(d => {
-         const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-         if (!isTeacher) {
-           counts[d.mahv] = (counts[d.mahv] || 0) + 1;
-         }
+        const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+        if (!isTeacher) {
+          counts[d.mahv] = (counts[d.mahv] || 0) + 1;
+        }
       });
       setUnreadCounts(counts);
     }
@@ -486,7 +488,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const baseSummaries = useMemo(() => {
     // 1. Group latest message per student and collect types from parent messages
     const studentDataMap = {};
-    
+
     latestMessages.forEach(m => {
       // Track latest message overall for each student (for display)
       if (!studentDataMap[m.mahv]) {
@@ -529,28 +531,14 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       };
     }).filter(s => {
       // Search filter
-      const matchesSearch = s.tenhv?.toLowerCase().includes(searchParent.toLowerCase()) || 
-                           s.mahv?.toLowerCase().includes(searchParent.toLowerCase());
+      const matchesSearch = s.tenhv?.toLowerCase().includes(searchParent.toLowerCase()) ||
+        s.mahv?.toLowerCase().includes(searchParent.toLowerCase());
       // Class filter
       const matchesClass = classFilter === 'Tất cả' || s.malop === classFilter;
-      
+
       return matchesSearch && matchesClass;
     });
   }, [students, classes, teachers, latestMessages, searchParent, classFilter]);
-
-  const paymentProofMessages = useMemo(() => {
-    const latestByStudent = new Map();
-
-    paymentProofDocs.forEach(doc => {
-      if (!doc?.mahv || !doc?.file_url) return;
-      const existing = latestByStudent.get(doc.mahv);
-      if (!existing || new Date(doc.created_at) > new Date(existing.created_at)) {
-        latestByStudent.set(doc.mahv, doc);
-      }
-    });
-
-    return Array.from(latestByStudent.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [paymentProofDocs]);
 
   const parentSummaries = useMemo(() => {
     return baseSummaries.filter(s => {
@@ -560,25 +548,42 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       else if (statFilter === 'DOI_NGUOI') matchesStat = s.allTypes.includes('ĐỔI NGƯỜI ĐÓN');
       else if (statFilter === 'VE_TRE') matchesStat = s.allTypes.includes('XIN VỀ TRỄ');
       else if (statFilter === 'GOP_Y') matchesStat = s.allTypes.includes('GÓP Ý');
-      else if (statFilter === 'DA_CHUYEN_KHOAN') matchesStat = paymentProofMessages.some(doc => doc.mahv === s.mahv);
       else if (statFilter === 'GUI_TIN_NHAN') matchesStat = s.allTypes.includes('TIN NHẮN');
 
       return matchesStat;
     }).sort((a, b) => {
+      // Sort by newest message first
       if (!a.lastTime) return 1;
       if (!b.lastTime) return -1;
       return b.lastTime - a.lastTime;
     });
-  }, [baseSummaries, statFilter, paymentProofMessages]);
-  
+  }, [baseSummaries, statFilter]);
+
   const suggestionMessages = useMemo(() => {
     return latestMessages.filter(m => {
       const isGopY = m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
       if (!isGopY) return false;
-      
+
       return isGopY;
     }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [latestMessages]);
+
+  const paymentProofMessages = useMemo(() => {
+    const latestByStudent = new Map();
+
+    paymentProofDocs.forEach(doc => {
+      if (!doc?.mahv || !doc?.file_url) {
+        return;
+      }
+
+      const existing = latestByStudent.get(doc.mahv);
+      if (!existing || new Date(doc.created_at) > new Date(existing.created_at)) {
+        latestByStudent.set(doc.mahv, doc);
+      }
+    });
+
+    return Array.from(latestByStudent.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [paymentProofDocs]);
 
   // Quick Report Counts
   const reports = useMemo(() => {
@@ -655,11 +660,11 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
     const channel = supabase
       .channel(`chat_${selectedStudent.mahv}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'hv_messages', 
-        filter: `mahv=eq.${selectedStudent.mahv}` 
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'hv_messages',
+        filter: `mahv=eq.${selectedStudent.mahv}`
       }, (payload) => {
         setMessages(prev => {
           const exists = prev.some(m => m.id === payload.new.id);
@@ -668,17 +673,17 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         });
         setTimeout(scrollToBottom, 50);
       })
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'hv_messages', 
-        filter: `mahv=eq.${selectedStudent.mahv}` 
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'hv_messages',
+        filter: `mahv=eq.${selectedStudent.mahv}`
       }, (payload) => {
         setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
       })
-      .on('postgres_changes', { 
-        event: 'DELETE', 
-        schema: 'public', 
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
         table: 'hv_messages'
       }, (payload) => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));
@@ -704,7 +709,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         .update({ content: inputText })
         .eq('id', editingMessage.id)
         .select();
-        
+
       if (!error && data) {
         setMessages(prev => prev.map(m => m.id === editingMessage.id ? data[0] : m));
         setEditingMessage(null);
@@ -802,7 +807,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
   const handleAction = async (action, message) => {
     setActiveMenu(null);
-    
+
     if (action === 'delete') {
       if (window.confirm('Bạn có muốn xóa tin nhắn này?')) {
         // 1. Delete from R2 if applicable
@@ -869,7 +874,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         .from('hv_messages')
         .update({ is_pinned: !message.is_pinned })
         .eq('id', message.id);
-      
+
       if (!error) {
         setMessages(prev => prev.map(m => m.id === message.id ? { ...m, is_pinned: !m.is_pinned } : m));
       }
@@ -882,7 +887,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
   const handleBulkForward = async () => {
     if (!forwardingMessage || selectedForwardStudents.length === 0) return;
-    
+
     setUploading(true);
     try {
       const payloads = selectedForwardStudents.map(mahv => ({
@@ -913,7 +918,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         }));
         await supabase.from('documents').insert(docPayloads);
       }
-      
+
       alert(`Đã chuyển tiếp tin nhắn thành công tới ${selectedForwardStudents.length} học viên.`);
       setForwardingMessage(null);
     } catch (err) {
@@ -949,8 +954,9 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         'announcement'
       );
       const groupIdByClass = {};
+
       const attachmentItems = uploadedAttachments.length > 0 ? uploadedAttachments : [null];
-      const payloads = targetClasses.flatMap(malop =>
+      const payloads = targetClasses.flatMap(malop => (
         attachmentItems.map(attachment => ({
           malop,
           manv: currentUser.manv || currentUser.username,
@@ -961,7 +967,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           file_mime_type: attachment?.mimeType || '',
           approved: autoApprove
         }))
-      );
+      ));
 
       if (attachmentItems.length > 1) {
         targetClasses.forEach((malop) => {
@@ -977,6 +983,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
             await triggerPushNotification(supabase, 'class_announcements', record);
           }
         }
+
         if (autoApprove) {
           await fanOutAnnouncementsToStudentChats(insertedData, groupIdByClass);
         }
@@ -1012,7 +1019,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
       const uploadedAttachments = await uploadAttachments(menuFiles.attachments, 'menu');
-      const payloads = targetClasses.flatMap(malop =>
+      const payloads = targetClasses.flatMap(malop => (
         uploadedAttachments.map(attachment => ({
           malop,
           manv: currentUser.manv || currentUser.username,
@@ -1024,7 +1031,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           file_mime_type: attachment.mimeType,
           approved: autoApprove
         }))
-      );
+      ));
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -1065,7 +1072,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
       const uploadedAttachments = await uploadAttachments(chuongTrinhHocFiles.attachments, 'curriculum');
-      const payloads = targetClasses.flatMap(malop =>
+      const payloads = targetClasses.flatMap(malop => (
         uploadedAttachments.map(attachment => ({
           malop,
           manv: currentUser.manv || currentUser.username,
@@ -1077,7 +1084,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           file_mime_type: attachment.mimeType,
           approved: autoApprove
         }))
-      );
+      ));
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -1117,7 +1124,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
       if (targetClasses.length === 0) throw new Error('Không tìm thấy lớp nào.');
 
-      const formattedCost = ngoaiKhoaForm.cost 
+      const formattedCost = ngoaiKhoaForm.cost
         ? (ngoaiKhoaForm.cost.includes('VNĐ') ? ngoaiKhoaForm.cost : `${ngoaiKhoaForm.cost} VNĐ`)
         : 'Miễn phí';
 
@@ -1136,7 +1143,7 @@ ${ngoaiKhoaForm.content}
 `.trim();
 
       const uploadedAttachments = await uploadAttachments(ngoaiKhoaFiles.attachments, 'trip');
-      const payloads = targetClasses.flatMap(malop =>
+      const payloads = targetClasses.flatMap(malop => (
         uploadedAttachments.map(attachment => ({
           malop,
           manv: currentUser.manv || currentUser.username,
@@ -1148,7 +1155,7 @@ ${ngoaiKhoaForm.content}
           file_mime_type: attachment.mimeType,
           approved: autoApprove
         }))
-      );
+      ));
 
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
@@ -1163,8 +1170,8 @@ ${ngoaiKhoaForm.content}
       alert(`Đã gửi hoạt động ngoại khóa thành công tới ${targetClasses.length} lớp.`);
       setIsNgoaiKhoaModalOpen(false);
       setNgoaiKhoaFiles({ attachments: [] });
-      setNgoaiKhoaForm({ 
-        type: 'all', 
+      setNgoaiKhoaForm({
+        type: 'all',
         selectedClasses: [],
         content: '',
         time: '',
@@ -1187,7 +1194,7 @@ ${ngoaiKhoaForm.content}
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
-      
+
       if (error) throw error;
       setHistoryNotices(data || []);
     } catch (err) {
@@ -1239,6 +1246,7 @@ ${ngoaiKhoaForm.content}
         .maybeSingle();
 
       if (error) throw error;
+
       if (data) {
         const { data: classStudents } = await supabase
           .from('tbl_hv')
@@ -1291,18 +1299,18 @@ ${ngoaiKhoaForm.content}
   const handleRevokeNotice = async (notice) => {
     if (!notice?.id) return;
     if (!window.confirm('Bạn có chắc chắn muốn thu hồi (xoá) bản tin này? Phụ huynh sẽ không còn thấy nội dung này nữa.')) return;
-    
+
     try {
       const { error } = await supabase
         .from('class_announcements')
         .delete()
         .eq('id', notice.id);
-      
+
       if (error) throw error;
 
       await deleteAnnouncementAsset(notice.image_url);
       await deleteAnnouncementAsset(notice.file_url);
-      
+
       setHistoryNotices(prev => prev.filter(n => n.id !== notice.id));
       alert('Đã thu hồi bản tin thành công.');
     } catch (err) {
@@ -1344,17 +1352,17 @@ ${ngoaiKhoaForm.content}
             return (
               <div className="pinned-messages-bar" onClick={() => scrollToMessage(currentPinned.id)}>
                 <div className="pinned-bar-content">
-                    <div className="pin-icon-wrapper">
-                      <Pin size={14} fill="currentColor" />
-                    </div>
-                    <div className="pinned-info">
-                      <span className="pinned-title">
-                        Tin nhắn đã ghim {pinned.length > 1 ? `(${ (pinnedIndex % pinned.length) + 1}/${pinned.length})` : ''}
-                      </span>
-                      <span className="pinned-preview">
-                        {currentPinned.content || (currentPinned.image_url ? "Hình ảnh" : "Tệp tin")}
-                      </span>
-                    </div>
+                  <div className="pin-icon-wrapper">
+                    <Pin size={14} fill="currentColor" />
+                  </div>
+                  <div className="pinned-info">
+                    <span className="pinned-title">
+                      Tin nhắn đã ghim {pinned.length > 1 ? `(${(pinnedIndex % pinned.length) + 1}/${pinned.length})` : ''}
+                    </span>
+                    <span className="pinned-preview">
+                      {currentPinned.content || (currentPinned.image_url ? "Hình ảnh" : "Tệp tin")}
+                    </span>
+                  </div>
                 </div>
                 <div className="pinned-bar-actions">
                   {pinned.length > 1 && (
@@ -1384,214 +1392,232 @@ ${ngoaiKhoaForm.content}
                   return currentUser?.role === 'Quản lý' || currentUser?.role === 'Hiệu trưởng';
                 }
                 return true;
-              }).map((m, idx) => {
+              }).length > 0 ? groupMessagesForDisplay(messages.filter(m => {
+                const isGopY = getBaseMessageDescription(m.description) === 'GOPY';
+                if (isGopY) {
+                  return currentUser?.role === 'Quản lý';
+                }
+                return true;
+              })).map((m, idx) => {
                 const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
                 const msgId = m.id || `msg-${idx}-${m.created_at}`;
                 const senderName = getChatSenderName(m);
+                const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
+                const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
                 return (
                   <div key={msgId} id={`msg-${m.id}`} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
-                     <div className="message-bubble-wrapper">
-                        <div className="msg-sender">{senderName}</div>
-                        <div className="message-bubble">
-                           {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
-                           {getBaseMessageDescription(m.description) === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
-                           {m.content && (
-                             <div className="msg-text">
-                               <ChatMessageContent content={m.content} isOwnMessage={isMine} />
-                             </div>
-                           )}
-                           {m.image_url && (
-                             <div className="msg-image">
-                               <img 
-                                 src={getDisplayUrl(m.image_url)} 
-                                 alt={m.file_name} 
-                                 onClick={() => setPreviewImage(m.image_url)}
-                                 referrerPolicy="no-referrer"
-                               />
-                             </div>
-                           )}
-                           {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMine} />}
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                             <button
-                               type="button"
-                               onClick={() => toggleMessageReaction(m)}
-                               style={{
-                                 border: 'none',
-                                 background: 'transparent',
-                                 padding: 0,
-                                 cursor: 'pointer',
-                                 display: 'flex',
-                                 alignItems: 'center',
-                                 color: m.reaction ? '#e11d48' : '#94a3b8'
-                               }}
-                               title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
-                             >
-                               <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
-                             </button>
-                             <div className="msg-time" style={{ marginTop: 0 }}>{formatTime(new Date(m.created_at))}</div>
-                           </div>
+                    <div className="message-bubble-wrapper">
+                      <div className="msg-sender">{senderName}</div>
+                      <div className="message-bubble">
+                        {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
+                        {getBaseMessageDescription(m.description) === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
+                        {m.content && (
+                          <div className="msg-text">
+                            <ChatMessageContent content={m.content} isOwnMessage={isMine} />
+                          </div>
+                        )}
+                        {imageAttachments.map((attachment, attachmentIndex) => (
+                          <div key={attachment.id || `${msgId}-image-${attachmentIndex}`} className="msg-image">
+                            <img
+                              src={getDisplayUrl(attachment.image_url)}
+                              alt={attachment.file_name}
+                              onClick={() => setPreviewImage(attachment.image_url)}
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                        ))}
+                        {fileAttachments.map((attachment, attachmentIndex) => (
+                          <ChatMediaAttachment
+                            key={attachment.id || `${msgId}-file-${attachmentIndex}`}
+                            fileUrl={attachment.file_url}
+                            fileName={attachment.file_name}
+                            mimeType={attachment.file_mime_type}
+                            isOwnMessage={isMine}
+                          />
+                        ))}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleMessageReaction(m)}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              padding: 0,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              color: m.reaction ? '#e11d48' : '#94a3b8'
+                            }}
+                            title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
+                          >
+                            <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
+                          </button>
+                          <div className="msg-time" style={{ marginTop: 0 }}>{formatTime(new Date(m.created_at))}</div>
                         </div>
+                      </div>
 
-                        <div className="message-actions-trigger" onClick={e => e.stopPropagation()}>
-                           <button className="action-btn-more" onClick={() => setActiveMenu(activeMenu === msgId ? null : msgId)}>
-                              <MoreHorizontal size={16} />
-                           </button>
-                           
-                           {activeMenu === msgId && (
-                             <div className="message-dropdown-menu">
-                                <button onClick={() => handleAction('edit', m)}><Pencil size={14} /> Chỉnh sửa</button>
-                                <button onClick={() => handleAction('pin', m)}>
-                                  <Pin size={14} /> {m.is_pinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
-                                </button>
-                                <button onClick={() => handleAction('forward', m)}><Share2 size={14} /> Chuyển tiếp</button>
-                                <div className="dropdown-divider"></div>
-                                <button className="delete-opt" onClick={() => handleAction('delete', m)}><Trash2 size={14} /> Xóa tin nhắn</button>
-                             </div>
-                           )}
-                        </div>
-                     </div>
+                      <div className="message-actions-trigger" onClick={e => e.stopPropagation()}>
+                        <button className="action-btn-more" onClick={() => setActiveMenu(activeMenu === msgId ? null : msgId)}>
+                          <MoreHorizontal size={16} />
+                        </button>
+
+                        {activeMenu === msgId && (
+                          <div className="message-dropdown-menu">
+                            <button onClick={() => handleAction('edit', m)}><Pencil size={14} /> Chỉnh sửa</button>
+                            <button onClick={() => handleAction('pin', m)}>
+                              <Pin size={14} /> {m.is_pinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
+                            </button>
+                            <button onClick={() => handleAction('forward', m)}><Share2 size={14} /> Chuyển tiếp</button>
+                            <div className="dropdown-divider"></div>
+                            <button className="delete-opt" onClick={() => handleAction('delete', m)}><Trash2 size={14} /> Xóa tin nhắn</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
-              })
+              }) : (
+                <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>Chưa có tin nhắn.</div>
+              )
             )}
           </div>
 
           <div className="chat-input-area">
-              {editingMessage && (
-                <div className="editing-banner">
-                  <span>Đang chỉnh sửa tin nhắn...</span>
-                  <button onClick={() => { setEditingMessage(null); setInputText(''); }}><X size={14} /></button>
-                </div>
-              )}
-              <form
-                className="chat-input-toolbar"
-                onSubmit={handleSendMessage}
-                onDragEnter={(e) => {
-                  e.preventDefault();
-                  setChatDropActive(true);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setChatDropActive(true);
-                }}
-                onDragLeave={(e) => {
-                  e.preventDefault();
-                  if (e.currentTarget.contains(e.relatedTarget)) return;
-                  setChatDropActive(false);
-                }}
-                onDrop={async (e) => {
-                  e.preventDefault();
-                  setChatDropActive(false);
-                  const droppedFiles = toFileArray(e.dataTransfer.files);
-                  if (!droppedFiles.length) return;
-                  const { images, files } = splitFilesByKind(droppedFiles);
-                  if (images.length > 0) await handleChatAttachmentUpload(images, 'image');
-                  if (files.length > 0) await handleChatAttachmentUpload(files, 'file');
-                }}
-                style={chatDropActive ? { borderColor: '#10b981', boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.12)' } : undefined}
-              >
-                <div className="toolbar-left">
-                   <label className="toolbar-btn">
-                      <ImageIcon size={20} />
-                      <input type="file" accept="image/*" multiple hidden onChange={(e) => handleFileUpload(e, 'image')} />
-                   </label>
-                   <label className="toolbar-btn">
-                      <Paperclip size={20} />
-                      <input type="file" multiple hidden onChange={(e) => handleFileUpload(e, 'file')} />
-                   </label>
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Nhập nội dung tin nhắn..." 
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  disabled={uploading}
-                />
-                <button type="submit" className="send-btn" disabled={!inputText.trim() || uploading}>
-                  {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
-                </button>
-             </form>
+            {editingMessage && (
+              <div className="editing-banner">
+                <span>Đang chỉnh sửa tin nhắn...</span>
+                <button onClick={() => { setEditingMessage(null); setInputText(''); }}><X size={14} /></button>
+              </div>
+            )}
+            <form
+              className="chat-input-toolbar"
+              onSubmit={handleSendMessage}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setChatDropActive(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setChatDropActive(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                setChatDropActive(false);
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setChatDropActive(false);
+                const droppedFiles = toFileArray(e.dataTransfer.files);
+                if (!droppedFiles.length) return;
+                const { images, files } = splitFilesByKind(droppedFiles);
+                if (images.length > 0) await handleChatAttachmentUpload(images, 'image');
+                if (files.length > 0) await handleChatAttachmentUpload(files, 'file');
+              }}
+              style={chatDropActive ? { borderColor: '#10b981', boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.12)' } : undefined}
+            >
+              <div className="toolbar-left">
+                <label className="toolbar-btn">
+                  <ImageIcon size={20} />
+                  <input type="file" accept="image/*" multiple hidden onChange={(e) => handleFileUpload(e, 'image')} />
+                </label>
+                <label className="toolbar-btn">
+                  <Paperclip size={20} />
+                  <input type="file" multiple hidden onChange={(e) => handleFileUpload(e, 'file')} />
+                </label>
+              </div>
+              <input
+                type="text"
+                placeholder="Nhập nội dung tin nhắn..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                disabled={uploading}
+              />
+              <button type="submit" className="send-btn" disabled={!inputText.trim() || uploading}>
+                {uploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
+              </button>
+            </form>
           </div>
         </div>
 
         {!isMobileChatView && (
           <div className="chat-col details-col" style={{ width: '300px' }}>
             <div className="details-header">
-               <div className="large-avatar-circle" style={{ backgroundColor: '#ec4899' }}>
-                 {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <span>{getInitials(selectedStudent.tenhv)}</span>}
-               </div>
-               <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtme || '--'} - {selectedStudent.className}</h3>
+              <div className="large-avatar-circle" style={{ backgroundColor: '#ec4899' }}>
+                {selectedStudent.imgpath ? <img src={selectedStudent.imgpath} alt="" /> : <span>{getInitials(selectedStudent.tenhv)}</span>}
+              </div>
+              <h3 className="details-main-title">{selectedStudent.tenhv} - {selectedStudent.sdtme || '--'} - {selectedStudent.className}</h3>
             </div>
-            
+
             <div className="details-body scrollable">
-               <div className="details-section">
-                  <h4 className="section-header-title"><LayoutGrid size={18} /> Thông tin khách hàng</h4>
-                  <div className="info-list-modern">
-                     <div className="info-item-modern"><User size={16} /> <span>{selectedStudent.tenhv}</span></div>
-                     <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtme || '--'}</span></div>
-                     <div className="info-item-modern"><MapPin size={16} /> <span>{selectedStudent.diachi || 'N/A'}</span></div>
-                     <div className="info-item-modern"><FileText size={16} /> <span>{selectedStudent.className}</span></div>
-                  </div>
-               </div>
+              <div className="details-section">
+                <h4 className="section-header-title"><LayoutGrid size={18} /> Thông tin khách hàng</h4>
+                <div className="info-list-modern">
+                  <div className="info-item-modern"><User size={16} /> <span>{selectedStudent.tenhv}</span></div>
+                  <div className="info-item-modern"><Phone size={16} /> <span>{selectedStudent.sdtme || '--'}</span></div>
+                  <div className="info-item-modern"><MapPin size={16} /> <span>{selectedStudent.diachi || 'N/A'}</span></div>
+                  <div className="info-item-modern"><FileText size={16} /> <span>{selectedStudent.className}</span></div>
+                </div>
+              </div>
 
-               <div className="details-divider"></div>
+              <div className="details-divider"></div>
 
-                <div className="details-section">
-                  <h4 className="section-header-title"><File size={18} /> Kho lưu trữ</h4>
-                  <div className="storage-tabs-modern">
-                     <button 
-                       className={`storage-tab ${storageTab === 'image' ? 'active' : ''}`}
-                       onClick={() => setStorageTab('image')}
-                     >
-                       Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})
-                     </button>
-                     <button 
-                       className={`storage-tab ${storageTab === 'file' ? 'active' : ''}`}
-                       onClick={() => setStorageTab('file')}
-                     >
-                       File ({documents.filter(d => d.category !== 'Ảnh').length})
-                     </button>
-                  </div>
-                  
-                  <div className="storage-content-modern scrollable" style={{ maxHeight: '300px', marginTop: '12px' }}>
-                     {storageTab === 'image' ? (
-                       <div className="image-grid-storage">
-                          {documents.filter(d => d.category === 'Ảnh').length > 0 ? (
-                             documents.filter(d => d.category === 'Ảnh').map(img => (
-                               <div key={img.id} className="storage-img-item" onClick={() => setPreviewImage(img.file_url)}>
-                                  <img src={getDisplayUrl(img.file_url)} alt={img.name} referrerPolicy="no-referrer" />
-                               </div>
-                             ))
-                          ) : (
-                            <div className="empty-storage-msg">Chưa có hình ảnh nào</div>
-                          )}
-                       </div>
-                     ) : (
-                       <div className="file-list-storage">
-                          {documents.filter(d => d.category !== 'Ảnh').length > 0 ? (
-                             documents.filter(d => d.category !== 'Ảnh').map(f => (
-                               <div key={f.id} className="storage-file-item" onClick={() => window.open(f.file_url)}>
-                                  <FileText size={16} />
-                                  <span className="file-name-truncated" title={f.name}>{f.name}</span>
-                               </div>
-                             ))
-                          ) : (
-                            <div className="empty-storage-msg">Chưa có file nào</div>
-                          )}
-                       </div>
-                     )}
-                  </div>
-               </div>
+              <div className="details-section">
+                <h4 className="section-header-title"><File size={18} /> Kho lưu trữ</h4>
+                <div className="storage-tabs-modern">
+                  <button
+                    className={`storage-tab ${storageTab === 'image' ? 'active' : ''}`}
+                    onClick={() => setStorageTab('image')}
+                  >
+                    Hình ảnh ({documents.filter(d => d.category === 'Ảnh').length})
+                  </button>
+                  <button
+                    className={`storage-tab ${storageTab === 'file' ? 'active' : ''}`}
+                    onClick={() => setStorageTab('file')}
+                  >
+                    File ({documents.filter(d => d.category !== 'Ảnh').length})
+                  </button>
+                </div>
+
+                <div className="storage-content-modern scrollable" style={{ maxHeight: '300px', marginTop: '12px' }}>
+                  {storageTab === 'image' ? (
+                    <div className="image-grid-storage">
+                      {documents.filter(d => d.category === 'Ảnh').length > 0 ? (
+                        documents.filter(d => d.category === 'Ảnh').map(img => (
+                          <div key={img.id} className="storage-img-item" onClick={() => setPreviewImage(img.file_url)}>
+                            <img src={getDisplayUrl(img.file_url)} alt={img.name} referrerPolicy="no-referrer" />
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-storage-msg">Chưa có hình ảnh nào</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="file-list-storage">
+                      {documents.filter(d => d.category !== 'Ảnh').length > 0 ? (
+                        documents.filter(d => d.category !== 'Ảnh').map(f => (
+                          <div key={f.id} className="storage-file-item" onClick={() => window.open(f.file_url)}>
+                            <FileText size={16} />
+                            <span className="file-name-truncated" title={f.name}>{f.name}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-storage-msg">Chưa có file nào</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
-        
+
         {previewImage && (
           <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
-             <div className="preview-container" onClick={e => e.stopPropagation()}>
-                <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
-                <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
-             </div>
+            <div className="preview-container" onClick={e => e.stopPropagation()}>
+              <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+              <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
+            </div>
           </div>
         )}
 
@@ -1602,103 +1628,103 @@ ${ngoaiKhoaForm.content}
                 <h3>Chuyển tiếp tin nhắn</h3>
                 <button className="close-btn" onClick={() => setForwardingMessage(null)}><X size={20} /></button>
               </div>
-              
+
               <div className="modal-body">
                 <div className="forward-preview">
-                   <p className="label">Nội dung chuyển tiếp:</p>
-                   <div className="preview-bubble">
-                      {forwardingMessage.content && <p>{forwardingMessage.content}</p>}
-                      {forwardingMessage.image_url && <img src={getDisplayUrl(forwardingMessage.image_url)} alt="" style={{maxHeight: '60px', borderRadius: '4px'}} />}
-                      {forwardingMessage.file_url && <div className="file-tag"><FileText size={14} /> {forwardingMessage.file_name}</div>}
-                   </div>
+                  <p className="label">Nội dung chuyển tiếp:</p>
+                  <div className="preview-bubble">
+                    {forwardingMessage.content && <p>{forwardingMessage.content}</p>}
+                    {forwardingMessage.image_url && <img src={getDisplayUrl(forwardingMessage.image_url)} alt="" style={{ maxHeight: '60px', borderRadius: '4px' }} />}
+                    {forwardingMessage.file_url && <div className="file-tag"><FileText size={14} /> {forwardingMessage.file_name}</div>}
+                  </div>
                 </div>
 
                 <div className="recipient-selector">
-                   <div className="search-recipient">
-                      <Search size={16} />
-                      <input 
-                        type="text" 
-                        placeholder="Tìm kiếm học viên hoặc lớp..." 
-                        value={forwardSearch}
-                        onChange={e => setForwardSearch(e.target.value)}
-                      />
-                   </div>
+                  <div className="search-recipient">
+                    <Search size={16} />
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm học viên hoặc lớp..."
+                      value={forwardSearch}
+                      onChange={e => setForwardSearch(e.target.value)}
+                    />
+                  </div>
 
-                   <div className="recipient-list scrollable">
-                      {/* Grouping or providing bulk class actions */}
-                      {students
-                        .filter(s => {
-                          const clsName = getClassName(s.malop);
-                          const matches = s.tenhv?.toLowerCase().includes(forwardSearch.toLowerCase()) || 
-                                          s.mahv?.toLowerCase().includes(forwardSearch.toLowerCase()) ||
-                                          clsName.toLowerCase().includes(forwardSearch.toLowerCase());
-                          return matches;
-                        })
-                        .sort((a,b) => (a.malop === selectedStudent?.malop ? -1 : 1))
-                        .map((s, idx, arr) => {
-                          const prevS = arr[idx - 1];
-                          const showClassHeader = !prevS || prevS.malop !== s.malop;
-                          const clsName = getClassName(s.malop);
-                          
-                          return (
-                            <React.Fragment key={s.mahv}>
-                              {showClassHeader && (
-                                <div className="class-section-header">
-                                   <span>Lớp: {clsName}</span>
-                                   <button 
-                                     className="btn-select-class"
-                                     onClick={() => {
-                                       const members = students.filter(std => std.malop === s.malop).map(std => std.mahv);
-                                       const isAllSelected = members.every(id => selectedForwardStudents.includes(id));
-                                       if (isAllSelected) {
-                                         setSelectedForwardStudents(prev => prev.filter(id => !members.includes(id)));
-                                       } else {
-                                         setSelectedForwardStudents(prev => [...new Set([...prev, ...members])]);
-                                       }
-                                     }}
-                                   >
-                                     {students.filter(std => std.malop === s.malop).every(id => selectedForwardStudents.includes(id.mahv)) ? 'Bỏ chọn cả lớp' : 'Chọn cả lớp'}
-                                   </button>
-                                </div>
-                              )}
-                              <label className={`recipient-item ${selectedForwardStudents.includes(s.mahv) ? 'selected' : ''}`}>
-                                 <input 
-                                   type="checkbox" 
-                                   checked={selectedForwardStudents.includes(s.mahv)} 
-                                   onChange={() => {
-                                     if (selectedForwardStudents.includes(s.mahv)) {
-                                       setSelectedForwardStudents(prev => prev.filter(id => id !== s.mahv));
-                                     } else {
-                                       setSelectedForwardStudents(prev => [...prev, s.mahv]);
-                                     }
-                                   }}
-                                 />
-                                 <div className="r-avatar">{s.tenhv?.charAt(0)}</div>
-                                 <div className="r-info">
-                                    <span className="r-name">{s.tenhv} {s.malop === selectedStudent?.malop && <span className="same-class-tag">Cùng lớp</span>}</span>
-                                    <span className="r-sub">{s.mahv} - {clsName}</span>
-                                 </div>
-                              </label>
-                            </React.Fragment>
-                          );
-                        })
-                      }
-                   </div>
+                  <div className="recipient-list scrollable">
+                    {/* Grouping or providing bulk class actions */}
+                    {students
+                      .filter(s => {
+                        const clsName = getClassName(s.malop);
+                        const matches = s.tenhv?.toLowerCase().includes(forwardSearch.toLowerCase()) ||
+                          s.mahv?.toLowerCase().includes(forwardSearch.toLowerCase()) ||
+                          clsName.toLowerCase().includes(forwardSearch.toLowerCase());
+                        return matches;
+                      })
+                      .sort((a, b) => (a.malop === selectedStudent?.malop ? -1 : 1))
+                      .map((s, idx, arr) => {
+                        const prevS = arr[idx - 1];
+                        const showClassHeader = !prevS || prevS.malop !== s.malop;
+                        const clsName = getClassName(s.malop);
+
+                        return (
+                          <React.Fragment key={s.mahv}>
+                            {showClassHeader && (
+                              <div className="class-section-header">
+                                <span>Lớp: {clsName}</span>
+                                <button
+                                  className="btn-select-class"
+                                  onClick={() => {
+                                    const members = students.filter(std => std.malop === s.malop).map(std => std.mahv);
+                                    const isAllSelected = members.every(id => selectedForwardStudents.includes(id));
+                                    if (isAllSelected) {
+                                      setSelectedForwardStudents(prev => prev.filter(id => !members.includes(id)));
+                                    } else {
+                                      setSelectedForwardStudents(prev => [...new Set([...prev, ...members])]);
+                                    }
+                                  }}
+                                >
+                                  {students.filter(std => std.malop === s.malop).every(id => selectedForwardStudents.includes(id.mahv)) ? 'Bỏ chọn cả lớp' : 'Chọn cả lớp'}
+                                </button>
+                              </div>
+                            )}
+                            <label className={`recipient-item ${selectedForwardStudents.includes(s.mahv) ? 'selected' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={selectedForwardStudents.includes(s.mahv)}
+                                onChange={() => {
+                                  if (selectedForwardStudents.includes(s.mahv)) {
+                                    setSelectedForwardStudents(prev => prev.filter(id => id !== s.mahv));
+                                  } else {
+                                    setSelectedForwardStudents(prev => [...prev, s.mahv]);
+                                  }
+                                }}
+                              />
+                              <div className="r-avatar">{s.tenhv?.charAt(0)}</div>
+                              <div className="r-info">
+                                <span className="r-name">{s.tenhv} {s.malop === selectedStudent?.malop && <span className="same-class-tag">Cùng lớp</span>}</span>
+                                <span className="r-sub">{s.mahv} - {clsName}</span>
+                              </div>
+                            </label>
+                          </React.Fragment>
+                        );
+                      })
+                    }
+                  </div>
                 </div>
               </div>
 
               <div className="modal-footer">
                 <div className="selection-count">Đã chọn <strong>{selectedForwardStudents.length}</strong> học viên</div>
                 <div className="footer-btns">
-                   <button className="btn-cancel" onClick={() => setForwardingMessage(null)}>Hủy</button>
-                   <button 
-                     className="btn-forward-submit" 
-                     disabled={selectedForwardStudents.length === 0 || uploading}
-                     onClick={handleBulkForward}
-                   >
-                     {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
-                     Gửi ngay
-                   </button>
+                  <button className="btn-cancel" onClick={() => setForwardingMessage(null)}>Hủy</button>
+                  <button
+                    className="btn-forward-submit"
+                    disabled={selectedForwardStudents.length === 0 || uploading}
+                    onClick={handleBulkForward}
+                  >
+                    {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                    Gửi ngay
+                  </button>
                 </div>
               </div>
             </div>
@@ -1712,44 +1738,44 @@ ${ngoaiKhoaForm.content}
   return (
     <div className="chat-dashboard animate-fade-in">
       <div className="chat-dashboard-header">
-          <h2 className="chat-dashboard-title">Quản lý trao đổi phụ huynh</h2>
-          <div className="chat-header-actions">
-            <button 
-              className="chat-action-btn btn-history"
-              onClick={() => {
-                setIsHistoryModalOpen(true);
-                fetchHistoryNotices();
-              }}
-            >
-               <Clock size={18} /> Lịch sử đã đăng
-            </button>
-            <button 
-              className="chat-action-btn btn-menu"
-              onClick={() => setIsMenuModalOpen(true)}
-            >
-               <Utensils size={18} /> Gửi Thực Đơn
-            </button>
-            <button 
-              className="chat-action-btn btn-ngoaikhoa"
-              onClick={() => setIsNgoaiKhoaModalOpen(true)}
-            >
-               <ImageIcon size={18} /> Gửi Ngoại Khóa
-            </button>
-            <button 
-              className="chat-action-btn btn-chuongtrinhhoc"
-              onClick={() => setIsChuongTrinhHocModalOpen(true)}
-              style={{ background: '#0ea5e9', color: 'white', border: 'none' }}
-            >
-               <FileText size={18} /> Gửi C.Trình Học
-            </button>
-            <button 
-              className="chat-action-btn btn-announcement"
-              onClick={() => setIsAnnouncementModalOpen(true)}
-            >
-               <Bell size={18} /> Đăng Bảng Tin (Announcement)
-            </button>
-          </div>
-       </div>
+        <h2 className="chat-dashboard-title">Quản lý trao đổi phụ huynh</h2>
+        <div className="chat-header-actions">
+          <button
+            className="chat-action-btn btn-history"
+            onClick={() => {
+              setIsHistoryModalOpen(true);
+              fetchHistoryNotices();
+            }}
+          >
+            <Clock size={18} /> Lịch sử đã đăng
+          </button>
+          <button
+            className="chat-action-btn btn-menu"
+            onClick={() => setIsMenuModalOpen(true)}
+          >
+            <Utensils size={18} /> Gửi Thực Đơn
+          </button>
+          <button
+            className="chat-action-btn btn-ngoaikhoa"
+            onClick={() => setIsNgoaiKhoaModalOpen(true)}
+          >
+            <ImageIcon size={18} /> Gửi Ngoại Khóa
+          </button>
+          <button
+            className="chat-action-btn btn-chuongtrinhhoc"
+            onClick={() => setIsChuongTrinhHocModalOpen(true)}
+            style={{ background: '#0ea5e9', color: 'white', border: 'none' }}
+          >
+            <FileText size={18} /> Gửi C.Trình Học
+          </button>
+          <button
+            className="chat-action-btn btn-announcement"
+            onClick={() => setIsAnnouncementModalOpen(true)}
+          >
+            <Bell size={18} /> Đăng Bảng Tin (Announcement)
+          </button>
+        </div>
+      </div>
 
       {/* Filters Row */}
       <div className="chat-filters-row">
@@ -1757,9 +1783,9 @@ ${ngoaiKhoaForm.content}
           <span className="filter-label">Phụ huynh</span>
           <div className="search-input-wrapper">
             <Search size={18} className="search-icon-inside" />
-            <input 
-              type="text" 
-              placeholder="TÌM KIẾM THEO TÊN/MÃ..." 
+            <input
+              type="text"
+              placeholder="TÌM KIẾM THEO TÊN/MÃ..."
               value={searchParent}
               onChange={(e) => setSearchParent(e.target.value)}
             />
@@ -1768,7 +1794,7 @@ ${ngoaiKhoaForm.content}
 
         <div className="filter-group">
           <span className="filter-label">Lọc theo:</span>
-          <select 
+          <select
             className="class-select-styled"
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
@@ -1784,7 +1810,7 @@ ${ngoaiKhoaForm.content}
           <span className="filter-label" style={{ whiteSpace: 'nowrap' }}>Thời gian cập nhật:</span>
           <div className="date-filters">
             {['Hôm nay', 'Tuần này', 'Tháng này', 'tháng trước tới nay', 'Tuỳ chọn'].map(f => (
-              <button 
+              <button
                 key={f}
                 className={`date-filter-btn ${dateFilter === f ? 'active' : ''}`}
                 onClick={() => setDateFilter(f)}
@@ -1796,20 +1822,20 @@ ${ngoaiKhoaForm.content}
 
           {dateFilter === 'Tuỳ chọn' && (
             <div className="custom-date-picker" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '12px' }}>
-              <input 
-                type="date" 
-                className="class-select-styled" 
+              <input
+                type="date"
+                className="class-select-styled"
                 style={{ padding: '0.4rem 0.75rem', minWidth: 'auto' }}
                 value={customRange.start}
-                onChange={(e) => setCustomRange({...customRange, start: e.target.value})}
+                onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })}
               />
               <span className="filter-label">đến</span>
-              <input 
-                type="date" 
-                className="class-select-styled" 
+              <input
+                type="date"
+                className="class-select-styled"
                 style={{ padding: '0.4rem 0.75rem', minWidth: 'auto' }}
                 value={customRange.end}
-                onChange={(e) => setCustomRange({...customRange, end: e.target.value})}
+                onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })}
               />
             </div>
           )}
@@ -1818,7 +1844,7 @@ ${ngoaiKhoaForm.content}
 
       {/* Quick Reports Section */}
       <div className="quick-reports-container">
-        <div 
+        <div
           className="report-card xin-nghi"
           onClick={() => setStatFilter(statFilter === 'XIN_NGHI' ? 'ALL' : 'XIN_NGHI')}
           style={{ cursor: 'pointer', outline: statFilter === 'XIN_NGHI' ? '3px solid #8b5cf6' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'XIN_NGHI' ? 0.6 : 1 }}
@@ -1826,7 +1852,7 @@ ${ngoaiKhoaForm.content}
           <span className="report-label">Xin nghỉ</span>
           <span className="report-value">{String(reports.xinNghi).padStart(2, '0')}</span>
         </div>
-        <div 
+        <div
           className="report-card bao-thuoc"
           onClick={() => setStatFilter(statFilter === 'BAO_THUOC' ? 'ALL' : 'BAO_THUOC')}
           style={{ cursor: 'pointer', outline: statFilter === 'BAO_THUOC' ? '3px solid #10b981' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'BAO_THUOC' ? 0.6 : 1 }}
@@ -1834,7 +1860,7 @@ ${ngoaiKhoaForm.content}
           <span className="report-label">Báo thuốc</span>
           <span className="report-value">{String(reports.baoThuoc).padStart(2, '0')}</span>
         </div>
-        <div 
+        <div
           className="report-card gui-tin-nhan"
           onClick={() => setStatFilter(statFilter === 'GUI_TIN_NHAN' ? 'ALL' : 'GUI_TIN_NHAN')}
           style={{ cursor: 'pointer', outline: statFilter === 'GUI_TIN_NHAN' ? '3px solid #3b82f6' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'GUI_TIN_NHAN' ? 0.6 : 1 }}
@@ -1842,7 +1868,7 @@ ${ngoaiKhoaForm.content}
           <span className="report-label">Gửi tin nhắn</span>
           <span className="report-value">{String(reports.guiTinNhan).padStart(2, '0')}</span>
         </div>
-        <div 
+        <div
           className="report-card doi-nguoi"
           onClick={() => setStatFilter(statFilter === 'DOI_NGUOI' ? 'ALL' : 'DOI_NGUOI')}
           style={{ cursor: 'pointer', outline: statFilter === 'DOI_NGUOI' ? '3px solid #f59e0b' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'DOI_NGUOI' ? 0.6 : 1 }}
@@ -1850,7 +1876,7 @@ ${ngoaiKhoaForm.content}
           <span className="report-label">Báo đổi người đón trẻ</span>
           <span className="report-value">{String(reports.doiNguoi).padStart(2, '0')}</span>
         </div>
-        <div 
+        <div
           className="report-card ve-tre"
           onClick={() => setStatFilter(statFilter === 'VE_TRE' ? 'ALL' : 'VE_TRE')}
           style={{ cursor: 'pointer', outline: statFilter === 'VE_TRE' ? '3px solid #ef4444' : 'none', opacity: statFilter !== 'ALL' && statFilter !== 'VE_TRE' ? 0.6 : 1 }}
@@ -1860,15 +1886,15 @@ ${ngoaiKhoaForm.content}
         </div>
 
         {(currentUser?.role === 'Quản lý' || currentUser?.role === 'Hiệu trưởng') && (
-          <div 
+          <div
             className="report-card gop-y"
             onClick={() => setStatFilter(statFilter === 'GOP_Y' ? 'ALL' : 'GOP_Y')}
-            style={{ 
-              cursor: 'pointer', 
-              background: '#f97316', 
+            style={{
+              cursor: 'pointer',
+              background: '#f97316',
               color: 'white',
-              outline: statFilter === 'GOP_Y' ? '3px solid #ea580c' : 'none', 
-              opacity: statFilter !== 'ALL' && statFilter !== 'GOP_Y' ? 0.6 : 1 
+              outline: statFilter === 'GOP_Y' ? '3px solid #ea580c' : 'none',
+              opacity: statFilter !== 'ALL' && statFilter !== 'GOP_Y' ? 0.6 : 1
             }}
           >
             <span className="report-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Góp ý phụ huynh</span>
@@ -2003,20 +2029,20 @@ ${ngoaiKhoaForm.content}
                   <td>{s.teacherName}</td>
                   <td>
                     {s.lastMsg ? (
-                      <div 
-                        style={{ 
-                          fontSize: '0.85rem', 
-                          color: '#475569', 
-                          maxWidth: '220px', 
-                          overflow: 'hidden', 
-                          textOverflow: 'ellipsis', 
-                          whiteSpace: 'nowrap' 
-                        }} 
+                      <div
+                        style={{
+                          fontSize: '0.85rem',
+                          color: '#475569',
+                          maxWidth: '220px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
                         title={getMessagePreviewText(s.lastMsg)}
                       >
                         {getMessagePreviewText(s.lastMsg)}
                       </div>
-                    ) : <span style={{color: '#cbd5e1'}}>--</span>}
+                    ) : <span style={{ color: '#cbd5e1' }}>--</span>}
                   </td>
                   <td className="time-cell">{s.lastTime ? formatTime(s.lastTime) : '--:--'}</td>
                 </>
@@ -2028,10 +2054,10 @@ ${ngoaiKhoaForm.content}
 
       {previewImage && (
         <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
-           <div className="preview-container" onClick={e => e.stopPropagation()}>
-              <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
-              <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
-           </div>
+          <div className="preview-container" onClick={e => e.stopPropagation()}>
+            <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+            <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
+          </div>
         </div>
       )}
 
@@ -2039,135 +2065,143 @@ ${ngoaiKhoaForm.content}
       {isAnnouncementModalOpen && createPortal(
         <div className="chat-modal-overlay" onClick={() => setIsAnnouncementModalOpen(false)}>
           <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
-             <div className="modal-header">
-                <h3><Bell size={20} /> Đăng Thông Báo Bảng Tin</h3>
-                <button className="close-btn" onClick={() => setIsAnnouncementModalOpen(false)}><X size={20} /></button>
-             </div>
-             <div className="modal-body">
-                <div style={{ marginBottom: '20px' }}>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
-                   <div style={{ display: 'flex', gap: '10px' }}>
-                      <button 
-                        className={`mode-btn ${announcementForm.type === 'all' ? 'active' : ''}`}
-                        onClick={() => setAnnouncementForm({...announcementForm, type: 'all'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: announcementForm.type === 'all' ? '2px solid #8b5cf6' : '1px solid #e2e8f0', 
-                          background: announcementForm.type === 'all' ? '#f5f3ff' : 'white', 
-                          color: announcementForm.type === 'all' ? '#8b5cf6' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        Gửi tất cả các lớp
-                      </button>
-                      <button 
-                        className={`mode-btn ${announcementForm.type === 'class' ? 'active' : ''}`}
-                        onClick={() => setAnnouncementForm({...announcementForm, type: 'class'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: announcementForm.type === 'class' ? '2px solid #8b5cf6' : '1px solid #e2e8f0', 
-                          background: announcementForm.type === 'class' ? '#f5f3ff' : 'white', 
-                          color: announcementForm.type === 'class' ? '#8b5cf6' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        Chọn từng lớp riêng
-                      </button>
-                   </div>
+            <div className="modal-header">
+              <h3><Bell size={20} /> Đăng Thông Báo Bảng Tin</h3>
+              <button className="close-btn" onClick={() => setIsAnnouncementModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className={`mode-btn ${announcementForm.type === 'all' ? 'active' : ''}`}
+                    onClick={() => setAnnouncementForm({ ...announcementForm, type: 'all' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: announcementForm.type === 'all' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
+                      background: announcementForm.type === 'all' ? '#f5f3ff' : 'white',
+                      color: announcementForm.type === 'all' ? '#8b5cf6' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Gửi tất cả các lớp
+                  </button>
+                  <button
+                    className={`mode-btn ${announcementForm.type === 'class' ? 'active' : ''}`}
+                    onClick={() => setAnnouncementForm({ ...announcementForm, type: 'class' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: announcementForm.type === 'class' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
+                      background: announcementForm.type === 'class' ? '#f5f3ff' : 'white',
+                      color: announcementForm.type === 'class' ? '#8b5cf6' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Chọn từng lớp riêng
+                  </button>
                 </div>
+              </div>
 
-                {announcementForm.type === 'class' && (
-                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }} className="fade-in">
-                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {classes.map(c => (
-                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={announcementForm.selectedClasses.includes(c.malop)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setAnnouncementForm(prev => {
-                                  const list = checked 
-                                    ? [...prev.selectedClasses, c.malop]
-                                    : prev.selectedClasses.filter(id => id !== c.malop);
-                                  return { ...prev, selectedClasses: list };
-                                });
-                              }}
-                            />
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
-                          </label>
-                        ))}
-                      </div>
-                   </div>
-                )}
-
-                <div style={{ marginBottom: '20px' }}>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Nội dung thông báo:</label>
-                   <textarea 
-                     placeholder="Nhập nội dung thông báo nhấn mạnh..."
-                     rows="5"
-                     style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }}
-                     value={announcementForm.content}
-                     onChange={e => setAnnouncementForm({...announcementForm, content: e.target.value})}
-                   />
+              {announcementForm.type === 'class' && (
+                <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }} className="fade-in">
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {classes.map(c => (
+                      <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={announcementForm.selectedClasses.includes(c.malop)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setAnnouncementForm(prev => {
+                              const list = checked
+                                ? [...prev.selectedClasses, c.malop]
+                                : prev.selectedClasses.filter(id => id !== c.malop);
+                              return { ...prev, selectedClasses: list };
+                            });
+                          }}
+                        />
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
+              )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                   <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><ImageIcon size={16} /> Đính kèm ảnh:</label>
-                      <FileDropZone
-                        files={announcementFiles.images}
-                        onFilesChange={(files) => mergeStateFiles(setAnnouncementFiles, 'images', files)}
-                        accept="image/*"
-                        filterFiles={(file) => String(file?.type || '').toLowerCase().startsWith('image/')}
-                        icon={ImageIcon}
-                        accentColor="#8b5cf6"
-                        textColor="#4c1d95"
-                        subTextColor="#64748b"
-                        emptyTitle="Chọn ảnh thông báo..."
-                        selectedHint="Chọn ảnh thông báo..."
-                        style={{ padding: '12px', borderRadius: '10px', background: '#f8fafc' }}
-                        listStyle={{ maxHeight: '92px' }}
-                      />
-                   </div>
-                   <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><File size={16} /> Đính kèm File:</label>
-                      <FileDropZone
-                        files={announcementFiles.files}
-                        onFilesChange={(files) => mergeStateFiles(setAnnouncementFiles, 'files', files)}
-                        icon={Paperclip}
-                        accentColor="#8b5cf6"
-                        textColor="#4c1d95"
-                        subTextColor="#64748b"
-                        emptyTitle="Chọn tệp đính kèm..."
-                        selectedHint="Chọn tệp đính kèm..."
-                        style={{ padding: '12px', borderRadius: '10px', background: '#f8fafc' }}
-                        listStyle={{ maxHeight: '92px' }}
-                      />
-                   </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Nội dung thông báo:</label>
+                <textarea
+                  placeholder="Nhập nội dung thông báo nhấn mạnh..."
+                  rows="5"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }}
+                  value={announcementForm.content}
+                  onChange={e => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><ImageIcon size={16} /> Đính kèm ảnh:</label>
+                  <FileDropZone
+                    files={announcementFiles.images}
+                    onFilesChange={(files) => mergeStateFiles(setAnnouncementFiles, 'images', files)}
+                    accept="image/*"
+                    filterFiles={(file) => String(file?.type || '').toLowerCase().startsWith('image/')}
+                    icon={ImageIcon}
+                    accentColor="#8b5cf6"
+                    textColor="#4c1d95"
+                    subTextColor="#64748b"
+                    emptyTitle="Chọn ảnh thông báo..."
+                    selectedHint="Chọn ảnh thông báo..."
+                    style={{
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: '#f8fafc'
+                    }}
+                    listStyle={{ maxHeight: '92px' }}
+                  />
                 </div>
-             </div>
-             <div className="modal-footer">
-                <button className="btn-cancel" onClick={() => setIsAnnouncementModalOpen(false)}>Hủy bỏ</button>
-                <button 
-                  className="btn-forward-submit" 
-                  style={{ background: '#8b5cf6' }}
-                  disabled={uploading}
-                  onClick={handlePostAnnouncement}
-                >
-                   {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
-                   Đăng thông báo lên Bảng tin
-                </button>
-             </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}><File size={16} /> Đính kèm File:</label>
+                  <FileDropZone
+                    files={announcementFiles.files}
+                    onFilesChange={(files) => mergeStateFiles(setAnnouncementFiles, 'files', files)}
+                    icon={Paperclip}
+                    accentColor="#8b5cf6"
+                    textColor="#4c1d95"
+                    subTextColor="#64748b"
+                    emptyTitle="Chọn tệp đính kèm..."
+                    selectedHint="Chọn tệp đính kèm..."
+                    style={{
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: '#f8fafc'
+                    }}
+                    listStyle={{ maxHeight: '92px' }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setIsAnnouncementModalOpen(false)}>Hủy bỏ</button>
+              <button
+                className="btn-forward-submit"
+                style={{ background: '#8b5cf6' }}
+                disabled={uploading}
+                onClick={handlePostAnnouncement}
+              >
+                {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                Đăng thông báo lên Bảng tin
+              </button>
+            </div>
           </div>
         </div>,
         document.body
@@ -2176,106 +2210,106 @@ ${ngoaiKhoaForm.content}
       {isMenuModalOpen && createPortal(
         <div className="chat-modal-overlay" onClick={() => setIsMenuModalOpen(false)}>
           <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
-             <div className="modal-header">
-                <h3><Utensils size={20} /> Gửi Thực Đơn Cho Phụ Huynh</h3>
-                <button className="close-btn" onClick={() => setIsMenuModalOpen(false)}><X size={20} /></button>
-             </div>
-             <div className="modal-body">
-                <div style={{ marginBottom: '20px' }}>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
-                   <div style={{ display: 'flex', gap: '10px' }}>
-                      <button 
-                        className={`mode-btn ${menuForm.type === 'all' ? 'active' : ''}`}
-                        onClick={() => setMenuForm({...menuForm, type: 'all'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: menuForm.type === 'all' ? '2px solid #10b981' : '1px solid #e2e8f0', 
-                          background: menuForm.type === 'all' ? '#f0fdf4' : 'white', 
-                          color: menuForm.type === 'all' ? '#10b981' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Gửi tất cả các lớp
-                      </button>
-                      <button 
-                        className={`mode-btn ${menuForm.type === 'class' ? 'active' : ''}`}
-                        onClick={() => setMenuForm({...menuForm, type: 'class'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: menuForm.type === 'class' ? '2px solid #10b981' : '1px solid #e2e8f0', 
-                          background: menuForm.type === 'class' ? '#f0fdf4' : 'white', 
-                          color: menuForm.type === 'class' ? '#10b981' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Chọn từng lớp riêng
-                      </button>
-                   </div>
+            <div className="modal-header">
+              <h3><Utensils size={20} /> Gửi Thực Đơn Cho Phụ Huynh</h3>
+              <button className="close-btn" onClick={() => setIsMenuModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className={`mode-btn ${menuForm.type === 'all' ? 'active' : ''}`}
+                    onClick={() => setMenuForm({ ...menuForm, type: 'all' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: menuForm.type === 'all' ? '2px solid #10b981' : '1px solid #e2e8f0',
+                      background: menuForm.type === 'all' ? '#f0fdf4' : 'white',
+                      color: menuForm.type === 'all' ? '#10b981' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Gửi tất cả các lớp
+                  </button>
+                  <button
+                    className={`mode-btn ${menuForm.type === 'class' ? 'active' : ''}`}
+                    onClick={() => setMenuForm({ ...menuForm, type: 'class' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: menuForm.type === 'class' ? '2px solid #10b981' : '1px solid #e2e8f0',
+                      background: menuForm.type === 'class' ? '#f0fdf4' : 'white',
+                      color: menuForm.type === 'class' ? '#10b981' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Chọn từng lớp riêng
+                  </button>
                 </div>
+              </div>
 
-                {menuForm.type === 'class' && (
-                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {classes.map(c => (
-                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={menuForm.selectedClasses.includes(c.malop)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setMenuForm(prev => {
-                                  const list = checked 
-                                    ? [...prev.selectedClasses, c.malop]
-                                    : prev.selectedClasses.filter(id => id !== c.malop);
-                                  return { ...prev, selectedClasses: list };
-                                });
-                              }}
-                            />
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
-                          </label>
-                        ))}
-                      </div>
-                   </div>
-                )}
-
-                <div>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh thực đơn:</label>
-                   <FileDropZone
-                     files={menuFiles.attachments}
-                     onFilesChange={(files) => mergeStateFiles(setMenuFiles, 'attachments', files)}
-                     icon={Upload}
-                     accentColor="#10b981"
-                     borderColor="#10b981"
-                     activeBorderColor="#059669"
-                     background="#f0fdf4"
-                     textColor="#065f46"
-                     subTextColor="#059669"
-                     emptyTitle="Chọn hoặc kéo thả ảnh thực đơn vào đây"
-                     emptySubtitle="Chấp nhận định dạng JPG, PNG, WEBP"
-                     selectedHint="Nhấn để thay đổi ảnh"
-                     style={{ padding: '30px' }}
-                   />
+              {menuForm.type === 'class' && (
+                <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {classes.map(c => (
+                      <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={menuForm.selectedClasses.includes(c.malop)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setMenuForm(prev => {
+                              const list = checked
+                                ? [...prev.selectedClasses, c.malop]
+                                : prev.selectedClasses.filter(id => id !== c.malop);
+                              return { ...prev, selectedClasses: list };
+                            });
+                          }}
+                        />
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-             </div>
-             <div className="modal-footer">
-                <button className="btn-cancel" onClick={() => setIsMenuModalOpen(false)}>Hủy bỏ</button>
-                <button 
-                  className="btn-forward-submit" 
-                  style={{ background: '#10b981' }}
-                  disabled={uploading || menuFiles.attachments.length === 0}
-                  onClick={handlePostMenu}
-                >
-                   {uploading ? <Loader2 size={18} className="spinner" /> : <Utensils size={18} />}
-                   Gửi Thực Đơn Cho Phụ Huynh
-                </button>
-             </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh thực đơn:</label>
+                <FileDropZone
+                  files={menuFiles.attachments}
+                  onFilesChange={(files) => mergeStateFiles(setMenuFiles, 'attachments', files)}
+                  icon={Upload}
+                  accentColor="#10b981"
+                  borderColor="#10b981"
+                  activeBorderColor="#059669"
+                  background="#f0fdf4"
+                  textColor="#065f46"
+                  subTextColor="#059669"
+                  emptyTitle="Chọn hoặc kéo thả ảnh thực đơn vào đây"
+                  emptySubtitle="Chấp nhận định dạng JPG, PNG, WEBP"
+                  selectedHint="Nhấn để thay đổi ảnh"
+                  style={{ padding: '30px' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setIsMenuModalOpen(false)}>Hủy bỏ</button>
+              <button
+                className="btn-forward-submit"
+                style={{ background: '#10b981' }}
+                disabled={uploading || menuFiles.attachments.length === 0}
+                onClick={handlePostMenu}
+              >
+                {uploading ? <Loader2 size={18} className="spinner" /> : <Utensils size={18} />}
+                Gửi Thực Đơn Cho Phụ Huynh
+              </button>
+            </div>
           </div>
         </div>,
         document.body
@@ -2284,106 +2318,106 @@ ${ngoaiKhoaForm.content}
       {isChuongTrinhHocModalOpen && createPortal(
         <div className="chat-modal-overlay" onClick={() => setIsChuongTrinhHocModalOpen(false)}>
           <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
-             <div className="modal-header">
-                <h3><FileText size={20} /> Gửi Chương Trình Học Cho Phụ Huynh</h3>
-                <button className="close-btn" onClick={() => setIsChuongTrinhHocModalOpen(false)}><X size={20} /></button>
-             </div>
-             <div className="modal-body">
-                <div style={{ marginBottom: '20px' }}>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
-                   <div style={{ display: 'flex', gap: '10px' }}>
-                      <button 
-                        className={`mode-btn ${chuongTrinhHocForm.type === 'all' ? 'active' : ''}`}
-                        onClick={() => setChuongTrinhHocForm({...chuongTrinhHocForm, type: 'all'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: chuongTrinhHocForm.type === 'all' ? '2px solid #0ea5e9' : '1px solid #e2e8f0', 
-                          background: chuongTrinhHocForm.type === 'all' ? '#e0f2fe' : 'white', 
-                          color: chuongTrinhHocForm.type === 'all' ? '#0ea5e9' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Gửi tất cả các lớp
-                      </button>
-                      <button 
-                        className={`mode-btn ${chuongTrinhHocForm.type === 'class' ? 'active' : ''}`}
-                        onClick={() => setChuongTrinhHocForm({...chuongTrinhHocForm, type: 'class'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: chuongTrinhHocForm.type === 'class' ? '2px solid #0ea5e9' : '1px solid #e2e8f0', 
-                          background: chuongTrinhHocForm.type === 'class' ? '#e0f2fe' : 'white', 
-                          color: chuongTrinhHocForm.type === 'class' ? '#0ea5e9' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Chọn từng lớp riêng
-                      </button>
-                   </div>
+            <div className="modal-header">
+              <h3><FileText size={20} /> Gửi Chương Trình Học Cho Phụ Huynh</h3>
+              <button className="close-btn" onClick={() => setIsChuongTrinhHocModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className={`mode-btn ${chuongTrinhHocForm.type === 'all' ? 'active' : ''}`}
+                    onClick={() => setChuongTrinhHocForm({ ...chuongTrinhHocForm, type: 'all' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: chuongTrinhHocForm.type === 'all' ? '2px solid #0ea5e9' : '1px solid #e2e8f0',
+                      background: chuongTrinhHocForm.type === 'all' ? '#e0f2fe' : 'white',
+                      color: chuongTrinhHocForm.type === 'all' ? '#0ea5e9' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Gửi tất cả các lớp
+                  </button>
+                  <button
+                    className={`mode-btn ${chuongTrinhHocForm.type === 'class' ? 'active' : ''}`}
+                    onClick={() => setChuongTrinhHocForm({ ...chuongTrinhHocForm, type: 'class' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: chuongTrinhHocForm.type === 'class' ? '2px solid #0ea5e9' : '1px solid #e2e8f0',
+                      background: chuongTrinhHocForm.type === 'class' ? '#e0f2fe' : 'white',
+                      color: chuongTrinhHocForm.type === 'class' ? '#0ea5e9' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Chọn từng lớp riêng
+                  </button>
                 </div>
+              </div>
 
-                {chuongTrinhHocForm.type === 'class' && (
-                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {classes.map(c => (
-                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={chuongTrinhHocForm.selectedClasses.includes(c.malop)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setChuongTrinhHocForm(prev => {
-                                  const list = checked 
-                                    ? [...prev.selectedClasses, c.malop]
-                                    : prev.selectedClasses.filter(id => id !== c.malop);
-                                  return { ...prev, selectedClasses: list };
-                                });
-                              }}
-                            />
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
-                          </label>
-                        ))}
-                      </div>
-                   </div>
-                )}
-
-                <div>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh chương trình học:</label>
-                   <FileDropZone
-                     files={chuongTrinhHocFiles.attachments}
-                     onFilesChange={(files) => mergeStateFiles(setChuongTrinhHocFiles, 'attachments', files)}
-                     icon={Upload}
-                     accentColor="#0ea5e9"
-                     borderColor="#0ea5e9"
-                     activeBorderColor="#0284c7"
-                     background="#e0f2fe"
-                     textColor="#0369a1"
-                     subTextColor="#0284c7"
-                     emptyTitle="Chọn hoặc kéo thả ảnh vào đây"
-                     emptySubtitle="Chấp nhận định dạng JPG, PNG, WEBP"
-                     selectedHint="Nhấn để thay đổi ảnh"
-                     style={{ padding: '30px' }}
-                   />
+              {chuongTrinhHocForm.type === 'class' && (
+                <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {classes.map(c => (
+                      <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={chuongTrinhHocForm.selectedClasses.includes(c.malop)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setChuongTrinhHocForm(prev => {
+                              const list = checked
+                                ? [...prev.selectedClasses, c.malop]
+                                : prev.selectedClasses.filter(id => id !== c.malop);
+                              return { ...prev, selectedClasses: list };
+                            });
+                          }}
+                        />
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-             </div>
-             <div className="modal-footer">
-                <button className="btn-cancel" onClick={() => setIsChuongTrinhHocModalOpen(false)}>Hủy bỏ</button>
-                <button 
-                  className="btn-forward-submit" 
-                  style={{ background: '#0ea5e9' }}
-                  disabled={uploading || chuongTrinhHocFiles.attachments.length === 0}
-                  onClick={handlePostChuongTrinhHoc}
-                >
-                   {uploading ? <Loader2 size={18} className="spinner" /> : <FileText size={18} />}
-                   Gửi Chương Trình Học
-                </button>
-             </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh chương trình học:</label>
+                <FileDropZone
+                  files={chuongTrinhHocFiles.attachments}
+                  onFilesChange={(files) => mergeStateFiles(setChuongTrinhHocFiles, 'attachments', files)}
+                  icon={Upload}
+                  accentColor="#0ea5e9"
+                  borderColor="#0ea5e9"
+                  activeBorderColor="#0284c7"
+                  background="#e0f2fe"
+                  textColor="#0369a1"
+                  subTextColor="#0284c7"
+                  emptyTitle="Chọn hoặc kéo thả ảnh vào đây"
+                  emptySubtitle="Chấp nhận định dạng JPG, PNG, WEBP"
+                  selectedHint="Nhấn để thay đổi ảnh"
+                  style={{ padding: '30px' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setIsChuongTrinhHocModalOpen(false)}>Hủy bỏ</button>
+              <button
+                className="btn-forward-submit"
+                style={{ background: '#0ea5e9' }}
+                disabled={uploading || chuongTrinhHocFiles.attachments.length === 0}
+                onClick={handlePostChuongTrinhHoc}
+              >
+                {uploading ? <Loader2 size={18} className="spinner" /> : <FileText size={18} />}
+                Gửi Chương Trình Học
+              </button>
+            </div>
           </div>
         </div>,
         document.body
@@ -2392,162 +2426,162 @@ ${ngoaiKhoaForm.content}
       {isNgoaiKhoaModalOpen && createPortal(
         <div className="chat-modal-overlay" onClick={() => setIsNgoaiKhoaModalOpen(false)}>
           <div className="chat-modal announcement-modal" onClick={e => e.stopPropagation()}>
-             <div className="modal-header" style={{ background: '#fdf2f8' }}>
-                <h3 style={{ color: '#be185d' }}><ImageIcon size={20} /> Gửi Hoạt Động Ngoại Khóa</h3>
-                <button className="close-btn" onClick={() => setIsNgoaiKhoaModalOpen(false)}><X size={20} /></button>
-             </div>
-             <div className="modal-body">
-                <div style={{ marginBottom: '20px' }}>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
-                   <div style={{ display: 'flex', gap: '10px' }}>
-                      <button 
-                        className={`mode-btn ${ngoaiKhoaForm.type === 'all' ? 'active' : ''}`}
-                        onClick={() => setNgoaiKhoaForm({...ngoaiKhoaForm, type: 'all'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: ngoaiKhoaForm.type === 'all' ? '2px solid #ec4899' : '1px solid #e2e8f0', 
-                          background: ngoaiKhoaForm.type === 'all' ? '#fdf2f8' : 'white', 
-                          color: ngoaiKhoaForm.type === 'all' ? '#ec4899' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Gửi tất cả các lớp
-                      </button>
-                      <button 
-                        className={`mode-btn ${ngoaiKhoaForm.type === 'class' ? 'active' : ''}`}
-                        onClick={() => setNgoaiKhoaForm({...ngoaiKhoaForm, type: 'class'})}
-                        style={{ 
-                          flex: 1, 
-                          padding: '12px', 
-                          borderRadius: '12px', 
-                          border: ngoaiKhoaForm.type === 'class' ? '2px solid #ec4899' : '1px solid #e2e8f0', 
-                          background: ngoaiKhoaForm.type === 'class' ? '#fdf2f8' : 'white', 
-                          color: ngoaiKhoaForm.type === 'class' ? '#ec4899' : '#64748b', 
-                          fontWeight: 700, 
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Chọn từng lớp riêng
-                      </button>
-                   </div>
+            <div className="modal-header" style={{ background: '#fdf2f8' }}>
+              <h3 style={{ color: '#be185d' }}><ImageIcon size={20} /> Gửi Hoạt Động Ngoại Khóa</h3>
+              <button className="close-btn" onClick={() => setIsNgoaiKhoaModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Gửi tới:</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className={`mode-btn ${ngoaiKhoaForm.type === 'all' ? 'active' : ''}`}
+                    onClick={() => setNgoaiKhoaForm({ ...ngoaiKhoaForm, type: 'all' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: ngoaiKhoaForm.type === 'all' ? '2px solid #ec4899' : '1px solid #e2e8f0',
+                      background: ngoaiKhoaForm.type === 'all' ? '#fdf2f8' : 'white',
+                      color: ngoaiKhoaForm.type === 'all' ? '#ec4899' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Gửi tất cả các lớp
+                  </button>
+                  <button
+                    className={`mode-btn ${ngoaiKhoaForm.type === 'class' ? 'active' : ''}`}
+                    onClick={() => setNgoaiKhoaForm({ ...ngoaiKhoaForm, type: 'class' })}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: ngoaiKhoaForm.type === 'class' ? '2px solid #ec4899' : '1px solid #e2e8f0',
+                      background: ngoaiKhoaForm.type === 'class' ? '#fdf2f8' : 'white',
+                      color: ngoaiKhoaForm.type === 'class' ? '#ec4899' : '#64748b',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Chọn từng lớp riêng
+                  </button>
                 </div>
+              </div>
 
-                {ngoaiKhoaForm.type === 'class' && (
-                   <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {classes.map(c => (
-                          <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={ngoaiKhoaForm.selectedClasses.includes(c.malop)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setNgoaiKhoaForm(prev => {
-                                  const list = checked 
-                                    ? [...prev.selectedClasses, c.malop]
-                                    : prev.selectedClasses.filter(id => id !== c.malop);
-                                  return { ...prev, selectedClasses: list };
-                                });
-                              }}
-                            />
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
-                          </label>
-                        ))}
-                      </div>
-                   </div>
-                )}
-
-                <div style={{ marginBottom: '15px' }}>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Nội dung hoạt động:</label>
-                   <textarea 
-                     placeholder="Mô tả ngắn gọn về hoạt động ngoại khóa..."
-                     rows="3"
-                     style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }}
-                     value={ngoaiKhoaForm.content}
-                     onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, content: e.target.value})}
-                   />
+              {ngoaiKhoaForm.type === 'class' && (
+                <div style={{ marginBottom: '20px', maxHeight: '200px', overflowY: 'auto', padding: '10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, color: '#334155' }}>Chọn các lớp:</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {classes.map(c => (
+                      <label key={c.malop} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={ngoaiKhoaForm.selectedClasses.includes(c.malop)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setNgoaiKhoaForm(prev => {
+                              const list = checked
+                                ? [...prev.selectedClasses, c.malop]
+                                : prev.selectedClasses.filter(id => id !== c.malop);
+                              return { ...prev, selectedClasses: list };
+                            });
+                          }}
+                        />
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tenlop}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
+              )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                   <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Thời gian tổ chức:</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ví dụ: 08:00 - 15/06"
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                        value={ngoaiKhoaForm.time}
-                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, time: e.target.value})}
-                      />
-                   </div>
-                   <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Địa điểm:</label>
-                      <input 
-                        type="text" 
-                        placeholder="Nơi diễn ra hoạt động..."
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                        value={ngoaiKhoaForm.location}
-                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, location: e.target.value})}
-                      />
-                   </div>
-                </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Nội dung hoạt động:</label>
+                <textarea
+                  placeholder="Mô tả ngắn gọn về hoạt động ngoại khóa..."
+                  rows="3"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }}
+                  value={ngoaiKhoaForm.content}
+                  onChange={e => setNgoaiKhoaForm({ ...ngoaiKhoaForm, content: e.target.value })}
+                />
+              </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                   <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Thời hạn đăng ký:</label>
-                      <input 
-                        type="text" 
-                        placeholder="Hạn cuối đăng ký..."
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                        value={ngoaiKhoaForm.deadline}
-                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, deadline: e.target.value})}
-                      />
-                   </div>
-                   <div>
-                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Chi phí:</label>
-                      <input 
-                        type="text" 
-                        placeholder="Số tiền (nếu có)..."
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                        value={ngoaiKhoaForm.cost}
-                        onChange={e => setNgoaiKhoaForm({...ngoaiKhoaForm, cost: formatCurrency(e.target.value)})}
-                      />
-                   </div>
-                </div>
-
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
                 <div>
-                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh hoạt động:</label>
-                   <FileDropZone
-                     files={ngoaiKhoaFiles.attachments}
-                     onFilesChange={(files) => mergeStateFiles(setNgoaiKhoaFiles, 'attachments', files)}
-                     icon={Upload}
-                     accentColor="#ec4899"
-                     borderColor="#ec4899"
-                     activeBorderColor="#be185d"
-                     background="#fdf2f8"
-                     textColor="#9d174d"
-                     subTextColor="#be185d"
-                     emptyTitle="Chọn ảnh ngoại khóa"
-                     selectedHint="Nhấn để thay đổi ảnh"
-                     style={{ padding: '20px' }}
-                   />
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Thời gian tổ chức:</label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 08:00 - 15/06"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    value={ngoaiKhoaForm.time}
+                    onChange={e => setNgoaiKhoaForm({ ...ngoaiKhoaForm, time: e.target.value })}
+                  />
                 </div>
-             </div>
-             <div className="modal-footer">
-                <button className="btn-cancel" onClick={() => setIsNgoaiKhoaModalOpen(false)}>Hủy bỏ</button>
-                <button 
-                  className="btn-forward-submit" 
-                  style={{ background: '#ec4899' }}
-                  disabled={uploading || ngoaiKhoaFiles.attachments.length === 0}
-                  onClick={handlePostNgoaiKhoa}
-                >
-                   {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
-                   Gửi Hoạt Động Cho Phụ Huynh
-                </button>
-             </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Địa điểm:</label>
+                  <input
+                    type="text"
+                    placeholder="Nơi diễn ra hoạt động..."
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    value={ngoaiKhoaForm.location}
+                    onChange={e => setNgoaiKhoaForm({ ...ngoaiKhoaForm, location: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Thời hạn đăng ký:</label>
+                  <input
+                    type="text"
+                    placeholder="Hạn cuối đăng ký..."
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    value={ngoaiKhoaForm.deadline}
+                    onChange={e => setNgoaiKhoaForm({ ...ngoaiKhoaForm, deadline: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Chi phí:</label>
+                  <input
+                    type="text"
+                    placeholder="Số tiền (nếu có)..."
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    value={ngoaiKhoaForm.cost}
+                    onChange={e => setNgoaiKhoaForm({ ...ngoaiKhoaForm, cost: formatCurrency(e.target.value) })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700, color: '#334155' }}>Hình ảnh hoạt động:</label>
+                <FileDropZone
+                  files={ngoaiKhoaFiles.attachments}
+                  onFilesChange={(files) => mergeStateFiles(setNgoaiKhoaFiles, 'attachments', files)}
+                  icon={Upload}
+                  accentColor="#ec4899"
+                  borderColor="#ec4899"
+                  activeBorderColor="#be185d"
+                  background="#fdf2f8"
+                  textColor="#9d174d"
+                  subTextColor="#be185d"
+                  emptyTitle="Chọn ảnh ngoại khóa"
+                  selectedHint="Nhấn để thay đổi ảnh"
+                  style={{ padding: '20px' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setIsNgoaiKhoaModalOpen(false)}>Hủy bỏ</button>
+              <button
+                className="btn-forward-submit"
+                style={{ background: '#ec4899' }}
+                disabled={uploading || ngoaiKhoaFiles.attachments.length === 0}
+                onClick={handlePostNgoaiKhoa}
+              >
+                {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                Gửi Hoạt Động Cho Phụ Huynh
+              </button>
+            </div>
           </div>
         </div>,
         document.body
@@ -2556,27 +2590,27 @@ ${ngoaiKhoaForm.content}
       {isHistoryModalOpen && createPortal(
         <div className="chat-modal-overlay" onClick={() => setIsHistoryModalOpen(false)}>
           <div className="chat-modal announcement-modal" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
-             <div className="modal-header">
-                <h3><Clock size={20} /> Lịch sử Bản tin / Thực đơn / Ngoại khóa</h3>
-                <button className="close-btn" onClick={() => setIsHistoryModalOpen(false)}><X size={20} /></button>
-             </div>
-             <div className="modal-body">
-                {historyLoading ? (
-                  <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="spinner" size={40} /></div>
-                ) : historyNotices.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Chưa có bản tin nào được đăng.</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', padding: '5px' }}>
-                    {historyNotices.map(notice => {
-                      const noticeTitle = notice.title || 'THÔNG BÁO';
-                      return (
+            <div className="modal-header">
+              <h3><Clock size={20} /> Lịch sử Bản tin / Thực đơn / Ngoại khóa</h3>
+              <button className="close-btn" onClick={() => setIsHistoryModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              {historyLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="spinner" size={40} /></div>
+              ) : historyNotices.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Chưa có bản tin nào được đăng.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', padding: '5px' }}>
+                  {historyNotices.map(notice => {
+                    const noticeTitle = notice.title || 'THÔNG BÁO';
+                    return (
                       <div key={notice.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '15px', position: 'relative' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span style={{ 
-                              fontSize: '0.75rem', 
-                              fontWeight: 700, 
-                              padding: '4px 10px', 
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '4px 10px',
                               borderRadius: '6px',
                               background: noticeTitle === 'TH?C ??N' ? '#f0fdf4' : noticeTitle === 'NGO?I KH?A' ? '#fdf2f8' : '#f5f3ff',
                               color: noticeTitle === 'TH?C ??N' ? '#10b981' : noticeTitle === 'NGO?I KH?A' ? '#ec4899' : '#8b5cf6'
@@ -2591,23 +2625,23 @@ ${ngoaiKhoaForm.content}
                         </div>
                         <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '5px' }}>Lớp: {getClassName(notice.malop)}</div>
                         <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '10px' }}>{notice.content}</div>
-                        
+
                         {notice.image_url && (
                           <div style={{ marginBottom: '10px' }}>
-                             <img src={getDisplayUrl(notice.image_url)} alt="preview" style={{ maxHeight: '100px', borderRadius: '8px', cursor: 'zoom-in' }} onClick={() => setPreviewImage(notice.image_url)} />
+                            <img src={getDisplayUrl(notice.image_url)} alt="preview" style={{ maxHeight: '100px', borderRadius: '8px', cursor: 'zoom-in' }} onClick={() => setPreviewImage(notice.image_url)} />
                           </div>
                         )}
 
                         <div style={{ position: 'absolute', right: '15px', bottom: '15px', display: 'flex', gap: '8px' }}>
                           {notice.approved === false && (
-                            <button 
+                            <button
                               onClick={() => handleApproveNotice(notice)}
                               style={{ padding: '6px 12px', background: '#dcfce7', color: '#15803d', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
                             >
                               Approve
                             </button>
                           )}
-                          <button 
+                          <button
                             onClick={() => handleRevokeNotice(notice)}
                             style={{ padding: '6px 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                           >
@@ -2615,13 +2649,14 @@ ${ngoaiKhoaForm.content}
                           </button>
                         </div>
                       </div>
-                    )})}
-                  </div>
-                )}
-             </div>
-             <div className="modal-footer">
-                <button className="btn-cancel" onClick={() => setIsHistoryModalOpen(false)}>Đóng</button>
-             </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setIsHistoryModalOpen(false)}>Đóng</button>
+            </div>
           </div>
         </div>,
         document.body

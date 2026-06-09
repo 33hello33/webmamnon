@@ -6,8 +6,9 @@ import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { groupMessagesForDisplay } from '../utils/chatMessageGrouping';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
+import { groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
+import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '../utils/ngoaiKhoaUtils';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
    const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
@@ -65,6 +66,23 @@ const addDaysToDateString = (dateStr, days) => {
    return `${nextYear}-${nextMonth}-${nextDay}`;
 };
 
+const resizeChatTextarea = (textarea, maxLines = 3) => {
+   if (!textarea) return;
+
+   textarea.style.height = 'auto';
+
+   const computedStyle = window.getComputedStyle(textarea);
+   const lineHeight = parseFloat(computedStyle.lineHeight) || 16;
+   const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+   const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+   const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
+   const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
+   const maxHeight = Math.ceil((lineHeight * maxLines) + paddingTop + paddingBottom + borderTop + borderBottom);
+
+   textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+   textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+};
+
 function ParentPortal({ parentData, setParentData }) {
    const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
    const { config } = useConfig();
@@ -76,7 +94,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [parentNotices, setParentNotices] = useState([]);
    const [ngoaiKhoaAnnouncements, setNgoaiKhoaAnnouncements] = useState([]);
    const [uploading, setUploading] = useState(false);
-   const [showChatInfo, setShowChatInfo] = useState(false);
+   const [showChatInfo, setShowChatInfo] = useState(true);
    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
    const [leaveType, setLeaveType] = useState('today');
    const [leaveForm, setLeaveForm] = useState({ from: '', to: '', reason: '' });
@@ -106,10 +124,12 @@ function ParentPortal({ parentData, setParentData }) {
    const [ngoaiKhoaReason, setNgoaiKhoaReason] = useState('');
    const chatEndRef = useRef(null);
    const chatContainerRef = useRef(null);
+   const chatInputRef = useRef(null);
    const tuitionTransferInputRef = useRef(null);
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
    const [loadingTuitionNoticeImage, setLoadingTuitionNoticeImage] = useState(false);
+   const [loadingInvoiceImage, setLoadingInvoiceImage] = useState(false);
    const [staffDirectory, setStaffDirectory] = useState({});
    const leaveSubmitLockRef = useRef(false);
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
@@ -207,6 +227,15 @@ function ParentPortal({ parentData, setParentData }) {
          console.error('Không làm mới được dữ liệu học phí phụ huynh:', error);
       }
    }, [parentData?.student?.mahv, setParentData]);
+
+   const scrollParentChatToBottom = (behavior = 'auto') => {
+      if (!chatContainerRef.current) return;
+      chatContainerRef.current.scrollTo({
+         top: chatContainerRef.current.scrollHeight,
+         left: 0,
+         behavior
+      });
+   };
 
    const getStaffDisplayName = (staffId) => {
       if (!staffId) return 'Nhà trường';
@@ -309,10 +338,10 @@ function ParentPortal({ parentData, setParentData }) {
          }
 
          const registration = await navigator.serviceWorker.ready;
-         
+
          // In a real app, replace this with your VAPID public key
-         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'; 
-         
+         const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
+
          // Convert VAPID key to Uint8Array
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -396,7 +425,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
-         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+         setTimeout(() => scrollParentChatToBottom('smooth'), 100);
       }
    };
 
@@ -460,8 +489,8 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const fetchNgoaiKhoaAnnouncements = async () => {
-      const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 10);
-      setNgoaiKhoaAnnouncements(data);
+      const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 20);
+      setNgoaiKhoaAnnouncements(getActiveNgoaiKhoaAnnouncements(data).slice(0, 10));
    };
 
    const fetchChatMessages = async (isLoadMore = false) => {
@@ -497,18 +526,12 @@ function ParentPortal({ parentData, setParentData }) {
          } else {
             setChatMessages(reversed);
             setHasMoreChat(data.length === pageSize);
-            setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+            setTimeout(() => scrollParentChatToBottom('auto'), 50);
          }
       }
 
       if (isLoadMore) setIsLoadMoreChat(false);
       else setChatLoading(false);
-   };
-
-   const handleChatScroll = (e) => {
-      if (e.target.scrollTop === 0 && hasMoreChat && !chatLoading && !isLoadMoreChat) {
-         fetchChatMessages(true);
-      }
    };
 
    const toggleChatReaction = async (message) => {
@@ -535,25 +558,18 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
+   const handleChatScroll = (e) => {
+      if (e.target.scrollTop === 0 && hasMoreChat && !chatLoading && !isLoadMoreChat) {
+         fetchChatMessages(true);
+      }
+   };
+
    const handleLeaveSubmit = async (e) => {
       e.preventDefault();
       if (leaveSubmitLockRef.current) return;
 
       let fromDateStr = leaveForm.from;
       let toDateStr = leaveForm.to;
-
-      const getLeaveStatus = (dateStr, todayDateStr, cutoffMinutes) => {
-         if (dateStr < todayDateStr) {
-            return 'Nghỉ không phép';
-         }
-
-         if (dateStr > todayDateStr) {
-            return 'Nghỉ phép';
-         }
-
-         const currentTimeTotal = getVietnamTimeTotal();
-         return currentTimeTotal <= cutoffMinutes ? 'Nghỉ phép' : 'Nghỉ không phép';
-      };
 
       const todayStr = getVietnamDateString();
 
@@ -580,21 +596,44 @@ function ParentPortal({ parentData, setParentData }) {
          const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${formatDateStringVi(fromDateStr)}\n- Đến ngày: ${formatDateStringVi(toDateStr)}\n- Lý do: ${trimmedReason}`;
          await sendQuickMessage(msg);
 
-         const configTimeStr = config?.xinnghitruocmaygio || config?.xinghitruocmaygio || '08:00';
+         // Insert into tbl_diemdanh
+         const configTimeStr = config?.xinnghitruocmaygio || '08:00';
          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
          const cfgTimeTotal = (Number.isFinite(cfgHour) ? cfgHour : 8) * 60 + (Number.isFinite(cfgMin) ? cfgMin : 0);
+         let leaveMalop = parentData.student.malop || null;
+         let leaveManv = parentData.teacherManv || null;
+
+         if (leaveMalop) {
+            const { data: classData } = await supabase
+               .from('tbl_lop')
+               .select('malop, manv')
+               .eq('malop', leaveMalop)
+               .maybeSingle();
+
+            if (classData) {
+               leaveMalop = classData.malop || leaveMalop;
+               leaveManv = classData.manv || leaveManv;
+            }
+         }
 
          let currDateStr = fromDateStr;
          while (currDateStr <= toDateStr) {
-            const trangthai = getLeaveStatus(currDateStr, todayStr, cfgTimeTotal);
+            let trangthai = 'Nghỉ phép';
+
+            if (currDateStr === todayStr) {
+               const currentTimeTotal = getVietnamTimeTotal();
+               if (currentTimeTotal > cfgTimeTotal) {
+                  trangthai = 'Nghỉ không phép';
+               }
+            }
 
             const payload = {
                mahv: parentData.student.mahv,
-               malop: parentData.student.malop,
+               malop: leaveMalop,
                ngay: currDateStr,
-               trangthai: trangthai,
+               trangthai,
                ghichu: trimmedReason,
-               manv: parentData.teacherManv || 'parent'
+               manv: leaveManv
             };
 
             // Check if record exists
@@ -738,7 +777,7 @@ function ParentPortal({ parentData, setParentData }) {
             if (existingWindow) existingWindow.close();
             const separator = resolvedImageUrl.includes('?') ? '&' : '?';
             const downloadUrl = `${resolvedImageUrl}${separator}download=`;
-            
+
             const link = document.createElement('a');
             link.href = downloadUrl;
             document.body.appendChild(link);
@@ -846,9 +885,9 @@ function ParentPortal({ parentData, setParentData }) {
                      if (existingWindow) existingWindow.close();
                      return;
                   }
-                } catch (error) {
+               } catch (error) {
                   console.warn('Web Share failed, falling back to image preview', error);
-                }
+               }
 
                try {
                   await navigator.share({
@@ -911,6 +950,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (!parentData?.latestFee || !parentData?.student?.mahv) return null;
 
       const noticeId = String(parentData.latestFee.mahd || '').trim();
+      const studentId = String(parentData.student.mahv || '').trim();
       const candidateUrls = [];
 
       if (parentData.latestFee.image_url) {
@@ -921,7 +961,7 @@ function ParentPortal({ parentData, setParentData }) {
          const { data: noticeData, error: noticeError } = await supabase
             .from('tbl_thongbao')
             .select('image_url')
-            .eq('mahv', parentData.student.mahv)
+            .eq('mahv', studentId)
             .eq('mahd', noticeId)
             .maybeSingle();
 
@@ -1038,6 +1078,132 @@ function ParentPortal({ parentData, setParentData }) {
          alert('Không tải được hình thông báo thu học phí. Vui lòng thử lại sau.');
       } finally {
          setLoadingTuitionNoticeImage(false);
+      }
+   };
+
+   const fetchInvoiceImageUrl = async () => {
+      const invoiceRecord = tuitionStatus?.record;
+      if (!tuitionStatus?.isPaid || !invoiceRecord || !parentData?.student?.mahv) return null;
+
+      const invoiceId = String(invoiceRecord.mahd || '').trim();
+      const studentId = String(parentData.student.mahv || '').trim();
+      const candidateUrls = [];
+
+      if (invoiceRecord.image_url) {
+         candidateUrls.push(invoiceRecord.image_url);
+      }
+
+      if (invoiceId) {
+         const { data: invoiceData, error: invoiceError } = await supabase
+            .from('tbl_hd')
+            .select('image_url')
+            .eq('mahv', studentId)
+            .eq('mahd', invoiceId)
+            .maybeSingle();
+
+         if (invoiceError) {
+            console.warn('Không đọc được image_url từ tbl_hd:', invoiceError);
+         }
+         if (invoiceData?.image_url) {
+            candidateUrls.push(invoiceData.image_url);
+         }
+      }
+
+      if (!invoiceId) {
+         return await getFirstWorkingImageUrl(candidateUrls);
+      }
+
+      const pickExactInvoiceImage = (messages = []) => {
+         const validMessages = messages
+            .filter(msg => msg?.image_url)
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+         if (validMessages.length === 0) return null;
+
+         const exactMatch = validMessages.find(msg => String(msg.content || '').includes(invoiceId));
+         return exactMatch?.image_url || null;
+      };
+
+      let imageUrl = pickExactInvoiceImage(chatMessages);
+      if (imageUrl) {
+         candidateUrls.push(imageUrl);
+      }
+
+      if (!imageUrl) {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', studentId)
+            .not('image_url', 'is', null)
+            .ilike('content', `%${invoiceId}%`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+         if (error) throw error;
+         imageUrl = pickExactInvoiceImage(data || []);
+         if (imageUrl) {
+            candidateUrls.push(imageUrl);
+         }
+      }
+
+      if (!imageUrl) {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('content, image_url, created_at')
+            .eq('mahv', studentId)
+            .not('image_url', 'is', null)
+            .ilike('content', `%${invoiceId}%`)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+         if (error) throw error;
+         imageUrl = pickExactInvoiceImage(data || []);
+         if (imageUrl) {
+            candidateUrls.push(imageUrl);
+         }
+      }
+
+      return await getFirstWorkingImageUrl(candidateUrls);
+   };
+
+   const handleOpenInvoiceImage = async () => {
+      setLoadingInvoiceImage(true);
+      try {
+         const imageUrl = await fetchInvoiceImageUrl();
+         if (imageUrl) {
+            setPreviewImage(imageUrl);
+         } else {
+            alert('Chưa tìm thấy hình hóa đơn học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         console.error('Error loading invoice image:', error);
+         alert('Không tải được hình hóa đơn học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingInvoiceImage(false);
+      }
+   };
+
+   const handleDownloadInvoiceImage = async () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      let newWindow = null;
+      if (!isMobileDevice) {
+         newWindow = window.open('', '_blank');
+      }
+
+      setLoadingInvoiceImage(true);
+      try {
+         const imageUrl = await fetchInvoiceImageUrl();
+         if (imageUrl) {
+            const invoiceId = tuitionStatus?.record?.mahd || parentData?.student?.mahv || 'invoice';
+            await handleDownloadImage(imageUrl, `hoa-don-hoc-phi-${invoiceId}.jpg`, newWindow);
+         } else {
+            if (newWindow) newWindow.close();
+            alert('Chưa tìm thấy hình hóa đơn học phí trong mục Liên lạc GV.');
+         }
+      } catch (error) {
+         if (newWindow) newWindow.close();
+         console.error('Error downloading invoice image:', error);
+         alert('Không tải được hình hóa đơn học phí. Vui lòng thử lại sau.');
+      } finally {
+         setLoadingInvoiceImage(false);
       }
    };
 
@@ -1179,102 +1345,102 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
-    const fetchUnreads = async () => {
-       if (!parentData) return;
-       
-       let totalUnread = 0;
+   const fetchUnreads = async () => {
+      if (!parentData) return;
 
-       // 1. Fetch Chat Unreads
-       const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
-       let chatCount = 0;
-       if (chatData) {
-          chatData.forEach(d => {
-             const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
-             if (isTeacher) chatCount++;
-          });
-          setUnreadChatCount(chatCount);
-          totalUnread += chatCount;
-       }
+      let totalUnread = 0;
 
-       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
-       const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
-       const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).eq('approved', true).order('created_at', { ascending: false }).limit(20);
+      // 1. Fetch Chat Unreads
+      const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
+      let chatCount = 0;
+      if (chatData) {
+         chatData.forEach(d => {
+            const isTeacher = Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH');
+            if (isTeacher) chatCount++;
+         });
+         setUnreadChatCount(chatCount);
+         totalUnread += chatCount;
+      }
 
-       // Notices (General + Class excluding Menu/NgoaiKhoa)
-       const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
-       const latestGenNotice = generalNotices?.[0];
-       const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
-       const latestClassNotice = classNotices?.[0];
-       
-       const currentLatestNoticeTime = Math.max(
-          0, /* General notices excluded */
-          latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
-       );
-       if (currentLatestNoticeTime > lastNoticeTime) {
-          setUnreadNotices(1);
-          totalUnread += 1;
-       } else {
-          setUnreadNotices(0);
-       }
+      // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
+      const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
+      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).eq('approved', true).order('created_at', { ascending: false }).limit(20);
 
-       // Menu
-       const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
-       const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
-       const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
-       if (currentLatestMenuTime > lastMenuTime) {
-          setUnreadMenu(1);
-          totalUnread += 1;
-       } else {
-          setUnreadMenu(0);
-       }
+      // Notices (General + Class excluding Menu/NgoaiKhoa)
+      const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
+      const latestGenNotice = generalNotices?.[0];
+      const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
+      const latestClassNotice = classNotices?.[0];
 
-       // Ngoai Khoa
-       const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
-       const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
-       const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
-       if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
-          setUnreadNgoaiKhoa(1);
-          totalUnread += 1;
-       } else {
-          setUnreadNgoaiKhoa(0);
-       }
+      const currentLatestNoticeTime = Math.max(
+         0, /* General notices excluded */
+         latestClassNotice ? new Date(latestClassNotice.created_at).getTime() : 0
+      );
+      if (currentLatestNoticeTime > lastNoticeTime) {
+         setUnreadNotices(1);
+         totalUnread += 1;
+      } else {
+         setUnreadNotices(0);
+      }
 
-       // Chuong trinh hoc
-       const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
-       const latestChuongTrinhHoc = (classAnnouncements || []).find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
-       const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
-       if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
-          setUnreadChuongTrinhHoc(1);
-          totalUnread += 1;
-       } else {
-          setUnreadChuongTrinhHoc(0);
-       }
+      // Menu
+      const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
+      const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
+      const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
+      if (currentLatestMenuTime > lastMenuTime) {
+         setUnreadMenu(1);
+         totalUnread += 1;
+      } else {
+         setUnreadMenu(0);
+      }
 
-       // 3. Fetch Health Unreads
-       const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
-       const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
-       const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
-       if (currentLatestHealthTime > lastHealthTime) {
-          setUnreadHealth(1);
-          totalUnread += 1;
-       } else {
-          setUnreadHealth(0);
-       }
+      // Ngoai Khoa
+      const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
+      const latestNgoaiKhoa = getActiveNgoaiKhoaAnnouncements(classAnnouncements || [])[0];
+      const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
+      if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
+         setUnreadNgoaiKhoa(1);
+         totalUnread += 1;
+      } else {
+         setUnreadNgoaiKhoa(0);
+      }
 
-       // 4. Fetch Tuition (latestFee) Unreads
-       const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${parentData.student.mahv}`) || '0');
-       const latestFee = parentData?.latestFee;
-       if (latestFee) {
-          const currentFeeTime = new Date(latestFee.ngaylap).getTime();
-          if (currentFeeTime > lastFeeTime) {
-             // Only count as unread if it hasn't been paid (if we can detect that)
-             // For now, any new fee notification counts as +1
-             totalUnread += 1;
-          }
-       }
+      // Chuong trinh hoc
+      const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
+      const latestChuongTrinhHoc = (classAnnouncements || []).find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
+      const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
+      if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
+         setUnreadChuongTrinhHoc(1);
+         totalUnread += 1;
+      } else {
+         setUnreadChuongTrinhHoc(0);
+      }
 
-       syncAppBadge(totalUnread);
-    };
+      // 3. Fetch Health Unreads
+      const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
+      const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
+      const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
+      if (currentLatestHealthTime > lastHealthTime) {
+         setUnreadHealth(1);
+         totalUnread += 1;
+      } else {
+         setUnreadHealth(0);
+      }
+
+      // 4. Fetch Tuition (latestFee) Unreads
+      const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${parentData.student.mahv}`) || '0');
+      const latestFee = parentData?.latestFee;
+      if (latestFee) {
+         const currentFeeTime = new Date(latestFee.ngaylap).getTime();
+         if (currentFeeTime > lastFeeTime) {
+            // Only count as unread if it hasn't been paid (if we can detect that)
+            // For now, any new fee notification counts as +1
+            totalUnread += 1;
+         }
+      }
+
+      syncAppBadge(totalUnread);
+   };
 
    useEffect(() => {
       if (!parentData) return;
@@ -1325,6 +1491,7 @@ function ParentPortal({ parentData, setParentData }) {
             const justApproved = payload.eventType === 'UPDATE' && payload.old?.approved === false && payload.new?.approved === true;
             if (payload.eventType === 'INSERT' && !approvedNow) return;
             if (payload.eventType !== 'INSERT' && !justApproved) return;
+            if (isNgoaiKhoaCloseAnnouncement(payload.new)) return;
             const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })
@@ -1402,7 +1569,7 @@ function ParentPortal({ parentData, setParentData }) {
             setChatMessages(prev => {
                const exists = prev.some(m => m.id === payload.new.id);
                if (exists) return prev;
-               setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+               setTimeout(() => scrollParentChatToBottom('smooth'), 100);
                return [...prev, payload.new];
             });
          })
@@ -1419,6 +1586,10 @@ function ParentPortal({ parentData, setParentData }) {
 
    useEffect(() => {
       if (!parentData) return;
+
+      if (parentTab === 'chat-tab') {
+         setShowChatInfo(true);
+      }
 
       const markAsRead = async () => {
          if (parentTab === 'chat-tab') {
@@ -1464,20 +1635,20 @@ function ParentPortal({ parentData, setParentData }) {
             }
             setUnreadChuongTrinhHoc(0);
          } else if (parentTab === 'health-tab') {
-             if (healthHistory.length > 0) {
-                const time = new Date(healthHistory[0].ngay).getTime();
-                localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
-             }
-             setUnreadHealth(0);
-             fetchUnreads();
-          } else if (parentTab === 'fee-tab') {
-             const latestFee = parentData?.latestFee;
-             if (latestFee) {
-                const time = new Date(latestFee.ngaylap).getTime();
-                localStorage.setItem(`last_fee_time_${parentData.student.mahv}`, String(time));
-             }
-             fetchUnreads();
-          }
+            if (healthHistory.length > 0) {
+               const time = new Date(healthHistory[0].ngay).getTime();
+               localStorage.setItem(`last_health_time_${parentData.student.mahv}`, String(time));
+            }
+            setUnreadHealth(0);
+            fetchUnreads();
+         } else if (parentTab === 'fee-tab') {
+            const latestFee = parentData?.latestFee;
+            if (latestFee) {
+               const time = new Date(latestFee.ngaylap).getTime();
+               localStorage.setItem(`last_fee_time_${parentData.student.mahv}`, String(time));
+            }
+            fetchUnreads();
+         }
       };
       markAsRead();
    }, [parentTab, parentData?.student?.mahv, parentData?.latestFee?.ngaylap, parentNotices, ngoaiKhoaAnnouncements, healthHistory]);
@@ -1487,6 +1658,52 @@ function ParentPortal({ parentData, setParentData }) {
          // chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
          // Handled inside fetchChatMessages or new message logic
       }
+   }, [parentTab]);
+
+   useEffect(() => {
+      if (parentTab !== 'chat-tab') {
+         document.documentElement.style.removeProperty('--parent-chat-viewport-height');
+         return undefined;
+      }
+
+      const updateChatViewportHeight = () => {
+         const viewportHeight = window.visualViewport?.height || window.innerHeight;
+         document.documentElement.style.setProperty('--parent-chat-viewport-height', `${Math.round(viewportHeight)}px`);
+      };
+
+      updateChatViewportHeight();
+
+      const viewport = window.visualViewport;
+      window.addEventListener('resize', updateChatViewportHeight);
+      viewport?.addEventListener('resize', updateChatViewportHeight);
+      viewport?.addEventListener('scroll', updateChatViewportHeight);
+
+      return () => {
+         window.removeEventListener('resize', updateChatViewportHeight);
+         viewport?.removeEventListener('resize', updateChatViewportHeight);
+         viewport?.removeEventListener('scroll', updateChatViewportHeight);
+         document.documentElement.style.removeProperty('--parent-chat-viewport-height');
+      };
+   }, [parentTab]);
+
+   useEffect(() => {
+      resizeChatTextarea(chatInputRef.current, 3);
+   }, [chatInput]);
+
+   useEffect(() => {
+      if (parentTab === 'menu') return;
+
+      const resetTopPosition = () => {
+         window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+         document.documentElement.scrollTop = 0;
+         document.body.scrollTop = 0;
+         document.getElementById('login-box-target')?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+         document.getElementById('parent-dashboard')?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      };
+
+      resetTopPosition();
+      const rafId = window.requestAnimationFrame(resetTopPosition);
+      return () => window.cancelAnimationFrame(rafId);
    }, [parentTab]);
 
    const handleSendChat = async (e) => {
@@ -1503,7 +1720,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (data) {
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
-         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+         setTimeout(() => scrollParentChatToBottom('smooth'), 100);
       }
    };
 
@@ -1532,24 +1749,6 @@ function ParentPortal({ parentData, setParentData }) {
             finalUrl = publicUrl;
          }
 
-         if (type !== 'transfer-proof') {
-            const msgPayload = {
-               mahv: parentData.student.mahv,
-               manv: parentData.teacherManv,
-               content: '',
-               image_url: isImageUpload ? finalUrl : null,
-               file_url: !isImageUpload ? finalUrl : null,
-               file_name: file.name,
-               file_mime_type: file.type,
-               description: 'PH'
-            };
-
-            const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
-            if (data) {
-               await triggerPushNotification(supabase, 'hv_messages', data[0]);
-            }
-         }
-
          const newDoc = {
             mahv: parentData.student.mahv,
             name: file.name,
@@ -1573,6 +1772,12 @@ function ParentPortal({ parentData, setParentData }) {
       if (uploading) return;
       tuitionTransferInputRef.current?.click();
    };
+
+   const groupedParentClassNotices = groupAnnouncementsForDisplay(
+      parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC')
+   );
+   const groupedParentMenus = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'THỰC ĐƠN'));
+   const groupedParentCurriculums = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC'));
 
    return (
       <div id="parent-dashboard" className={`parent-premium-mobile ${parentTab === 'chat-tab' ? 'chat-mode-active' : ''}`}>
@@ -1736,7 +1941,7 @@ function ParentPortal({ parentData, setParentData }) {
                               <Bell size={20} className="text-primary" /> Thông báo từ nhà trường
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').length > 0 ? parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').map((notice, idx) => (
+                              {groupedParentClassNotices.length > 0 ? groupedParentClassNotices.map((notice, idx) => (
                                  <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.date).toLocaleDateString('vi-VN')}</span>
@@ -1747,22 +1952,19 @@ function ParentPortal({ parentData, setParentData }) {
                                     <div style={{ color: '#1e293b', fontWeight: 600, fontSize: '1rem', marginBottom: '5px' }}>{notice.title || (notice.type === 'class' ? 'Thông báo từ lớp' : 'Thông báo học phí/Phát sinh')}</div>
                                     <div style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{notice.content}</div>
 
-                                    {notice.image_url && (
+                                    {(notice._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
                                        <div
+                                          key={attachment.id || `${idx}-image-${attachmentIndex}`}
                                           style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', cursor: 'zoom-in', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
-                                          onClick={() => setPreviewImage(notice.image_url)}
+                                          onClick={() => setPreviewImage(attachment.image_url)}
                                        >
-                                          <img src={getDisplayUrl(notice.image_url)} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
+                                          <img src={getDisplayUrl(attachment.image_url)} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
                                        </div>
-                                    )}
+                                    ))}
 
-                                    {notice.file_url && (
-                                       <a href={notice.file_url} target="_blank" rel="noreferrer" style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: '#f8fafc', borderRadius: '8px', textDecoration: 'none', color: '#475569', fontSize: '0.85rem', border: '1px solid #e2e8f0' }}>
-                                          <FileText size={16} />
-                                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{notice.file_name || 'Xem tệp đính kèm'}</span>
-                                          <Download size={16} />
-                                       </a>
-                                    )}
+                                    {(notice._attachments || []).filter((attachment) => attachment.file_url).map((attachment, attachmentIndex) => (
+                                       <ChatMediaAttachment key={attachment.id || `${idx}-file-${attachmentIndex}`} fileUrl={attachment.file_url} fileName={attachment.file_name} mimeType={attachment.file_mime_type} />
+                                    ))}
                                  </div>
                               )) : (
                                  <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Không có thông báo mới.</div>
@@ -1779,7 +1981,7 @@ function ParentPortal({ parentData, setParentData }) {
                               <Utensils size={20} /> Thực đơn hàng ngày
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                              {parentNotices.filter(n => n.title === 'THỰC ĐƠN').length > 0 ? parentNotices.filter(n => n.title === 'THỰC ĐƠN').map((menu, idx) => (
+                              {groupedParentMenus.length > 0 ? groupedParentMenus.map((menu, idx) => (
                                  <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                     <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0fdf4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                        <span style={{ fontWeight: 800, color: '#166534' }}>Thực đơn mới</span>
@@ -1787,14 +1989,15 @@ function ParentPortal({ parentData, setParentData }) {
                                     </div>
                                     <div style={{ padding: '15px' }}>
                                        <p style={{ margin: '0 0 10px 0', color: '#475569', fontSize: '0.95rem' }}>{menu.content}</p>
-                                       {menu.image_url && (
+                                       {(menu._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
                                           <div
-                                             style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
-                                             onClick={() => setPreviewImage(menu.image_url)}
+                                             key={attachment.id || `${idx}-menu-image-${attachmentIndex}`}
+                                             style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginTop: attachmentIndex > 0 ? '10px' : '0' }}
+                                             onClick={() => setPreviewImage(attachment.image_url)}
                                           >
-                                             <img src={getDisplayUrl(menu.image_url)} alt="menu" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
+                                             <img src={getDisplayUrl(attachment.image_url)} alt="menu" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                           </div>
-                                       )}
+                                       ))}
                                     </div>
                                  </div>
                               )) : (
@@ -1823,19 +2026,19 @@ function ParentPortal({ parentData, setParentData }) {
                                           <span style={{ fontSize: '0.8rem', color: '#be185d', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
                                        </div>
                                        <div style={{ padding: '15px' }}>
-                                           <div style={{ 
-                                              color: '#475569', 
-                                              fontSize: '0.95rem', 
-                                              lineHeight: '1.7', 
-                                              whiteSpace: 'pre-wrap',
-                                              background: '#f8fafc',
-                                              padding: '15px',
-                                              borderRadius: '12px',
-                                              border: '1px solid #f1f5f9',
-                                              marginBottom: '15px'
-                                           }}>
-                                              {item.content}
-                                           </div>
+                                          <div style={{
+                                             color: '#475569',
+                                             fontSize: '0.95rem',
+                                             lineHeight: '1.7',
+                                             whiteSpace: 'pre-wrap',
+                                             background: '#f8fafc',
+                                             padding: '15px',
+                                             borderRadius: '12px',
+                                             border: '1px solid #f1f5f9',
+                                             marginBottom: '15px'
+                                          }}>
+                                             {item.content}
+                                          </div>
                                           {item.image_url && (
                                              <div
                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginBottom: '20px' }}
@@ -1919,34 +2122,35 @@ function ParentPortal({ parentData, setParentData }) {
                               <FileText size={20} /> Chương trình học mới nhất
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                              {parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC').length > 0 ? (
-                                 parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC').map((item, idx) => (
+                              {groupedParentCurriculums.length > 0 ? (
+                                 groupedParentCurriculums.map((item, idx) => (
                                     <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                        <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0f9ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                           <span style={{ fontWeight: 800, color: '#0ea5e9' }}>Thông tin chương trình học</span>
                                           <span style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 600 }}>{new Date(item.date).toLocaleDateString('vi-VN')}</span>
                                        </div>
                                        <div style={{ padding: '15px' }}>
-                                          <div style={{ 
-                                             color: '#475569', 
-                                             fontSize: '0.95rem', 
-                                             lineHeight: '1.7', 
+                                          <div style={{
+                                             color: '#475569',
+                                             fontSize: '0.95rem',
+                                             lineHeight: '1.7',
                                              whiteSpace: 'pre-wrap',
-                                             marginBottom: item.image_url ? '15px' : '0'
-                                          }}>
-                                             {item.content}
-                                          </div>
-                                          {item.image_url && (
-                                             <div
-                                                style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
-                                                onClick={() => setPreviewImage(item.image_url)}
-                                             >
-                                                <img src={getDisplayUrl(item.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
-                                             </div>
-                                          )}
-                                       </div>
-                                    </div>
-                                 ))
+                                              marginBottom: (item._attachments || []).some((attachment) => attachment.image_url) ? '15px' : '0'
+                                           }}>
+                                              {item.content}
+                                           </div>
+                                           {(item._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
+                                              <div
+                                                 key={attachment.id || `${idx}-curriculum-image-${attachmentIndex}`}
+                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginTop: attachmentIndex > 0 ? '10px' : '0' }}
+                                                 onClick={() => setPreviewImage(attachment.image_url)}
+                                              >
+                                                 <img src={getDisplayUrl(attachment.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
+                                              </div>
+                                           ))}
+                                        </div>
+                                     </div>
+                                  ))
                               ) : (
                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
                                     <FileText size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
@@ -2039,23 +2243,23 @@ function ParentPortal({ parentData, setParentData }) {
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         {parentData.latestFee ? (
                            <>
-                           {!tuitionStatus.isPaid && (
-                              <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
-                                 {tuitionStatus.text}
-                              </div>
-                           )}
-                           <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                                 <div>
-                                    <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>{tuitionStatus.text}</div>
-                                    <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
+                              {!tuitionStatus.isPaid && (
+                                 <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
+                                    {tuitionStatus.text}
                                  </div>
-                                 <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
-                                    <CreditCard size={24} />
+                              )}
+                              <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                                    <div>
+                                       <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>{tuitionStatus.text}</div>
+                                       <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
+                                    </div>
+                                    <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
+                                       <CreditCard size={24} />
+                                    </div>
                                  </div>
-                              </div>
-                              <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                 <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
+                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
                                     {!tuitionStatus.isPaid && (
                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                           <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
@@ -2064,8 +2268,14 @@ function ParentPortal({ parentData, setParentData }) {
                                           <input ref={tuitionTransferInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'transfer-proof')} disabled={uploading} />
                                        </div>
                                     )}
+                                    {tuitionStatus.isPaid && (
+                                       <div style={{ display: 'flex', gap: '8px' }}>
+                                          <button onClick={handleOpenInvoiceImage} disabled={loadingInvoiceImage} style={{ background: 'white', color: '#15803d', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingInvoiceImage ? 'wait' : 'pointer', opacity: loadingInvoiceImage ? 0.8 : 1 }}>{loadingInvoiceImage ? 'Đang tải...' : 'Xem hóa đơn'}</button>
+                                          <button onClick={handleDownloadInvoiceImage} disabled={loadingInvoiceImage} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid white', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingInvoiceImage ? 'wait' : 'pointer', opacity: loadingInvoiceImage ? 0.8 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} /> Tải về</button>
+                                       </div>
+                                    )}
+                                 </div>
                               </div>
-                           </div>
                            </>
                         ) : (
                            <div className="fee-card-empty" style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', padding: '30px', borderRadius: '20px', textAlign: 'center', color: '#94a3b8', marginBottom: '20px' }}>
@@ -2177,28 +2387,39 @@ function ParentPortal({ parentData, setParentData }) {
                   )}
 
                   {parentTab === 'chat-tab' && (
-                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', background: '#f8fafc', borderRadius: '0', overflow: 'hidden' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 99 }}>
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                     <div id="chat-tab" className="parent-tab-content active" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', width: '100%', maxWidth: '100%', minWidth: 0, background: '#f8fafc', borderRadius: '0', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '12px', background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 99, width: '100%', maxWidth: '100%', minWidth: 0 }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
                               <div style={{ position: 'relative' }}>
                                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                                     {parentData.teacherInfo?.tennv?.charAt(0) || 'G'}
                                  </div>
                                  <span style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '12px', height: '12px', background: '#22c55e', border: '2px solid white', borderRadius: '50%' }}></span>
                               </div>
-                              <div>
-                                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>GV {parentData.teacherInfo?.tennv}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>GV {parentData.teacherInfo?.tennv}</div>
                                  <div style={{ fontSize: '0.75rem', color: '#22c55e', fontWeight: 600 }}>Đang hoạt động</div>
                               </div>
                            </div>
-                           <div style={{ display: 'flex', gap: '5px' }}>
-                              <button style={{ padding: '8px', background: '#f1f5f9', border: 'none', borderRadius: '10px', color: '#64748b' }} onClick={() => setShowChatInfo(!showChatInfo)}>
-                                 <MoreVertical size={20} />
+                           <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                              <button style={{ padding: '8px', background: '#f1f5f9', border: 'none', borderRadius: '10px', color: '#64748b', minWidth: '36px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowChatInfo(!showChatInfo)}>
+                                 {showChatInfo ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                               </button>
                            </div>
                         </div>
 
-                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {showChatInfo && (
+                           <div style={{ padding: '12px', background: '#fff7ed', borderBottom: '1px solid #fed7aa', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+                              <div style={{ fontSize: '0.82rem', lineHeight: 1.55, color: '#9a3412', fontWeight: 600 }}>
+                                 <div style={{ marginBottom: '6px' }}>Lưu ý: Khung giờ thuận tiện giáo viên trả lời tin nhắn là</div>
+                                 <div>✅ trước 8h sáng</div>
+                                 <div>✅ từ 11h-13h45</div>
+                                 <div>✅ từ 16h-20h</div>
+                              </div>
+                           </div>
+                        )}
+
+                        <div ref={chatContainerRef} onScroll={handleChatScroll} style={{ flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                            {isLoadMoreChat && (
                               <div style={{ display: 'flex', justifyContent: 'center', padding: '10px' }}><Loader2 size={16} className="spinner" /></div>
                            )}
@@ -2254,7 +2475,7 @@ function ParentPortal({ parentData, setParentData }) {
                                           >
                                              <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
                                           </button>
-                                          <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: 0, fontWeight: 600 }}>
+                                          <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 600 }}>
                                              {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                           </span>
                                        </div>
@@ -2279,16 +2500,13 @@ function ParentPortal({ parentData, setParentData }) {
                               </div>
                               <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                                  <textarea
+                                    ref={chatInputRef}
                                     placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."}
                                     value={chatInput}
-                                    onChange={(e) => {
-                                       setChatInput(e.target.value);
-                                       e.target.style.height = 'auto';
-                                       e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                                    }}
+                                    onChange={(e) => setChatInput(e.target.value)}
                                     disabled={uploading}
                                     rows={1}
-                                    style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '0.9rem', outline: 'none', resize: 'none', minHeight: '42px', maxHeight: '120px', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'auto' }}
+                                    style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none', resize: 'none', minHeight: '42px', maxHeight: 'calc(1.45em * 3 + 24px)', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'hidden' }}
                                  />
                               </div>
                               <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', minWidth: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1, flexShrink: 0 }}>
@@ -2442,10 +2660,10 @@ function ParentPortal({ parentData, setParentData }) {
                      <X size={20} />
                   </button>
                </div>
-               <img 
-                  src={getDisplayUrl(previewImage)} 
-                  alt="Preview" 
-                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }} 
+               <img
+                  src={getDisplayUrl(previewImage)}
+                  alt="Preview"
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}
                   referrerPolicy="no-referrer"
                   onClick={e => e.stopPropagation()}
                />

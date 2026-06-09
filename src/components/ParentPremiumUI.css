@@ -616,20 +616,22 @@
 /* Chat Mode Layout Fixes */
 body:has(.chat-mode-active) {
     overflow: hidden !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
 }
 
 .app-container:has(.chat-mode-active) {
     overflow: hidden !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
+    align-items: stretch !important;
 }
 
 #login-box-target:has(.chat-mode-active) {
     overflow: hidden !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    min-height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
@@ -643,15 +645,17 @@ body:has(.chat-mode-active) {
 }
 
 .parent-premium-mobile.chat-mode-active {
-    height: 100vh !important;
-    max-height: 100vh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    min-height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
     overflow: hidden !important;
     padding-bottom: 0 !important;
+    overscroll-behavior: none;
+    display: flex;
+    flex-direction: column;
     width: 100%;
     max-width: 100%;
     overflow-x: hidden !important;
-    display: flex;
-    flex-direction: column;
 }
 
 .premium-tab-container.chat-mode {
@@ -662,7 +666,7 @@ body:has(.chat-mode-active) {
     min-width: 0 !important;
     flex: 1 1 auto;
     min-height: 0;
-    height: 100vh;
+    height: 100%;
     max-height: 100%;
     margin: 0 !important;
     border-radius: 0 !important;
@@ -697,6 +701,8 @@ body:has(.chat-mode-active) {
 
 @media (min-width: 1024px) {
     .premium-tab-container.chat-mode {
+        position: relative;
+        inset: auto;
         width: 95%;
         max-width: 800px !important;
         height: calc(100vh - 120px);
