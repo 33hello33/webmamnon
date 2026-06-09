@@ -616,36 +616,22 @@
 /* Chat Mode Layout Fixes */
 body:has(.chat-mode-active) {
     overflow: hidden !important;
-    height: 100vh !important;
-    height: 100svh !important;
-    height: 100dvh !important;
-    max-height: 100vh !important;
-    max-height: 100svh !important;
-    max-height: 100dvh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
 }
 
 .app-container:has(.chat-mode-active) {
     overflow: hidden !important;
-    height: 100vh !important;
-    height: 100svh !important;
-    height: 100dvh !important;
-    max-height: 100vh !important;
-    max-height: 100svh !important;
-    max-height: 100dvh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
     align-items: stretch !important;
 }
 
 #login-box-target:has(.chat-mode-active) {
     overflow: hidden !important;
-    height: 100vh !important;
-    height: 100svh !important;
-    height: 100dvh !important;
-    min-height: 100vh !important;
-    min-height: 100svh !important;
-    min-height: 100dvh !important;
-    max-height: 100vh !important;
-    max-height: 100svh !important;
-    max-height: 100dvh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    min-height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
@@ -659,15 +645,9 @@ body:has(.chat-mode-active) {
 }
 
 .parent-premium-mobile.chat-mode-active {
-    height: 100vh !important;
-    height: 100svh !important;
-    height: 100dvh !important;
-    min-height: 100vh !important;
-    min-height: 100svh !important;
-    min-height: 100dvh !important;
-    max-height: 100vh !important;
-    max-height: 100svh !important;
-    max-height: 100dvh !important;
+    height: var(--parent-chat-viewport-height, 100dvh) !important;
+    min-height: var(--parent-chat-viewport-height, 100dvh) !important;
+    max-height: var(--parent-chat-viewport-height, 100dvh) !important;
     overflow: hidden !important;
     padding-bottom: 0 !important;
     overscroll-behavior: none;

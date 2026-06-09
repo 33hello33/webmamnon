@@ -6,7 +6,8 @@ import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { groupMessagesForDisplay } from '../utils/chatMessageGrouping';
+import { groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
+import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '../utils/ngoaiKhoaUtils';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
@@ -65,6 +66,23 @@ const addDaysToDateString = (dateStr, days) => {
    return `${nextYear}-${nextMonth}-${nextDay}`;
 };
 
+const resizeChatTextarea = (textarea, maxLines = 3) => {
+   if (!textarea) return;
+
+   textarea.style.height = 'auto';
+
+   const computedStyle = window.getComputedStyle(textarea);
+   const lineHeight = parseFloat(computedStyle.lineHeight) || 16;
+   const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+   const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+   const borderTop = parseFloat(computedStyle.borderTopWidth) || 0;
+   const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
+   const maxHeight = Math.ceil((lineHeight * maxLines) + paddingTop + paddingBottom + borderTop + borderBottom);
+
+   textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+   textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+};
+
 function ParentPortal({ parentData, setParentData }) {
    const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
    const { config } = useConfig();
@@ -106,6 +124,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [ngoaiKhoaReason, setNgoaiKhoaReason] = useState('');
    const chatEndRef = useRef(null);
    const chatContainerRef = useRef(null);
+   const chatInputRef = useRef(null);
    const tuitionTransferInputRef = useRef(null);
    const [hasMoreChat, setHasMoreChat] = useState(true);
    const [isLoadMoreChat, setIsLoadMoreChat] = useState(false);
@@ -470,8 +489,8 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const fetchNgoaiKhoaAnnouncements = async () => {
-      const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 10);
-      setNgoaiKhoaAnnouncements(data);
+      const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 20);
+      setNgoaiKhoaAnnouncements(getActiveNgoaiKhoaAnnouncements(data).slice(0, 10));
    };
 
    const fetchChatMessages = async (isLoadMore = false) => {
@@ -1377,7 +1396,7 @@ function ParentPortal({ parentData, setParentData }) {
 
       // Ngoai Khoa
       const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
-      const latestNgoaiKhoa = (classAnnouncements || []).find(n => n.title === 'NGOẠI KHÓA');
+      const latestNgoaiKhoa = getActiveNgoaiKhoaAnnouncements(classAnnouncements || [])[0];
       const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
       if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
          setUnreadNgoaiKhoa(1);
@@ -1472,6 +1491,7 @@ function ParentPortal({ parentData, setParentData }) {
             const justApproved = payload.eventType === 'UPDATE' && payload.old?.approved === false && payload.new?.approved === true;
             if (payload.eventType === 'INSERT' && !approvedNow) return;
             if (payload.eventType !== 'INSERT' && !justApproved) return;
+            if (isNgoaiKhoaCloseAnnouncement(payload.new)) return;
             const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })
@@ -1641,6 +1661,36 @@ function ParentPortal({ parentData, setParentData }) {
    }, [parentTab]);
 
    useEffect(() => {
+      if (parentTab !== 'chat-tab') {
+         document.documentElement.style.removeProperty('--parent-chat-viewport-height');
+         return undefined;
+      }
+
+      const updateChatViewportHeight = () => {
+         const viewportHeight = window.visualViewport?.height || window.innerHeight;
+         document.documentElement.style.setProperty('--parent-chat-viewport-height', `${Math.round(viewportHeight)}px`);
+      };
+
+      updateChatViewportHeight();
+
+      const viewport = window.visualViewport;
+      window.addEventListener('resize', updateChatViewportHeight);
+      viewport?.addEventListener('resize', updateChatViewportHeight);
+      viewport?.addEventListener('scroll', updateChatViewportHeight);
+
+      return () => {
+         window.removeEventListener('resize', updateChatViewportHeight);
+         viewport?.removeEventListener('resize', updateChatViewportHeight);
+         viewport?.removeEventListener('scroll', updateChatViewportHeight);
+         document.documentElement.style.removeProperty('--parent-chat-viewport-height');
+      };
+   }, [parentTab]);
+
+   useEffect(() => {
+      resizeChatTextarea(chatInputRef.current, 3);
+   }, [chatInput]);
+
+   useEffect(() => {
       if (parentTab === 'menu') return;
 
       const resetTopPosition = () => {
@@ -1722,6 +1772,12 @@ function ParentPortal({ parentData, setParentData }) {
       if (uploading) return;
       tuitionTransferInputRef.current?.click();
    };
+
+   const groupedParentClassNotices = groupAnnouncementsForDisplay(
+      parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC')
+   );
+   const groupedParentMenus = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'THỰC ĐƠN'));
+   const groupedParentCurriculums = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC'));
 
    return (
       <div id="parent-dashboard" className={`parent-premium-mobile ${parentTab === 'chat-tab' ? 'chat-mode-active' : ''}`}>
@@ -1885,7 +1941,7 @@ function ParentPortal({ parentData, setParentData }) {
                               <Bell size={20} className="text-primary" /> Thông báo từ nhà trường
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').length > 0 ? parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC').map((notice, idx) => (
+                              {groupedParentClassNotices.length > 0 ? groupedParentClassNotices.map((notice, idx) => (
                                  <div key={idx} style={{ background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{new Date(notice.date).toLocaleDateString('vi-VN')}</span>
@@ -1896,16 +1952,19 @@ function ParentPortal({ parentData, setParentData }) {
                                     <div style={{ color: '#1e293b', fontWeight: 600, fontSize: '1rem', marginBottom: '5px' }}>{notice.title || (notice.type === 'class' ? 'Thông báo từ lớp' : 'Thông báo học phí/Phát sinh')}</div>
                                     <div style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{notice.content}</div>
 
-                                    {notice.image_url && (
+                                    {(notice._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
                                        <div
+                                          key={attachment.id || `${idx}-image-${attachmentIndex}`}
                                           style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', cursor: 'zoom-in', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
-                                          onClick={() => setPreviewImage(notice.image_url)}
+                                          onClick={() => setPreviewImage(attachment.image_url)}
                                        >
-                                          <img src={getDisplayUrl(notice.image_url)} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
+                                          <img src={getDisplayUrl(attachment.image_url)} alt="announcement" style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
                                        </div>
-                                    )}
+                                    ))}
 
-                                    {notice.file_url && <ChatMediaAttachment fileUrl={notice.file_url} fileName={notice.file_name} mimeType={notice.file_mime_type} />}
+                                    {(notice._attachments || []).filter((attachment) => attachment.file_url).map((attachment, attachmentIndex) => (
+                                       <ChatMediaAttachment key={attachment.id || `${idx}-file-${attachmentIndex}`} fileUrl={attachment.file_url} fileName={attachment.file_name} mimeType={attachment.file_mime_type} />
+                                    ))}
                                  </div>
                               )) : (
                                  <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Không có thông báo mới.</div>
@@ -1922,7 +1981,7 @@ function ParentPortal({ parentData, setParentData }) {
                               <Utensils size={20} /> Thực đơn hàng ngày
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                              {parentNotices.filter(n => n.title === 'THỰC ĐƠN').length > 0 ? parentNotices.filter(n => n.title === 'THỰC ĐƠN').map((menu, idx) => (
+                              {groupedParentMenus.length > 0 ? groupedParentMenus.map((menu, idx) => (
                                  <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                     <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0fdf4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                        <span style={{ fontWeight: 800, color: '#166534' }}>Thực đơn mới</span>
@@ -1930,14 +1989,15 @@ function ParentPortal({ parentData, setParentData }) {
                                     </div>
                                     <div style={{ padding: '15px' }}>
                                        <p style={{ margin: '0 0 10px 0', color: '#475569', fontSize: '0.95rem' }}>{menu.content}</p>
-                                       {menu.image_url && (
+                                       {(menu._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
                                           <div
-                                             style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
-                                             onClick={() => setPreviewImage(menu.image_url)}
+                                             key={attachment.id || `${idx}-menu-image-${attachmentIndex}`}
+                                             style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginTop: attachmentIndex > 0 ? '10px' : '0' }}
+                                             onClick={() => setPreviewImage(attachment.image_url)}
                                           >
-                                             <img src={getDisplayUrl(menu.image_url)} alt="menu" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
+                                             <img src={getDisplayUrl(attachment.image_url)} alt="menu" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
                                           </div>
-                                       )}
+                                       ))}
                                     </div>
                                  </div>
                               )) : (
@@ -2062,8 +2122,8 @@ function ParentPortal({ parentData, setParentData }) {
                               <FileText size={20} /> Chương trình học mới nhất
                            </h3>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                              {parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC').length > 0 ? (
-                                 parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC').map((item, idx) => (
+                              {groupedParentCurriculums.length > 0 ? (
+                                 groupedParentCurriculums.map((item, idx) => (
                                     <div key={idx} style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                        <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', background: '#f0f9ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                           <span style={{ fontWeight: 800, color: '#0ea5e9' }}>Thông tin chương trình học</span>
@@ -2075,21 +2135,22 @@ function ParentPortal({ parentData, setParentData }) {
                                              fontSize: '0.95rem',
                                              lineHeight: '1.7',
                                              whiteSpace: 'pre-wrap',
-                                             marginBottom: item.image_url ? '15px' : '0'
-                                          }}>
-                                             {item.content}
-                                          </div>
-                                          {item.image_url && (
-                                             <div
-                                                style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in' }}
-                                                onClick={() => setPreviewImage(item.image_url)}
-                                             >
-                                                <img src={getDisplayUrl(item.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
-                                             </div>
-                                          )}
-                                       </div>
-                                    </div>
-                                 ))
+                                              marginBottom: (item._attachments || []).some((attachment) => attachment.image_url) ? '15px' : '0'
+                                           }}>
+                                              {item.content}
+                                           </div>
+                                           {(item._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
+                                              <div
+                                                 key={attachment.id || `${idx}-curriculum-image-${attachmentIndex}`}
+                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginTop: attachmentIndex > 0 ? '10px' : '0' }}
+                                                 onClick={() => setPreviewImage(attachment.image_url)}
+                                              >
+                                                 <img src={getDisplayUrl(attachment.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
+                                              </div>
+                                           ))}
+                                        </div>
+                                     </div>
+                                  ))
                               ) : (
                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
                                     <FileText size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
@@ -2439,16 +2500,13 @@ function ParentPortal({ parentData, setParentData }) {
                               </div>
                               <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                                  <textarea
+                                    ref={chatInputRef}
                                     placeholder={uploading ? "Đang tải tệp lên..." : "Nhập tin nhắn..."}
                                     value={chatInput}
-                                    onChange={(e) => {
-                                       setChatInput(e.target.value);
-                                       e.target.style.height = 'auto';
-                                       e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                                    }}
+                                    onChange={(e) => setChatInput(e.target.value)}
                                     disabled={uploading}
                                     rows={1}
-                                    style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none', resize: 'none', minHeight: '42px', maxHeight: '120px', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'auto' }}
+                                    style={{ width: '100%', padding: '12px 15px', background: '#f1f5f9', border: 'none', borderRadius: '24px', fontSize: '16px', outline: 'none', resize: 'none', minHeight: '42px', maxHeight: 'calc(1.45em * 3 + 24px)', lineHeight: 1.45, fontFamily: 'inherit', overflowY: 'hidden' }}
                                  />
                               </div>
                               <button type="submit" disabled={(!chatInput.trim() && !uploading) || uploading} style={{ width: '42px', minWidth: '42px', height: '42px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.3)', opacity: (!chatInput.trim() && !uploading) ? 0.5 : 1, flexShrink: 0 }}>

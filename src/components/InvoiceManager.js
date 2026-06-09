@@ -7,6 +7,7 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { toLocalISODate } from '../utils/localDate';
+import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 
 
 
@@ -28,6 +29,30 @@ const formatMonthYear = (dateStr) => {
    if (!dateStr) return '';
    const d = new Date(dateStr);
    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
+const formatPlainCurrency = (value) => {
+   const amount = Number(value) || 0;
+   return amount.toLocaleString('en-US');
+};
+
+const buildCombinedNote = (...parts) => (
+   parts
+      .map(part => String(part || '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim()
+);
+
+const extractNgoaiKhoaCost = (content) => {
+   const match = String(content || '').match(/CHI PHÍ\s*:\s*([^\n\r]+)/i);
+   if (!match) return 0;
+   return parseInt(String(match[1]).replace(/[^\d]/g, ''), 10) || 0;
+};
+
+const getNgoaiKhoaPeriodKey = (snapshot, fallbackDate) => {
+   const endedAt = snapshot?.endedAt || fallbackDate;
+   return formatMonthYear(endedAt);
 };
 
 const calculateThoiluong = (inv) => {
@@ -185,6 +210,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const [previewImg, setPreviewImg] = useState(null);
    const [studySummary, setStudySummary] = useState(null);
    const [refundOverrides, setRefundOverrides] = useState({ meal: null, tuition: null });
+   const [ngoaiKhoaAdjustment, setNgoaiKhoaAdjustment] = useState({ totalDeduction: 0, period: '', items: [] });
    const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
@@ -815,6 +841,79 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       }
    };
 
+   useEffect(() => {
+      let isActive = true;
+
+      const loadNgoaiKhoaAdjustment = async () => {
+         if (!selectedStudent?.mahv || !invoiceData.ngayBatDau) {
+            if (isActive) setNgoaiKhoaAdjustment({ totalDeduction: 0, period: '', items: [] });
+            return;
+         }
+
+         const billingDate = new Date(invoiceData.ngayBatDau);
+         if (isNaN(billingDate.getTime())) {
+            if (isActive) setNgoaiKhoaAdjustment({ totalDeduction: 0, period: '', items: [] });
+            return;
+         }
+
+         const prevMonthDate = new Date(billingDate.getFullYear(), billingDate.getMonth() - 1, 1);
+         const prevMonthKey = formatMonthYear(prevMonthDate);
+
+         try {
+            const { data, error } = await supabase
+               .from('class_announcements')
+               .select('id, title, content, created_at')
+               .eq('approved', true)
+               .eq('title', 'NGOẠI KHÓA')
+               .order('created_at', { ascending: false })
+               .limit(300);
+
+            if (error) throw error;
+            if (!isActive) return;
+
+            const matchedPrograms = Array.from(
+               new Map(
+                  (data || [])
+                     .map((record) => {
+                        const snapshot = parseNgoaiKhoaCloseSnapshot(record);
+                        if (!snapshot) return null;
+
+                        const periodKey = getNgoaiKhoaPeriodKey(snapshot, record.created_at);
+                        if (periodKey !== prevMonthKey) return null;
+
+                        const studentEntry = (snapshot.notRegistered || []).find(
+                           (item) => item?.mahv === selectedStudent.mahv
+                        );
+                        if (!studentEntry) return null;
+
+                        return {
+                           key: `${snapshot.programId || record.id}-${snapshot.endedAt || record.created_at}`,
+                           cost: extractNgoaiKhoaCost(snapshot.content),
+                           snapshot
+                        };
+                     })
+                     .filter(Boolean)
+                     .map((item) => [item.key, item])
+               ).values()
+            );
+
+            setNgoaiKhoaAdjustment({
+               totalDeduction: matchedPrograms.reduce((sum, item) => sum + (item.cost || 0), 0),
+               period: prevMonthKey,
+               items: matchedPrograms
+            });
+         } catch (error) {
+            console.error('Lỗi tải dữ liệu trừ ngoại khóa:', error);
+            if (isActive) setNgoaiKhoaAdjustment({ totalDeduction: 0, period: prevMonthKey, items: [] });
+         }
+      };
+
+      loadNgoaiKhoaAdjustment();
+      return () => {
+         isActive = false;
+      };
+   }, [selectedStudent?.mahv, invoiceData.ngayBatDau]);
+
    const showMessage = (type, text) => {
       setMessage({ type, text });
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -850,6 +949,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
       return (isNegative ? '-' : '') + n.toLocaleString('en-US');
    };
+
+   const ngoaiKhoaAutoNote = ngoaiKhoaAdjustment.totalDeduction > 0
+      ? `Trừ ${formatPlainCurrency(ngoaiKhoaAdjustment.totalDeduction)} tiền dã ngoại tháng ${ngoaiKhoaAdjustment.period} do không đăng ký${ngoaiKhoaAdjustment.items.length > 1 ? ` ${ngoaiKhoaAdjustment.items.length} chương trình` : ''}.`
+      : '';
 
    const handleFinanceInput = (field, e) => {
       const s = e.target.value.trim();
@@ -1084,8 +1187,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          // Local tz for ngaylap
          const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
-         const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
-         const combinedNote = `${invoiceData.ghiChu}${billNote}`;
+         const billNote = unpaidBills.length > 0 ? `(Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
+         const combinedNote = buildCombinedNote(invoiceData.ghiChu, ngoaiKhoaAutoNote, billNote);
          const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
          const insertData = {
             mahd: newMaHD,
@@ -1173,6 +1276,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             studySummary: studySummary,
             actualMealRefund,
             actualTuitionRefund,
+            ngoaiKhoaDeduction,
+            deductionSum,
             trutienan_val,
             trutiennghi_val
          });
@@ -1205,8 +1310,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
          const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
          const currentTimePeriod = calculateThoiluong(invoiceData);
-         const billNote = unpaidBills.length > 0 ? ` (Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
-         const combinedNote = `${invoiceData.ghiChu}${billNote}`;
+         const billNote = unpaidBills.length > 0 ? `(Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
+         const combinedNote = buildCombinedNote(invoiceData.ghiChu, ngoaiKhoaAutoNote, billNote);
          const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
 
          const insertData = {
@@ -1274,7 +1379,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                statsPeriod: studySummary.period || currentTimePeriod
             } : null,
             actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
-            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0))
+            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0)),
+            ngoaiKhoaDeduction: formatCurrency(Math.round(ngoaiKhoaDeduction || 0))
          });
       } catch (err) {
          console.error(err);
@@ -1351,7 +1457,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const actualMealRefund = refundOverrides.meal !== null ? refundOverrides.meal : roundedMealRefund;
    const actualTuitionRefund = refundOverrides.tuition !== null ? refundOverrides.tuition : roundedTuitionRefund;
 
-   const deductionSum = (actualMealRefund || 0) + (actualTuitionRefund || 0);
+   const ngoaiKhoaDeduction = ngoaiKhoaAdjustment.totalDeduction || 0;
+   const deductionSum = (actualMealRefund || 0) + (actualTuitionRefund || 0) + ngoaiKhoaDeduction;
 
    const hpVal = Number(invoiceData.hocphi) || 0;
    const ghpVal = Number(invoiceData.giamHocphi) || 0;
@@ -1552,8 +1659,18 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                           <span style={{ fontWeight: 700 }}>đ</span>
                                        </div>
                                     </div>
+                                    {ngoaiKhoaDeduction > 0 && (
+                                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
+                                          <span>Trừ tiền dã ngoại tháng trước:</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                             <span style={{ fontWeight: 700 }}>-</span>
+                                             <span style={{ fontWeight: 700 }}>{formatCurrency(ngoaiKhoaDeduction)}</span>
+                                             <span style={{ fontWeight: 700 }}>đ</span>
+                                          </div>
+                                       </div>
+                                    )}
                                     <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
-                                       Tổng hoàn trả từ lịch nghỉ: -{formatCurrency(deductionSum)}đ
+                                       Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
                                     </div>
                                  </div>
                               )}
@@ -1712,6 +1829,11 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                  onChange={e => handleFormChange('ghiChu', e.target.value)}
                                  placeholder="VD: Khách hứa trả nốt vào mùng 5..."
                               />
+                              {ngoaiKhoaAutoNote && (
+                                 <div style={{ marginTop: '6px', fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
+                                    {ngoaiKhoaAutoNote}
+                                 </div>
+                              )}
                            </div>
                            <div className="im-fi-item-col">
                               <label>💳 Hình thức thanh toán</label>
@@ -1901,6 +2023,12 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                               <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
                               <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
                            </div>
+                           {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                 <span>- Trừ tiền dã ngoại tháng trước:</span>
+                                 <b>-{formatCurrency(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>
+                              </div>
+                           )}
                         </div>
                      )}
                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
@@ -1986,7 +2114,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         </div>
                      )}
 
-                     {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0) && (
+                     {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
                         <>
                            <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
                            {parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
@@ -1999,6 +2127,12 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
                                  <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund} đ</div>
+                              </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.ngoaiKhoaDeduction} đ</div>
                               </div>
                            )}
                         </>
