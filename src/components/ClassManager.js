@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, generateId } from '../supabase';
+import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
