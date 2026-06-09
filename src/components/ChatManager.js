@@ -4,6 +4,7 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { deleteFromR2 } from '../utils/cloudflareR2';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import { saveImageToDevice } from '../utils/mobileImageSave';
 import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
@@ -75,6 +76,16 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     const num = value.toString().replace(/\D/g, '');
     if (!num) return value; // Trả về giá trị gốc nếu không có số
     return num.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  const handleSavePreviewImage = async (imageUrl, filename = `anh-${Date.now()}.jpg`) => {
+    if (!imageUrl) return;
+    try {
+      await saveImageToDevice(getDisplayUrl(imageUrl), filename);
+    } catch (error) {
+      console.error('Không thể lưu ảnh:', error);
+      window.open(getDisplayUrl(imageUrl), '_blank', 'noopener,noreferrer');
+    }
   };
 
   // Views
@@ -1615,7 +1626,12 @@ ${ngoaiKhoaForm.content}
         {previewImage && (
           <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
             <div className="preview-container" onClick={e => e.stopPropagation()}>
-              <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+              <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '10px', zIndex: 2 }}>
+                <button className="preview-close-btn" onClick={() => handleSavePreviewImage(previewImage)} title="Lưu ảnh">
+                  <Download size={20} />
+                </button>
+                <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+              </div>
               <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
             </div>
           </div>
@@ -2055,7 +2071,12 @@ ${ngoaiKhoaForm.content}
       {previewImage && (
         <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
           <div className="preview-container" onClick={e => e.stopPropagation()}>
-            <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+            <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '10px', zIndex: 2 }}>
+              <button className="preview-close-btn" onClick={() => handleSavePreviewImage(previewImage)} title="Lưu ảnh">
+                <Download size={20} />
+              </button>
+              <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+            </div>
             <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
           </div>
         </div>

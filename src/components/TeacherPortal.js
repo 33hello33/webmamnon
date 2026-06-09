@@ -4,10 +4,11 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import { saveImageToDevice } from '../utils/mobileImageSave';
 import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell } from 'lucide-react';
+import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell, Download } from 'lucide-react';
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 import { buildGroupedMessageDescription, createMessageGroupId, groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import { getActiveNgoaiKhoaAnnouncements } from '../utils/ngoaiKhoaUtils';
@@ -34,7 +35,18 @@ const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
    const [loading, setLoading] = useState(false);
+   const [previewImage, setPreviewImage] = useState(null);
    const isBoMonTeacher = attendanceUser?.role === 'Giáo viên BM';
+
+   const handleSavePreviewImage = async (imageUrl, filename = `anh-${Date.now()}.jpg`) => {
+      if (!imageUrl) return;
+      try {
+         await saveImageToDevice(imageUrl, filename);
+      } catch (error) {
+         console.error('Không thể lưu ảnh:', error);
+         window.open(imageUrl, '_blank', 'noopener,noreferrer');
+      }
+   };
 
    const normalizeAnnouncementTitle = (title) => String(title || '').trim().toUpperCase();
 
@@ -1488,7 +1500,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            )}
                            {imageAttachments.map((attachment, attachmentIndex) => (
                               <div key={attachment.id || `${idx}-image-${attachmentIndex}`} style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', width: 'fit-content' }}>
-                                 <img src={attachment.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
+                                 <img src={attachment.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain', cursor: 'zoom-in' }} referrerPolicy="no-referrer" onClick={() => setPreviewImage(attachment.image_url)} />
                               </div>
                            ))}
                            {fileAttachments.map((attachment, attachmentIndex) => (
@@ -1918,7 +1930,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                               </div>
                               {(item._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
                                  <div key={attachment.id || `${item.id || 'announcement'}-image-${attachmentIndex}`} style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                    <img src={attachment.image_url} alt={item.title || 'announcement'} style={{ width: '100%', display: 'block' }} />
+                                    <img src={attachment.image_url} alt={item.title || 'announcement'} style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} onClick={() => setPreviewImage(attachment.image_url)} />
                                  </div>
                               ))}
                               {(item._attachments || []).filter((attachment) => attachment.file_url).map((attachment, attachmentIndex) => (
@@ -2030,6 +2042,24 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         </button>
                      </div>
                   </form>
+               </div>
+            </div>
+         )}
+
+         {previewImage && (
+            <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
+               <div className="preview-container" onClick={e => e.stopPropagation()}>
+                  <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '10px', zIndex: 2 }}>
+                     <button
+                        className="preview-close-btn"
+                        onClick={() => handleSavePreviewImage(previewImage)}
+                        title="Lưu ảnh"
+                     >
+                        <Download size={22} />
+                     </button>
+                     <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+                  </div>
+                  <img src={previewImage} alt="Preview" referrerPolicy="no-referrer" />
                </div>
             </div>
          )}
