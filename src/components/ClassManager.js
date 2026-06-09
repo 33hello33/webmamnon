@@ -203,6 +203,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferTargetClassId, setTransferTargetClassId] = useState('');
   const [transferringStudent, setTransferringStudent] = useState(null);
+  const [transferMode, setTransferMode] = useState('single');
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [selectionAlert, setSelectionAlert] = useState({ open: false, title: '', message: '' });
   const isProcessingRef = React.useRef(false);
 
 
@@ -336,6 +339,33 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   }, [students, selectedClassId]);
 
   useEffect(() => {
+    setSelectedStudentIds(prev => prev.filter(id => classStudents.some(s => s.mahv === id)));
+  }, [classStudents]);
+
+  const selectedStudents = React.useMemo(
+    () => classStudents.filter(s => selectedStudentIds.includes(s.mahv)),
+    [classStudents, selectedStudentIds]
+  );
+
+  const isAllStudentsSelected = classStudents.length > 0 && selectedStudentIds.length === classStudents.length;
+
+  const toggleStudentSelection = (studentId) => {
+    setSelectedStudentIds(prev => (
+      prev.includes(studentId)
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    ));
+  };
+
+  const toggleSelectAllStudents = () => {
+    setSelectedStudentIds(isAllStudentsSelected ? [] : classStudents.map(s => s.mahv));
+  };
+
+  const openSelectionAlert = (title, message) => {
+    setSelectionAlert({ open: true, title, message });
+  };
+
+  useEffect(() => {
     const fetchContractsForClass = async () => {
       const stdIds = classStudents.map(s => s.mahv);
       if (stdIds.length > 0) {
@@ -376,8 +406,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   // --- BATCH NOTICE HANDLERS ---
   const handleOpenBatchNotice = async () => {
-    const activeStudents = classStudents.filter(s => (s.trangthai || '').trim().toLowerCase().includes('đang học'));
-    if (activeStudents.length === 0) return showMessage('error', 'Lớp này không có học sinh nào "Đang Học" để gửi thông báo');
+    if (selectedStudents.length === 0) {
+      return openSelectionAlert('Chưa chọn học sinh', 'Vui lòng tick học sinh trước khi xuất thông báo hàng loạt.');
+    }
+
+    const activeStudents = selectedStudents.filter(s => (s.trangthai || '').trim().toLowerCase().includes('đang học'));
+    if (activeStudents.length === 0) {
+      return openSelectionAlert('Không có học sinh phù hợp', 'Chỉ những học sinh đang học trong danh sách đã tick mới được xuất thông báo hàng loạt.');
+    }
 
     try {
       setIsBatchNoticeOpen(true);
@@ -1170,27 +1206,51 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   };
 
   const handleOpenTransfer = (student) => {
+    setTransferMode('single');
     setTransferringStudent(student);
+    setTransferTargetClassId('');
+    setIsTransferModalOpen(true);
+  };
+
+  const handleOpenBulkTransfer = () => {
+    if (selectedStudents.length === 0) {
+      return openSelectionAlert('Chưa chọn học sinh', 'Vui lòng tick học sinh trước khi chuyển lớp hàng loạt.');
+    }
+    setTransferMode('bulk');
+    setTransferringStudent(null);
     setTransferTargetClassId('');
     setIsTransferModalOpen(true);
   };
 
   const confirmTransfer = async () => {
     if (!transferTargetClassId) return showMessage('error', 'Vui lòng chọn lớp mới!');
-    if (!transferringStudent) return;
+    const transferStudentIds = transferMode === 'bulk'
+      ? selectedStudents.map(s => s.mahv)
+      : (transferringStudent ? [transferringStudent.mahv] : []);
+    if (transferStudentIds.length === 0) return;
 
     try {
       // Chuyển học sinh sang lớp mới bằng cách update cột malop trong tbl_hv
-      const { error } = await supabase.from('tbl_hv')
-        .update({ malop: transferTargetClassId })
-        .eq('mahv', transferringStudent.mahv);
+      const query = supabase.from('tbl_hv')
+        .update({ malop: transferTargetClassId });
+      const { error } = transferMode === 'bulk'
+        ? await query.in('mahv', transferStudentIds)
+        : await query.eq('mahv', transferStudentIds[0]);
 
       if (error) throw error;
 
-      showMessage('success', `Đã chuyển ${transferringStudent.tenhv} sang lớp mới thành công!`);
       const targetClassName = classes.find(c => c.malop === transferTargetClassId)?.tenlop || transferTargetClassId;
-      insertLog(`[CHUYỂN LỚP] HS: ${transferringStudent.tenhv} | Từ ${selectedClass.tenlop} sang ${targetClassName}`);
+      if (transferMode === 'bulk') {
+        showMessage('success', `Đã chuyển ${transferStudentIds.length} học sinh sang lớp mới thành công!`);
+        insertLog(`[CHUYỂN LỚP HÀNG LOẠT] Sĩ số: ${transferStudentIds.length} | Từ ${selectedClass?.tenlop || selectedClassId} sang ${targetClassName}`);
+        setSelectedStudentIds([]);
+      } else {
+        showMessage('success', `Đã chuyển ${transferringStudent.tenhv} sang lớp mới thành công!`);
+        insertLog(`[CHUYỂN LỚP] HS: ${transferringStudent.tenhv} | Từ ${selectedClass.tenlop} sang ${targetClassName}`);
+      }
       setIsTransferModalOpen(false);
+      setTransferringStudent(null);
+      setTransferMode('single');
       if (fetchStudents) fetchStudents(); // Refresh global student list
       fetchClasses(); // Refresh local counts if needed
     } catch (err) {
@@ -1365,6 +1425,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         <MessageSquare size={16} /> Xuất thông báo hàng loạt
                       </button>
                     )}
+                    <button
+                      className="btn btn-outline"
+                      onClick={handleOpenBulkTransfer}
+                      title={selectedStudentIds.length > 0 ? `Đã chọn ${selectedStudentIds.length} học sinh` : 'Chọn học sinh trước khi chuyển lớp hàng loạt'}
+                    >
+                      <ArrowRightLeft size={16} /> Chuyển lớp hàng loạt
+                    </button>
                     <button className="btn btn-success" onClick={handleExportStudents}>
                       <Download size={16} /> Xuất Excel
                     </button>
@@ -1376,6 +1443,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <thead>
                       <tr>
                         <th>STT</th>
+                        <th style={{ textAlign: 'center', width: '52px' }}>
+                          <input
+                            type="checkbox"
+                            checked={isAllStudentsSelected}
+                            onChange={toggleSelectAllStudents}
+                            aria-label="Chọn tất cả học sinh"
+                          />
+                        </th>
                         <th style={{ textAlign: 'center' }}>Hành động</th>
                         <th>Mã HS</th>
                         <th>Tên Học Sinh</th>
@@ -1390,6 +1465,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           return (
                             <tr key={s.mahv}>
                               <td>{idx + 1}</td>
+                              <td className="text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStudentIds.includes(s.mahv)}
+                                  onChange={() => toggleStudentSelection(s.mahv)}
+                                  aria-label={`Chọn học sinh ${s.tenhv}`}
+                                />
+                              </td>
                               <td className="text-center">
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                                   <button className="tm-btn-icon text-primary" title="Xem chi tiết học sinh" onClick={() => handleOpenViewStudent(s)}>
@@ -1419,7 +1502,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         })
                       ) : (
                         <tr>
-                          <td colSpan="7" className="empty-state">Lớp chưa có học sinh nào</td>
+                          <td colSpan="8" className="empty-state">Lớp chưa có học sinh nào</td>
                         </tr>
                       )}
                     </tbody>
@@ -1435,9 +1518,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       return (
                         <div key={s.mahv} className="student-card">
                           <div className="student-card-header">
-                            <div>
-                              <div className="student-name">{s.tenhv}</div>
-                              <div className="student-id">#{s.mahv}</div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedStudentIds.includes(s.mahv)}
+                                onChange={() => toggleStudentSelection(s.mahv)}
+                                aria-label={`Chọn học sinh ${s.tenhv}`}
+                                style={{ marginTop: '3px' }}
+                              />
+                              <div>
+                                <div className="student-name">{s.tenhv}</div>
+                                <div className="student-id">#{s.mahv}</div>
+                              </div>
                             </div>
 
                             <span className={`status-badge ${(() => {
@@ -1569,19 +1661,32 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         </div>
       )}
       {/* Transfer Class Modal */}
-      {isTransferModalOpen && transferringStudent && (
+      {isTransferModalOpen && (transferMode === 'bulk' || transferringStudent) && (
         <div className="modal-overlay" style={{ zIndex: 1100 }}>
           <div className="modal-content sm-modal">
             <div className="modal-header">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8b5cf6' }}>
-                <ArrowRightLeft size={20} /> Chuyển lớp cho học sinh
+                <ArrowRightLeft size={20} /> {transferMode === 'bulk' ? 'Chuyển lớp hàng loạt' : 'Chuyển lớp cho học sinh'}
               </h3>
-              <button className="close-btn" onClick={() => setIsTransferModalOpen(false)}><X size={20} /></button>
+              <button
+                className="close-btn"
+                onClick={() => {
+                  setIsTransferModalOpen(false);
+                  setTransferringStudent(null);
+                  setTransferMode('single');
+                }}
+              ><X size={20} /></button>
             </div>
             <div className="modal-body">
-              <p style={{ marginBottom: '1rem', color: '#475569' }}>
-                Học sinh: <strong style={{ color: '#10b981' }}>{transferringStudent.tenhv}</strong> (Mã: {transferringStudent.mahv})
-              </p>
+              {transferMode === 'bulk' ? (
+                <p style={{ marginBottom: '1rem', color: '#475569' }}>
+                  Đang chọn <strong style={{ color: '#10b981' }}>{selectedStudents.length}</strong> học sinh để chuyển lớp.
+                </p>
+              ) : (
+                <p style={{ marginBottom: '1rem', color: '#475569' }}>
+                  Học sinh: <strong style={{ color: '#10b981' }}>{transferringStudent.tenhv}</strong> (Mã: {transferringStudent.mahv})
+                </p>
+              )}
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                 <label style={{ color: '#64748b', fontWeight: 600, fontSize: '0.85rem' }}>Chọn lớp học mới chuyển đến:</label>
                 <select
@@ -1599,13 +1704,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   }}
                 >
                   <option value="">-- Chọn lớp học --</option>
-                  {classes.filter(c => transferringStudent.malop !== c.malop && !transferringStudent.malop_list?.includes(c.malop)).map(c => (
+                  {classes.filter(c => {
+                    if (c.malop === selectedClassId) return false;
+                    if (transferMode !== 'bulk') {
+                      return transferringStudent.malop !== c.malop && !transferringStudent.malop_list?.includes(c.malop);
+                    }
+                    return !selectedStudents.some(student => student.malop_list?.includes(c.malop));
+                  }).map(c => (
                     <option key={c.malop} value={c.malop}>{c.tenlop} ({c.malop})</option>
                   ))}
                 </select>
               </div>
               <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '1rem', gap: '10px' }}>
-                <button className="btn btn-outline" onClick={() => setIsTransferModalOpen(false)}>Hủy</button>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => {
+                    setIsTransferModalOpen(false);
+                    setTransferringStudent(null);
+                    setTransferMode('single');
+                  }}
+                >Hủy</button>
                 <button
                   className="btn btn-primary"
                   style={{ background: '#8b5cf6', borderColor: '#8b5cf6' }}
@@ -1613,6 +1731,32 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   disabled={!transferTargetClassId}
                 >
                   Xác nhận chuyển lớp
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectionAlert.open && (
+        <div className="modal-overlay" style={{ zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-content sm-modal" style={{ maxWidth: '420px', width: 'calc(100% - 32px)' }}>
+            <div className="modal-header">
+              <h3>{selectionAlert.title}</h3>
+              <button
+                className="close-btn"
+                onClick={() => setSelectionAlert({ open: false, title: '', message: '' })}
+              ><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, color: '#475569', lineHeight: 1.6 }}>{selectionAlert.message}</p>
+              <div className="form-actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setSelectionAlert({ open: false, title: '', message: '' })}
+                  style={{ minWidth: '120px' }}
+                >
+                  Đóng
                 </button>
               </div>
             </div>
