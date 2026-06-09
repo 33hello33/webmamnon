@@ -8,6 +8,7 @@ import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '../utils/ngoaiKhoaUtils';
+import { saveImageToDevice } from '../utils/mobileImageSave';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
@@ -750,6 +751,16 @@ function ParentPortal({ parentData, setParentData }) {
       const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const isStandaloneMode = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone;
       const resolvedImageUrl = getDisplayUrl(imageUrl);
+
+      try {
+         const handled = await saveImageToDevice(resolvedImageUrl, filename);
+         if (handled) {
+            if (existingWindow) existingWindow.close();
+            return;
+         }
+      } catch (error) {
+         console.warn('saveImageToDevice failed, falling back to legacy download flow', error);
+      }
 
       // Mobile and desktop flows are handled separately below.
       if (false && isMobileDevice && navigator.share && navigator.canShare) {
