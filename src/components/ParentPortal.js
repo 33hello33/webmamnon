@@ -6,6 +6,7 @@ import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
+import { groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
@@ -2211,9 +2212,11 @@ function ParentPortal({ parentData, setParentData }) {
                                  <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Bắt đầu trò chuyện với giáo viên phụ trách của bé.</p>
                               </div>
                            ) : (
-                              chatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]')).map((m, idx) => {
+                              groupMessagesForDisplay(chatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]'))).map((m, idx) => {
                                  const isMe = m.description === 'PH';
                                  const senderName = getParentChatSenderName(m);
+                                 const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
+                                 const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
                                  return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', minWidth: 0, alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
                                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', padding: '0 4px', fontWeight: 700 }}>
@@ -2224,15 +2227,24 @@ function ParentPortal({ parentData, setParentData }) {
                                              <ChatMessageContent content={m.content} isOwnMessage={isMe} />
                                           </div>
                                        )}
-                                       {m.image_url && (
+                                       {imageAttachments.map((attachment, attachmentIndex) => (
                                           <div
+                                             key={attachment.id || `${idx}-image-${attachmentIndex}`}
                                              style={{ marginTop: '5px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', cursor: 'zoom-in' }}
-                                             onClick={() => setPreviewImage(m.image_url)}
+                                             onClick={() => setPreviewImage(attachment.image_url)}
                                           >
-                                             <img src={getDisplayUrl(m.image_url)} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
+                                             <img src={getDisplayUrl(attachment.image_url)} alt="chat" style={{ maxWidth: '100%', maxHeight: '300px', display: 'block', borderRadius: '8px', objectFit: 'contain' }} referrerPolicy="no-referrer" />
                                           </div>
-                                       )}
-                                       {m.file_url && <ChatMediaAttachment fileUrl={m.file_url} fileName={m.file_name} mimeType={m.file_mime_type} isOwnMessage={isMe} />}
+                                       ))}
+                                       {fileAttachments.map((attachment, attachmentIndex) => (
+                                          <ChatMediaAttachment
+                                             key={attachment.id || `${idx}-file-${attachmentIndex}`}
+                                             fileUrl={attachment.file_url}
+                                             fileName={attachment.file_name}
+                                             mimeType={attachment.file_mime_type}
+                                             isOwnMessage={isMe}
+                                          />
+                                       ))}
                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                                           <button
                                              type="button"

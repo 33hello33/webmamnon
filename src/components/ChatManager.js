@@ -7,6 +7,7 @@ import { triggerPushNotification } from '../utils/pushNotifications';
 import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
+import { buildGroupedMessageDescription, createMessageGroupId, getBaseMessageDescription } from '../utils/chatMessageGrouping';
 import {
   MessageSquare,
   Send,
@@ -170,6 +171,73 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       }));
     }
     return uploads;
+  };
+
+  const fanOutAnnouncementsToStudentChats = async (announcements, groupIdByClass = {}) => {
+    const validAnnouncements = (announcements || []).filter(item => item?.malop);
+    if (validAnnouncements.length === 0) return;
+
+    const classIds = Array.from(new Set(validAnnouncements.map(item => item.malop).filter(Boolean)));
+    if (classIds.length === 0) return;
+
+    const { data: classStudents, error: classStudentsError } = await supabase
+      .from('tbl_hv')
+      .select('mahv, malop')
+      .in('malop', classIds)
+      .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+
+    if (classStudentsError) throw classStudentsError;
+
+    const studentsByClass = new Map();
+    (classStudents || []).forEach((student) => {
+      if (!student?.mahv || !student?.malop) return;
+      if (!studentsByClass.has(student.malop)) studentsByClass.set(student.malop, []);
+      studentsByClass.get(student.malop).push(student);
+    });
+
+    const chatPayloads = [];
+    const documentPayloads = [];
+
+    validAnnouncements.forEach((announcement) => {
+      const students = studentsByClass.get(announcement.malop) || [];
+      const description = buildGroupedMessageDescription('THONG_BAO', groupIdByClass[announcement.malop] || '');
+
+      students.forEach((student) => {
+        chatPayloads.push({
+          mahv: student.mahv,
+          manv: announcement.manv || currentUser.manv || currentUser.username,
+          content: announcement.content || '',
+          image_url: announcement.image_url || null,
+          file_url: announcement.file_url || null,
+          file_name: announcement.file_name || '',
+          file_mime_type: announcement.file_mime_type || '',
+          description
+        });
+
+        if (announcement.image_url || announcement.file_url) {
+          documentPayloads.push({
+            mahv: student.mahv,
+            name: announcement.file_name || 'Thong bao lop',
+            category: announcement.image_url ? 'Ảnh' : 'Tài liệu',
+            file_url: announcement.image_url || announcement.file_url,
+            mime_type: announcement.file_mime_type || ''
+          });
+        }
+      });
+    });
+
+    if (chatPayloads.length > 0) {
+      const { data: insertedMessages, error: chatInsertError } = await supabase.from('hv_messages').insert(chatPayloads).select();
+      if (chatInsertError) throw chatInsertError;
+
+      for (const message of insertedMessages || []) {
+        await triggerPushNotification(supabase, 'hv_messages', message);
+      }
+    }
+
+    if (documentPayloads.length > 0) {
+      await supabase.from('documents').insert(documentPayloads);
+    }
   };
 
   const handleChatAttachmentUpload = async (selectedFiles, forcedType = null) => {
@@ -880,6 +948,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         [...announcementFiles.images, ...announcementFiles.files],
         'announcement'
       );
+      const groupIdByClass = {};
       const attachmentItems = uploadedAttachments.length > 0 ? uploadedAttachments : [null];
       const payloads = targetClasses.flatMap(malop =>
         attachmentItems.map(attachment => ({
@@ -894,6 +963,12 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         }))
       );
 
+      if (attachmentItems.length > 1) {
+        targetClasses.forEach((malop) => {
+          groupIdByClass[malop] = createMessageGroupId(`announcement-${malop}`);
+        });
+      }
+
       const { data: insertedData, error } = await supabase.from('class_announcements').insert(payloads).select();
       if (error) throw error;
       if (insertedData) {
@@ -901,6 +976,9 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           if (record?.approved !== false) {
             await triggerPushNotification(supabase, 'class_announcements', record);
           }
+        }
+        if (autoApprove) {
+          await fanOutAnnouncementsToStudentChats(insertedData, groupIdByClass);
         }
       }
 
@@ -1175,7 +1253,8 @@ ${ngoaiKhoaForm.content}
           image_url: data.image_url || null,
           file_url: data.file_url || null,
           file_name: data.file_name || '',
-          file_mime_type: data.file_mime_type || ''
+          file_mime_type: data.file_mime_type || '',
+          description: buildGroupedMessageDescription('THONG_BAO')
         }));
 
         if (chatPayloads.length > 0) {
@@ -1315,7 +1394,7 @@ ${ngoaiKhoaForm.content}
                         <div className="msg-sender">{senderName}</div>
                         <div className="message-bubble">
                            {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
-                           {m.description === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
+                           {getBaseMessageDescription(m.description) === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
                            {m.content && (
                              <div className="msg-text">
                                <ChatMessageContent content={m.content} isOwnMessage={isMine} />
