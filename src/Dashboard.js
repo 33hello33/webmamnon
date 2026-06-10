@@ -115,6 +115,7 @@ function Dashboard() {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
+  const [selectedApprovalImage, setSelectedApprovalImage] = useState(null);
   const [pendingApprovalBusyKeys, setPendingApprovalBusyKeys] = useState([]);
   const [classNameMap, setClassNameMap] = useState({});
   const isApprovalManager = user?.role === 'Quản lý';
@@ -1041,7 +1042,7 @@ function Dashboard() {
         <div className="modal-overlay" style={{ zIndex: 1250 }} onClick={() => setShowPendingApprovals(false)}>
           <div
             className="modal-content"
-            style={{ maxWidth: '760px', width: '95%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: '1100px', width: '95%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
@@ -1084,11 +1085,16 @@ function Dashboard() {
                           </div>
 
                           {imageAttachments.length > 0 && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                               {imageAttachments.map((attachment, index) => (
-                                <a key={attachment.id || `${approvalKey}-image-${index}`} href={attachment.image_url} target="_blank" rel="noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                  <img src={attachment.image_url} alt="" style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }} />
-                                </a>
+                                <button
+                                  key={attachment.id || `${approvalKey}-image-${index}`}
+                                  type="button"
+                                  onClick={() => setSelectedApprovalImage(attachment.image_url)}
+                                  style={{ display: 'block', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', padding: '0', background: '#fff', cursor: 'zoom-in' }}
+                                >
+                                  <img src={attachment.image_url} alt="" style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', display: 'block', background: '#f8fafc' }} />
+                                </button>
                               ))}
                             </div>
                           )}
@@ -1142,6 +1148,43 @@ function Dashboard() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedApprovalImage && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1300, background: 'rgba(15, 23, 42, 0.85)' }}
+          onClick={() => setSelectedApprovalImage(null)}
+        >
+          <div
+            style={{
+              width: 'min(96vw, 1400px)',
+              maxHeight: '92vh',
+              padding: '12px',
+              borderRadius: '20px',
+              background: '#fff',
+              boxShadow: '0 25px 80px rgba(0, 0, 0, 0.35)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setSelectedApprovalImage(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: 'calc(92vh - 64px)', overflow: 'auto', background: '#f8fafc', borderRadius: '16px' }}>
+              <img
+                src={selectedApprovalImage}
+                alt=""
+                style={{ maxWidth: '100%', maxHeight: 'calc(92vh - 96px)', objectFit: 'contain', display: 'block' }}
+              />
             </div>
           </div>
         </div>
