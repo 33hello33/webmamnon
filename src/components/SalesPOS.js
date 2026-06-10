@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, insertLog } from '../supabase';
 import { Search, Trash2, Plus, Minus, CreditCard, CheckCircle, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -7,12 +7,12 @@ import { useConfig } from '../ConfigContext';
 
 export default function SalesPOS() {
    const { config } = useConfig();
-   const walletsConfig = (config ? [
+   const walletsConfig = useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '' },
       { id: 'vi2', name: config.vi2?.name || '' },
       { id: 'vi3', name: config.vi3?.name || '' },
       { id: 'vi4', name: config.vi4?.name || '' }
-   ].filter(w => w.name.trim() !== '') : []);
+   ].filter(w => w.name.trim() !== '') : []), [config]);
    const [students, setStudents] = useState([]);
    const [products, setProducts] = useState([]);
    const [classes, setClasses] = useState([]);
