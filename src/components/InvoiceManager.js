@@ -44,6 +44,12 @@ const buildCombinedNote = (...parts) => (
       .trim()
 );
 
+const normalizeSurcharges = (value) => (
+   Array.isArray(value)
+      ? value.filter(item => item && (item.name || Number(item.amount)))
+      : []
+);
+
 const extractNgoaiKhoaCost = (content) => {
    const match = String(content || '').match(/CHI PHÍ\s*:\s*([^\n\r]+)/i);
    if (!match) return 0;
@@ -1361,6 +1367,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             ghichu: combinedNote,
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
+            phuthu: normalizeSurcharges(invoiceData.phuthu),
             qrUrl: (() => {
                const base = getQRUrl({
                   mahv: selectedStudent.mahv,
@@ -2112,6 +2119,18 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
                            <div style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</div>
                         </div>
+                     )}
+
+                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {downloadingNotice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                                 <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
+                              </div>
+                           ))}
+                        </>
                      )}
 
                      {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (

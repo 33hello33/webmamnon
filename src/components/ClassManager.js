@@ -59,6 +59,16 @@ const parseFormattedNumber = (val) => {
   return parseInt(val.toString().replace(/,/g, ''), 10) || 0;
 };
 
+const normalizeSurcharges = (value) => (
+  Array.isArray(value)
+    ? value.filter(item => item && (item.name || Number(item.amount)))
+    : []
+);
+
+const sumSurcharges = (items) => (
+  normalizeSurcharges(items).reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+);
+
 const parseScheduleDays = (tgb) => {
   if (!tgb) return [];
   const normalized = tgb.toLowerCase().replace(/thứ /g, 't').replace(/thứ/g, 't').replace(/chủ nhật/g, 'cn');
@@ -606,6 +616,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const totalRefund = mealRefund + tuitionRefund;
         const stHinhThuc = studentRaw.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
         const stNoCu = debtMap[currentMahv] || 0;
+        const phuthu = normalizeSurcharges(studentRaw.phuthu);
+        const surchargeSum = sumSurcharges(phuthu);
 
         return {
           mahv: currentMahv,
@@ -616,9 +628,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           nghiLienTiep: maxLeave,
-          tongcong: Math.max(0, initHocPhi + stNoCu - totalRefund),
+          tongcong: Math.max(0, initHocPhi + stNoCu + surchargeSum - totalRefund),
           ngaybatdau: startStr,
           hinhthuc: stHinhThuc,
+          phuthu,
           ghichu: '',
           thoigianbieu: selectedClass?.thoigianbieu || '',
           diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod },
@@ -749,13 +762,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const ghp = parseInt(row.giamhocphi || 0);
         const nocu = parseInt(row.noCu || 0);
 
+        const surchargeSum = sumSurcharges(row.phuthu);
+
         return {
           ...row,
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           nghiLienTiep: maxLeave,
           diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod: sPeriod },
-          tongcong: Math.max(0, hp - ghp + nocu - totalRefund),
+          tongcong: Math.max(0, hp - ghp + nocu + surchargeSum - totalRefund),
           ngaybatdau: startStr
         };
       }));
@@ -787,7 +802,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const recalculatedMealRefund = (item.diemDanhInfo?.nghiPhep || 0) >= 3
         ? Math.round((((item.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
         : 0;
-      const tc = Math.max(0, hpNumber + currentNoCu - (parseInt(batchNoticeData.giamHocphi) || 0) - recalculatedMealRefund - (item.truHocPhi || 0));
+      const surchargeSum = sumSurcharges(item.phuthu);
+      const tc = Math.max(0, hpNumber + currentNoCu + surchargeSum - (parseInt(batchNoticeData.giamHocphi) || 0) - recalculatedMealRefund - (item.truHocPhi || 0));
 
       return {
         ...item,
@@ -821,7 +837,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           const nocu = parseInt(newItem.noCu || 0);
           const tta = parseInt(newItem.truTienAn || 0);
           const thp = parseInt(newItem.truHocPhi || 0);
-          newItem.tongcong = Math.max(0, hp - ghp + nocu - tta - thp);
+          const surchargeSum = sumSurcharges(newItem.phuthu);
+          newItem.tongcong = Math.max(0, hp - ghp + nocu + surchargeSum - tta - thp);
         }
         return newItem;
       }
@@ -868,6 +885,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           truTienAnStr: formatTuition(row.truTienAn || 0),
           truHocPhiStr: formatTuition(row.truHocPhi || 0),
           noCuStr: formatTuition(row.noCu || 0),
+          phuthu: normalizeSurcharges(row.phuthu),
           tongcongStr: formatTuition(row.tongcong),
           qrUrl: (() => {
             const base = getQRUrl({
@@ -2244,6 +2262,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
                   <div style={{ fontWeight: 900 }}>{exportingNotice.giamhocphiStr} đ</div>
                 </div>
+              )}
+              {exportingNotice.phuthu && exportingNotice.phuthu.length > 0 && (
+                <>
+                  <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                  {exportingNotice.phuthu.map((pt, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                      <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                      <div style={{ fontWeight: 700 }}>{formatTuition(pt.amount || 0)} đ</div>
+                    </div>
+                  ))}
+                </>
               )}
               {(parseInt(String(exportingNotice.truTienAn).replace(/\D/g, '')) > 0 || parseInt(String(exportingNotice.truHocPhi).replace(/\D/g, '')) > 0) && (
                 <>
