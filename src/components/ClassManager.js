@@ -1055,6 +1055,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         currentNotices.push({
           ...row,
           ...insertData,
+          phuthu: (row.phuthu || []).map(p => ({ ...p })),
           sdt: students.find(s => s.mahv === row.mahv)?.sdt || '',
           qrUrl: (() => {
             const base = getQRUrl({
