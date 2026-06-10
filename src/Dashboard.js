@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import {
@@ -19,10 +19,16 @@ import {
   Key,
   MessageSquare,
   BookOpen,
-  Activity
+  Activity,
+  Check,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
+import { deleteFromR2 } from './utils/cloudflareR2';
+import { triggerPushNotification } from './utils/pushNotifications';
+import { buildGroupedMessageDescription, groupAnnouncementsForDisplay } from './utils/chatMessageGrouping';
 import StudentManager from './components/StudentManager';
 import DebtManager from './components/DebtManager';
 import EmployeeManager from './components/EmployeeManager';
@@ -107,6 +113,13 @@ function Dashboard() {
   const [changePassLoading, setChangePassLoading] = useState(false);
   const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [showPendingApprovals, setShowPendingApprovals] = useState(false);
+  const [pendingApprovalBusyKeys, setPendingApprovalBusyKeys] = useState([]);
+  const [classNameMap, setClassNameMap] = useState({});
+  const isApprovalManager = user?.role === 'Quản lý';
+  const groupedPendingApprovals = groupAnnouncementsForDisplay(pendingApprovals);
+  const pendingApprovalCount = groupedPendingApprovals.length;
 
   const getVisibleTabs = () => {
     if (!user) return [];
@@ -137,6 +150,230 @@ function Dashboard() {
   useEffect(() => {
     document.body.setAttribute('data-theme', theme);
   }, [theme]);
+
+  const setPendingBusy = (groupKey, isBusy) => {
+    setPendingApprovalBusyKeys((prev) => (
+      isBusy ? Array.from(new Set([...prev, groupKey])) : prev.filter((key) => key !== groupKey)
+    ));
+  };
+
+  const removePendingGroupFromState = (groupedNotice) => {
+    const idsToRemove = new Set((groupedNotice?._announcements || []).map((item) => item.id).filter(Boolean));
+    setPendingApprovals((prev) => prev.filter((item) => !idsToRemove.has(item.id)));
+  };
+
+  const fetchPendingApprovals = useCallback(async () => {
+    if (!isApprovalManager) {
+      setPendingApprovals([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('class_announcements')
+      .select('id, malop, manv, title, content, image_url, file_url, file_name, file_mime_type, approved, created_at')
+      .eq('approved', false)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error('Error fetching pending approvals:', error);
+      return;
+    }
+
+    setPendingApprovals(data || []);
+
+    const classIds = Array.from(new Set((data || []).map((item) => item.malop).filter(Boolean)));
+    if (classIds.length === 0) {
+      setClassNameMap({});
+      return;
+    }
+
+    const { data: classes, error: classError } = await supabase
+      .from('tbl_lop')
+      .select('malop, tenlop')
+      .in('malop', classIds);
+
+    if (classError) {
+      console.error('Error fetching class names:', classError);
+      return;
+    }
+
+    const nextMap = {};
+    (classes || []).forEach((item) => {
+      if (item?.malop) nextMap[item.malop] = item.tenlop || item.malop;
+    });
+    setClassNameMap(nextMap);
+  }, [isApprovalManager]);
+
+  const deleteAnnouncementAsset = async (url) => {
+    if (!url) return;
+
+    if (config?.r2_enabled) {
+      try {
+        await deleteFromR2(
+          url,
+          config.r2_endpoint,
+          config.r2_access_key_id,
+          config.r2_secret_access_key,
+          config.r2_bucket_name,
+          config.r2_public_url
+        );
+      } catch (err) {
+        console.warn('Could not delete announcement file from R2:', err);
+      }
+      return;
+    }
+
+    if (url.includes('/storage/v1/object/public/assets/')) {
+      const path = url.split('/assets/')[1];
+      if (!path) return;
+      try {
+        await supabase.storage.from('assets').remove([path]);
+      } catch (err) {
+        console.warn('Could not delete announcement file from Supabase Storage:', err);
+      }
+    }
+  };
+
+  const handleApprovePendingGroup = async (groupedNotice) => {
+    const approvalKey = groupedNotice?.id || groupedNotice?._announcements?.[0]?.id;
+    const noticeIds = (groupedNotice?._announcements || []).map((item) => item.id).filter(Boolean);
+    if (!approvalKey || noticeIds.length === 0) return;
+
+    setPendingBusy(approvalKey, true);
+    try {
+      const { data: updatedRows, error } = await supabase
+        .from('class_announcements')
+        .update({ approved: true })
+        .in('id', noticeIds)
+        .select();
+
+      if (error) throw error;
+
+      const sampleNotice = updatedRows?.[0];
+      if (!sampleNotice?.malop) {
+        removePendingGroupFromState(groupedNotice);
+        return;
+      }
+
+      const { data: classStudents, error: studentError } = await supabase
+        .from('tbl_hv')
+        .select('mahv')
+        .eq('malop', sampleNotice.malop)
+        .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+
+      if (studentError) throw studentError;
+
+      const chatPayloads = [];
+      const documentPayloads = [];
+
+      (classStudents || []).filter((student) => student?.mahv).forEach((student) => {
+        (updatedRows || []).forEach((notice) => {
+          chatPayloads.push({
+            mahv: student.mahv,
+            manv: notice.manv || user?.manv || user?.username,
+            content: notice.content || '',
+            image_url: notice.image_url || null,
+            file_url: notice.file_url || null,
+            file_name: notice.file_name || '',
+            file_mime_type: notice.file_mime_type || '',
+            description: buildGroupedMessageDescription('THONG_BAO')
+          });
+
+          if (notice.image_url || notice.file_url) {
+            documentPayloads.push({
+              mahv: student.mahv,
+              name: notice.file_name || 'Thong bao lop',
+              category: notice.image_url ? 'Ảnh' : 'Tài liệu',
+              file_url: notice.image_url || notice.file_url,
+              mime_type: notice.file_mime_type || ''
+            });
+          }
+        });
+      });
+
+      if (chatPayloads.length > 0) {
+        const { data: insertedMessages, error: chatInsertError } = await supabase
+          .from('hv_messages')
+          .insert(chatPayloads)
+          .select();
+
+        if (chatInsertError) throw chatInsertError;
+
+        for (const message of insertedMessages || []) {
+          await triggerPushNotification(supabase, 'hv_messages', message);
+        }
+      }
+
+      if (documentPayloads.length > 0) {
+        const { error: documentError } = await supabase.from('documents').insert(documentPayloads);
+        if (documentError) throw documentError;
+      }
+
+      for (const notice of updatedRows || []) {
+        await triggerPushNotification(supabase, 'class_announcements', notice);
+      }
+
+      removePendingGroupFromState(groupedNotice);
+    } catch (err) {
+      window.alert('Lỗi khi duyệt: ' + err.message);
+    } finally {
+      setPendingBusy(approvalKey, false);
+    }
+  };
+
+  const handleDeletePendingGroup = async (groupedNotice) => {
+    const approvalKey = groupedNotice?.id || groupedNotice?._announcements?.[0]?.id;
+    const noticeIds = (groupedNotice?._announcements || []).map((item) => item.id).filter(Boolean);
+    if (!approvalKey || noticeIds.length === 0) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa nội dung này khỏi danh sách cần duyệt?')) return;
+
+    setPendingBusy(approvalKey, true);
+    try {
+      const { error } = await supabase
+        .from('class_announcements')
+        .delete()
+        .in('id', noticeIds);
+
+      if (error) throw error;
+
+      const attachmentUrls = Array.from(new Set(
+        (groupedNotice?._attachments || [])
+          .flatMap((attachment) => [attachment.image_url, attachment.file_url])
+          .filter(Boolean)
+      ));
+
+      for (const url of attachmentUrls) {
+        await deleteAnnouncementAsset(url);
+      }
+
+      removePendingGroupFromState(groupedNotice);
+    } catch (err) {
+      window.alert('Lỗi khi xóa: ' + err.message);
+    } finally {
+      setPendingBusy(approvalKey, false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isApprovalManager) {
+      setShowPendingApprovals(false);
+      setPendingApprovals([]);
+      return undefined;
+    }
+
+    fetchPendingApprovals();
+
+    const channel = supabase.channel('pending_approvals_dashboard')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'class_announcements' }, () => fetchPendingApprovals())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPendingApprovals, isApprovalManager]);
 
   useEffect(() => {
     const handleLog = (e) => {
@@ -373,6 +610,33 @@ function Dashboard() {
                 <option value="kindergarten">🎨 Mầm Non</option>
               </select>
             </div>
+
+            {isApprovalManager && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowPendingApprovals(true)}
+                  style={{
+                    padding: '0.45rem 1rem',
+                    borderRadius: '12px',
+                    border: '1px solid #cbd5e1',
+                    outline: 'none',
+                    background: 'white',
+                    color: '#334155',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                    position: 'relative'
+                  }}
+                >
+                  Cần duyệt
+                  {pendingApprovalCount > 0 && (
+                    <span style={{ position: 'absolute', top: -8, right: -8, background: '#ef4444', color: 'white', borderRadius: '999px', minWidth: '22px', height: '22px', padding: '0 6px', fontSize: '0.75rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+                      {pendingApprovalCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
 
             <div className="top-user-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {user?.role === 'Quản lý' && (
@@ -768,6 +1032,116 @@ function Dashboard() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPendingApprovals && isApprovalManager && (
+        <div className="modal-overlay" style={{ zIndex: 1250 }} onClick={() => setShowPendingApprovals(false)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '760px', width: '95%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={20} className="text-primary" /> Cần duyệt
+              </h3>
+              <button className="close-btn" onClick={() => setShowPendingApprovals(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto', padding: '1rem 1.25rem 1.25rem' }}>
+              {groupedPendingApprovals.length === 0 ? (
+                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b' }}>
+                  Không có nội dung cần duyệt.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {groupedPendingApprovals.map((item) => {
+                    const approvalKey = item.id || item._announcements?.[0]?.id;
+                    const isBusy = pendingApprovalBusyKeys.includes(approvalKey);
+                    const imageAttachments = (item._attachments || []).filter((attachment) => attachment.image_url);
+                    const fileAttachments = (item._attachments || []).filter((attachment) => attachment.file_url);
+                    const classLabel = classNameMap[item.malop] || item.malop || '-';
+
+                    return (
+                      <div key={approvalKey} style={{ border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', background: '#fff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '1rem 1rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, color: '#0f172a' }}>{item.title || 'Thông báo lớp'}</div>
+                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '4px' }}>
+                              Lớp: {classLabel}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                            {new Date(item.created_at || Date.now()).toLocaleString('vi-VN')}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: '#334155', background: '#f8fafc', borderRadius: '12px', padding: '0.9rem 1rem' }}>
+                            {item.content || 'Không có nội dung.'}
+                          </div>
+
+                          {imageAttachments.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                              {imageAttachments.map((attachment, index) => (
+                                <a key={attachment.id || `${approvalKey}-image-${index}`} href={attachment.image_url} target="_blank" rel="noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                  <img src={attachment.image_url} alt="" style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }} />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                          {fileAttachments.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {fileAttachments.map((attachment, index) => (
+                                <a
+                                  key={attachment.id || `${approvalKey}-file-${index}`}
+                                  href={attachment.file_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.8rem 0.9rem', color: '#334155', background: '#fff' }}
+                                >
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                                    T
+                                  </div>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {attachment.file_name || 'Tài liệu đính kèm'}
+                                    </div>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePendingGroup(item)}
+                              disabled={isBusy}
+                              style={{ border: '1px solid #fecaca', background: '#fff1f2', color: '#be123c', borderRadius: '10px', padding: '0.7rem 1rem', fontWeight: 700, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              {isBusy ? <Loader2 size={16} className="spinner" /> : <Trash2 size={16} />}
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApprovePendingGroup(item)}
+                              disabled={isBusy}
+                              style={{ border: '1px solid #bbf7d0', background: '#dcfce7', color: '#166534', borderRadius: '10px', padding: '0.7rem 1rem', fontWeight: 700, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              {isBusy ? <Loader2 size={16} className="spinner" /> : <Check size={16} />}
+                              Duyệt
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
