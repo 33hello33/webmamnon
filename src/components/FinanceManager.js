@@ -787,14 +787,24 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalHd = filterByWallet(hdList);
       const finalBill = filterByWallet(billList);
       const finalThongBao = filterByWallet(thongBaoList);
+      const latestNoticeByStudent = [];
+      const seenStudents = new Set();
+      [...finalThongBao]
+         .filter(tb => !isDeleted(tb))
+         .sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0))
+         .forEach(tb => {
+            const studentKey = String(tb.mahv || '').trim().toLowerCase();
+            if (!studentKey || seenStudents.has(studentKey)) return;
+            seenStudents.add(studentKey);
+            latestNoticeByStudent.push(tb);
+         });
       const paidInvoiceKeys = new Set(
          finalHd
             .filter(h => !isDeleted(h))
             .map(buildTuitionMatchKey)
             .filter(Boolean)
       );
-      const pendingNotices = finalThongBao.filter(tb => {
-         if (isDeleted(tb)) return false;
+      const pendingNotices = latestNoticeByStudent.filter(tb => {
          const noticeKey = buildTuitionMatchKey(tb);
          return noticeKey ? !paidInvoiceKeys.has(noticeKey) : true;
       });
