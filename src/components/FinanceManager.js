@@ -32,6 +32,22 @@ const isDeleted = (item) => {
    return false;
 };
 const safeParse = (arr) => (arr || []).filter(item => !isDeleted(item));
+const normalizeTuitionPeriod = (value) => (
+   String(value || '')
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .sort()
+      .join('|')
+);
+const buildTuitionMatchKey = (item) => {
+   if (!item) return '';
+   const mahv = String(item.mahv || '').trim().toLowerCase();
+   const period = normalizeTuitionPeriod(item.thoiluong);
+   const startDate = String(item.ngaybatdau || '').slice(0, 10);
+   const endDate = String(item.ngayketthuc || '').slice(0, 10);
+   return [mahv, period || `${startDate}_${endDate}`].join('::');
+};
 
 // Moved inside component to use config
 const READ_NUMBER_VN = (number) => {
@@ -108,7 +124,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [hinhThucFilter, setHinhThucFilter] = useState('');
    const [loaiPhieuFilter, setLoaiPhieuFilter] = useState('');
    const [stats, setStats] = useState({
-      phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0
+      phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0, doanhThuDuKien: 0
    });
 
    const [balanceModal, setBalanceModal] = useState(false);
@@ -744,17 +760,19 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          return q;
       };
 
-      const [resChi, resKho, resHd, resBill] = await Promise.all([
+      const [resChi, resKho, resHd, resBill, resThongBao] = await Promise.all([
          buildQuery('tbl_phieuchi', 'ngaylap'),
          buildQuery('tbl_nhapkho', 'ngaynhap'),
          buildQuery('tbl_hd', 'ngaylap'),
-         buildQuery('tbl_billhanghoa', 'ngaylap')
+         buildQuery('tbl_billhanghoa', 'ngaylap'),
+         buildQuery('tbl_thongbao', 'ngaylap')
       ]);
 
       const chiList = resChi.data || [];
       const khoList = resKho.data || [];
       const hdList = resHd.data || [];
       const billList = resBill.data || [];
+      const thongBaoList = resThongBao.data || [];
 
       const filterByWallet = (list) => {
          if (!hinhThucFilter) return list;
@@ -768,13 +786,26 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalKho = filterByWallet(khoList);
       const finalHd = filterByWallet(hdList);
       const finalBill = filterByWallet(billList);
+      const finalThongBao = filterByWallet(thongBaoList);
+      const paidInvoiceKeys = new Set(
+         finalHd
+            .filter(h => !isDeleted(h))
+            .map(buildTuitionMatchKey)
+            .filter(Boolean)
+      );
+      const pendingNotices = finalThongBao.filter(tb => {
+         if (isDeleted(tb)) return false;
+         const noticeKey = buildTuitionMatchKey(tb);
+         return noticeKey ? !paidInvoiceKeys.has(noticeKey) : true;
+      });
 
       setStats({
          phieuChi: finalChi.filter(c => !isDeleted(c) && (!c.loaiphieu || c.loaiphieu === 'Chi')).reduce((s, c) => s + pCur(c.chiphi), 0),
          thuKhac: finalChi.filter(c => !isDeleted(c) && c.loaiphieu === 'Thu').reduce((s, c) => s + pCur(c.chiphi), 0),
          nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
          thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
-         thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0)
+         thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0),
+         doanhThuDuKien: pendingNotices.reduce((s, tb) => s + pCur(tb.tongcong), 0)
       });
 
       let activeDataRaw = [];
@@ -782,6 +813,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       else if (activeSubTab === 'hoadon') activeDataRaw = hdList;
       else if (activeSubTab === 'nhapkho') activeDataRaw = khoList;
       else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') activeDataRaw = billList;
+      else if (activeSubTab === 'doanhthudukien') activeDataRaw = pendingNotices;
 
       let orderBy = activeSubTab === 'nhapkho' ? 'ngaynhap' : 'ngaylap';
       const sorted = [...activeDataRaw].sort((a, b) => {
@@ -842,6 +874,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             }
             return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.dadong || i.tongcong), fCur(i.conno || 0), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
          });
+      } else if (activeSubTab === 'doanhthudukien') {
+         headers = ['Số thông báo', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Còn dự kiến'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien || i.manv, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.conno || i.tongcong)]);
       } else {
          alert('Chưa hỗ trợ xuất cho tab này'); return;
       }
@@ -1012,6 +1047,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             } else if (activeSubTab === 'phieuchi') {
                const operatorName = (nvMap[item.manv] || '').toLowerCase();
                if (operatorName.includes(lowerQ)) return true;
+            } else if (activeSubTab === 'doanhthudukien') {
+               const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
+               if (studentName.includes(lowerQ)) return true;
             } else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') {
                const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
                const productName = (hhMap[item.mahang] || '').toLowerCase();
@@ -1271,6 +1309,75 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            </div>
                         );
                      })}
+                  </div>
+               </>
+            );
+         case 'doanhthudukien':
+            return (
+               <>
+                  <div className="table-scroll-wrapper">
+                     <table className="fm-table">
+                        <thead>
+                           <tr>
+                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Số thông báo <SortIcon columnKey="mahd" /></th>
+                              <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học sinh <SortIcon columnKey="mahv" /></th>
+                              <th>Tên lớp</th>
+                              <th>Người lập</th>
+                              <th>Thời lượng</th>
+                              <th>Hình thức</th>
+                              <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right">Giảm Học Phí</th>
+                              <th className="text-right">Còn Dự Kiến</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {filteredData.map(r => (
+                              <tr key={r.mahd}>
+                                 <td className="fm-code font-semibold">{r.mahd}</td>
+                                 <td>{formatDate(r.ngaylap)}</td>
+                                 <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                 <td>{r.tenlop}</td>
+                                 <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                 <td>{r.thoiluong || '_'}</td>
+                                 <td>{r.hinhthuc}</td>
+                                 <td className="text-right">{fCur(r.tongcong)}</td>
+                                 <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                 <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+
+                  <div className="fm-card-list">
+                     {filteredData.map(r => (
+                        <div key={r.mahd} className="fm-card" style={{ border: '1px solid #99f6e4', background: '#f0fdfa' }}>
+                           <div className="fm-card-header">
+                              <span className="fm-card-code">{r.mahd}</span>
+                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                           </div>
+                           <div className="fm-card-body">
+                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
+                              <div className="fm-card-row">
+                                 <span>Tổng cộng:</span>
+                                 <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                              </div>
+                              {pCur(r.giamhocphi) > 0 && (
+                                 <div className="fm-card-row">
+                                    <span>Giảm học phí:</span>
+                                    <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
+                                 </div>
+                              )}
+                              <div className="fm-card-row price-row">
+                                 <span>Còn dự kiến:</span>
+                                 <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
+                              </div>
+                           </div>
+                        </div>
+                     ))}
                   </div>
                </>
             );
@@ -1586,6 +1693,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu học phí</span>
                      <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('doanhthudukien'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-dukien"><Clock size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Doanh thu dự kiến</span>
+                     <span className="fm-stat-value" style={{ color: '#0f766e' }}>{fCur(stats.doanhThuDuKien)}</span>
                   </div>
                </div>
                <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuchi'); setLoaiPhieuFilter('Chi'); }} style={{ cursor: 'pointer' }}>

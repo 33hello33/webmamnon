@@ -52,6 +52,7 @@ const ALL_TABS = [
     subTabs: [
       { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'hoadon', label: 'QL phiếu thu HP' },
+      { id: 'doanhthudukien', label: 'Doanh thu dự kiến' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
     ]
