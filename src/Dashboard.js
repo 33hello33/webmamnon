@@ -270,6 +270,8 @@ function Dashboard() {
 
       (classStudents || []).filter((student) => student?.mahv).forEach((student) => {
         (updatedRows || []).forEach((notice) => {
+          if (notice?.title === 'CHƯƠNG TRÌNH HỌC') return;
+
           chatPayloads.push({
             mahv: student.mahv,
             manv: notice.manv || user?.manv || user?.username,
