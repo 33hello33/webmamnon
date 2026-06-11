@@ -104,6 +104,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [pickupForm, setPickupForm] = useState({ name: '', phone: '', relation: '', reason: '' });
    const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
    const [medicineForm, setMedicineForm] = useState({ name: '', usage: '' });
+   const [medicineSubmitting, setMedicineSubmitting] = useState(false);
    const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
    const [feedbackContent, setFeedbackContent] = useState('');
    const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -133,6 +134,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [loadingInvoiceImage, setLoadingInvoiceImage] = useState(false);
    const [staffDirectory, setStaffDirectory] = useState({});
    const leaveSubmitLockRef = useRef(false);
+   const medicineSubmitLockRef = useRef(false);
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
 
@@ -673,14 +675,22 @@ function ParentPortal({ parentData, setParentData }) {
 
    const handleMedicineSubmit = async (e) => {
       e.preventDefault();
+      if (medicineSubmitLockRef.current) return;
       if (!medicineForm.name || !medicineForm.usage) {
          alert('Vui lòng nhập đầy đủ thông tin dặn thuốc.');
          return;
       }
-      const msg = `💊 LỜI DẶN THUỐC\n- Bé: ${parentData.student.tenhv}\n- Tên thuốc: ${medicineForm.name}\n- Cách dùng: ${medicineForm.usage}`;
-      await sendQuickMessage(msg);
-      setIsMedicineModalOpen(false);
-      setMedicineForm({ name: '', usage: '' });
+      medicineSubmitLockRef.current = true;
+      setMedicineSubmitting(true);
+      try {
+         const msg = `💊 LỜI DẶN THUỐC\n- Bé: ${parentData.student.tenhv}\n- Tên thuốc: ${medicineForm.name}\n- Cách dùng: ${medicineForm.usage}`;
+         await sendQuickMessage(msg);
+         setIsMedicineModalOpen(false);
+         setMedicineForm({ name: '', usage: '' });
+      } finally {
+         medicineSubmitLockRef.current = false;
+         setMedicineSubmitting(false);
+      }
    };
 
    const handleFeedbackSubmit = async (e) => {
@@ -2623,7 +2633,9 @@ function ParentPortal({ parentData, setParentData }) {
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Cách dùng & Liều lượng</label>
                         <textarea placeholder="Ví dụ: Uống 1 viên sau ăn trưa lúc 11h30..." value={medicineForm.usage} onChange={e => setMedicineForm({ ...medicineForm, usage: e.target.value })} rows="3" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none' }} />
                      </div>
-                     <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', color: 'white', border: 'none', fontWeight: 800, fontSize: '1rem', marginTop: '10px' }}>Gửi lời dặn</button>
+                     <button type="submit" disabled={medicineSubmitting} style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', color: 'white', border: 'none', fontWeight: 800, fontSize: '1rem', marginTop: '10px', opacity: medicineSubmitting ? 0.8 : 1, cursor: medicineSubmitting ? 'wait' : 'pointer' }}>
+                        {medicineSubmitting ? <Loader2 size={20} className="spinner" /> : 'Gửi lời dặn'}
+                     </button>
                   </form>
                </div>
             </div>
