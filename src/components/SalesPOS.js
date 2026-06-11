@@ -578,6 +578,11 @@ export default function SalesPOS() {
 
                   <div style={{ marginTop: '15px', padding: '12px 0', borderTop: '2.5px solid #333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12pt" }}>
+                        <div>Tổng hàng: <b>{fCur(posPrintData?.tongcong)}</b></div>
+                        <div style={{ color: '#dc2626', fontWeight: 'bold' }}>Giảm giá: -{fCur(posPrintData?.giamgia)}</div>
+                        <div>Thành tiền: <b>{fCur(posPrintData?.thanhtien)}</b></div>
+                     </div>
+                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12pt" }}>
                         <div>Nợ cũ hàng: <b>{fCur(posPrintData?.nocu)}</b></div>
                         <div>Tổng bill: <b style={{ fontSize: '14pt' }}>{fCur(posPrintData?.tongcong_bill)}</b></div>
                         <div style={{ color: '#0ea5e9', fontWeight: 'bold' }}>Hình thức: {posPrintData?.hinhthuc}</div>
