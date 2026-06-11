@@ -49,6 +49,13 @@ const getVietnamTimeTotal = (date = new Date()) => {
    return (parseInt(hour, 10) || 0) * 60 + (parseInt(minute, 10) || 0);
 };
 
+const getYearMonthKey = (dateStr) => {
+   if (!dateStr) return '';
+   const date = new Date(dateStr);
+   if (Number.isNaN(date.getTime())) return '';
+   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
 const formatDateStringVi = (dateStr) => {
    if (!dateStr) return '';
    const [year, month, day] = String(dateStr).split('-');
@@ -1253,14 +1260,19 @@ function ParentPortal({ parentData, setParentData }) {
       const latestNotify = parentData?.latestFee;
       const invoices = parentData?.invoices || [];
       const latestInv = invoices[0] || null;
+      const currentVietnamDate = getVietnamDateParts();
+      const currentYearMonth = `${currentVietnamDate.year}-${currentVietnamDate.month}`;
+      const currentDay = parseInt(currentVietnamDate.day, 10) || 0;
 
-      if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true };
+      if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true, isOverdue: false, statusLabel: 'Đã thanh toán' };
 
       if (!latestNotify && latestInv) {
          const monthText = getFeePeriodLabel(latestInv);
          return {
             text: `Học phí đã thanh toán tháng ${monthText}`,
             isPaid: true,
+            isOverdue: false,
+            statusLabel: 'Đã thanh toán',
             record: latestInv,
             activeNotice: null
          };
@@ -1272,19 +1284,26 @@ function ParentPortal({ parentData, setParentData }) {
       const matchedInvoiceTime = getRecordTime(matchedInvoice);
       const isPaid = Boolean(matchedInvoice && matchedInvoiceTime >= notifyTime);
       const monthText = getFeePeriodLabel(latestNotify);
+      const feeYearMonth = getYearMonthKey(latestNotify.ngaybatdau || latestNotify.ngaylap);
+      const isCurrentOrPastFee = feeYearMonth ? feeYearMonth <= currentYearMonth : true;
+      const isOverdue = !isPaid && isCurrentOrPastFee && currentDay > 10;
 
       if (isPaid) {
          return {
             text: `Học phí đã thanh toán tháng ${monthText}`,
             isPaid: true,
+            isOverdue: false,
+            statusLabel: 'Đã thanh toán',
             record: matchedInvoice || latestNotify,
             activeNotice: latestNotify
          };
       }
 
       return {
-         text: `Học phí cần thanh toán tháng ${monthText}`,
+         text: isOverdue ? `Học phí quá hạn thanh toán tháng ${monthText}` : `Học phí cần thanh toán tháng ${monthText}`,
          isPaid: false,
+         isOverdue,
+         statusLabel: isOverdue ? 'Quá hạn' : (latestNotify.status || 'Chờ thanh toán'),
          record: latestNotify,
          activeNotice: latestNotify
       };
@@ -2264,9 +2283,21 @@ function ParentPortal({ parentData, setParentData }) {
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
                         {parentData.latestFee ? (
                            <>
-                              {!tuitionStatus.isPaid && (
+                              {!tuitionStatus.isPaid && !tuitionStatus.isOverdue && (
                                  <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
                                     {tuitionStatus.text}
+                                 </div>
+                              )}
+                              {tuitionStatus.isOverdue && (
+                                 <div style={{ background: 'linear-gradient(180deg, #ff4d8d 0%, #e11d48 52%, #9f1239 100%)', color: 'white', padding: '24px 22px', borderRadius: '28px', marginBottom: '20px', minHeight: '50vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', boxShadow: '0 22px 45px rgba(225, 29, 72, 0.38)', border: '2px solid rgba(255,255,255,0.32)' }}>
+                                    <div style={{ fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '14px', opacity: 0.95 }}>Thông báo quá hạn</div>
+                                    <div style={{ fontSize: 'clamp(2rem, 8vw, 3.4rem)', fontWeight: 900, lineHeight: 1.1, marginBottom: '12px' }}>Chưa đóng học phí</div>
+                                    <div style={{ fontSize: 'clamp(1rem, 4.2vw, 1.35rem)', fontWeight: 700, maxWidth: '26rem', lineHeight: 1.5 }}>
+                                       {tuitionStatus.text}
+                                    </div>
+                                    <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '999px', padding: '10px 18px', fontSize: 'clamp(0.95rem, 3.8vw, 1.1rem)', fontWeight: 800 }}>
+                                       Vui lòng hoàn tất thanh toán sau ngày 10
+                                    </div>
                                  </div>
                               )}
                               <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
@@ -2280,7 +2311,7 @@ function ParentPortal({ parentData, setParentData }) {
                                     </div>
                                  </div>
                                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700 }}>{tuitionStatus.isPaid ? 'Đã thanh toán' : (parentData.latestFee.status || 'Chờ thanh toán')}</span></div>
+                                    <div style={{ fontSize: '0.85rem' }}>Trạng thái: <span style={{ fontWeight: 700, color: tuitionStatus.isOverdue ? '#fecdd3' : 'inherit' }}>{tuitionStatus.statusLabel}</span></div>
                                     {!tuitionStatus.isPaid && (
                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                           <button onClick={handleOpenTuitionNoticeImage} disabled={loadingTuitionNoticeImage} style={{ background: 'white', color: '#b71c1c', border: 'none', padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, cursor: loadingTuitionNoticeImage ? 'wait' : 'pointer', opacity: loadingTuitionNoticeImage ? 0.8 : 1 }}>{loadingTuitionNoticeImage ? 'Đang tải...' : 'Xem thông báo'}</button>
