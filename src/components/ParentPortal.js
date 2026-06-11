@@ -1842,6 +1842,37 @@ function ParentPortal({ parentData, setParentData }) {
                      </div>
                   </div>
 
+                  {tuitionStatus.isOverdue && (
+                     <div
+                        onClick={() => setParentTab('fee-tab')}
+                        style={{
+                           background: 'linear-gradient(180deg, #ff4d8d 0%, #e11d48 52%, #9f1239 100%)',
+                           color: 'white',
+                           borderRadius: '28px',
+                           padding: '24px 22px',
+                           marginBottom: '20px',
+                           minHeight: '50vh',
+                           display: 'flex',
+                           flexDirection: 'column',
+                           justifyContent: 'center',
+                           alignItems: 'center',
+                           textAlign: 'center',
+                           boxShadow: '0 22px 45px rgba(225, 29, 72, 0.38)',
+                           border: '2px solid rgba(255,255,255,0.28)',
+                           cursor: 'pointer'
+                        }}
+                     >
+                        <div style={{ fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '14px', opacity: 0.95 }}>Thông báo quá hạn</div>
+                        <div style={{ fontSize: 'clamp(2rem, 8vw, 3.4rem)', fontWeight: 900, lineHeight: 1.1, marginBottom: '12px' }}>Chưa đóng học phí</div>
+                        <div style={{ fontSize: 'clamp(1rem, 4.2vw, 1.35rem)', fontWeight: 700, maxWidth: '26rem', lineHeight: 1.5 }}>
+                           {tuitionStatus.text}
+                        </div>
+                        <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '999px', padding: '10px 18px', fontSize: 'clamp(0.95rem, 3.8vw, 1.1rem)', fontWeight: 800 }}>
+                           Vui lòng hoàn tất thanh toán sau ngày 10
+                        </div>
+                     </div>
+                  )}
+
                   <div className="premium-quick-cards">
                      <div className="premium-card" onClick={() => setParentTab('attendance-tab')}>
                         <div className="premium-card-icon"><QrCode size={20} /></div>
@@ -2286,18 +2317,6 @@ function ParentPortal({ parentData, setParentData }) {
                               {!tuitionStatus.isPaid && !tuitionStatus.isOverdue && (
                                  <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
                                     {tuitionStatus.text}
-                                 </div>
-                              )}
-                              {tuitionStatus.isOverdue && (
-                                 <div style={{ background: 'linear-gradient(180deg, #ff4d8d 0%, #e11d48 52%, #9f1239 100%)', color: 'white', padding: '24px 22px', borderRadius: '28px', marginBottom: '20px', minHeight: '50vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', boxShadow: '0 22px 45px rgba(225, 29, 72, 0.38)', border: '2px solid rgba(255,255,255,0.32)' }}>
-                                    <div style={{ fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '14px', opacity: 0.95 }}>Thông báo quá hạn</div>
-                                    <div style={{ fontSize: 'clamp(2rem, 8vw, 3.4rem)', fontWeight: 900, lineHeight: 1.1, marginBottom: '12px' }}>Chưa đóng học phí</div>
-                                    <div style={{ fontSize: 'clamp(1rem, 4.2vw, 1.35rem)', fontWeight: 700, maxWidth: '26rem', lineHeight: 1.5 }}>
-                                       {tuitionStatus.text}
-                                    </div>
-                                    <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '999px', padding: '10px 18px', fontSize: 'clamp(0.95rem, 3.8vw, 1.1rem)', fontWeight: 800 }}>
-                                       Vui lòng hoàn tất thanh toán sau ngày 10
-                                    </div>
                                  </div>
                               )}
                               <div className="fee-card-premium" style={{ background: tuitionStatus.isPaid ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : 'linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%)', color: 'white', padding: '25px', borderRadius: '20px', marginBottom: '20px', boxShadow: tuitionStatus.isPaid ? '0 10px 15px -3px rgba(22, 163, 74, 0.3)' : '0 10px 15px -3px rgba(183, 28, 28, 0.3)' }}>
