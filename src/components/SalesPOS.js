@@ -57,7 +57,15 @@ export default function SalesPOS() {
    useEffect(() => { fetchBaseData(); }, []);
 
    const fCur = (val) => val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : '0';
-   const pCur = (val) => parseInt(String(val).replace(/,/g, ''), 10) || 0;
+const pCur = (val) => parseInt(String(val).replace(/,/g, ''), 10) || 0;
+const buildBillFileName = (studentName, billCode) => {
+   const safeName = String(studentName || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/\s+/g, ' ');
+   return `BH_${safeName} _${billCode}.png`;
+};
 
    const calculateOldDebt = async (mahv) => {
       try {
@@ -261,7 +269,7 @@ export default function SalesPOS() {
                   } else {
                      // Desktop: Auto download
                      const link = document.createElement('a');
-                     link.download = `Bill_${newMaBill}.png`;
+                     link.download = buildBillFileName(selectedStudent?.tenhv, newMaBill);
                      link.href = dataUrl;
                      link.click();
                   }
