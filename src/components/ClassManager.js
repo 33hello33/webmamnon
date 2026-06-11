@@ -167,6 +167,25 @@ const parseFormattedNumber = (val) => {
   return parseInt(val.toString().replace(/,/g, ''), 10) || 0;
 };
 
+const getNextNoticeNumber = async () => {
+  const { data, error } = await supabase
+    .from('tbl_thongbao')
+    .select('mahd')
+    .not('mahd', 'is', null)
+    .ilike('mahd', 'TB%');
+
+  if (error) throw error;
+
+  const maxNumber = (data || []).reduce((max, row) => {
+    const value = String(row?.mahd || '').trim();
+    const matchedNumber = parseInt(value.replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(matchedNumber)) return max;
+    return Math.max(max, matchedNumber);
+  }, 0);
+
+  return maxNumber + 1;
+};
+
 const getMealFeeInfo = (value, fallbackDays = 0) => {
   if (value === null || value === undefined || value === '') {
     return { amount: 0, days: fallbackDays };
@@ -1009,12 +1028,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const currentNotices = [];
       const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
-      const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
-      let nextNum = 1;
-      if (recentTB && recentTB.length > 0 && recentTB[0].mahd) {
-        const numPart = recentTB[0].mahd.replace(/\D/g, '');
-        if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
-      }
+      const nextNum = await getNextNoticeNumber();
 
       for (let i = 0; i < batchStudentsData.length; i++) {
         const row = batchStudentsData[i];
