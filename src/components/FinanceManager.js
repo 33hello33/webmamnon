@@ -659,10 +659,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleOpenCanDoi = () => {
       setCanDoiData({
-         vi1: initialBalances.vi1.toString(),
-         vi2: initialBalances.vi2.toString(),
-         vi3: initialBalances.vi3.toString(),
-         vi4: initialBalances.vi4.toString(),
+         vi1: currentBalances.vi1.toString(),
+         vi2: currentBalances.vi2.toString(),
+         vi3: currentBalances.vi3.toString(),
+         vi4: currentBalances.vi4.toString(),
          noidung: 'Cân đối dòng tiền định kỳ'
       });
       setCanDoiModal(true);
@@ -2497,7 +2497,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const diff = h[w.id] || {};
                                           const truoc = pCur(diff.truoc) || 0;
                                           const sau = pCur(diff.sau) || 0;
-                                          const offset = sau - truoc;
                                           return (
                                              <div key={w.id} style={{ background: 'white', padding: '10px 14px', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                                 <div style={{ fontSize: '0.75rem', fontWeight: 850, color: '#475569', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px' }}>{w.name}</div>
@@ -2515,7 +2514,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                                       <span style={{ color: '#8b5cf6' }}>{fCur(sau)}</span>
                                                    </div>
                                                    {(() => {
-                                                      const chenhLech = (pCur(diff.dauky) || 0) - sau;
+                                                      const chenhLech = truoc - sau;
                                                       if (chenhLech === 0) return null;
                                                       return (
                                                          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: chenhLech > 0 ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '2px', background: chenhLech > 0 ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px', alignSelf: 'flex-end' }}>
