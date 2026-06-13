@@ -1110,15 +1110,62 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const fetchInvoiceImageUrl = async () => {
-      const invoiceRecord = tuitionStatus?.record;
-      if (!tuitionStatus?.isPaid || !invoiceRecord || !parentData?.student?.mahv) return null;
+      if (!parentData?.student?.mahv) return null;
+
+      const studentId = String(parentData.student.mahv || '').trim();
+      const invoices = parentData?.invoices || [];
+      const activeNotice = tuitionStatus?.activeNotice || parentData?.latestFee || null;
+      const noticePeriod = normalizeFeePeriod(activeNotice);
+      const invoiceRecord = (() => {
+         if (tuitionStatus?.isPaid && tuitionStatus?.record) return tuitionStatus.record;
+         if (noticePeriod) {
+            const matchedInvoice = invoices.find(inv => normalizeFeePeriod(inv) === noticePeriod);
+            if (matchedInvoice) return matchedInvoice;
+         }
+         return invoices[0] || null;
+      })();
+
+      if (!invoiceRecord) return null;
 
       const invoiceId = String(invoiceRecord.mahd || '').trim();
-      const studentId = String(parentData.student.mahv || '').trim();
       const candidateUrls = [];
 
       if (invoiceRecord.image_url) {
          candidateUrls.push(invoiceRecord.image_url);
+      }
+
+      if (activeNotice?.image_url) {
+         candidateUrls.push(activeNotice.image_url);
+      }
+
+      const { data: invoiceRows, error: invoiceRowsError } = await supabase
+         .from('tbl_hd')
+         .select('mahd, image_url, thoiluong, ngaylap')
+         .eq('mahv', studentId)
+         .order('ngaylap', { ascending: false })
+         .limit(20);
+
+      if (invoiceRowsError) {
+         console.warn('Không đọc được danh sách image_url từ tbl_hd:', invoiceRowsError);
+      }
+
+      const validInvoiceRows = (invoiceRows || []).filter(row => row?.image_url);
+      const exactInvoiceRow = invoiceId
+         ? validInvoiceRows.find(row => String(row.mahd || '').trim() === invoiceId)
+         : null;
+      if (exactInvoiceRow?.image_url) {
+         candidateUrls.push(exactInvoiceRow.image_url);
+      }
+
+      if (noticePeriod) {
+         const periodMatchedRow = validInvoiceRows.find(row => normalizeFeePeriod(row) === noticePeriod);
+         if (periodMatchedRow?.image_url) {
+            candidateUrls.push(periodMatchedRow.image_url);
+         }
+      }
+
+      if (validInvoiceRows[0]?.image_url) {
+         candidateUrls.push(validInvoiceRows[0].image_url);
       }
 
       if (invoiceId) {
@@ -1137,6 +1184,22 @@ function ParentPortal({ parentData, setParentData }) {
          }
       }
 
+      if (activeNotice?.mahd) {
+         const { data: noticeData, error: noticeError } = await supabase
+            .from('tbl_thongbao')
+            .select('image_url')
+            .eq('mahv', studentId)
+            .eq('mahd', String(activeNotice.mahd).trim())
+            .maybeSingle();
+
+         if (noticeError) {
+            console.warn('Không đọc được image_url từ tbl_thongbao:', noticeError);
+         }
+         if (noticeData?.image_url) {
+            candidateUrls.push(noticeData.image_url);
+         }
+      }
+
       if (!invoiceId) {
          return await getFirstWorkingImageUrl(candidateUrls);
       }
@@ -1148,7 +1211,14 @@ function ParentPortal({ parentData, setParentData }) {
          if (validMessages.length === 0) return null;
 
          const exactMatch = validMessages.find(msg => String(msg.content || '').includes(invoiceId));
-         return exactMatch?.image_url || null;
+         if (exactMatch?.image_url) return exactMatch.image_url;
+
+         if (noticePeriod) {
+            const samePeriodMatch = validMessages.find(msg => String(msg.content || '').toLowerCase().includes(noticePeriod));
+            if (samePeriodMatch?.image_url) return samePeriodMatch.image_url;
+         }
+
+         return validMessages[0]?.image_url || null;
       };
 
       let imageUrl = pickExactInvoiceImage(chatMessages);

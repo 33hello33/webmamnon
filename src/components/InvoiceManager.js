@@ -207,6 +207,30 @@ const dataUrlToBlob = (dataUrl) => {
    return new Blob([bytes], { type: mime });
 };
 
+const sanitizeFileSegment = (value, fallback = 'file') => {
+   const normalized = String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .replace(/[\\/:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\s/g, '_')
+      .replace(/[^A-Za-z0-9._-]/g, '');
+
+   return normalized || fallback;
+};
+
+const buildStoredImageKey = (folder, studentId, recordId, extension = 'jpg') => {
+   const safeFolder = sanitizeFileSegment(folder, 'exports');
+   const safeStudentId = sanitizeFileSegment(studentId, 'student');
+   const safeRecordId = sanitizeFileSegment(recordId, 'record');
+   const safeExtension = sanitizeFileSegment(extension, 'jpg').replace(/^\.+/, '') || 'jpg';
+
+   return `${safeFolder}/${safeStudentId}/${Date.now()}_${safeRecordId}.${safeExtension}`;
+};
+
 export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }) {
    const { config, getTienAnConfig } = useConfig();
    const walletsConfig = (config ? [
@@ -342,7 +366,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      setPreviewImg(dataUrl);
                   } else {
                      const link = document.createElement('a');
-                     link.download = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
+                     link.download = `${sanitizeFileSegment(`HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'HoaDon')}.png`;
                      link.href = dataUrl;
                      document.body.appendChild(link);
                      link.click();
@@ -350,10 +374,16 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }
 
                   try {
-                     const fileName = `HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}.png`;
+                     const fileName = `${sanitizeFileSegment(`HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'HoaDon')}.png`;
                      const blob = dataUrlToBlob(dataUrl);
                      const pngFile = new File([blob], fileName, { type: 'image/png' });
                      const file = await compressImage(pngFile, 150);
+                     const storedImageKey = buildStoredImageKey(
+                        'invoice-images',
+                        downloadingInvoice.mahv,
+                        downloadingInvoice.mahd,
+                        file.name.split('.').pop() || 'jpg'
+                     );
 
                      let imageUrl = '';
                      if (configRef.current?.r2_enabled) {
@@ -363,13 +393,13 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            configRef.current.r2_access_key_id,
                            configRef.current.r2_secret_access_key,
                            configRef.current.r2_bucket_name,
-                           configRef.current.r2_public_url
+                           configRef.current.r2_public_url,
+                           { key: storedImageKey }
                         );
                      } else {
-                        const path = `chat-images/${downloadingInvoice.mahv}_${Date.now()}_${file.name}`;
-                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file);
                         if (upErr) throw upErr;
-                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
                         imageUrl = publicUrl;
                      }
 
@@ -454,7 +484,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      setPreviewImg(dataUrl);
                   } else {
                      const link = document.createElement('a');
-                     link.download = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
+                     link.download = `${sanitizeFileSegment(`ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}`, 'ThongBao')}.png`;
                      link.href = dataUrl;
                      document.body.appendChild(link);
                      link.click();
@@ -462,10 +492,16 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }
 
                   try {
-                     const fileName = `ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
+                     const fileName = `${sanitizeFileSegment(`ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}`, 'ThongBao')}.png`;
                      const blob = dataUrlToBlob(dataUrl);
                      const pngFile = new File([blob], fileName, { type: 'image/png' });
                      const file = await compressImage(pngFile, 150);
+                     const storedImageKey = buildStoredImageKey(
+                        'notice-images',
+                        downloadingNotice.mahv,
+                        downloadingNotice.mahd,
+                        file.name.split('.').pop() || 'jpg'
+                     );
 
                      let imageUrl = '';
                      if (config?.r2_enabled) {
@@ -475,13 +511,13 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            config.r2_access_key_id,
                            config.r2_secret_access_key,
                            config.r2_bucket_name,
-                           config.r2_public_url
+                           config.r2_public_url,
+                           { key: storedImageKey }
                         );
                      } else {
-                        const path = `chat-images/${downloadingNotice.mahv}_${Date.now()}_${file.name}`;
-                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file);
                         if (upErr) throw upErr;
-                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
                         imageUrl = publicUrl;
                      }
 
