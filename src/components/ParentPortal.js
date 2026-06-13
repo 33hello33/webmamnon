@@ -1134,10 +1134,6 @@ function ParentPortal({ parentData, setParentData }) {
          candidateUrls.push(invoiceRecord.image_url);
       }
 
-      if (activeNotice?.image_url) {
-         candidateUrls.push(activeNotice.image_url);
-      }
-
       const { data: invoiceRows, error: invoiceRowsError } = await supabase
          .from('tbl_hd')
          .select('mahd, image_url, thoiluong, ngaylap')
@@ -1164,10 +1160,6 @@ function ParentPortal({ parentData, setParentData }) {
          }
       }
 
-      if (validInvoiceRows[0]?.image_url) {
-         candidateUrls.push(validInvoiceRows[0].image_url);
-      }
-
       if (invoiceId) {
          const { data: invoiceData, error: invoiceError } = await supabase
             .from('tbl_hd')
@@ -1184,22 +1176,6 @@ function ParentPortal({ parentData, setParentData }) {
          }
       }
 
-      if (activeNotice?.mahd) {
-         const { data: noticeData, error: noticeError } = await supabase
-            .from('tbl_thongbao')
-            .select('image_url')
-            .eq('mahv', studentId)
-            .eq('mahd', String(activeNotice.mahd).trim())
-            .maybeSingle();
-
-         if (noticeError) {
-            console.warn('Không đọc được image_url từ tbl_thongbao:', noticeError);
-         }
-         if (noticeData?.image_url) {
-            candidateUrls.push(noticeData.image_url);
-         }
-      }
-
       if (!invoiceId) {
          return await getFirstWorkingImageUrl(candidateUrls);
       }
@@ -1211,14 +1187,7 @@ function ParentPortal({ parentData, setParentData }) {
          if (validMessages.length === 0) return null;
 
          const exactMatch = validMessages.find(msg => String(msg.content || '').includes(invoiceId));
-         if (exactMatch?.image_url) return exactMatch.image_url;
-
-         if (noticePeriod) {
-            const samePeriodMatch = validMessages.find(msg => String(msg.content || '').toLowerCase().includes(noticePeriod));
-            if (samePeriodMatch?.image_url) return samePeriodMatch.image_url;
-         }
-
-         return validMessages[0]?.image_url || null;
+         return exactMatch?.image_url || null;
       };
 
       let imageUrl = pickExactInvoiceImage(chatMessages);
