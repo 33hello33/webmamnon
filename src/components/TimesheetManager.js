@@ -751,10 +751,10 @@ export default function TimesheetManager() {
                <div className="p-header" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                   <div>
                      <h3 style={{ margin: 0 }}>
-                        {process.env.REACT_APP_COMPANY_NAME || 'Anh Ngữ Kỹ Năng E - Skills'}
+                        {process.env.REACT_APP_COMPANY_NAME || 'Anh Ngữ'}
                      </h3>
-                     <p>{process.env.REACT_APP_COMPANY_ADDRESS || 'ĐC: 668 Phùng Hưng, An Phước, Đồng Nai'}</p>
-                     <p>{process.env.REACT_APP_COMPANY_PHONE || 'SĐT: 0327.797.787'}</p>
+                     <p>{process.env.REACT_APP_COMPANY_ADDRESS || 'ĐC:'}</p>
+                     <p>{process.env.REACT_APP_COMPANY_PHONE || 'SĐT:'}</p>
                   </div>
 
                   <div style={{ textAlign: 'right' }}>

@@ -326,7 +326,7 @@ function Login() {
    const handleParentLogin = async (e) => {
       e.preventDefault();
       if (!username || !password) {
-         setMessage({ type: 'error', text: 'Vui l�ng nh?p d?y d? t�n dang nh?p v� m?t kh?u.' });
+         setMessage({ type: 'error', text: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.' });
          return;
       }
 
@@ -336,7 +336,7 @@ function Login() {
          const result = await authenticateParent(username, password);
 
          if (!result.ok) {
-            setMessage({ type: 'error', text: 'T�n dang nh?p ho?c m?t kh?u ph? huynh kh�ng d�ng.' });
+            setMessage({ type: 'error', text: 'Tên đăng nhập hoặc mật khẩu phụ huynh không đúng.' });
             setLoading(false);
             return;
          }
@@ -344,7 +344,7 @@ function Login() {
          await completeParentLogin(result.student, username, password);
       } catch (err) {
          console.error(err);
-         setMessage({ type: 'error', text: 'L?i h? th?ng khi tra c?u d? li?u.' });
+         setMessage({ type: 'error', text: 'Lỗi hệ thống khi tra cứu dữ liệu.' });
       }
       setLoading(false);
    };
