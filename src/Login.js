@@ -40,6 +40,27 @@ function Login() {
    const [changePassLoading, setChangePassLoading] = useState(false);
    const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
 
+   const isAttendanceRole = (role) => ['Giáo viên', 'Trợ giảng'].includes(String(role || '').trim());
+   const isAssignedAttendanceClass = (classItem, user) => {
+      if (!classItem || !user) return false;
+
+      const userIds = [user.manv, user.username, user.tennv, user.id]
+         .map(value => String(value || '').trim())
+         .filter(Boolean);
+
+      const maxAssistants = Math.max(0, Math.min(3, parseInt(config?.sonhanvientrogiang || '0', 10) || 0));
+      const assignedIds = [classItem.manv];
+
+      for (let i = 1; i <= maxAssistants; i++) {
+         assignedIds.push(classItem[`manv${i}`]);
+      }
+
+      return assignedIds
+         .map(value => String(value || '').trim())
+         .filter(Boolean)
+         .some(value => userIds.includes(value));
+   };
+
    const getWalletsFromConfig = () => {
       if (!config) return [];
       const wallets = [];
@@ -179,13 +200,13 @@ function Login() {
             const user = data[0];
             if (user.trangthai === 'Đã Nghỉ') {
                setMessage({ type: 'error', text: 'Tài khoản đã nghỉ việc.' });
-            } else if (user.role === 'Giáo viên') {
+            } else if (isAttendanceRole(user.role)) {
                // Chế độ Điểm danh
                setAttendanceUser(user);
                setLoginMode('attendance');
                const { data: allCls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
                if (allCls) {
-                  setAttClasses(allCls.filter(c => c.manv === user.manv || c.manv === user.username || c.manv === user.tennv || c.manv === user.id));
+                  setAttClasses(allCls.filter(c => isAssignedAttendanceClass(c, user)));
                }
                setMessage({ type: 'success', text: 'Đăng nhập thành công!' });
             } else {
@@ -564,7 +585,7 @@ function Login() {
                      </div>
                   )}
                   <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                     {attendanceUser.role !== 'Giáo viên' && (
+                     {!isAttendanceRole(attendanceUser.role) && (
                         <div style={{ flex: 1, minWidth: '150px' }}>
                            <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#334155' }}>Ngày điểm danh bù</label>
                            <input type="date" value={attDate} onChange={e => setAttDate(e.target.value)} style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px' }} />

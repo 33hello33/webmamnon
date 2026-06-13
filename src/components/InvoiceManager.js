@@ -167,6 +167,18 @@ const calculateConsecutiveLeave = (attendance) => {
    }));
 };
 
+const normalizeStudentStatus = (value) => (
+   String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd')
+      .trim()
+      .toLowerCase()
+);
+
+const isInactiveStudent = (student) => normalizeStudentStatus(student?.trangthai) === 'da nghi';
+
 export default function InvoiceManager() {
    const { config } = useConfig();
    const walletsConfig = (config ? [
@@ -223,11 +235,11 @@ export default function InvoiceManager() {
 
    const fetchBaseData = async () => {
       try {
-         const { data: stRaw } = await supabase.from('tbl_hv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null').order('tenhv', { ascending: true });
+         const { data: stRaw } = await supabase.from('tbl_hv').select('*').order('tenhv', { ascending: true });
          const { data: cls } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
          const { data: emp } = await supabase.from('tbl_nv').select('*');
 
-         const st = (stRaw || []).map(s => ({
+         const st = (stRaw || []).filter(s => !isInactiveStudent(s)).map(s => ({
             ...s,
             malop_list: s.malop ? [s.malop] : []
          }));
