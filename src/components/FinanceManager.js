@@ -48,6 +48,14 @@ const buildTuitionMatchKey = (item) => {
    const endDate = String(item.ngayketthuc || '').slice(0, 10);
    return [mahv, period || `${startDate}_${endDate}`].join('::');
 };
+const formatLocalDate = (dateObj) => {
+   if (!dateObj) return '';
+   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+};
+const createLocalDateTime = (dateObj = new Date()) => {
+   if (!dateObj) return '';
+   return `${formatLocalDate(dateObj)}T${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
+};
 
 // Moved inside component to use config
 const READ_NUMBER_VN = (number) => {
@@ -493,16 +501,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
          const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
          const manv = auth.user?.manv || '';
-         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+         const localNow = createLocalDateTime();
 
          // 1. Insert into tbl_candoidongtien
          const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
             noidung: canDoiData.noidung,
             manv: manv,
-            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
-            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
-            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
-            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
+            created_at: localNow,
+            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: getCanDoiAmount('vi1') },
+            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: getCanDoiAmount('vi2') },
+            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: getCanDoiAmount('vi3') },
+            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: getCanDoiAmount('vi4') }
          }]);
 
          if (err1) {
@@ -510,26 +519,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             return;
          }
 
-         // 2. Update existing tbl_tiendauky or Insert if none exists
-         let res2;
-         if (initialBalances.id) {
-            res2 = await supabase.from('tbl_tiendauky').update({
-               vi1: canDoiData.vi1.toString(),
-               vi2: canDoiData.vi2.toString(),
-               vi3: canDoiData.vi3.toString(),
-               vi4: canDoiData.vi4.toString(),
-               nguoilap: currentUser
-            }).eq('id', initialBalances.id);
-         } else {
-            res2 = await supabase.from('tbl_tiendauky').insert([{
-               ngaylap: localNow,
-               vi1: canDoiData.vi1.toString(),
-               vi2: canDoiData.vi2.toString(),
-               vi3: canDoiData.vi3.toString(),
-               vi4: canDoiData.vi4.toString(),
-               nguoilap: currentUser
-            }]);
-         }
+         // 2. Create a new opening-balance milestone after each balance action
+         const res2 = await supabase.from('tbl_tiendauky').insert([{
+            ngaylap: localNow,
+            vi1: getCanDoiAmount('vi1').toString(),
+            vi2: getCanDoiAmount('vi2').toString(),
+            vi3: getCanDoiAmount('vi3').toString(),
+            vi4: getCanDoiAmount('vi4').toString(),
+            nguoilap: currentUser
+         }]);
 
          if (res2.error) {
             alert('Lỗi khi cập nhật tiền đầu kỳ: ' + res2.error.message);
@@ -538,6 +536,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             insertLog(detailDesc);
             setCanDoiModal(false);
             fetchBalances();
+            fetchData();
             alert('Cân đối dòng tiền thành công!');
          }
       } else if (confirmDialog.actionType === 'EDIT_HOADON') {
@@ -632,7 +631,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       e.preventDefault();
       const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
       const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
-      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+      const localNow = createLocalDateTime();
       await supabase.from('tbl_tiendauky').insert([{
          ngaylap: localNow,
          vi1: balanceData.vi1 ? balanceData.vi1.toString() : '0',
@@ -679,6 +678,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          payload: null
       });
    };
+   const getCanDoiAmount = (walletId) => pCur(canDoiData[walletId]);
 
    const getDateRange = useCallback(() => {
       const today = new Date();
