@@ -340,6 +340,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             giamhocphi: pCur(invoice.giamhocphi),
             trutienan: pCur(invoice.trutienan),
             tiennghiphep: pCur(invoice.tiennghiphep),
+            trutiendangoai: pCur(invoice.trutiendangoai),
             tongcong: pCur(invoice.tongcong),
             dadong: pCur(invoice.dadong),
             conno: pCur(invoice.conno)
@@ -558,6 +559,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                giamhocphi: r.giamhocphi.toString(),
                trutienan: r.trutienan ? r.trutienan.toString() : '0',
                tiennghiphep: r.tiennghiphep ? r.tiennghiphep.toString() : '0',
+               trutiendangoai: r.trutiendangoai ? r.trutiendangoai.toString() : '0',
                phuthu: r.phuthu ? (typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu)) : null,
                tienan: r.tienan ? (typeof r.tienan === 'string' ? r.tienan : JSON.stringify(r.tienan)) : null,
                tongcong: r.tongcong.toString(),
@@ -869,8 +871,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          headers = ['Mã phiếu', 'Ngày lập', 'Loại', 'Hạng mục', 'Mô tả', 'Số tiền', 'Hình thức', 'Nhân viên'];
          mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv || i.nhanvien]);
       } else if (activeSubTab === 'hoadon') {
-         headers = ['Số phiếu', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
-         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.dadong), fCur(i.thukhac), fCur(i.dadong), fCur(i.conno)]);
+         headers = ['Số phiếu', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Trừ tiền ăn', 'Trừ HP nghỉ', 'Trừ tiền dã ngoại', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.trutienan), fCur(i.tiennghiphep), fCur(i.trutiendangoai), fCur(i.dadong), fCur(i.thukhac), fCur(i.dadong), fCur(i.conno)]);
       } else if (activeSubTab === 'nhapkho') {
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
          mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
@@ -2231,7 +2233,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         } catch (e) { }
                         const rM = pCur(printHoaDon.trutienan);
                         const rT = pCur(printHoaDon.tiennghiphep);
-                        const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
+                        const rN = pCur(printHoaDon.trutiendangoai);
+                        const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT + rN;
                         return (
                            <div style={{ display: "flex", justifyContent: "space-between" }}>
                               <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
@@ -2255,10 +2258,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         return null;
                      })()}
 
-                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
+                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0 || pCur(printHoaDon.trutiendangoai) > 0) && (
                         <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
                            {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
                            {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
+                           {pCur(printHoaDon.trutiendangoai) > 0 && <div>Trừ tiền dã ngoại: <b>{fCur(printHoaDon.trutiendangoai)} đ</b></div>}
                         </div>
                      )}
 
@@ -2653,6 +2657,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               const diff = val - old;
                               const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
                               setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tiennghiphep: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền dã ngoại (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.trutiendangoai)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.trutiendangoai);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, trutiendangoai: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
                            }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                         </div>
                      </div>

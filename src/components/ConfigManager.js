@@ -81,6 +81,7 @@ const ConfigManager = () => {
           phantramgiam: 50
         }),
         trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
+        tiendangoai: config.tiendangoai || '0',
         xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
       });
     }
@@ -553,6 +554,16 @@ const ConfigManager = () => {
                     value={formatCurrency(formData.trutiennghi || '')}
                     onChange={(e) => setFormData({ ...formData, trutiennghi: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
                     placeholder="VD: 20,000"
+                    style={{ fontSize: '0.9rem', padding: '4px 8px' }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền trừ dã ngoại</label>
+                  <input
+                    type="text"
+                    value={formatCurrency(formData.tiendangoai || '')}
+                    onChange={(e) => setFormData({ ...formData, tiendangoai: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
+                    placeholder="VD: 50,000"
                     style={{ fontSize: '0.9rem', padding: '4px 8px' }}
                   />
                 </div>

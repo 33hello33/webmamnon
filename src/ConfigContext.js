@@ -74,6 +74,7 @@ export const ConfigProvider = ({ children }) => {
           vi1: { name: 'Tiền mặt', bankId: '', accNo: '', accName: '' },
           hangmucthu: [],
           hangmucchi: [],
+          tiendangoai: '0',
           sonhanvientrogiang: 1,
           ngayquahan: 0,
           phanquyenrole: {

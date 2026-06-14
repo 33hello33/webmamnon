@@ -69,12 +69,6 @@ const normalizeSurcharges = (value) => (
       : []
 );
 
-const extractNgoaiKhoaCost = (content) => {
-   const match = String(content || '').match(/CHI PHÍ\s*:\s*([^\n\r]+)/i);
-   if (!match) return 0;
-   return parseInt(String(match[1]).replace(/[^\d]/g, ''), 10) || 0;
-};
-
 const getNgoaiKhoaPeriodKey = (snapshot, fallbackDate) => {
    const endedAt = snapshot?.endedAt || fallbackDate;
    return formatMonthYear(endedAt);
@@ -906,7 +900,13 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       let isActive = true;
 
       const loadNgoaiKhoaAdjustment = async () => {
+         const tienDaNgoai = parseInt(String(config?.tiendangoai || '0').replace(/\D/g, ''), 10) || 0;
          if (!selectedStudent?.mahv || !invoiceData.ngayBatDau) {
+            if (isActive) setNgoaiKhoaAdjustment({ totalDeduction: 0, period: '', items: [] });
+            return;
+         }
+
+         if (tienDaNgoai <= 0) {
             if (isActive) setNgoaiKhoaAdjustment({ totalDeduction: 0, period: '', items: [] });
             return;
          }
@@ -949,7 +949,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
                         return {
                            key: `${snapshot.programId || record.id}-${snapshot.endedAt || record.created_at}`,
-                           cost: extractNgoaiKhoaCost(snapshot.content),
                            snapshot
                         };
                      })
@@ -959,7 +958,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             );
 
             setNgoaiKhoaAdjustment({
-               totalDeduction: matchedPrograms.reduce((sum, item) => sum + (item.cost || 0), 0),
+               totalDeduction: matchedPrograms.length * tienDaNgoai,
                period: prevMonthKey,
                items: matchedPrograms
             });
@@ -973,7 +972,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       return () => {
          isActive = false;
       };
-   }, [selectedStudent?.mahv, invoiceData.ngayBatDau]);
+   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, config?.tiendangoai]);
 
    const showMessage = (type, text) => {
       setMessage({ type, text });
@@ -1273,6 +1272,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             sobuoihoc: sobuoihocFinal,
             tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
             trutienan: formatCurrency(Math.round(actualMealRefund)),
+            trutiendangoai: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
             sobuoinghiphep: studySummary?.nghiPhep || 0,
             nhanvien: cashier
          };
@@ -1390,6 +1390,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             sobuoihoc: sobuoihocFinal,
             tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
             trutienan: formatCurrency(Math.round(actualMealRefund)),
+            trutiendangoai: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
             sobuoinghiphep: studySummary?.nghiPhep || 0,
             nhanvien: cashier
          };
