@@ -10,7 +10,7 @@ const pCur = (val) => parseInt(String(val || 0).replace(/,/g, ''), 10) || 0;
 
 export default function ProductManager({ currentUser }) {
    const { config } = useConfig();
-   
+
    const walletsConfig = useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '' },
       { id: 'vi2', name: config.vi2?.name || '' },
@@ -26,14 +26,14 @@ export default function ProductManager({ currentUser }) {
    // Modal Thêm/Sửa
    const [isFormOpen, setIsFormOpen] = useState(false);
    const [isEdit, setIsEdit] = useState(false);
-   const [formData, setFormData] = useState({ mahang: '', tenhang: '', dvt: '' });
+   const [formData, setFormData] = useState({ mahang: '', tenhang: '', dvt: '', giaban: '' });
 
    // Modal Nhập Kho
    const [isImportOpen, setIsImportOpen] = useState(false);
-   const [importData, setImportData] = useState({ 
-      mahang: '', tenhang: '', soluongThem: '', gianhap: '', giaban: '', 
-      soluongCu: 0, nhacungcap: '', 
-      hinhthuc: walletsConfig[0]?.name || 'Tiền mặt' 
+   const [importData, setImportData] = useState({
+      mahang: '', tenhang: '', soluongThem: '', gianhap: '', giaban: '',
+      soluongCu: 0, nhacungcap: '',
+      hinhthuc: walletsConfig[0]?.name || 'Tiền mặt'
    });
 
    // Batch Import
@@ -79,28 +79,33 @@ export default function ProductManager({ currentUser }) {
    };
 
    const handleOpenAdd = () => {
-      setFormData({ mahang: generateCode(), tenhang: '', dvt: 'Cái' });
+      setFormData({ mahang: generateCode(), tenhang: '', dvt: 'Cái', giaban: '0' });
       setIsEdit(false);
       setIsFormOpen(true);
    };
 
    const handleOpenEdit = (prod) => {
-      setFormData({ mahang: prod.mahang, tenhang: prod.tenhang, dvt: prod.dvt || 'Cái' });
+      setFormData({ mahang: prod.mahang, tenhang: prod.tenhang, dvt: prod.dvt || 'Cái', giaban: fCur(prod.giaban || 0) });
       setIsEdit(true);
       setIsFormOpen(true);
    };
 
    const handleSaveProduct = async (e) => {
       e.preventDefault();
+      const rawGiaban = String(formData.giaban || '0').replace(/,/g, '');
       if (isEdit) {
-         await supabase.from('tbl_hanghoa').update({ tenhang: formData.tenhang, dvt: formData.dvt }).eq('mahang', formData.mahang);
+         await supabase.from('tbl_hanghoa').update({
+            tenhang: formData.tenhang,
+            dvt: formData.dvt,
+            giaban: rawGiaban
+         }).eq('mahang', formData.mahang);
       } else {
          await supabase.from('tbl_hanghoa').insert([{
             mahang: formData.mahang,
             tenhang: formData.tenhang,
             dvt: formData.dvt,
             soluong: 0,
-            giaban: '0',
+            giaban: rawGiaban,
             gianhap: '0',
             daxoa: null
          }]);
@@ -427,7 +432,7 @@ export default function ProductManager({ currentUser }) {
                   </div>
                   <form onSubmit={handleSaveProduct} style={{ padding: '1.5rem' }}>
                      <div className="form-alert info mb-4">
-                        <Info size={16} /> Lưu ý: Tại đây chỉ thiết lập cấu hình Nhận diện & Đơn vị tính. Số lượng tồn kho và Mức giá sẽ được nạp gộp vào hệ thống sau khi bạn sử dụng chức năng "Nhập Kho".
+                        <Info size={16} /> Lưu ý: Sử dụng chức năng "Nhập Kho" để nhập số lượng tồn kho và Mức giá bán.
                      </div>
                      <div className="form-group full-width" style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem', fontWeight: 600 }}>Mã Hàng (Auto)</label>
@@ -437,9 +442,13 @@ export default function ProductManager({ currentUser }) {
                         <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem', fontWeight: 600 }}>Tên Hàng Hóa</label>
                         <input type="text" value={formData.tenhang} onChange={e => setFormData({ ...formData, tenhang: e.target.value })} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                      </div>
-                     <div className="form-group full-width" style={{ marginBottom: '1.5rem' }}>
+                     <div className="form-group full-width" style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem', fontWeight: 600 }}>Đơn Vị Tính (Cái, Lốc, Hộp, Quyển...)</label>
                         <input type="text" value={formData.dvt} onChange={e => setFormData({ ...formData, dvt: e.target.value })} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                     </div>
+                     <div className="form-group full-width" style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem', fontWeight: 600 }}>Giá Bán Ra (VNĐ)</label>
+                        <input type="text" value={formData.giaban} onChange={e => setFormData({ ...formData, giaban: fCur(e.target.value.replace(/\D/g, '')) })} required style={{ width: '100%', textAlign: 'right', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                      </div>
                      <div className="form-actions full-width">
                         <button type="submit" className="btn btn-primary w-full" style={{ padding: '0.85rem', fontWeight: 700 }}>{isEdit ? 'Cập Nhật' : 'Tạo Hàng Mới'}</button>
