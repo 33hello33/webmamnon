@@ -1345,12 +1345,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
                               <th className="text-right">Giảm Học Phí</th>
                               <th className="text-right">Còn Dự Kiến</th>
+                              <th className="text-center">Hành động</th>
                            </tr>
                         </thead>
                         <tbody>
-                           {filteredData.map(r => (
-                              <tr key={r.mahd}>
-                                 <td className="fm-code font-semibold">{r.mahd}</td>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                              <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                 <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
                                  <td>{formatDate(r.ngaylap)}</td>
                                  <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
                                  <td>{r.tenlop}</td>
@@ -1360,17 +1363,26 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td className="text-right">{fCur(r.tongcong)}</td>
                                  <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
                                  <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
+                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {!deleted ? (
+                                       <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /></button>
+                                    ) : (
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </td>
                               </tr>
-                           ))}
+                           )})}
                         </tbody>
                      </table>
                   </div>
 
                   <div className="fm-card-list">
-                     {filteredData.map(r => (
-                        <div key={r.mahd} className="fm-card" style={{ border: '1px solid #99f6e4', background: '#f0fdfa' }}>
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                        <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
                            <div className="fm-card-header">
-                              <span className="fm-card-code">{r.mahd}</span>
+                              <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
                               <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                            </div>
                            <div className="fm-card-body">
@@ -1391,9 +1403,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <span>Còn dự kiến:</span>
                                  <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
                               </div>
+                              <div className="fm-card-actions">
+                                 {!deleted ? (
+                                    <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 )}
+                              </div>
                            </div>
                         </div>
-                     ))}
+                     )})}
                   </div>
                </>
             );
