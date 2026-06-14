@@ -12,6 +12,7 @@ import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Sen
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 import { buildGroupedMessageDescription, createMessageGroupId, groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import { getActiveNgoaiKhoaAnnouncements } from '../utils/ngoaiKhoaUtils';
+import { fetchHolidayDates, isHoliday } from '../utils/holidays';
 
 const resizeChatTextarea = (textarea, maxLines = 3) => {
    if (!textarea) return;
@@ -190,6 +191,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
       return d.toISOString().split('T')[0];
    });
+   const [attHolidayDates, setAttHolidayDates] = useState([]);
    const [attClasses, setAttClasses] = useState(initialClasses || []);
    const [attSelectedClass, setAttSelectedClass] = useState('');
    const [attStudents, setAttStudents] = useState([]);
@@ -435,12 +437,25 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (attendanceUser) loadData();
    }, [attSelectedClass, attDate, attendanceUser]);
 
+   useEffect(() => {
+      const loadHolidayDates = async () => {
+         const year = parseInt(String(attDate || '').slice(0, 4), 10) || new Date().getFullYear();
+         const dates = await fetchHolidayDates(year);
+         setAttHolidayDates(dates);
+      };
+
+      loadHolidayDates();
+   }, [attDate]);
+
+   const isAttendanceHoliday = isHoliday(attDate, attHolidayDates);
+
    const handleUpdateRecord = (mahv, field, value) => {
       setAttRecords(prev => ({ ...prev, [mahv]: { ...(prev[mahv] || {}), [field]: value } }));
    };
 
    const handleSaveAttendance = async () => {
       if (!attSelectedClass) return window.alert('Chưa chọn lớp!');
+      if (isAttendanceHoliday) return window.alert('Ngày này là ngày nghỉ, không thể điểm danh.');
       setLoading(true);
       try {
          const existingAttendanceMap = new Map();
@@ -1768,6 +1783,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
                {attSelectedClass && (
                   <>
+                     {isAttendanceHoliday && (
+                        <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '12px', background: '#fff7ed', border: '1px solid #fdba74', color: '#c2410c', fontWeight: 600 }}>
+                           Ngày đã chọn là ngày nghỉ. Hệ thống khóa ghi điểm danh cho ngày này.
+                        </div>
+                     )}
                      <div className="attendance-portal-list">
                         {attStudents.length > 0 ? attStudents.map(st => {
                            const rec = attRecords[st.mahv] || {};
@@ -1782,24 +1802,24 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                     <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                                        {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('comat')) && (
                                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#16a34a', fontWeight: 700, fontSize: '0.95rem', background: rec.trangthai === 'Có mặt' ? '#f0fdf4' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: rec.trangthai === 'Có mặt' ? '1px solid #bbf7d0' : '1px solid #e2e8f0', transition: '0.2s' }}>
-                                             <input type="radio" name={`tt_${st.mahv}`} checked={rec.trangthai === 'Có mặt'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Có mặt')} /> Có mặt
+                                             <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'Có mặt'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Có mặt')} /> Có mặt
                                           </label>
                                        )}
                                        {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangP')) && (
                                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#d97706', fontWeight: 700, fontSize: '0.95rem', background: rec.trangthai === 'Nghỉ phép' ? '#fffbeb' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ phép' ? '1px solid #fef3c7' : '1px solid #e2e8f0', transition: '0.2s' }}>
-                                             <input type="radio" name={`tt_${st.mahv}`} checked={rec.trangthai === 'Nghỉ phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ phép')} /> Nghỉ P
+                                             <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'Nghỉ phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ phép')} /> Nghỉ P
                                           </label>
                                        )}
                                        {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangKP')) && (
                                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#dc2626', fontWeight: 700, fontSize: '0.95rem', background: rec.trangthai === 'Nghỉ không phép' ? '#fef2f2' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ không phép' ? '1px solid #fee2e2' : '1px solid #e2e8f0', transition: '0.2s' }}>
-                                             <input type="radio" name={`tt_${st.mahv}`} checked={rec.trangthai === 'Nghỉ không phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ không phép')} /> Nghỉ KP
+                                             <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'Nghỉ không phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ không phép')} /> Nghỉ KP
                                           </label>
                                        )}
                                     </div>
                                  </div>
                                  <div>
                                     <span className="portal-att-label">Ghi chú / Nhận xét</span>
-                                    <textarea placeholder="Nhận xét riêng..." value={rec.ghichu || ''} onChange={e => handleUpdateRecord(st.mahv, 'ghichu', e.target.value)} rows="2" style={{ width: '100%', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '10px', resize: 'vertical', fontFamily: 'inherit', fontSize: '0.9rem', outline: 'none' }} />
+                                    <textarea placeholder="Nhận xét riêng..." value={rec.ghichu || ''} onChange={e => handleUpdateRecord(st.mahv, 'ghichu', e.target.value)} disabled={isAttendanceHoliday} rows="2" style={{ width: '100%', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '10px', resize: 'vertical', fontFamily: 'inherit', fontSize: '0.9rem', outline: 'none' }} />
                                  </div>
                               </div>
                            );
@@ -1811,7 +1831,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         )}
                      </div>
                      {attStudents.length > 0 && (
-                        <button onClick={handleSaveAttendance} disabled={loading} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                        <button onClick={handleSaveAttendance} disabled={loading || isAttendanceHoliday} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                            {loading ? <Loader2 size={20} className="spinner" /> : 'Lưu Danh Sách Điểm Danh'}
                         </button>
                      )}

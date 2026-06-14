@@ -466,6 +466,12 @@
   border-color: #fde047;
 }
 
+.tm-cal-cell.holiday-lock {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #be123c;
+}
+
 .tm-current-month {
   color: #1e293b;
   margin: 0;
@@ -821,4 +827,4 @@
 [data-theme="kindergarten"] .tm-cal-header {
   background: #ffffff !important;
   border-bottom: 1px solid #f1f5f9 !important;
-}
+}

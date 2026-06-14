@@ -5,6 +5,7 @@ import {
   Users, User, Search, Download, Calendar, Filter, X, CheckSquare, Save, Loader2, BookOpen
 } from 'lucide-react';
 import { useConfig } from '../ConfigContext';
+import { fetchHolidayDates, isHoliday } from '../utils/holidays';
 import StudentAttendanceCalendar from './StudentAttendanceCalendar';
 import './AttendanceManager.css';
 
@@ -36,6 +37,7 @@ export default function AttendanceManager({ students, showMessage }) {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
+  const [holidayDates, setHolidayDates] = useState([]);
   const [attStudents, setAttStudents] = useState([]);
   const [attRecords, setAttRecords] = useState({});
   const [lessonContent, setLessonContent] = useState('');
@@ -135,6 +137,18 @@ export default function AttendanceManager({ students, showMessage }) {
     loadMarkingData();
   }, [markingMode, selectedId, attDate, viewMode, students, markingClassId]);
 
+  useEffect(() => {
+    const loadHolidayDates = async () => {
+      const year = parseInt(String(attDate || '').slice(0, 4), 10) || new Date().getFullYear();
+      const dates = await fetchHolidayDates(year);
+      setHolidayDates(dates);
+    };
+
+    loadHolidayDates();
+  }, [attDate]);
+
+  const isAttendanceHoliday = isHoliday(attDate, holidayDates);
+
   const handleUpdateMarkRecord = (mahv, field, value) => {
     setAttRecords(prev => ({ ...prev, [mahv]: { ...(prev[mahv] || {}), [field]: value } }));
   };
@@ -142,6 +156,7 @@ export default function AttendanceManager({ students, showMessage }) {
   const handleSaveAttendance = async () => {
     const targetMalop = viewMode === 'class' ? selectedId : markingClassId;
     if (!targetMalop) return showMessage('error', 'Chưa chọn lớp!');
+    if (isAttendanceHoliday) return showMessage('error', 'Ngày này là ngày nghỉ, không thể điểm danh.');
     setLoading(true);
     try {
       for (const st of attStudents) {
@@ -697,9 +712,15 @@ export default function AttendanceManager({ students, showMessage }) {
                       })()}
                       <div style={{ flex: 2, minWidth: '200px' }}>
                         <label className="portal-att-label">Nội dung dạy buổi hôm nay</label>
-                        <textarea placeholder="Kiến thức cũ, phần mới, bài tập..." value={lessonContent} onChange={e => setLessonContent(e.target.value)} rows="1" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px', resize: 'vertical' }} />
+                        <textarea placeholder="Kiến thức cũ, phần mới, bài tập..." value={lessonContent} onChange={e => setLessonContent(e.target.value)} disabled={isAttendanceHoliday} rows="1" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px', resize: 'vertical' }} />
                       </div>
                     </div>
+
+                    {isAttendanceHoliday && (
+                      <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '12px', background: '#fff7ed', border: '1px solid #fdba74', color: '#c2410c', fontWeight: 600 }}>
+                        Ngày đã chọn là ngày nghỉ. Hệ thống khóa ghi điểm danh cho ngày này.
+                      </div>
+                    )}
 
                     <div className="attendance-portal-list">
                       {attStudents.length > 0 ? attStudents.map(st => {
@@ -716,24 +737,24 @@ export default function AttendanceManager({ students, showMessage }) {
                               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('comat')) && (
                                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#16a34a', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Có mặt' ? '#f0fdf4' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Có mặt' ? '1px solid #bbf7d0' : '1px solid #e2e8f0' }}>
-                                    <input type="radio" checked={rec.trangthai === 'Có mặt'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Có mặt')} /> Có mặt
+                                    <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Có mặt'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Có mặt')} /> Có mặt
                                   </label>
                                 )}
                                 {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangP')) && (
                                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#d97706', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Nghỉ phép' ? '#fffbeb' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ phép' ? '1px solid #fef3c7' : '1px solid #e2e8f0' }}>
-                                    <input type="radio" checked={rec.trangthai === 'Nghỉ phép'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Nghỉ phép')} /> Nghỉ phép
+                                    <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Nghỉ phép'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Nghỉ phép')} /> Nghỉ phép
                                   </label>
                                 )}
                                 {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangKP')) && (
                                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#dc2626', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Nghỉ không phép' ? '#fef2f2' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ không phép' ? '1px solid #fee2e2' : '1px solid #e2e8f0' }}>
-                                    <input type="radio" checked={rec.trangthai === 'Nghỉ không phép'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Nghỉ không phép')} /> Nghỉ KP
+                                    <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Nghỉ không phép'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Nghỉ không phép')} /> Nghỉ KP
                                   </label>
                                 )}
                               </div>
                             </div>
                             <div style={{ flex: '1 1 200px' }}>
                               <span className="portal-att-label">Nhận xét</span>
-                              <input type="text" placeholder="Ghi chú..." value={rec.ghichu || ''} onChange={e => handleUpdateMarkRecord(st.mahv, 'ghichu', e.target.value)} style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.85rem' }} />
+                              <input type="text" placeholder="Ghi chú..." value={rec.ghichu || ''} onChange={e => handleUpdateMarkRecord(st.mahv, 'ghichu', e.target.value)} disabled={isAttendanceHoliday} style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.85rem' }} />
                             </div>
                           </div>
                         );
@@ -746,7 +767,7 @@ export default function AttendanceManager({ students, showMessage }) {
                     </div>
 
                     {attStudents.length > 0 && (
-                      <button className="btn btn-primary" onClick={handleSaveAttendance} disabled={loading} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#db2777', fontWeight: 700 }}>
+                      <button className="btn btn-primary" onClick={handleSaveAttendance} disabled={loading || isAttendanceHoliday} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#db2777', fontWeight: 700 }}>
                         {loading ? <Loader2 className="spinner" size={20} /> : <Save size={18} />} Lưu Bảng Điểm Danh
                       </button>
                     )}

@@ -5,6 +5,7 @@ import { Search, Calendar, FileText, Download, Users, ChevronLeft, ChevronRight,
 import * as XLSX from 'xlsx';
 import './TimesheetManager.css';
 import { useConfig } from '../ConfigContext';
+import { fetchHolidayDates, isHoliday } from '../utils/holidays';
 
 export default function TimesheetManager() {
    const { config } = useConfig();
@@ -35,6 +36,7 @@ export default function TimesheetManager() {
    const [showCalendar, setShowCalendar] = useState(false);
    const [calendarClass, setCalendarClass] = useState(null);
    const [currentDate, setCurrentDate] = useState(new Date());
+   const [holidayDates, setHolidayDates] = useState([]);
 
    // Teaching schedule for the month
    const [scheduleData, setScheduleData] = useState([]);
@@ -186,6 +188,8 @@ export default function TimesheetManager() {
       setDirtySchedule({});
       setShowCalendar(true);
       setCurrentDate(globalDate); // sync calendar to global month picker
+      const dates = await fetchHolidayDates(globalDate.getFullYear());
+      setHolidayDates(dates);
       await loadScheduleForMonth(cls.malop, globalDate.getFullYear(), globalDate.getMonth());
    };
 
@@ -220,6 +224,15 @@ export default function TimesheetManager() {
       }
    };
 
+   useEffect(() => {
+      const loadHolidayDates = async () => {
+         const dates = await fetchHolidayDates(currentDate.getFullYear());
+         setHolidayDates(dates);
+      };
+
+      loadHolidayDates();
+   }, [currentDate]);
+
    // Calendar logic
    const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
    const getFirstDayOfMonth = (year, month) => {
@@ -232,6 +245,8 @@ export default function TimesheetManager() {
    const currentMonth = currentDate.getMonth();
    const daysInMonth = getDaysInMonth(currentYear, currentMonth);
    const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
+   const getCalendarDateStr = (day) => `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+   const isHolidayCell = (day) => isHoliday(getCalendarDateStr(day), holidayDates);
 
    const getDaySchedule = (day) => {
       const dateStrPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -246,6 +261,14 @@ export default function TimesheetManager() {
    };
 
    const handleDayClick = (day) => {
+      if (isHolidayCell(day)) {
+         setWarningModal({
+            isOpen: true,
+            title: 'Ngày nghỉ',
+            message: 'Ngày này đã được cấu hình là ngày nghỉ nên không thể chấm công.'
+         });
+         return;
+      }
       const existing = getDaySchedule(day);
       if (existing && existing.trangthai === 'Có dạy' && existing.manv === activeTeacher.manv) {
          // Toggle off
@@ -268,10 +291,26 @@ export default function TimesheetManager() {
 
    const handleDayContextMenu = (e, day) => {
       e.preventDefault();
+      if (isHolidayCell(day)) {
+         setWarningModal({
+            isOpen: true,
+            title: 'Ngày nghỉ',
+            message: 'Ngày này đã được cấu hình là ngày nghỉ nên không thể phân công dạy thay.'
+         });
+         return;
+      }
       setShowSubjectMenu({ day, x: e.clientX, y: e.clientY });
    };
 
    const assignSubstitute = (day, substituteTeacher) => {
+      if (isHolidayCell(day)) {
+         setWarningModal({
+            isOpen: true,
+            title: 'Ngày nghỉ',
+            message: 'Ngày này đã được cấu hình là ngày nghỉ nên không thể phân công dạy thay.'
+         });
+         return;
+      }
       const existing = getDaySchedule(day);
       const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+07:00`;
       setDirtySchedule(prev => ({
@@ -288,6 +327,15 @@ export default function TimesheetManager() {
    };
 
    const saveCalendar = async () => {
+      const hasHolidayChanges = Object.keys(dirtySchedule).some((day) => isHolidayCell(parseInt(day, 10)));
+      if (hasHolidayChanges) {
+         setWarningModal({
+            isOpen: true,
+            title: 'Ngày nghỉ',
+            message: 'Có thay đổi rơi vào ngày nghỉ. Vui lòng bỏ các ngày này trước khi lưu.'
+         });
+         return;
+      }
       setLoading(true);
       try {
          const updates = [];
@@ -903,9 +951,14 @@ export default function TimesheetManager() {
                      {Array.from({ length: daysInMonth }).map((_, i) => {
                         const day = i + 1;
                         const schedule = getDaySchedule(day);
+                        const holidayCell = isHolidayCell(day);
 
                         let cellClass = "";
                         let textStatus = "";
+                        if (holidayCell) {
+                           cellClass = "holiday-lock";
+                           textStatus = "Ngay nghi";
+                        }
                         if (schedule) {
                            if (schedule.trangthai === 'Có dạy' && schedule.manv === activeTeacher.manv) {
                               cellClass = "active-teach";
@@ -931,6 +984,7 @@ export default function TimesheetManager() {
                               className={`tm-cal-cell ${cellClass}`}
                               onClick={() => handleDayClick(day)}
                               onContextMenu={(e) => handleDayContextMenu(e, day)}
+                              title={holidayCell ? 'Ngay nghi' : ''}
                            >
                               <span className="tm-day-num">{day}</span>
                               {textStatus && <span className="tm-status-text">{textStatus}</span>}

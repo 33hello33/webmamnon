@@ -1,0 +1,708 @@
+/* ═══════════════════════════════════════════════════
+   HolidayManager — Compact Collapsible Design
+   ═══════════════════════════════════════════════════ */
+
+.holiday-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+/* ── Collapsed Bar (Header) ──────────────────────── */
+.hm-collapsed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 1rem;
+  background: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+  gap: 0.75rem;
+}
+
+.hm-collapsed-bar:hover {
+  background: #f1f5f9;
+}
+
+.hm-collapsed-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.hm-collapsed-icon {
+  color: #ef4444;
+}
+
+.hm-collapsed-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #94a3b8;
+}
+
+.hm-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.5rem;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+/* ── Expanded Body ───────────────────────────────── */
+.hm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  animation: hmSlideDown 0.2s ease-out;
+}
+
+@keyframes hmSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Toolbar ─────────────────────────────────────── */
+.hm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.hm-year-select {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.hm-year-select select {
+  background: transparent;
+  border: none;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+}
+
+.hm-btn-import {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  color: #7c3aed;
+  padding: 0.38rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+
+.hm-btn-import:hover:not(:disabled) {
+  background: #ddd6fe;
+  color: #6d28d9;
+}
+
+.hm-btn-import:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hm-btn-add {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #ef4444;
+  border: none;
+  color: white;
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s;
+  box-shadow: 0 2px 8px rgba(239,68,68,0.25);
+  white-space: nowrap;
+}
+
+.hm-btn-add:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* ── Alert ───────────────────────────────────────── */
+.hm-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  animation: hmSlideDown 0.2s ease;
+}
+
+.hm-alert.success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.hm-alert.error   { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+
+/* ── Add/Edit Form Card ──────────────────────────── */
+.hm-form-card {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  animation: hmSlideDown 0.2s ease;
+}
+
+.hm-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.9rem;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.hm-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  padding: 0.15rem;
+  border-radius: 5px;
+  transition: 0.15s;
+}
+.hm-close-btn:hover { background: #fee2e2; color: #ef4444; }
+
+.hm-form-body {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hm-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 580px) {
+  .hm-form-grid { grid-template-columns: 1fr; }
+}
+
+.hm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.hm-field label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.hint-soft {
+  font-weight: 400;
+  text-transform: none;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  letter-spacing: 0;
+}
+
+.required { color: #ef4444; }
+
+.hm-field input,
+.hm-field select {
+  padding: 0.5rem 0.7rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #1e293b;
+  transition: 0.15s;
+  background: white;
+}
+
+.hm-field input:focus,
+.hm-field select:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239,68,68,0.1);
+  outline: none;
+}
+
+.day-hint {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+}
+.day-hint.weekend { color: #f59e0b; }
+
+/* ── Toggle ──────────────────────────────────────── */
+.hm-form-bottom {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: white;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.hm-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  flex: 1;
+}
+
+.hm-toggle {
+  width: 36px;
+  height: 20px;
+  background: #e2e8f0;
+  border-radius: 100px;
+  position: relative;
+  transition: 0.25s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.hm-toggle.on { background: #ef4444; }
+
+.hm-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.hm-toggle.on .hm-toggle-thumb { transform: translateX(16px); }
+
+.toggle-title {
+  display: block;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: #334155;
+}
+.toggle-sub {
+  display: block;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 0.1rem;
+}
+
+/* ── Form Actions ────────────────────────────────── */
+.hm-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.hm-btn-cancel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.hm-btn-cancel:hover { background: #e2e8f0; }
+
+.hm-btn-save {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #ef4444;
+  border: none;
+  color: white;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.15s;
+  box-shadow: 0 2px 8px rgba(239,68,68,0.2);
+}
+.hm-btn-save:hover:not(:disabled) { background: #dc2626; }
+.hm-btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Loading & Empty ─────────────────────────────── */
+.hm-loading,
+.hm-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.5rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.hm-empty { flex-direction: column; gap: 0.4rem; }
+.hm-empty p { margin: 0; }
+
+/* ── Holiday List ────────────────────────────────── */
+.hm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hm-month-group {
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.hm-month-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.38rem 0.75rem;
+  background: #f1f5f9;
+  font-size: 0.73rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.hm-month-count {
+  background: #ef4444;
+  color: white;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 100px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* ── Holiday Item ────────────────────────────────── */
+.hm-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+  background: white;
+}
+.hm-item:last-child { border-bottom: none; }
+.hm-item:hover { background: #fef2f2; }
+.hm-item.recurring { border-left: 3px solid #8b5cf6; }
+
+/* ── Date Badge (compact) ────────────────────────── */
+.hm-date-badge {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  text-align: center;
+  min-width: 38px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(239,68,68,0.2);
+}
+
+.hm-date-day {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.hm-date-dow {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* ── Item Info ───────────────────────────────────── */
+.hm-item-info {
+  padding: 0.1rem 0.4rem;
+  border-radius: 100px;
+  font-weight: 700;
+}
+.hm-tag.recurring { background: #ede9fe; color: #7c3aed; }
+.hm-tag.weekend   { background: #fef3c7; color: #92400e; }
+
+.hm-item-meta {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.15rem;
+}
+
+.hm-desc {
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+/* ── Item Actions ────────────────────────────────── */
+.hm-item-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.hm-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.hm-action-btn.edit  { background: #eff6ff; color: #3b82f6; }
+.hm-action-btn.edit:hover { background: #dbeafe; transform: scale(1.05); }
+
+.hm-action-btn.delete { background: #fff1f2; color: #f43f5e; }
+.hm-action-btn.delete:hover { background: #ffe4e6; }
+.hm-action-btn.delete.confirm {
+  background: #ef4444;
+  color: white;
+  animation: hmPulse 0.5s ease infinite alternate;
+}
+
+@keyframes hmPulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.05); }
+}
+
+/* ── Spin ────────────────────────────────────────── */
+.spin { animation: hmSpin 0.8s linear infinite; }
+@keyframes hmSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Responsive ──────────────────────────────────── */
+@media (max-width: 480px) {
+  .hm-toolbar { gap: 0.35rem; }
+  .hm-btn-import span,
+  .hm-btn-add span { display: none; }
+}
+
+/* Holiday Mini Calendar Styles */
+.hm-split-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 1.5rem;
+}
+
+.hm-left-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.hm-right-pane {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px dashed #cbd5e1;
+  padding-left: 1.5rem;
+}
+
+@media (max-width: 800px) {
+  .hm-split-layout {
+    flex-direction: column;
+  }
+  .hm-right-pane {
+    width: 100%;
+    border-left: none;
+    border-top: 1px dashed #cbd5e1;
+    padding-left: 0;
+    padding-top: 1.5rem;
+  }
+}
+
+.hm-mini-calendar {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.hm-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 700;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.hm-cal-header button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+}
+
+.hm-cal-header button:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.hm-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #94a3b8;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.hm-cal-weekdays .w {
+  color: #f59e0b;
+}
+
+.hm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 0.5rem;
+}
+
+.hm-cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.hm-cal-day.empty {
+  cursor: default;
+  background: transparent;
+}
+
+.hm-cal-day:not(.empty):hover {
+  background: #f1f5f9;
+}
+
+.hm-cal-day.is-weekend {
+  color: #f59e0b;
+}
+
+.hm-cal-day.is-holiday {
+  background: #fee2e2;
+  color: #ef4444;
+  font-weight: 800;
+  border: 1px solid #fca5a5;
+}
+
+.hm-cal-day.is-selected {
+  background: #3b82f6;
+  color: white;
+  font-weight: 800;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.hm-cal-day.is-selected.is-holiday {
+  background: #ef4444;
+  border-color: #dc2626;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.hm-cal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.6rem;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.hm-cal-footer .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.hm-cal-footer .dot.hol {
+  background: #ef4444;
+}
+
+.hm-cal-footer .dot.wknd {
+  background: #f59e0b;
+}

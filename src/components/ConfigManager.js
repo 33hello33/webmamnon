@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, insertLog } from '../supabase';
 import { createPortal } from 'react-dom';
 import { useConfig } from '../ConfigContext';
+import HolidayManager from './HolidayManager';
 import {
   Save,
   Upload,
@@ -24,7 +25,8 @@ import {
   MessageSquare,
   BarChart3,
   Briefcase,
-  Users
+  Users,
+  CalendarDays
 } from 'lucide-react';
 import './ConfigManager.css';
 
@@ -637,6 +639,14 @@ const ConfigManager = () => {
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="config-section">
+          <div className="section-title">
+            <CalendarDays size={20} />
+            <h3>Ngày nghỉ lễ</h3>
+          </div>
+          <HolidayManager />
         </section>
 
         {/* Row 5: Roles & Permissions */}
