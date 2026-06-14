@@ -4,6 +4,25 @@ import { Search, Filter, Download, RefreshCw, UserCheck, UserX, Clock, Edit2 } f
 import * as XLSX from 'xlsx';
 import { buildNgoaiKhoaCloseContent, getActiveNgoaiKhoaAnnouncements, getArchivedNgoaiKhoaPrograms } from '../utils/ngoaiKhoaUtils';
 
+const formatDateTimeVi = (value) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('vi-VN');
+};
+
+const parseProgramLine = (content, label) => {
+  const source = String(content || '');
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = source.match(new RegExp(`${escapedLabel}\\s*:\\s*(.+)`, 'i'));
+  return match?.[1]?.trim() || '';
+};
+
+const extractProgramMeta = (content) => ({
+  location: parseProgramLine(content, 'ĐỊA ĐIỂM'),
+  time: parseProgramLine(content, 'THỜI GIAN'),
+  deadline: parseProgramLine(content, 'HẠN ĐĂNG KÝ')
+});
+
 export default function NgoaiKhoaManager({ currentUser }) {
   const [loading, setLoading] = useState(false);
   const [savingStudent, setSavingStudent] = useState(null);
@@ -257,7 +276,7 @@ export default function NgoaiKhoaManager({ currentUser }) {
       'Tên Học Sinh': item.tenhv,
       'Lớp': item.className,
       'Trạng thái': !item.hasResponded ? 'Chưa phản hồi' : (item.codangky ? 'Đã đăng ký' : 'Không tham gia'),
-      'Ngày đăng ký': item.ngaydangky ? new Date(item.ngaydangky).toLocaleString('vi-VN') : '',
+      'Ngày xác nhận': item.ngaydangky ? new Date(item.ngaydangky).toLocaleString('vi-VN') : '',
       'Lý do': item.lydo || ''
     }));
 
@@ -265,6 +284,48 @@ export default function NgoaiKhoaManager({ currentUser }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'DangKyNgoaiKhoa');
     XLSX.writeFile(wb, `Danh_sach_ngoai_khoa_${Date.now()}.xlsx`);
+  };
+
+  const buildArchivedSheetRows = (items = [], statusLabel = '') => (
+    items.map((item, index) => ({
+      STT: index + 1,
+      'Mã HS': item.mahv || '',
+      'Tên Học Sinh': item.tenhv || '',
+      'Lớp': item.className || item.malop || '',
+      'Trạng thái': statusLabel,
+      'Ngày xác nhận': item.ngaydangky ? formatDateTimeVi(item.ngaydangky) : '',
+      'Lý do': item.lydo || ''
+    }))
+  );
+
+  const handleExportArchivedProgram = (program) => {
+    const snapshot = program?.snapshot || {};
+    const meta = extractProgramMeta(snapshot.content || '');
+    const registeredRows = buildArchivedSheetRows(snapshot.registered || [], 'Đã đăng ký');
+    const notRegisteredRows = buildArchivedSheetRows(snapshot.notRegistered || [], 'Không đăng ký');
+    const noResponseRows = buildArchivedSheetRows(snapshot.noResponse || [], 'Không phản hồi');
+
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['Thông tin', 'Giá trị'],
+      ['Địa điểm', meta.location || 'Chưa cập nhật'],
+      ['Thời gian chương trình', meta.time || 'Chưa cập nhật'],
+      ['Hạn đăng ký', meta.deadline || 'Chưa cập nhật'],
+      ['Thời gian đăng ký', `${formatDateTimeVi(snapshot.startedAt)} - ${formatDateTimeVi(snapshot.endedAt || program?.created_at)}`],
+      ['Đã đăng ký', registeredRows.length],
+      ['Không đăng ký', notRegisteredRows.length],
+      ['Không phản hồi', noResponseRows.length]
+    ]);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'TongQuan');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(registeredRows), 'DaDangKy');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(notRegisteredRows), 'KhongDangKy');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(noResponseRows), 'KhongPhanHoi');
+
+    const suffix = String(snapshot.endedAt || program?.created_at || Date.now())
+      .replace(/[:T]/g, '-')
+      .replace(/\..+$/, '');
+    XLSX.writeFile(wb, `Danh_sach_ngoai_khoa_da_ket_thuc_${suffix}.xlsx`);
   };
 
   return (
@@ -474,27 +535,45 @@ export default function NgoaiKhoaManager({ currentUser }) {
 
       {archivedPrograms.length > 0 && (
         <div style={{ marginTop: '24px', display: 'grid', gap: '14px' }}>
+          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+            Chương trình đã kết thúc
+          </div>
           {archivedPrograms.map((program) => {
             const snapshot = program.snapshot || {};
+            const meta = extractProgramMeta(snapshot.content || '');
             return (
               <div key={program.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '16px 18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
-                  <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                    Chương trình đã kết thúc
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'grid', gap: '6px' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                      {meta.location || 'Chưa cập nhật địa điểm'}
+                    </div>
+                    <div style={{ fontSize: '0.88rem', color: '#475569' }}>
+                      Thời gian đăng ký: <strong>{formatDateTimeVi(snapshot.startedAt)}</strong> - <strong>{formatDateTimeVi(snapshot.endedAt || program.created_at)}</strong>
+                    </div>
+                    {meta.time && (
+                      <div style={{ fontSize: '0.88rem', color: '#64748b' }}>
+                        Thời gian chương trình: {meta.time}
+                      </div>
+                    )}
+                    {meta.deadline && (
+                      <div style={{ fontSize: '0.88rem', color: '#64748b' }}>
+                        Hạn đăng ký: {meta.deadline}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                    {snapshot.endedAt ? new Date(snapshot.endedAt).toLocaleString('vi-VN') : new Date(program.created_at).toLocaleString('vi-VN')}
-                  </div>
+                  <button
+                    onClick={() => handleExportArchivedProgram(program)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#0ea5e9', color: 'white', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    <Download size={16} />
+                    Tải danh sách Excel
+                  </button>
                 </div>
                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.9rem', color: '#475569' }}>
                   <span>Đăng ký: <strong>{snapshot.registered?.length || 0}</strong></span>
                   <span>Không đăng ký: <strong>{snapshot.notRegistered?.length || 0}</strong></span>
                   <span>Không phản hồi: <strong>{snapshot.noResponse?.length || 0}</strong></span>
-                </div>
-                <div style={{ marginTop: '12px', display: 'grid', gap: '8px', fontSize: '0.88rem', color: '#475569' }}>
-                  <div><strong>Danh sách đăng ký:</strong> {(snapshot.registered || []).map((item) => item.tenhv).join(', ') || '-'}</div>
-                  <div><strong>Danh sách không đăng ký:</strong> {(snapshot.notRegistered || []).map((item) => item.tenhv).join(', ') || '-'}</div>
-                  <div><strong>Danh sách không phản hồi:</strong> {(snapshot.noResponse || []).map((item) => item.tenhv).join(', ') || '-'}</div>
                 </div>
               </div>
             );
