@@ -55,6 +55,7 @@ const formatMessageTimestamp = (dateValue) => {
 };
 
 const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
+const TEACHER_CHAT_PAGE_SIZE = 10;
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
@@ -95,6 +96,78 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (message.file_url) return '[Tài liệu]';
       return '...';
    };
+
+   const getMessageIdentity = (message) => (
+      message?.id ?? `${message?.mahv || 'unknown'}-${message?.created_at || 'na'}-${message?.manv || 'na'}-${message?.content || ''}-${message?.file_url || ''}-${message?.image_url || ''}`
+   );
+
+   const sortMessagesByCreatedAt = (messages = [], ascending = true) => (
+      [...messages].sort((a, b) => {
+         const timeA = new Date(a?.created_at || 0).getTime();
+         const timeB = new Date(b?.created_at || 0).getTime();
+         return ascending ? timeA - timeB : timeB - timeA;
+      })
+   );
+
+   const dedupeMessages = (messages = []) => {
+      const uniqueMessages = new Map();
+      messages.forEach((message) => {
+         if (!message) return;
+         uniqueMessages.set(getMessageIdentity(message), message);
+      });
+      return Array.from(uniqueMessages.values());
+   };
+
+   const mergeTeacherSummaryMessages = (currentMessages = [], incomingMessages = []) => {
+      const allMessages = dedupeMessages([...currentMessages, ...incomingMessages]);
+      const messagesByStudent = new Map();
+
+      allMessages.forEach((message) => {
+         if (!message?.mahv) return;
+         if (!messagesByStudent.has(message.mahv)) messagesByStudent.set(message.mahv, []);
+         messagesByStudent.get(message.mahv).push(message);
+      });
+
+      return Array.from(messagesByStudent.values()).flatMap((studentMessages) => (
+         sortMessagesByCreatedAt(studentMessages, false).slice(0, TEACHER_CHAT_PAGE_SIZE)
+      ));
+   };
+
+   const buildTeacherReports = (messages = []) => {
+      const dateLimit = getDateLimit();
+      const reportStudents = {
+         xinNghi: new Set(),
+         baoThuoc: new Set(),
+         guiTinNhan: new Set(),
+         doiNguoi: new Set(),
+         veTre: new Set()
+      };
+
+      messages.forEach((message) => {
+         if (new Date(message.created_at) < dateLimit) return;
+         const content = message.content?.toUpperCase() || '';
+         const isPH = message.description === 'PH' || (!message.manv);
+         if (!isPH) return;
+
+         if (content.includes('XIN NGHỈ') || content.includes('XIN NGHI')) reportStudents.xinNghi.add(message.mahv);
+         else if (content.includes('DẶN THUỐC') || content.includes('DAN THUOC')) reportStudents.baoThuoc.add(message.mahv);
+         else if (content.includes('ĐỔI NGƯỜI') || content.includes('DOI NGUOI')) reportStudents.doiNguoi.add(message.mahv);
+         else if (content.includes('VỀ TRỄ') || content.includes('VE TRE')) reportStudents.veTre.add(message.mahv);
+         else reportStudents.guiTinNhan.add(message.mahv);
+      });
+
+      return {
+         xinNghi: reportStudents.xinNghi.size,
+         baoThuoc: reportStudents.baoThuoc.size,
+         guiTinNhan: reportStudents.guiTinNhan.size,
+         doiNguoi: reportStudents.doiNguoi.size,
+         veTre: reportStudents.veTre.size
+      };
+   };
+
+   const mergeTeacherThreadMessages = (currentMessages = [], incomingMessages = []) => (
+      sortMessagesByCreatedAt(dedupeMessages([...currentMessages, ...incomingMessages]), true)
+   );
 
    const getFilteredChatStudents = () => {
       const dateLimit = getDateLimit();
@@ -232,6 +305,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [attLatestMessages, setAttLatestMessages] = useState([]);
    const [attChatMessages, setAttChatMessages] = useState([]);
    const [attChatLoading, setAttChatLoading] = useState(false);
+   const [attChatLoadingMore, setAttChatLoadingMore] = useState(false);
+   const [attChatHasMore, setAttChatHasMore] = useState(false);
    const [attChatInput, setAttChatInput] = useState('');
    const [attChatDocuments, setAttChatDocuments] = useState([]);
    const [attSearchQuery, setAttSearchQuery] = useState('');
@@ -255,10 +330,20 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [teacherChatDropActive, setTeacherChatDropActive] = useState(false);
    const mobileChatPanelHeight = '90dvh';
    const attChatInputRef = React.useRef(null);
+   const attChatStudentIdRef = React.useRef('');
 
    useEffect(() => {
       resizeChatTextarea(attChatInputRef.current, 3);
    }, [attChatInput]);
+
+   useEffect(() => {
+      attChatStudentIdRef.current = attChatSelectedStudent?.mahv || '';
+   }, [attChatSelectedStudent]);
+
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   useEffect(() => {
+      setAttReports(buildTeacherReports(attLatestMessages));
+   }, [attLatestMessages, attDateFilter]);
 
    const syncAppBadge = (count) => {
       const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -700,56 +785,52 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (!attendanceUser) return;
       if (attAllStudents.length === 0) {
          setAttLatestMessages([]);
-         setAttReports({ xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 });
          return;
       }
-
-      const dateLimit = getDateLimit();
 
       const studentIds = [...new Set(attAllStudents.map(student => student?.mahv).filter(Boolean))];
       if (studentIds.length === 0) {
          setAttLatestMessages([]);
-         setAttReports({ xinNghi: 0, baoThuoc: 0, guiTinNhan: 0, doiNguoi: 0, veTre: 0 });
          return;
       }
 
-      const { data: msgs } = await supabase
-         .from('hv_messages')
-         .select('*')
+      const { data, error } = await supabase
+         .from('tbl_hv')
+         .select('mahv, hv_messages(id, mahv, manv, content, description, created_at, image_url, file_url, file_name, file_mime_type)')
          .in('mahv', studentIds)
-         .order('created_at', { ascending: false });
+         .limit(TEACHER_CHAT_PAGE_SIZE, { foreignTable: 'hv_messages' })
+         .order('created_at', { foreignTable: 'hv_messages', ascending: false });
 
-      if (msgs) {
-         setAttLatestMessages(msgs);
-         const reportStudents = {
-            xinNghi: new Set(),
-            baoThuoc: new Set(),
-            guiTinNhan: new Set(),
-            doiNguoi: new Set(),
-            veTre: new Set()
-         };
-
-         msgs.forEach(m => {
-            if (new Date(m.created_at) < dateLimit) return;
-            const content = m.content?.toUpperCase() || '';
-            const isPH = m.description === 'PH' || (!m.manv);
-            if (!isPH) return;
-
-            if (content.includes('XIN NGHỈ') || content.includes('XIN NGHI')) reportStudents.xinNghi.add(m.mahv);
-            else if (content.includes('DẶN THUỐC') || content.includes('DAN THUOC')) reportStudents.baoThuoc.add(m.mahv);
-            else if (content.includes('ĐỔI NGƯỜI') || content.includes('DOI NGUOI')) reportStudents.doiNguoi.add(m.mahv);
-            else if (content.includes('VỀ TRỄ') || content.includes('VE TRE')) reportStudents.veTre.add(m.mahv);
-            else reportStudents.guiTinNhan.add(m.mahv);
-         });
-
-         setAttReports({
-            xinNghi: reportStudents.xinNghi.size,
-            baoThuoc: reportStudents.baoThuoc.size,
-            guiTinNhan: reportStudents.guiTinNhan.size,
-            doiNguoi: reportStudents.doiNguoi.size,
-            veTre: reportStudents.veTre.size
-         });
+      if (error) {
+         console.error('Error fetching teacher chat summaries:', error);
+         return;
       }
+
+      if (data) {
+         const summaryMessages = data.flatMap((student) => student.hv_messages || []);
+         setAttLatestMessages(mergeTeacherSummaryMessages([], summaryMessages));
+      }
+   };
+
+   const refreshTeacherSummaryForStudent = async (studentId) => {
+      if (!studentId) return;
+
+      const { data, error } = await supabase
+         .from('hv_messages')
+         .select('id, mahv, manv, content, description, created_at, image_url, file_url, file_name, file_mime_type')
+         .eq('mahv', studentId)
+         .order('created_at', { ascending: false })
+         .limit(TEACHER_CHAT_PAGE_SIZE);
+
+      if (error) {
+         console.error('Error refreshing teacher summary for student:', error);
+         return;
+      }
+
+      setAttLatestMessages((prev) => {
+         const otherMessages = prev.filter((message) => message.mahv !== studentId);
+         return mergeTeacherSummaryMessages(otherMessages, data || []);
+      });
    };
 
    const getNotifType = (content) => {
@@ -818,6 +899,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
    };
 
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
       const fetchAllStudentsData = async () => {
          if (attendanceUser && attTab === 'chat' && attClasses.length > 0 && attAllStudents.length === 0) {
@@ -837,12 +919,13 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          fetchAttUnreads();
          if (attTab === 'chat') {
             fetchAttSummaries();
-            const interval = setInterval(() => { fetchAttSummaries(); fetchAttUnreads(); }, 30000);
+            const interval = setInterval(() => { fetchAttUnreads(); }, 30000);
             return () => clearInterval(interval);
          }
       }
    }, [attendanceUser, attTab, attDateFilter, attAllStudents, attClasses]);
 
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
       if (attendanceUser) {
          fetchAttUnreads();
@@ -866,21 +949,92 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      }
                   }
                }
-               fetchAttUnreads(); fetchAttSummaries();
+               if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
+                  setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev, [payload.new]));
+               }
+               fetchAttUnreads();
             })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => {
-               fetchAttUnreads(); fetchAttSummaries();
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, (payload) => {
+               if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
+                  setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev.filter((message) => message.id !== payload.new.id), [payload.new]));
+               }
+               fetchAttUnreads();
             })
-            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => {
-               fetchAttUnreads(); fetchAttSummaries();
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, (payload) => {
+               const studentId = payload.old?.mahv;
+               const deletedId = payload.old?.id;
+               if (studentId && attAllStudents.some(s => s.mahv === studentId)) {
+                  setAttLatestMessages((prev) => prev.filter((message) => message.id !== deletedId));
+                  refreshTeacherSummaryForStudent(studentId);
+               }
+               fetchAttUnreads();
             })
             .subscribe();
          return () => supabase.removeChannel(channel);
       }
    }, [attendanceUser, attDateFilter, attAllStudents]);
 
+   const scrollTeacherChatToBottom = () => {
+      setTimeout(() => {
+         if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight;
+      }, 100);
+   };
+
+   const loadOlderTeacherChatMessages = async () => {
+      if (!attChatSelectedStudent?.mahv || !attChatHasMore || attChatLoadingMore || attChatLoading || attChatMessages.length === 0) return;
+
+      const studentId = attChatSelectedStudent.mahv;
+      const oldestCreatedAt = attChatMessages[0]?.created_at;
+      if (!oldestCreatedAt) return;
+
+      const scrollContainer = attScrollRef.current;
+      const previousScrollTop = scrollContainer?.scrollTop || 0;
+      const previousScrollHeight = scrollContainer?.scrollHeight || 0;
+
+      setAttChatLoadingMore(true);
+      try {
+         const { data, error } = await supabase
+            .from('hv_messages')
+            .select('*')
+            .eq('mahv', studentId)
+            .lt('created_at', oldestCreatedAt)
+            .order('created_at', { ascending: false })
+            .limit(TEACHER_CHAT_PAGE_SIZE);
+
+         if (error) throw error;
+         if (attChatStudentIdRef.current !== studentId) return;
+
+         const olderMessages = sortMessagesByCreatedAt(data || [], true);
+         setAttChatHasMore((data || []).length === TEACHER_CHAT_PAGE_SIZE);
+
+         if (olderMessages.length > 0) {
+            setAttChatMessages((prev) => mergeTeacherThreadMessages(olderMessages, prev));
+            setTimeout(() => {
+               if (!attScrollRef.current) return;
+               const nextScrollHeight = attScrollRef.current.scrollHeight;
+               attScrollRef.current.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop;
+            }, 0);
+         }
+      } catch (error) {
+         console.error('Error loading older teacher chat messages:', error);
+      } finally {
+         if (attChatStudentIdRef.current === studentId) {
+            setAttChatLoadingMore(false);
+         }
+      }
+   };
+
+   const handleAttChatScroll = () => {
+      if (!attScrollRef.current || attChatLoading || attChatLoadingMore || !attChatHasMore) return;
+      if (attScrollRef.current.scrollTop <= 80) {
+         loadOlderTeacherChatMessages();
+      }
+   };
+
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
       if (attTab === 'chat' && attChatSelectedStudent) {
+         let isActive = true;
          const markAsRead = async () => {
             await markTeacherThreadAsRead(attChatSelectedStudent.mahv);
          };
@@ -888,15 +1042,33 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
          const fetchMessages = async () => {
             setAttChatLoading(true);
-            const { data } = await supabase.from('hv_messages').select('*').eq('mahv', attChatSelectedStudent.mahv).order('created_at', { ascending: true });
-            if (data) setAttChatMessages(data);
+            setAttChatLoadingMore(false);
+            setAttChatHasMore(false);
+            const studentId = attChatSelectedStudent.mahv;
+            const { data, error } = await supabase
+               .from('hv_messages')
+               .select('*')
+               .eq('mahv', studentId)
+               .order('created_at', { ascending: false })
+               .limit(TEACHER_CHAT_PAGE_SIZE);
+
+            if (!isActive || attChatStudentIdRef.current !== studentId) return;
+
+            if (error) {
+               console.error('Error fetching teacher chat messages:', error);
+               setAttChatMessages([]);
+            } else {
+               const nextMessages = sortMessagesByCreatedAt(data || [], true);
+               setAttChatMessages(nextMessages);
+               setAttChatHasMore((data || []).length === TEACHER_CHAT_PAGE_SIZE);
+            }
             setAttChatLoading(false);
-            setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+            scrollTeacherChatToBottom();
          };
 
          const fetchDocs = async () => {
             const { data } = await supabase.from('documents').select('*').eq('mahv', attChatSelectedStudent.mahv).order('created_at', { ascending: false });
-            if (data) setAttChatDocuments(data.filter(doc => doc.category !== tuitionTransferProofCategory));
+            if (isActive && data) setAttChatDocuments(data.filter(doc => doc.category !== tuitionTransferProofCategory));
          };
 
          fetchMessages();
@@ -906,19 +1078,22 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
                setAttChatMessages(prev => {
                   if (prev.some(m => m.id === payload.new.id)) return prev;
-                  return [...prev, payload.new];
+                  return mergeTeacherThreadMessages(prev, [payload.new]);
                });
                const isParentMessage = payload.new.description === 'PH' || (!payload.new.manv);
                if (isParentMessage && !payload.new.is_read) {
                   markTeacherThreadAsRead(attChatSelectedStudent.mahv);
                }
-               setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);
+               scrollTeacherChatToBottom();
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
-               setAttChatMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+               setAttChatMessages(prev => mergeTeacherThreadMessages(prev.filter(m => m.id !== payload.new.id), [payload.new]));
             }).subscribe();
 
-         return () => supabase.removeChannel(threadChannel);
+         return () => {
+            isActive = false;
+            supabase.removeChannel(threadChannel);
+         };
       }
    }, [attTab, attChatSelectedStudent]);
 
@@ -1500,66 +1675,73 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                </button>
             </div>
 
-            <div ref={attScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: isMobileChatView ? '0.85rem 0.75rem' : '1rem', display: 'flex', flexDirection: 'column', gap: isMobileChatView ? '12px' : '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)', width: '100%', maxWidth: '100%', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+            <div ref={attScrollRef} onScroll={handleAttChatScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: isMobileChatView ? '0.85rem 0.75rem' : '1rem', display: 'flex', flexDirection: 'column', gap: isMobileChatView ? '12px' : '14px', background: 'linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)', width: '100%', maxWidth: '100%', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                {attChatLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader2 size={24} className="spinner" /></div>
                ) : attChatMessages.length === 0 ? (
                   <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontSize: '0.9rem', background: 'white', border: '1px dashed #cbd5e1', borderRadius: '18px', padding: '1.5rem 1.25rem' }}>Bắt đầu trò chuyện với phụ huynh của {attChatSelectedStudent.tenhv}</div>
                ) : (
-                  groupMessagesForDisplay(attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]'))).map((m, idx) => {
-                     if (isHiddenSystemChatMessage(m)) return null;
-                     const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
-                     const senderName = getTeacherChatSenderName(m);
-                     const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
-                     const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
-                     return (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isMobileChatView ? '100%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', minWidth: 0 }}>
-                           <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800, lineHeight: 1.35, wordBreak: 'break-word' }}>
-                              {senderName}
-                           </div>
-                           {m.content && (
-                              <div style={{
-                                 padding: isMobileChatView ? '10px 12px' : '11px 14px',
-                                 borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                 background: isMe ? 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)' : 'white',
-                                 color: isMe ? 'white' : '#1e293b',
-                                 border: isMe ? 'none' : '1px solid #e2e8f0',
-                                 boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
-                                 fontSize: isMobileChatView ? '0.9rem' : '0.92rem',
-                                 lineHeight: 1.5,
-                                 width: 'fit-content',
-                                 maxWidth: '100%',
-                                 whiteSpace: 'pre-wrap',
-                                 wordBreak: 'break-word',
-                                 overflowWrap: 'anywhere'
-                              }}>
-                                 <ChatMessageContent content={m.content} isOwnMessage={isMe} />
-                              </div>
-                           )}
-                           {imageAttachments.map((attachment, attachmentIndex) => (
-                              <div key={attachment.id || `${idx}-image-${attachmentIndex}`} style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', width: 'fit-content' }}>
-                                 <img src={attachment.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain', cursor: 'zoom-in' }} referrerPolicy="no-referrer" onClick={() => setPreviewImage(attachment.image_url)} />
-                              </div>
-                           ))}
-                           {fileAttachments.map((attachment, attachmentIndex) => (
-                              <ChatMediaAttachment key={attachment.id || `${idx}-file-${attachmentIndex}`} fileUrl={attachment.file_url} fileName={attachment.file_name} mimeType={attachment.file_mime_type} isOwnMessage={isMe} />
-                           ))}
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                              <button
-                                 type="button"
-                                 onClick={() => toggleAttChatReaction(m)}
-                                 style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: m.reaction ? '#e11d48' : '#94a3b8' }}
-                                 title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
-                              >
-                                 <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
-                              </button>
-                              <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: 0 }}>
-                                 {formatMessageTimestamp(m.created_at)}
-                              </span>
-                           </div>
+                  <>
+                     {attChatLoadingMore && (
+                        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '4px' }}>
+                           <Loader2 size={18} className="spinner" />
                         </div>
-                     );
-                  })
+                     )}
+                     {groupMessagesForDisplay(attChatMessages.filter(m => !m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]'))).map((m, idx) => {
+                        if (isHiddenSystemChatMessage(m)) return null;
+                        const isMe = m.manv === (attendanceUser.manv || attendanceUser.username) && m.description !== 'PH';
+                        const senderName = getTeacherChatSenderName(m);
+                        const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
+                        const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
+                        return (
+                           <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: isMobileChatView ? '100%' : '88%', alignSelf: isMe ? 'flex-end' : 'flex-start', minWidth: 0 }}>
+                              <div style={{ fontSize: '0.69rem', color: '#64748b', marginBottom: '5px', padding: '0 4px', fontWeight: 800, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                                 {senderName}
+                              </div>
+                              {m.content && (
+                                 <div style={{
+                                    padding: isMobileChatView ? '10px 12px' : '11px 14px',
+                                    borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                                    background: isMe ? 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)' : 'white',
+                                    color: isMe ? 'white' : '#1e293b',
+                                    border: isMe ? 'none' : '1px solid #e2e8f0',
+                                    boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
+                                    fontSize: isMobileChatView ? '0.9rem' : '0.92rem',
+                                    lineHeight: 1.5,
+                                    width: 'fit-content',
+                                    maxWidth: '100%',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                    overflowWrap: 'anywhere'
+                                 }}>
+                                    <ChatMessageContent content={m.content} isOwnMessage={isMe} />
+                                 </div>
+                              )}
+                              {imageAttachments.map((attachment, attachmentIndex) => (
+                                 <div key={attachment.id || `${idx}-image-${attachmentIndex}`} style={{ marginTop: '6px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0', background: 'white', padding: '4px', maxWidth: '100%', width: 'fit-content' }}>
+                                    <img src={attachment.image_url} alt="chat" style={{ display: 'block', width: '100%', maxWidth: isMobileChatView ? '100%' : '420px', height: 'auto', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain', cursor: 'zoom-in' }} referrerPolicy="no-referrer" onClick={() => setPreviewImage(attachment.image_url)} />
+                                 </div>
+                              ))}
+                              {fileAttachments.map((attachment, attachmentIndex) => (
+                                 <ChatMediaAttachment key={attachment.id || `${idx}-file-${attachmentIndex}`} fileUrl={attachment.file_url} fileName={attachment.file_name} mimeType={attachment.file_mime_type} isOwnMessage={isMe} />
+                              ))}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                 <button
+                                    type="button"
+                                    onClick={() => toggleAttChatReaction(m)}
+                                    style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: m.reaction ? '#e11d48' : '#94a3b8' }}
+                                    title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
+                                 >
+                                    <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
+                                 </button>
+                                 <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: 0 }}>
+                                    {formatMessageTimestamp(m.created_at)}
+                                 </span>
+                              </div>
+                           </div>
+                        );
+                     })}
+                  </>
                )}
             </div>
 
