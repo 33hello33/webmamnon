@@ -8,6 +8,7 @@ import { useConfig } from './ConfigContext';
 import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search } from 'lucide-react';
 import ParentPortal from './components/ParentPortal';
 import TeacherPortal from './components/TeacherPortal';
+import { enrichParentChildren, fetchParentStudentPortalData } from './utils/parentPortalData';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_MONTH_MS = 30 * ONE_DAY_MS;
@@ -158,63 +159,28 @@ function Login() {
       return true;
    };
 
-   const fetchParentPortalData = async (studentRecord) => {
-      const mahv = studentRecord.mahv;
-      const { data: feeRows } = await supabase.from('tbl_thongbao').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(20);
-      const { data: invoiceRows } = await supabase.from('tbl_hd').select('*').eq('mahv', mahv).order('ngaylap', { ascending: false }).limit(20);
-      const { data: attendances } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', mahv).order('ngay', { ascending: false }).limit(30);
-
-      const isDeletedRecord = (record) => {
-         const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
-         return deletedValue === 'đã xóa' || deletedValue === 'da xoa';
-      };
-
-      const feeData = (feeRows || []).find(row => !isDeletedRecord(row)) || null;
-      const invoices = (invoiceRows || []).filter(row => !isDeletedRecord(row));
-
-      let teacherManv = null;
-      let tenLop = null;
-      const { data: classData } = await supabase.from('tbl_lop').select('manv, tenlop').eq('malop', studentRecord.malop).maybeSingle();
-      if (classData) {
-         teacherManv = classData.manv;
-         tenLop = classData.tenlop;
-      } else {
-         const { data: firstNv } = await supabase.from('tbl_nv').select('manv').limit(1).maybeSingle();
-         teacherManv = firstNv?.manv || null;
-      }
-
-      let teacherInfo = null;
-      if (teacherManv) {
-         const { data: nvData } = await supabase.from('tbl_nv').select('tennv, role, sdt').eq('manv', teacherManv).maybeSingle();
-         teacherInfo = nvData;
-      }
-
-      return {
-         student: { ...studentRecord, tenlop: tenLop },
-         latestFee: feeData || null,
-         invoices: invoices || [],
-         attendances: attendances || [],
-         teacherManv,
-         teacherInfo
-      };
-   };
-
    const authenticateParent = async (loginUsername, loginPassword) => {
       const { data, error } = await supabase
          .from('tbl_hv')
          .select('*')
          .eq('username', loginUsername)
          .eq('password', loginPassword)
-         .maybeSingle();
+         .order('tenhv', { ascending: true });
 
       if (error) throw new Error('Lỗi hệ thống khi tra cứu dữ liệu.');
-      if (!data) return { ok: false };
+      const matchedStudents = (data || []).filter((student) => student?.trangthai !== 'Đã Nghỉ');
+      if (matchedStudents.length === 0) return { ok: false };
 
-      return { ok: true, student: data };
+      return { ok: true, students: matchedStudents };
    };
 
-   const completeParentLogin = async (studentRecord, loginUsername, loginPassword) => {
-      const parentDataObj = await fetchParentPortalData(studentRecord);
+   const completeParentLogin = async (studentRecords, loginUsername, loginPassword, options = {}) => {
+      const children = await enrichParentChildren(supabase, studentRecords);
+      const requestedStudentId = options.activeStudentId;
+      const activeStudent = children.find((student) => student.mahv === requestedStudentId) || children[0];
+      const parentDataObj = await fetchParentStudentPortalData(supabase, activeStudent);
+      parentDataObj.children = children;
+      parentDataObj.activeStudentId = parentDataObj.student?.mahv || activeStudent?.mahv || null;
       setParentData(parentDataObj);
       persistParentSession(parentDataObj, loginUsername, loginPassword);
    };
@@ -243,7 +209,9 @@ function Login() {
          return false;
       }
 
-      await completeParentLogin(result.student, savedUsername, savedPassword);
+      await completeParentLogin(result.students, savedUsername, savedPassword, {
+         activeStudentId: session?.data?.activeStudentId || session?.activeStudentId || session?.data?.student?.mahv || session?.student?.mahv
+      });
       return true;
    };
 
@@ -341,7 +309,7 @@ function Login() {
             return;
          }
 
-         await completeParentLogin(result.student, username, password);
+         await completeParentLogin(result.students, username, password);
       } catch (err) {
          console.error(err);
          setMessage({ type: 'error', text: 'Lỗi hệ thống khi tra cứu dữ liệu.' });

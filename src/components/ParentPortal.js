@@ -9,7 +9,8 @@ import ChatMediaAttachment from './ChatMediaAttachment';
 import { groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '../utils/ngoaiKhoaUtils';
 import { saveImageToDevice } from '../utils/mobileImageSave';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone } from 'lucide-react';
+import { fetchParentStudentPortalData } from '../utils/parentPortalData';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone, CheckCircle2 } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
    const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
@@ -188,6 +189,7 @@ function ParentPortal({ parentData, setParentData }) {
    const [unreadNgoaiKhoa, setUnreadNgoaiKhoa] = useState(0);
    const [unreadChuongTrinhHoc, setUnreadChuongTrinhHoc] = useState(0);
    const [previewImage, setPreviewImage] = useState(null);
+   const [isSwitchingChild, setIsSwitchingChild] = useState(false);
    const [calendarDate, setCalendarDate] = useState(new Date());
    const [monthlyAttendance, setMonthlyAttendance] = useState([]);
    const [calendarLoading, setCalendarLoading] = useState(false);
@@ -210,6 +212,13 @@ function ParentPortal({ parentData, setParentData }) {
    const medicineSubmitLockRef = useRef(false);
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
+   const parentChildren = React.useMemo(() => {
+      if (Array.isArray(parentData?.children) && parentData.children.length > 0) {
+         return parentData.children;
+      }
+      return parentData?.student ? [parentData.student] : [];
+   }, [parentData]);
+   const activeStudentId = parentData?.activeStudentId || parentData?.student?.mahv || '';
 
    const getDisplayUrl = (url) => {
       if (!url) return '';
@@ -221,6 +230,47 @@ function ParentPortal({ parentData, setParentData }) {
          if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
       }
       return url;
+   };
+
+   const updateParentSessionCache = (nextParentData) => {
+      try {
+         const savedSession = localStorage.getItem('parent_session');
+         if (!savedSession) return;
+         const parsedSession = JSON.parse(savedSession);
+         localStorage.setItem('parent_session', JSON.stringify({
+            ...parsedSession,
+            data: nextParentData
+         }));
+      } catch (error) {
+         console.error('Không cập nhật được phiên phụ huynh:', error);
+      }
+   };
+
+   const handleSelectChild = async (child) => {
+      if (!child?.mahv || child.mahv === activeStudentId || isSwitchingChild) return;
+
+      setIsSwitchingChild(true);
+      try {
+         const nextContext = await fetchParentStudentPortalData(supabase, child);
+         const nextChildren = parentChildren.map((item) => (
+            item?.mahv === nextContext.student?.mahv
+               ? { ...item, ...nextContext.student }
+               : item
+         ));
+         const nextParentData = {
+            ...nextContext,
+            children: nextChildren,
+            activeStudentId: nextContext.student?.mahv || child.mahv
+         };
+
+         setParentData(nextParentData);
+         updateParentSessionCache(nextParentData);
+      } catch (error) {
+         console.error('Không chuyển được bé đang xem:', error);
+         alert('Không tải được dữ liệu của bé. Vui lòng thử lại.');
+      } finally {
+         setIsSwitchingChild(false);
+      }
    };
 
    const canOpenImageUrl = async (url) => {
@@ -1959,6 +2009,42 @@ function ParentPortal({ parentData, setParentData }) {
                         </div>
                      </div>
                   </div>
+
+                  {parentChildren.length > 1 && (
+                     <div className="premium-children-section">
+                        <div className="premium-section-title" style={{ padding: 0, marginBottom: '12px' }}>Các con của tôi</div>
+                        <div className="premium-children-scroll" aria-label="Danh sách học sinh">
+                           {parentChildren.map((child) => {
+                              const isActive = child?.mahv === activeStudentId;
+                              const childAvatar = child?.imgpath || child?.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(child?.tenhv || 'P')}&background=random`;
+                              return (
+                                 <button
+                                    key={child?.mahv || child?.tenhv}
+                                    type="button"
+                                    className={`premium-child-card ${isActive ? 'active' : ''}`}
+                                    onClick={() => handleSelectChild(child)}
+                                    disabled={isSwitchingChild}
+                                 >
+                                    <span className="premium-child-check">
+                                       {isActive && <CheckCircle2 size={16} />}
+                                    </span>
+                                    <div className="premium-child-avatar">
+                                       <img src={childAvatar} alt={child?.tenhv || 'Bé'} />
+                                    </div>
+                                    <div className="premium-child-name">{child?.tenhv || 'Chưa cập nhật'}</div>
+                                    <div className="premium-child-class">Lớp {child?.tenlop || child?.malop || 'Chưa xếp lớp'}</div>
+                                 </button>
+                              );
+                           })}
+                        </div>
+                        {isSwitchingChild && (
+                           <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.82rem', fontWeight: 600 }}>
+                              <Loader2 size={15} className="spinner" />
+                              Đang chuyển dữ liệu của bé...
+                           </div>
+                        )}
+                     </div>
+                  )}
 
                   {tuitionStatus.isOverdue && (
                      <div
