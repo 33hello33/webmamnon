@@ -49,6 +49,29 @@ const getVietnamTimeTotal = (date = new Date()) => {
    return (parseInt(hour, 10) || 0) * 60 + (parseInt(minute, 10) || 0);
 };
 
+const formatMessageTimestamp = (dateValue) => {
+   if (!dateValue) return '--:--';
+   const messageDate = new Date(dateValue);
+   if (Number.isNaN(messageDate.getTime())) return '--:--';
+
+   const now = new Date();
+   const isSameDay =
+      messageDate.getFullYear() === now.getFullYear() &&
+      messageDate.getMonth() === now.getMonth() &&
+      messageDate.getDate() === now.getDate();
+
+   if (isSameDay) {
+      return messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+   }
+
+   const isSameYear = messageDate.getFullYear() === now.getFullYear();
+   const dateText = isSameYear
+      ? messageDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+      : messageDate.toLocaleDateString('vi-VN');
+
+   return `${dateText} ${messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+};
+
 const getYearMonthKey = (dateStr) => {
    if (!dateStr) return '';
    const date = new Date(dateStr);
@@ -2586,7 +2609,7 @@ function ParentPortal({ parentData, setParentData }) {
                                              <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
                                           </button>
                                           <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 600 }}>
-                                             {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                             {formatMessageTimestamp(m.created_at)}
                                           </span>
                                        </div>
                                     </div>

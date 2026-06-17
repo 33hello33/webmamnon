@@ -31,6 +31,29 @@ const resizeChatTextarea = (textarea, maxLines = 3) => {
    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
 };
 
+const formatMessageTimestamp = (dateValue) => {
+   if (!dateValue) return '--:--';
+   const messageDate = new Date(dateValue);
+   if (Number.isNaN(messageDate.getTime())) return '--:--';
+
+   const now = new Date();
+   const isSameDay =
+      messageDate.getFullYear() === now.getFullYear() &&
+      messageDate.getMonth() === now.getMonth() &&
+      messageDate.getDate() === now.getDate();
+
+   if (isSameDay) {
+      return messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+   }
+
+   const isSameYear = messageDate.getFullYear() === now.getFullYear();
+   const dateText = isSameYear
+      ? messageDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+      : messageDate.toLocaleDateString('vi-VN');
+
+   return `${dateText} ${messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+};
+
 const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
@@ -1531,7 +1554,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                  <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
                               </button>
                               <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: 0 }}>
-                                 {new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                 {formatMessageTimestamp(m.created_at)}
                               </span>
                            </div>
                         </div>

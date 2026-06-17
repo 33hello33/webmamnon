@@ -49,6 +49,29 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
   const { config } = useConfig();
 
+  const formatMessageTimestamp = (dateValue) => {
+    if (!dateValue) return '--:--';
+    const messageDate = new Date(dateValue);
+    if (Number.isNaN(messageDate.getTime())) return '--:--';
+
+    const now = new Date();
+    const isSameDay =
+      messageDate.getFullYear() === now.getFullYear() &&
+      messageDate.getMonth() === now.getMonth() &&
+      messageDate.getDate() === now.getDate();
+
+    if (isSameDay) {
+      return messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const isSameYear = messageDate.getFullYear() === now.getFullYear();
+    const dateText = isSameYear
+      ? messageDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+      : messageDate.toLocaleDateString('vi-VN');
+
+    return `${dateText} ${messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+
   const getClassName = (malop) => {
     if (!malop) return 'Chưa xếp lớp';
     const cls = classes.find(c => c.malop === malop || c.classid === malop);
@@ -1463,7 +1486,7 @@ ${ngoaiKhoaForm.content}
                           >
                             <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
                           </button>
-                          <div className="msg-time" style={{ marginTop: 0 }}>{formatTime(new Date(m.created_at))}</div>
+                          <div className="msg-time" style={{ marginTop: 0 }}>{formatMessageTimestamp(m.created_at)}</div>
                         </div>
                       </div>
 
