@@ -225,6 +225,58 @@ const buildStoredImageKey = (folder, studentId, recordId, extension = 'jpg') => 
    return `${safeFolder}/${safeStudentId}/${Date.now()}_${safeRecordId}.${safeExtension}`;
 };
 
+const uploadGeneratedImage = async (file, storedImageKey, currentConfig) => {
+   if (currentConfig?.r2_enabled) {
+      const uploadedUrl = await uploadToR2(
+         file,
+         currentConfig.r2_endpoint,
+         currentConfig.r2_access_key_id,
+         currentConfig.r2_secret_access_key,
+         currentConfig.r2_bucket_name,
+         currentConfig.r2_public_url,
+         { key: storedImageKey }
+      );
+      if (!uploadedUrl) {
+         throw new Error('Không nhận được đường dẫn ảnh từ Cloudflare R2.');
+      }
+      return uploadedUrl;
+   }
+
+   const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file, {
+      upsert: true,
+      contentType: file.type || 'image/jpeg',
+      cacheControl: '3600'
+   });
+   if (upErr) throw upErr;
+
+   const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
+   if (!publicUrl) {
+      throw new Error('Không nhận được đường dẫn ảnh từ Supabase Storage.');
+   }
+   return publicUrl;
+};
+
+const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl) => {
+   let lastError = null;
+
+   for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await supabase
+         .from(tableName)
+         .update({ image_url: imageUrl })
+         .eq('mahv', studentId)
+         .eq('mahd', recordId);
+
+      if (!error) {
+         return;
+      }
+
+      lastError = error;
+      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+   }
+
+   throw lastError || new Error(`Không cập nhật được image_url cho ${tableName}.`);
+};
+
 export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }) {
    const { config, getTienAnConfig } = useConfig();
    const walletsConfig = (config ? [
@@ -379,32 +431,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         file.name.split('.').pop() || 'jpg'
                      );
 
-                     let imageUrl = '';
-                     if (configRef.current?.r2_enabled) {
-                        imageUrl = await uploadToR2(
-                           file,
-                           configRef.current.r2_endpoint,
-                           configRef.current.r2_access_key_id,
-                           configRef.current.r2_secret_access_key,
-                           configRef.current.r2_bucket_name,
-                           configRef.current.r2_public_url,
-                           { key: storedImageKey }
-                        );
-                     } else {
-                        const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file);
-                        if (upErr) throw upErr;
-                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
-                        imageUrl = publicUrl;
-                     }
-
-                     const { error: invoiceUpdateErr } = await supabase
-                        .from('tbl_hd')
-                        .update({ image_url: imageUrl })
-                        .eq('mahv', downloadingInvoice.mahv)
-                        .eq('mahd', downloadingInvoice.mahd);
-                     if (invoiceUpdateErr) {
-                        console.warn('Không cập nhật được image_url cho hóa đơn học phí:', invoiceUpdateErr);
-                     }
+                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
+                     await updateGeneratedImageUrl('tbl_hd', downloadingInvoice.mahv, downloadingInvoice.mahd, imageUrl);
 
                   } catch (autoSendErr) {
                      console.error('Invoice image save error:', autoSendErr);
@@ -497,32 +525,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         file.name.split('.').pop() || 'jpg'
                      );
 
-                     let imageUrl = '';
-                     if (config?.r2_enabled) {
-                        imageUrl = await uploadToR2(
-                           file,
-                           config.r2_endpoint,
-                           config.r2_access_key_id,
-                           config.r2_secret_access_key,
-                           config.r2_bucket_name,
-                           config.r2_public_url,
-                           { key: storedImageKey }
-                        );
-                     } else {
-                        const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file);
-                        if (upErr) throw upErr;
-                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
-                        imageUrl = publicUrl;
-                     }
-
-                     const { error: noticeUpdateErr } = await supabase
-                        .from('tbl_thongbao')
-                        .update({ image_url: imageUrl })
-                        .eq('mahv', downloadingNotice.mahv)
-                        .eq('mahd', downloadingNotice.mahd);
-                     if (noticeUpdateErr) {
-                        console.warn('Không cập nhật được image_url cho thông báo học phí:', noticeUpdateErr);
-                     }
+                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
+                     await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
 
                   } catch (autoSendErr) {
                      console.error('Notice image save error:', autoSendErr);

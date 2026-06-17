@@ -79,6 +79,49 @@ const getYearMonthKey = (dateStr) => {
    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const getFeePeriodKeys = (record) => {
+   const periodText = String(record?.thoiluong || record?.thang || '').trim();
+   const matches = Array.from(periodText.matchAll(/(\d{1,2})\/(\d{4})/g));
+
+   if (matches.length > 0) {
+      return matches
+         .map(([, month, year]) => `${year}-${String(month).padStart(2, '0')}`)
+         .filter(Boolean);
+   }
+
+   const fallbackKey = getYearMonthKey(record?.ngaybatdau || record?.ngaylap);
+   return fallbackKey ? [fallbackKey] : [];
+};
+
+const getLatestFeePeriodKey = (record) => {
+   const keys = getFeePeriodKeys(record).sort();
+   return keys[keys.length - 1] || '';
+};
+
+const getRecordTime = (record) => {
+   if (!record?.ngaylap) return 0;
+   const time = new Date(record.ngaylap).getTime();
+   return Number.isFinite(time) ? time : 0;
+};
+
+const compareFeeRecordsDesc = (left, right) => {
+   const leftPeriod = getLatestFeePeriodKey(left);
+   const rightPeriod = getLatestFeePeriodKey(right);
+   const periodCompare = rightPeriod.localeCompare(leftPeriod);
+   if (periodCompare !== 0) return periodCompare;
+
+   const timeCompare = getRecordTime(right) - getRecordTime(left);
+   if (timeCompare !== 0) return timeCompare;
+
+   return String(right?.mahd || '').localeCompare(String(left?.mahd || ''), undefined, { numeric: true, sensitivity: 'base' });
+};
+
+const compareRecordTimeDesc = (left, right) => {
+   const timeCompare = getRecordTime(right) - getRecordTime(left);
+   if (timeCompare !== 0) return timeCompare;
+   return String(right?.mahd || '').localeCompare(String(left?.mahd || ''), undefined, { numeric: true, sensitivity: 'base' });
+};
+
 const formatDateStringVi = (dateStr) => {
    if (!dateStr) return '';
    const [year, month, day] = String(dateStr).split('-');
@@ -245,8 +288,12 @@ function ParentPortal({ parentData, setParentData }) {
          if (feeError) throw feeError;
          if (invoiceError) throw invoiceError;
 
-         const latestFee = (feeRows || []).find(row => !isDeletedRecord(row)) || null;
-         const invoices = (invoiceRows || []).filter(row => !isDeletedRecord(row));
+         const latestFeeRows = (feeRows || [])
+            .filter(row => !isDeletedRecord(row));
+         const invoices = (invoiceRows || [])
+            .filter(row => !isDeletedRecord(row))
+            .sort(compareFeeRecordsDesc);
+         const latestFee = [...latestFeeRows].sort(compareRecordTimeDesc)[0] || null;
 
          setParentData(prev => {
             if (!prev) return prev;
@@ -1168,7 +1215,9 @@ function ParentPortal({ parentData, setParentData }) {
          console.warn('Không đọc được danh sách image_url từ tbl_hd:', invoiceRowsError);
       }
 
-      const validInvoiceRows = (invoiceRows || []).filter(row => row?.image_url);
+      const validInvoiceRows = (invoiceRows || [])
+         .filter(row => row?.image_url)
+         .sort(compareFeeRecordsDesc);
       const exactInvoiceRow = invoiceId
          ? validInvoiceRows.find(row => String(row.mahd || '').trim() === invoiceId)
          : null;
@@ -1312,16 +1361,10 @@ function ParentPortal({ parentData, setParentData }) {
       return getFeePeriodLabel(feeRecord).trim().toLowerCase();
    };
 
-   const getRecordTime = (record) => {
-      if (!record?.ngaylap) return 0;
-      const time = new Date(record.ngaylap).getTime();
-      return Number.isFinite(time) ? time : 0;
-   };
-
    const tuitionStatus = (() => {
       const latestNotify = parentData?.latestFee;
       const invoices = parentData?.invoices || [];
-      const latestInv = invoices[0] || null;
+      const latestInv = [...invoices].sort(compareRecordTimeDesc)[0] || null;
       const currentVietnamDate = getVietnamDateParts();
       const currentYearMonth = `${currentVietnamDate.year}-${currentVietnamDate.month}`;
       const currentDay = parseInt(currentVietnamDate.day, 10) || 0;
@@ -1340,11 +1383,24 @@ function ParentPortal({ parentData, setParentData }) {
          };
       }
 
+      const latestNotifyTime = getRecordTime(latestNotify);
+      const latestInvTime = getRecordTime(latestInv);
+
+      if (latestInv && latestInvTime > latestNotifyTime) {
+         const monthText = getFeePeriodLabel(latestInv);
+         return {
+            text: `Học phí đã thanh toán tháng ${monthText}`,
+            isPaid: true,
+            isOverdue: false,
+            statusLabel: 'Đã thanh toán',
+            record: latestInv,
+            activeNotice: null
+         };
+      }
+
       const noticePeriod = normalizeFeePeriod(latestNotify);
       const matchedInvoice = invoices.find(inv => normalizeFeePeriod(inv) === noticePeriod) || null;
-      const notifyTime = getRecordTime(latestNotify);
-      const matchedInvoiceTime = getRecordTime(matchedInvoice);
-      const isPaid = Boolean(matchedInvoice && matchedInvoiceTime >= notifyTime);
+      const isPaid = Boolean(matchedInvoice);
       const monthText = getFeePeriodLabel(latestNotify);
       const feeYearMonth = getYearMonthKey(latestNotify.ngaybatdau || latestNotify.ngaylap);
       const isCurrentOrPastFee = feeYearMonth ? feeYearMonth <= currentYearMonth : true;
@@ -2374,7 +2430,7 @@ function ParentPortal({ parentData, setParentData }) {
 
                   {parentTab === 'fee-tab' && (
                      <div id="fee-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        {parentData.latestFee ? (
+                        {(parentData.latestFee || parentData.invoices.length > 0) ? (
                            <>
                               {!tuitionStatus.isPaid && !tuitionStatus.isOverdue && (
                                  <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', padding: '14px 16px', borderRadius: '16px', marginBottom: '16px', fontWeight: 700 }}>
@@ -2385,7 +2441,7 @@ function ParentPortal({ parentData, setParentData }) {
                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                                     <div>
                                        <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: '5px' }}>{tuitionStatus.text}</div>
-                                       <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
+                                       <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{tuitionStatus.record?.tongcong || parentData.latestFee?.tongcong || parentData.invoices?.[0]?.tongcong} <span style={{ fontSize: '1rem' }}>VNĐ</span></div>
                                     </div>
                                     <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px', height: 'fit-content' }}>
                                        <CreditCard size={24} />
