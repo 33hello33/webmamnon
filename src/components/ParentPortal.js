@@ -329,7 +329,7 @@ function ParentPortal({ parentData, setParentData }) {
                .limit(20),
             supabase
                .from('tbl_hd')
-               .select('*')
+               .select('mahd, ngaylap, ngaybatdau, thoiluong, tongcong, hinhthuc, image_url, daxoa')
                .eq('mahv', studentId)
                .order('ngaylap', { ascending: false })
                .limit(20)
@@ -1256,7 +1256,7 @@ function ParentPortal({ parentData, setParentData }) {
 
       const { data: invoiceRows, error: invoiceRowsError } = await supabase
          .from('tbl_hd')
-         .select('mahd, image_url, thoiluong, ngaylap')
+         .select('mahd, image_url, thoiluong, ngaylap, ngaybatdau')
          .eq('mahv', studentId)
          .order('ngaylap', { ascending: false })
          .limit(20);

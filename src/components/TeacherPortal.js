@@ -499,7 +499,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
 
          // Lấy danh sách học sinh từ bảng tbl_hv
-         const { data: stFound, error: stError } = await supabase.from('tbl_hv').select('*').eq('malop', attSelectedClass);
+         const { data: stFound, error: stError } = await supabase
+            .from('tbl_hv')
+            .select('mahv, tenhv, trangthai, tinhtrangsk')
+            .eq('malop', attSelectedClass);
          if (stError) console.error('Error fetching students:', stError);
 
          // Lọc bỏ học sinh đã nghỉ ở phía client để tránh lỗi cú pháp truy vấn

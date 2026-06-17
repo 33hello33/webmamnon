@@ -45,6 +45,8 @@ import {
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 import './ChatManager.css';
 
+const CHAT_MANAGER_PAGE_SIZE = 10;
+
 const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
   const { config } = useConfig();
@@ -70,6 +72,95 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       : messageDate.toLocaleDateString('vi-VN');
 
     return `${dateText} ${messageDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+
+  const getDashboardDateRange = () => {
+    let startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    let endDate = null;
+
+    if (dateFilter === 'Tuần này') {
+      startDate.setDate(startDate.getDate() - 6);
+    } else if (dateFilter === 'Tháng này') {
+      startDate.setDate(1);
+    } else if (dateFilter === 'tháng trước tới nay') {
+      startDate.setMonth(startDate.getMonth() - 1);
+      startDate.setDate(1);
+    } else if (dateFilter === 'Tuỳ chọn') {
+      startDate = new Date(customRange.start);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(customRange.end);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    return { startDate, endDate };
+  };
+
+  const isDateInDashboardRange = (dateValue) => {
+    if (!dateValue) return false;
+    const { startDate, endDate } = getDashboardDateRange();
+    const targetDate = new Date(dateValue);
+    if (Number.isNaN(targetDate.getTime())) return false;
+    if (targetDate < startDate) return false;
+    if (endDate && targetDate > endDate) return false;
+    return true;
+  };
+
+  const getMessageIdentity = (message) => (
+    message?.id ?? `${message?.mahv || 'unknown'}-${message?.created_at || 'na'}-${message?.manv || 'na'}-${message?.content || ''}-${message?.file_url || ''}-${message?.image_url || ''}`
+  );
+
+  const sortMessagesByCreatedAt = (messageList = [], ascending = true) => (
+    [...messageList].sort((a, b) => {
+      const timeA = new Date(a?.created_at || 0).getTime();
+      const timeB = new Date(b?.created_at || 0).getTime();
+      return ascending ? timeA - timeB : timeB - timeA;
+    })
+  );
+
+  const dedupeMessages = (messageList = []) => {
+    const uniqueMessages = new Map();
+    messageList.forEach((message) => {
+      if (!message) return;
+      uniqueMessages.set(getMessageIdentity(message), message);
+    });
+    return Array.from(uniqueMessages.values());
+  };
+
+  const mergeSummaryMessages = (currentMessages = [], incomingMessages = []) => {
+    const allMessages = dedupeMessages([...currentMessages, ...incomingMessages]).filter((message) => isDateInDashboardRange(message?.created_at));
+    const messagesByStudent = new Map();
+
+    allMessages.forEach((message) => {
+      if (!message?.mahv) return;
+      if (!messagesByStudent.has(message.mahv)) messagesByStudent.set(message.mahv, []);
+      messagesByStudent.get(message.mahv).push(message);
+    });
+
+    return Array.from(messagesByStudent.values()).flatMap((studentMessages) => (
+      sortMessagesByCreatedAt(studentMessages, false).slice(0, CHAT_MANAGER_PAGE_SIZE)
+    ));
+  };
+
+  const mergeThreadMessages = (currentMessages = [], incomingMessages = []) => (
+    sortMessagesByCreatedAt(dedupeMessages([...currentMessages, ...incomingMessages]), true)
+  );
+
+  const mergePaymentProofEntries = (currentDocs = [], incomingDocs = []) => {
+    const latestByStudent = new Map();
+
+    [...currentDocs, ...incomingDocs].forEach((doc) => {
+      if (!doc?.mahv || !doc?.file_url) return;
+      if (doc.category !== tuitionTransferProofCategory) return;
+      if (!isDateInDashboardRange(doc.created_at)) return;
+
+      const existing = latestByStudent.get(doc.mahv);
+      if (!existing || new Date(doc.created_at) > new Date(existing.created_at)) {
+        latestByStudent.set(doc.mahv, doc);
+      }
+    });
+
+    return Array.from(latestByStudent.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
 
   const getClassName = (malop) => {
@@ -139,6 +230,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [storageTab, setStorageTab] = useState('image'); // 'image' or 'file'
@@ -181,6 +274,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   const mobileChatPanelHeight = '90dvh';
 
   const scrollRef = useRef();
+  const selectedStudentIdRef = useRef('');
 
   const mergeStateFiles = (setter, key, incomingFiles) => {
     setter(prev => ({
@@ -375,13 +469,52 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    selectedStudentIdRef.current = selectedStudent?.mahv || '';
+  }, [selectedStudent]);
+
+  const fetchDashboardCollections = async () => {
+    const { startDate, endDate } = getDashboardDateRange();
+
+    let query = supabase
+      .from('tbl_hv')
+      .select('mahv, hv_messages(id, mahv, manv, content, description, created_at, image_url, file_url, file_name, file_mime_type), documents!documents_mahv_fkey(id, mahv, file_url, category, created_at, name, mime_type)')
+      .or('trangthai.neq."Đã Nghỉ",trangthai.is.null')
+      .limit(CHAT_MANAGER_PAGE_SIZE, { foreignTable: 'hv_messages' })
+      .limit(1, { foreignTable: 'documents' })
+      .order('created_at', { foreignTable: 'hv_messages', ascending: false })
+      .order('created_at', { foreignTable: 'documents', ascending: false })
+      .gte('hv_messages.created_at', startDate.toISOString())
+      .eq('documents.category', tuitionTransferProofCategory)
+      .gte('documents.created_at', startDate.toISOString());
+
+    if (endDate) {
+      query = query
+        .lte('hv_messages.created_at', endDate.toISOString())
+        .lte('documents.created_at', endDate.toISOString());
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const summaryMessages = (data || []).flatMap((student) => student.hv_messages || []);
+    const latestTransferProofs = (data || []).flatMap((student) => student.documents || []);
+
+    setLatestMessages(mergeSummaryMessages([], summaryMessages));
+    setPaymentProofDocs(mergePaymentProofEntries([], latestTransferProofs));
+  };
+
   // ----- Initial Data Fetching -----
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         // Fetch Classes
-        const { data: classData } = await supabase.from('tbl_lop').select('*').or('daxoa.neq."Đã Xóa",daxoa.is.null');
+        const { data: classData } = await supabase
+          .from('tbl_lop')
+          .select('malop, tenlop, classid, classname, giaovien, manv')
+          .or('daxoa.neq."Đã Xóa",daxoa.is.null');
         if (classData) setClasses(classData);
 
         // Fetch Staff / Teachers
@@ -396,13 +529,14 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         }
 
         // Fetch Students
-        const { data: studentData } = await supabase.from('tbl_hv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+        const { data: studentData } = await supabase
+          .from('tbl_hv')
+          .select('mahv, tenhv, malop, sdtme, sdt, diachi, imgpath')
+          .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
         if (studentData) setStudents(studentData);
 
-        // Fetch Latest Messages
-        await fetchSummaries();
-
-        // Fetch Unreads
+        // Fetch Dashboard Data
+        await fetchDashboardCollections();
         await fetchUnreads();
       } catch (err) {
         console.error('Error fetching chat dashboard data:', err);
@@ -411,20 +545,41 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       }
     };
     fetchData();
+  }, []);
 
-    // Subscribe to unread count changes
-    const badgeChannel = supabase.channel('chat_manager_badger')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages' }, () => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const badgeChannel = supabase.channel(`chat_manager_badger_${dateFilter}_${customRange.start}_${customRange.end}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
         fetchUnreads();
-        fetchSummaries(); // Also refresh standard latest messages
+        if (isDateInDashboardRange(payload.new?.created_at)) {
+          setLatestMessages(prev => mergeSummaryMessages(prev, [payload.new]));
+        }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => {
-        fetchPaymentProofs();
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, (payload) => {
+        fetchUnreads();
+        refreshSummaryForStudent(payload.new?.mahv);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, (payload) => {
+        fetchUnreads();
+        refreshSummaryForStudent(payload.old?.mahv);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'documents' }, (payload) => {
+        if (payload.new?.category !== tuitionTransferProofCategory) return;
+        if (!isDateInDashboardRange(payload.new?.created_at)) return;
+        setPaymentProofDocs(prev => mergePaymentProofEntries(prev, [payload.new]));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'documents' }, (payload) => {
+        const studentId = payload.new?.mahv || payload.old?.mahv;
+        refreshPaymentProofForStudent(studentId);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'documents' }, (payload) => {
+        refreshPaymentProofForStudent(payload.old?.mahv);
       })
       .subscribe();
 
     return () => supabase.removeChannel(badgeChannel);
-  }, []);
+  }, [dateFilter, customRange.start, customRange.end]);
 
   const fetchUnreads = async () => {
     const { data } = await supabase
@@ -445,76 +600,74 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   };
 
   const fetchSummaries = async () => {
-    // Determine time range based on dateFilter
-    let startDate = new Date();
-    startDate.setHours(0, 0, 0, 0);
-
-    if (dateFilter === 'Tuần này') {
-      startDate.setDate(startDate.getDate() - 6);
-    } else if (dateFilter === 'Tháng này') {
-      startDate.setDate(1);
-    } else if (dateFilter === 'tháng trước tới nay') {
-      startDate.setMonth(startDate.getMonth() - 1);
-      startDate.setDate(1);
-    } else if (dateFilter === 'Tuỳ chọn') {
-      startDate = new Date(customRange.start);
-      startDate.setHours(0, 0, 0, 0);
+    try {
+      await fetchDashboardCollections();
+    } catch (error) {
+      console.error('Error fetching dashboard summaries:', error);
     }
-
-    let query = supabase
-      .from('hv_messages')
-      .select('*')
-      .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: false });
-
-    if (dateFilter === 'Tuỳ chọn') {
-      const endDate = new Date(customRange.end);
-      endDate.setHours(23, 59, 59, 999);
-      query = query.lte('created_at', endDate.toISOString());
-    }
-
-    const { data: msgs, error } = await query;
-
-    if (msgs) setLatestMessages(msgs);
   };
 
-  const fetchPaymentProofs = async () => {
-    let startDate = new Date();
-    startDate.setHours(0, 0, 0, 0);
+  const refreshSummaryForStudent = async (studentId) => {
+    if (!studentId) return;
 
-    if (dateFilter === 'Tuần này') {
-      startDate.setDate(startDate.getDate() - 6);
-    } else if (dateFilter === 'Tháng này') {
-      startDate.setDate(1);
-    } else if (dateFilter === 'tháng trước tới nay') {
-      startDate.setMonth(startDate.getMonth() - 1);
-      startDate.setDate(1);
-    } else if (dateFilter === 'Tuỳ chọn') {
-      startDate = new Date(customRange.start);
-      startDate.setHours(0, 0, 0, 0);
+    try {
+      const { startDate, endDate } = getDashboardDateRange();
+      let query = supabase
+        .from('hv_messages')
+        .select('id, mahv, manv, content, description, created_at, image_url, file_url, file_name, file_mime_type')
+        .eq('mahv', studentId)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(CHAT_MANAGER_PAGE_SIZE);
+
+      if (endDate) query = query.lte('created_at', endDate.toISOString());
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      setLatestMessages((prev) => {
+        const otherMessages = prev.filter((message) => message.mahv !== studentId);
+        return mergeSummaryMessages(otherMessages, data || []);
+      });
+    } catch (error) {
+      console.error('Error refreshing student summaries:', error);
     }
-
-    let query = supabase
-      .from('documents')
-      .select('*')
-      .eq('category', tuitionTransferProofCategory)
-      .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: false });
-
-    if (dateFilter === 'Tuỳ chọn') {
-      const endDate = new Date(customRange.end);
-      endDate.setHours(23, 59, 59, 999);
-      query = query.lte('created_at', endDate.toISOString());
-    }
-
-    const { data } = await query;
-    if (data) setPaymentProofDocs(data);
   };
 
+  const refreshPaymentProofForStudent = async (studentId) => {
+    if (!studentId) return;
+
+    try {
+      const { startDate, endDate } = getDashboardDateRange();
+      let query = supabase
+        .from('documents')
+        .select('id, mahv, file_url, category, created_at, name, mime_type')
+        .eq('mahv', studentId)
+        .eq('category', tuitionTransferProofCategory)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (endDate) query = query.lte('created_at', endDate.toISOString());
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      setPaymentProofDocs((prev) => {
+        const otherDocs = prev.filter((doc) => doc.mahv !== studentId);
+        return mergePaymentProofEntries(otherDocs, data || []);
+      });
+    } catch (error) {
+      console.error('Error refreshing payment proof for student:', error);
+    }
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (view === 'dashboard') {
-      fetchSummaries();
-      fetchPaymentProofs();
+      fetchDashboardCollections().catch((error) => {
+        console.error('Error refreshing chat dashboard:', error);
+      });
     }
   }, [dateFilter, view, customRange]);
 
@@ -643,9 +796,66 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     return content || (message.image_url ? '📷 [Hình ảnh]' : (message.file_url ? '📎 [Tài liệu]' : '...'));
   };
 
+  const scrollToBottom = () => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  };
+
+  const loadOlderMessages = async () => {
+    if (!selectedStudent?.mahv || !hasMoreMessages || loadingMoreMessages || loadingMessages || messages.length === 0) return;
+
+    const studentId = selectedStudent.mahv;
+    const oldestCreatedAt = messages[0]?.created_at;
+    if (!oldestCreatedAt) return;
+
+    const scrollContainer = scrollRef.current;
+    const previousScrollTop = scrollContainer?.scrollTop || 0;
+    const previousScrollHeight = scrollContainer?.scrollHeight || 0;
+
+    setLoadingMoreMessages(true);
+    try {
+      const { data, error } = await supabase
+        .from('hv_messages')
+        .select('*')
+        .eq('mahv', studentId)
+        .lt('created_at', oldestCreatedAt)
+        .order('created_at', { ascending: false })
+        .limit(CHAT_MANAGER_PAGE_SIZE);
+
+      if (error) throw error;
+      if (selectedStudentIdRef.current !== studentId) return;
+
+      const olderMessages = sortMessagesByCreatedAt(data || [], true);
+      setHasMoreMessages((data || []).length === CHAT_MANAGER_PAGE_SIZE);
+
+      if (olderMessages.length > 0) {
+        setMessages((prev) => mergeThreadMessages(olderMessages, prev));
+        setTimeout(() => {
+          if (!scrollRef.current) return;
+          const nextScrollHeight = scrollRef.current.scrollHeight;
+          scrollRef.current.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop;
+        }, 0);
+      }
+    } catch (error) {
+      console.error('Error loading older chat messages:', error);
+    } finally {
+      if (selectedStudentIdRef.current === studentId) {
+        setLoadingMoreMessages(false);
+      }
+    }
+  };
+
+  const handleMessagesScroll = () => {
+    if (!scrollRef.current || loadingMessages || loadingMoreMessages || !hasMoreMessages) return;
+    if (scrollRef.current.scrollTop <= 80) {
+      loadOlderMessages();
+    }
+  };
+
   // ----- Chat Logic -----
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!selectedStudent || view !== 'chat') return;
+    let isActive = true;
 
     // Mark as read when opening chat
     const markAsRead = async () => {
@@ -670,12 +880,26 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
     const fetchMessages = async () => {
       setLoadingMessages(true);
-      const { data } = await supabase
+      setLoadingMoreMessages(false);
+      setHasMoreMessages(false);
+      const studentId = selectedStudent.mahv;
+      const { data, error } = await supabase
         .from('hv_messages')
         .select('*')
-        .eq('mahv', selectedStudent.mahv)
-        .order('created_at', { ascending: true });
-      if (data) setMessages(data);
+        .eq('mahv', studentId)
+        .order('created_at', { ascending: false })
+        .limit(CHAT_MANAGER_PAGE_SIZE);
+
+      if (!isActive || selectedStudentIdRef.current !== studentId) return;
+
+      if (error) {
+        console.error('Error fetching chat messages:', error);
+        setMessages([]);
+      } else {
+        const nextMessages = sortMessagesByCreatedAt(data || [], true);
+        setMessages(nextMessages);
+        setHasMoreMessages((data || []).length === CHAT_MANAGER_PAGE_SIZE);
+      }
       setLoadingMessages(false);
       setTimeout(scrollToBottom, 100);
     };
@@ -703,7 +927,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         setMessages(prev => {
           const exists = prev.some(m => m.id === payload.new.id);
           if (exists) return prev;
-          return [...prev, payload.new];
+          return mergeThreadMessages(prev, [payload.new]);
         });
         setTimeout(scrollToBottom, 50);
       })
@@ -713,7 +937,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         table: 'hv_messages',
         filter: `mahv=eq.${selectedStudent.mahv}`
       }, (payload) => {
-        setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+        setMessages(prev => mergeThreadMessages(prev.filter(m => m.id !== payload.new.id), [payload.new]));
       })
       .on('postgres_changes', {
         event: 'DELETE',
@@ -721,17 +945,15 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         table: 'hv_messages'
       }, (payload) => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        refreshSummaryForStudent(payload.old?.mahv);
       })
       .subscribe();
 
     return () => {
+      isActive = false;
       supabase.removeChannel(channel);
     };
   }, [selectedStudent, view]);
-
-  const scrollToBottom = () => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  };
 
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
@@ -784,13 +1006,17 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     if (view === 'dashboard') {
       await fetchSummaries();
     } else if (view === 'chat' && selectedStudent) {
-      // Re-fetch messages for current student
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('hv_messages')
         .select('*')
         .eq('mahv', selectedStudent.mahv)
-        .order('created_at', { ascending: true });
-      if (data) setMessages(data);
+        .order('created_at', { ascending: false })
+        .limit(CHAT_MANAGER_PAGE_SIZE);
+      if (!error && data) {
+        setMessages(sortMessagesByCreatedAt(data, true));
+        setHasMoreMessages(data.length === CHAT_MANAGER_PAGE_SIZE);
+        setTimeout(scrollToBottom, 50);
+      }
     }
     setTimeout(() => setIsRefreshing(false), 1000);
   };
@@ -1418,7 +1644,7 @@ ${ngoaiKhoaForm.content}
             );
           })()}
 
-          <div className="chat-messages scrollable" ref={scrollRef}>
+          <div className="chat-messages scrollable" ref={scrollRef} onScroll={handleMessagesScroll}>
             {loadingMessages ? <div className="loading-center"><Loader2 size={32} className="spinner" /></div> : (
               messages.filter(m => {
                 const isGopY = m.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
@@ -1426,91 +1652,100 @@ ${ngoaiKhoaForm.content}
                   return currentUser?.role === 'Quản lý' || currentUser?.role === 'Hiệu trưởng';
                 }
                 return true;
-              }).length > 0 ? groupMessagesForDisplay(messages.filter(m => {
-                const isGopY = getBaseMessageDescription(m.description) === 'GOPY';
-                if (isGopY) {
-                  return currentUser?.role === 'Quản lý';
-                }
-                return true;
-              })).map((m, idx) => {
-                const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
-                const msgId = m.id || `msg-${idx}-${m.created_at}`;
-                const senderName = getChatSenderName(m);
-                const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
-                const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
-                return (
-                  <div key={msgId} id={`msg-${m.id}`} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
-                    <div className="message-bubble-wrapper">
-                      <div className="msg-sender">{senderName}</div>
-                      <div className="message-bubble">
-                        {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
-                        {getBaseMessageDescription(m.description) === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
-                        {m.content && (
-                          <div className="msg-text">
-                            <ChatMessageContent content={m.content} isOwnMessage={isMine} />
+              }).length > 0 ? (
+                <>
+                  {loadingMoreMessages && (
+                    <div className="loading-center" style={{ paddingTop: 0, paddingBottom: '12px' }}>
+                      <Loader2 size={20} className="spinner" />
+                    </div>
+                  )}
+                  {groupMessagesForDisplay(messages.filter(m => {
+                    const isGopY = getBaseMessageDescription(m.description) === 'GOPY';
+                    if (isGopY) {
+                      return currentUser?.role === 'Quản lý';
+                    }
+                    return true;
+                  })).map((m, idx) => {
+                    const isMine = m.manv === (currentUser.manv || currentUser.username) && m.description !== 'PH';
+                    const msgId = m.id || `msg-${idx}-${m.created_at}`;
+                    const senderName = getChatSenderName(m);
+                    const imageAttachments = (m._attachments || []).filter((attachment) => attachment.image_url);
+                    const fileAttachments = (m._attachments || []).filter((attachment) => attachment.file_url);
+                    return (
+                      <div key={msgId} id={`msg-${m.id}`} className={`message-row ${isMine ? 'mine' : 'theirs'}`}>
+                        <div className="message-bubble-wrapper">
+                          <div className="msg-sender">{senderName}</div>
+                          <div className="message-bubble">
+                            {m.is_pinned && <div className="pinned-badge"><Pin size={10} /> Đã ghim</div>}
+                            {getBaseMessageDescription(m.description) === 'THONG_BAO' && <div className="announcement-badge"><Bell size={10} /> THÔNG BÁO</div>}
+                            {m.content && (
+                              <div className="msg-text">
+                                <ChatMessageContent content={m.content} isOwnMessage={isMine} />
+                              </div>
+                            )}
+                            {imageAttachments.map((attachment, attachmentIndex) => (
+                              <div key={attachment.id || `${msgId}-image-${attachmentIndex}`} className="msg-image">
+                                <img
+                                  src={getDisplayUrl(attachment.image_url)}
+                                  alt={attachment.file_name}
+                                  onClick={() => setPreviewImage(attachment.image_url)}
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+                            ))}
+                            {fileAttachments.map((attachment, attachmentIndex) => (
+                              <ChatMediaAttachment
+                                key={attachment.id || `${msgId}-file-${attachmentIndex}`}
+                                fileUrl={attachment.file_url}
+                                fileName={attachment.file_name}
+                                mimeType={attachment.file_mime_type}
+                                isOwnMessage={isMine}
+                              />
+                            ))}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleMessageReaction(m)}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  color: m.reaction ? '#e11d48' : '#94a3b8'
+                                }}
+                                title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
+                              >
+                                <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
+                              </button>
+                              <div className="msg-time" style={{ marginTop: 0 }}>{formatMessageTimestamp(m.created_at)}</div>
+                            </div>
                           </div>
-                        )}
-                        {imageAttachments.map((attachment, attachmentIndex) => (
-                          <div key={attachment.id || `${msgId}-image-${attachmentIndex}`} className="msg-image">
-                            <img
-                              src={getDisplayUrl(attachment.image_url)}
-                              alt={attachment.file_name}
-                              onClick={() => setPreviewImage(attachment.image_url)}
-                              referrerPolicy="no-referrer"
-                            />
+
+                          <div className="message-actions-trigger" onClick={e => e.stopPropagation()}>
+                            <button className="action-btn-more" onClick={() => setActiveMenu(activeMenu === msgId ? null : msgId)}>
+                              <MoreHorizontal size={16} />
+                            </button>
+
+                            {activeMenu === msgId && (
+                              <div className="message-dropdown-menu">
+                                <button onClick={() => handleAction('edit', m)}><Pencil size={14} /> Chỉnh sửa</button>
+                                <button onClick={() => handleAction('pin', m)}>
+                                  <Pin size={14} /> {m.is_pinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
+                                </button>
+                                <button onClick={() => handleAction('forward', m)}><Share2 size={14} /> Chuyển tiếp</button>
+                                <div className="dropdown-divider"></div>
+                                <button className="delete-opt" onClick={() => handleAction('delete', m)}><Trash2 size={14} /> Xóa tin nhắn</button>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                        {fileAttachments.map((attachment, attachmentIndex) => (
-                          <ChatMediaAttachment
-                            key={attachment.id || `${msgId}-file-${attachmentIndex}`}
-                            fileUrl={attachment.file_url}
-                            fileName={attachment.file_name}
-                            mimeType={attachment.file_mime_type}
-                            isOwnMessage={isMine}
-                          />
-                        ))}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => toggleMessageReaction(m)}
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              padding: 0,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              color: m.reaction ? '#e11d48' : '#94a3b8'
-                            }}
-                            title={m.reaction ? 'Bỏ tim' : 'Thả tim'}
-                          >
-                            <Heart size={15} fill={m.reaction ? '#e11d48' : 'none'} />
-                          </button>
-                          <div className="msg-time" style={{ marginTop: 0 }}>{formatMessageTimestamp(m.created_at)}</div>
                         </div>
                       </div>
-
-                      <div className="message-actions-trigger" onClick={e => e.stopPropagation()}>
-                        <button className="action-btn-more" onClick={() => setActiveMenu(activeMenu === msgId ? null : msgId)}>
-                          <MoreHorizontal size={16} />
-                        </button>
-
-                        {activeMenu === msgId && (
-                          <div className="message-dropdown-menu">
-                            <button onClick={() => handleAction('edit', m)}><Pencil size={14} /> Chỉnh sửa</button>
-                            <button onClick={() => handleAction('pin', m)}>
-                              <Pin size={14} /> {m.is_pinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
-                            </button>
-                            <button onClick={() => handleAction('forward', m)}><Share2 size={14} /> Chuyển tiếp</button>
-                            <div className="dropdown-divider"></div>
-                            <button className="delete-opt" onClick={() => handleAction('delete', m)}><Trash2 size={14} /> Xóa tin nhắn</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }) : (
+                    );
+                  })}
+                </>
+              ) : (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>Chưa có tin nhắn.</div>
               )
             )}

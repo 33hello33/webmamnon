@@ -44,7 +44,7 @@ export const fetchParentStudentPortalData = async (supabase, studentRecord) => {
       .limit(20),
     supabase
       .from('tbl_hd')
-      .select('*')
+      .select('mahd, ngaylap, ngaybatdau, thoiluong, tongcong, hinhthuc, image_url, daxoa')
       .eq('mahv', mahv)
       .order('ngaylap', { ascending: false })
       .limit(20),
