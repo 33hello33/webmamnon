@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, insertLog } from '../supabase';
 import { createPortal } from 'react-dom';
 import { useConfig } from '../ConfigContext';
+import { DEFAULT_CONSECUTIVE_REFUND_CONFIG, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
 import HolidayManager from './HolidayManager';
 import {
   Save,
@@ -56,6 +57,7 @@ const ConfigManager = () => {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isTruTienAnModalOpen, setIsTruTienAnModalOpen] = useState(false);
+  const [isNghiLienTiepModalOpen, setIsNghiLienTiepModalOpen] = useState(false);
   const [syncingSecrets, setSyncingSecrets] = useState(false);
 
   useEffect(() => {
@@ -76,10 +78,7 @@ const ConfigManager = () => {
           available: ['comat', 'vangP', 'vangKP'],
           selected: ['comat', 'vangP', 'vangKP']
         },
-        nghilientiep: typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : (config.nghilientiep || {
-          songaynghilientiep: 7,
-          phantramgiam: 50
-        }),
+        nghilientiep: normalizeConsecutiveRefundConfig(config.nghilientiep, config),
         trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
         tiendangoai: config.tiendangoai || '0',
         xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
@@ -101,7 +100,8 @@ const ConfigManager = () => {
       hangmucthu: formData.hangmucthu.split('\n').map(s => s.trim()).filter(s => s),
       hangmucchi: formData.hangmucchi.split('\n').map(s => s.trim()).filter(s => s),
       sonhanvientrogiang: Math.max(0, Math.min(3, parseInt(formData.sonhanvientrogiang) || 0)),
-      ngayquahan: Math.max(0, parseInt(formData.ngayquahan) || 0)
+      ngayquahan: Math.max(0, parseInt(formData.ngayquahan) || 0),
+      nghilientiep: normalizeConsecutiveRefundConfig(formData.nghilientiep, formData)
     };
 
     try {
@@ -204,6 +204,47 @@ const ConfigManager = () => {
   };
 
   const trutienanTiers = (typeof formData.trutienan === 'object' && formData.trutienan !== null) ? formData.trutienan : {};
+  const consecutiveRefundConfig = normalizeConsecutiveRefundConfig(formData.nghilientiep, formData);
+
+  const handleAddConsecutiveRefundTier = () => {
+    const newTiers = { ...consecutiveRefundConfig };
+    const existingKeys = Object.keys(newTiers)
+      .map((key) => parseInt(key, 10))
+      .filter((key) => Number.isFinite(key) && key > 0)
+      .sort((left, right) => left - right);
+    let nextKey = existingKeys.length > 0 ? existingKeys[existingKeys.length - 1] + 1 : 6;
+    while (newTiers[String(nextKey)]) {
+      nextKey += 1;
+    }
+    newTiers[String(nextKey)] = { phantramgiam: 0 };
+    setFormData({ ...formData, nghilientiep: newTiers });
+  };
+
+  const handleUpdateConsecutiveRefundTier = (oldKey, newKey, percent) => {
+    const newTiers = { ...consecutiveRefundConfig };
+    const previous = newTiers[oldKey];
+    const parsedNewKey = parseInt(String(newKey).replace(/\D/g, ''), 10);
+    const safeKey = Number.isFinite(parsedNewKey) && parsedNewKey > 0 ? String(parsedNewKey) : oldKey;
+    delete newTiers[oldKey];
+    newTiers[safeKey] = {
+      phantramgiam: Math.max(0, Math.min(100, parseInt(percent, 10) || 0)),
+      ...(previous && typeof previous === 'object' ? previous : {})
+    };
+    newTiers[safeKey].phantramgiam = Math.max(0, Math.min(100, parseInt(percent, 10) || 0));
+    setFormData({
+      ...formData,
+      nghilientiep: newTiers
+    });
+  };
+
+  const handleRemoveConsecutiveRefundTier = (key) => {
+    const newTiers = { ...consecutiveRefundConfig };
+    delete newTiers[key];
+    setFormData({
+      ...formData,
+      nghilientiep: Object.keys(newTiers).length > 0 ? newTiers : DEFAULT_CONSECUTIVE_REFUND_CONFIG
+    });
+  };
 
   const handleAddTier = () => {
     const newTiers = { ...trutienanTiers };
@@ -235,7 +276,7 @@ const ConfigManager = () => {
         <div className="config-modal">
           <div className="modal-header">
             <h3>Cấu hình mức trừ tiền ăn</h3>
-            <button className="btn-close" onClick={() => setIsTruTienAnModalOpen(false)}>×</button>
+            <button type="button" className="btn-close" onClick={() => setIsTruTienAnModalOpen(false)}>×</button>
           </div>
           <div className="modal-body">
             <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
@@ -262,16 +303,71 @@ const ConfigManager = () => {
                     onChange={(e) => handleUpdateTier(key, key, e.target.value.replace(/,/g, ''))}
                     placeholder="VD: 20000"
                   />
-                  <button className="btn-remove-tier" onClick={() => handleRemoveTier(key)}>×</button>
+                  <button type="button" className="btn-remove-tier" onClick={() => handleRemoveTier(key)}>×</button>
                 </div>
               ))}
-              <button className="btn-add-tier" onClick={handleAddTier}>
+              <button type="button" className="btn-add-tier" onClick={handleAddTier}>
                 <Plus size={16} /> Thêm mức mới
               </button>
             </div>
           </div>
           <div className="modal-footer">
-            <button className="btn-confirm" onClick={() => setIsTruTienAnModalOpen(false)}>Xong</button>
+            <button type="button" className="btn-confirm" onClick={() => setIsTruTienAnModalOpen(false)}>Xong</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
+  const renderNghiLienTiepModal = () => {
+    if (!isNghiLienTiepModalOpen) return null;
+
+    return createPortal(
+      <div className="config-modal-overlay">
+        <div className="config-modal">
+          <div className="modal-header">
+            <h3>Cấu hình hoàn học phí liên tiếp</h3>
+            <button type="button" className="btn-close" onClick={() => setIsNghiLienTiepModalOpen(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
+              Thiết lập các mức hoàn học phí theo số ngày nghỉ phép liên tiếp.
+              Hệ thống sẽ chọn mức cao nhất phù hợp cho từng đợt nghỉ.
+            </p>
+            <div className="tier-list">
+              <div className="tier-header">
+                <span>Số ngày nghỉ</span>
+                <span>Giảm (%)</span>
+                <span></span>
+              </div>
+              {Object.entries(consecutiveRefundConfig).map(([key, val]) => (
+                <div key={key} className="tier-item">
+                  <input
+                    type="number"
+                    min="1"
+                    value={key}
+                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, e.target.value.replace(/\D/g, ''), val?.phantramgiam)}
+                    placeholder="VD: 6"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={val?.phantramgiam || 0}
+                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, key, e.target.value)}
+                    placeholder="VD: 30"
+                  />
+                  <button type="button" className="btn-remove-tier" onClick={() => handleRemoveConsecutiveRefundTier(key)}>×</button>
+                </div>
+              ))}
+              <button type="button" className="btn-add-tier" onClick={handleAddConsecutiveRefundTier}>
+                <Plus size={16} /> Thêm mức mới
+              </button>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn-confirm" onClick={() => setIsNghiLienTiepModalOpen(false)}>Xong</button>
           </div>
         </div>
       </div>,
@@ -569,34 +665,24 @@ const ConfigManager = () => {
                 </div>
                 <div style={{ marginTop: '0.8rem', padding: '10px', background: '#fff5f7', borderRadius: '8px', border: '1px solid #fce7f3' }}>
                   <div className="section-subtitle" style={{ fontSize: '0.8rem', fontWeight: 800, color: '#be185d', marginBottom: '8px', textTransform: 'uppercase' }}>Hoàn học phí liên tiếp</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Nghỉ ≥ (ngày)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={formData.nghilientiep?.songaynghilientiep || 7}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          nghilientiep: { ...formData.nghilientiep, songaynghilientiep: parseInt(e.target.value) || 0 }
-                        })}
-                        style={{ fontSize: '0.9rem', padding: '4px 8px' }}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Giảm (%)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={formData.nghilientiep?.phantramgiam || 0}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          nghilientiep: { ...formData.nghilientiep, phantramgiam: parseInt(e.target.value) || 0 }
-                        })}
-                        style={{ fontSize: '0.9rem', padding: '4px 8px' }}
-                      />
-                    </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsNghiLienTiepModalOpen(true)}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        fontSize: '0.85rem',
+                        background: '#fdf2f8',
+                        border: '1px solid #fce7f3',
+                        borderRadius: '8px',
+                        color: '#be185d',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {Object.keys(consecutiveRefundConfig).length > 0 ? `Đã cấu hình ${Object.keys(consecutiveRefundConfig).length} mức` : 'Nhấp để cấu hình chi tiết'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -703,6 +789,7 @@ const ConfigManager = () => {
           </div>
         </section>
         {renderTruTienAnModal()}
+        {renderNghiLienTiepModal()}
       </form>
     </div>
   );

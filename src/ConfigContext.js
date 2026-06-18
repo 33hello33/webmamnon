@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import { DEFAULT_CONSECUTIVE_REFUND_CONFIG, normalizeConsecutiveRefundConfig } from './utils/consecutiveLeaveRefund';
 
 const ConfigContext = createContext();
 
@@ -17,7 +18,10 @@ export const ConfigProvider = ({ children }) => {
       }
 
       if (data) {
-        setConfig(data);
+        setConfig({
+          ...data,
+          nghilientiep: normalizeConsecutiveRefundConfig(data.nghilientiep, data)
+        });
         // Apply web name to title
         if (data.tenweb) document.title = data.tenweb;
         // Apply logo favicon if needed (simplification: inject link)
@@ -77,6 +81,7 @@ export const ConfigProvider = ({ children }) => {
           tiendangoai: '0',
           sonhanvientrogiang: 1,
           ngayquahan: 0,
+          nghilientiep: DEFAULT_CONSECUTIVE_REFUND_CONFIG,
           phanquyenrole: {
             'Quản lý': { full: true },
             'Nhân viên VP': { full: false, tabs: ['overview', 'finances', 'students'] },

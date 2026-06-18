@@ -6,6 +6,7 @@ import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
+import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, dedupeAttendanceRecordsByDay, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 
@@ -136,60 +137,6 @@ const calculateEndDateBySessions = (startDateStr, numSessions, activeDays) => {
       return toLocalISODate(current);
    }
    return '';
-};
-
-const calculateConsecutiveLeave = (attendance) => {
-   if (!attendance || attendance.length === 0) return [];
-
-   // Filter for excused leave and sort by date
-   const excusedLeaveDays = attendance
-      .filter(att => (att.trangthai || '').trim().toLowerCase() === 'nghỉ phép')
-      .map(att => {
-         const d = new Date(att.ngay);
-         d.setHours(0, 0, 0, 0); // Normalize time
-         return d;
-      })
-      .sort((a, b) => a - b);
-
-   if (excusedLeaveDays.length === 0) return [];
-
-   const groups = [];
-   let currentGroup = [excusedLeaveDays[0]];
-
-   for (let i = 1; i < excusedLeaveDays.length; i++) {
-      const prev = new Date(excusedLeaveDays[i - 1]);
-      const curr = new Date(excusedLeaveDays[i]);
-
-      const diffInDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
-
-      let isConsecutive = false;
-      if (diffInDays === 1) {
-         isConsecutive = true;
-      } else if (diffInDays === 2) {
-         // Check if the middle day is a Sunday (0)
-         const middleDay = new Date(prev);
-         middleDay.setDate(prev.getDate() + 1);
-         if (middleDay.getDay() === 0) {
-            isConsecutive = true;
-         }
-      }
-
-      if (isConsecutive) {
-         currentGroup.push(curr);
-      } else {
-         groups.push([...currentGroup]);
-         currentGroup = [curr];
-      }
-   }
-
-   groups.push(currentGroup);
-
-
-   return groups.map(g => ({
-      ngay_bat_dau_nghi: toLocalISODate(g[0]),
-      ngay_ket_thuc_nghi: toLocalISODate(g[g.length - 1]),
-      so_ngay_nghi_lien_tuc: g.length
-   }));
 };
 
 const dataUrlToBlob = (dataUrl) => {
@@ -337,6 +284,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const configRef = useRef(config);
    configRef.current = config;
    const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
+   const consecutiveRefundConfig = React.useMemo(
+      () => normalizeConsecutiveRefundConfig(config?.nghilientiep, config),
+      [config]
+   );
 
    const [noCu, setNoCu] = useState(0);
    const [unpaidBills, setUnpaidBills] = useState([]);
@@ -870,16 +821,17 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
             if (currentStudentRef.current !== student.mahv) return;
 
+            const uniqueAttendance = dedupeAttendanceRecordsByDay(attendance || []);
             const normalizeStatus = (s) => (s || '').trim().toLowerCase();
             let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
-            (attendance || []).forEach(att => {
+            uniqueAttendance.forEach(att => {
                const s = normalizeStatus(att.trangthai);
                if (s === 'có mặt') daHoc++;
                else if (s === 'nghỉ phép') nghiPhep++;
                else if (s === 'nghỉ không phép') nghiKhongPhep++;
             });
 
-            const consecutiveLeave = calculateConsecutiveLeave(attendance || []);
+            const consecutiveLeave = calculateConsecutiveLeaveGroups(uniqueAttendance);
             const maxConsecutive = consecutiveLeave.length > 0 ? Math.max(...consecutiveLeave.map(l => l.so_ngay_nghi_lien_tuc)) : 0;
             const mm = String(prevMonth.getMonth() + 1).padStart(2, '0');
             const yyyy = prevMonth.getFullYear();
@@ -1171,16 +1123,17 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
          if (currentStudentRef.current !== selectedStudent.mahv) return;
 
+         const uniqueAttendance = dedupeAttendanceRecordsByDay(attendance || []);
          const normalizeStatus = (s) => (s || '').trim().toLowerCase();
          let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
-         (attendance || []).forEach(att => {
+         uniqueAttendance.forEach(att => {
             const s = normalizeStatus(att.trangthai);
             if (s === 'có mặt') daHoc++;
             else if (s === 'nghỉ phép') nghiPhep++;
             else if (s === 'nghỉ không phép') nghiKhongPhep++;
          });
 
-         const consecutiveLeave = calculateConsecutiveLeave(attendance || []);
+         const consecutiveLeave = calculateConsecutiveLeaveGroups(uniqueAttendance);
          const maxConsecutive = consecutiveLeave.length > 0 ? Math.max(...consecutiveLeave.map(l => l.so_ngay_nghi_lien_tuc)) : 0;
 
          const mm = String(prevMonth.getMonth() + 1).padStart(2, '0');
@@ -1492,19 +1445,11 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
    let tuitionRefund = 0;
    let mealRefund = 0;
-   const p6 = parseFloat(config?.nghi6ngay) || 0;
-   const p12 = parseFloat(config?.nghi12ngay) || 0;
-
-   if (studySummary?.consecutiveLeave) {
-      studySummary.consecutiveLeave.forEach(group => {
-         const count = group.so_ngay_nghi_lien_tuc;
-         if (count >= 12) {
-            tuitionRefund += count * trutiennghi_val * (p12 / 100);
-         } else if (count >= 6) {
-            tuitionRefund += count * trutiennghi_val * (p6 / 100);
-         }
-      });
-   }
+   tuitionRefund = calculateConsecutiveTuitionRefund({
+      groups: studySummary?.consecutiveLeave || [],
+      dailyRefundAmount: trutiennghi_val,
+      config: consecutiveRefundConfig
+   });
 
    // Hoàn trả tiền ăn: Tổng số ngày nghỉ phép >= 3 ngày
    if (studySummary?.nghiPhep >= 3) {

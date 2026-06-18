@@ -10,6 +10,7 @@ import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
+import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, dedupeAttendanceRecordsByDay, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import './ClassManager.css';
@@ -140,48 +141,6 @@ const calculateThoiluong = (ngayBatDau, soLuong, loaiDong) => {
   return `${String(start.getUTCMonth() + 1).padStart(2, '0')}/${start.getUTCFullYear()}`;
 };
 
-const calculateConsecutiveLeave = (attendanceData) => {
-  const excusedLeaveDays = (attendanceData || []).filter(a => {
-    const st = (a.trangthai || '').trim().toLowerCase();
-    return st.includes('nghỉ phép') && !st.includes('không');
-  })
-    .map(a => new Date(a.ngay).getTime())
-    .sort((a, b) => a - b);
-
-  if (excusedLeaveDays.length === 0) return [];
-
-  const groups = [];
-  let currentGroup = [excusedLeaveDays[0]];
-
-  for (let i = 1; i < excusedLeaveDays.length; i++) {
-    const prev = new Date(excusedLeaveDays[i - 1]);
-    const curr = new Date(excusedLeaveDays[i]);
-    const diffInDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
-
-    let isConsecutive = false;
-    if (diffInDays === 1) {
-      isConsecutive = true;
-    } else if (diffInDays === 2) {
-      const middleDay = new Date(prev);
-      middleDay.setDate(prev.getDate() + 1);
-      if (middleDay.getDay() === 0) isConsecutive = true;
-    }
-
-    if (isConsecutive) {
-      currentGroup.push(curr);
-    } else {
-      groups.push([...currentGroup]);
-      currentGroup = [curr];
-    }
-  }
-  groups.push(currentGroup);
-  return groups.map(g => ({
-    ngay_bat_dau_nghi: g[0],
-    ngay_ket_thuc_nghi: g[g.length - 1],
-    so_ngay_nghi_lien_tuc: g.length
-  }));
-};
-
 const dataUrlToBlob = (dataUrl) => {
   const [meta, base64] = dataUrl.split(',');
   const mime = meta.match(/data:(.*?);base64/)?.[1] || 'image/png';
@@ -212,6 +171,10 @@ const getNextNoticeNumber = async () => {
 
 export default function ClassManager({ students, showMessage, fetchStudents }) {
   const { config, getTienAnConfig } = useConfig();
+  const consecutiveRefundConfig = React.useMemo(
+    () => normalizeConsecutiveRefundConfig(config?.nghilientiep, config),
+    [config]
+  );
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
     { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -674,36 +637,31 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
         // Đếm status giống hệt InvoiceManager (dùng tên field diHoc, nghiKP như InvoiceManager)
         const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-
-        // Loại bỏ các bản ghi trùng lặp trong cùng một ngày (chỉ lấy bản ghi cuối cùng của ngày đó)
-        const uniqueDayRecords = Array.from(new Map(studentAttendance.map(att => [att.ngay, att])).values());
+        const uniqueDayRecords = dedupeAttendanceRecordsByDay(studentAttendance);
 
         let diHoc = 0, nghiPhep = 0, nghiKP = 0;
-        // Đếm status giống hệt InvoiceManager (dùng tên field diHoc, nghiKP như InvoiceManager)
         uniqueDayRecords.forEach(att => {
           const s = normalizeStatus(att.trangthai);
-          if (s.includes('có mặt')) diHoc++;
-          else if (s.includes('nghỉ phép') && !s.includes('không')) nghiPhep++;
-          else if (s.includes('không phép') || s.includes('nghỉ kp')) nghiKP++;
+          if (s === 'có mặt') diHoc++;
+          else if (s === 'nghỉ phép') nghiPhep++;
+          else if (s === 'nghỉ không phép') nghiKP++;
         });
 
-        const groups = calculateConsecutiveLeave(uniqueDayRecords);
+        const groups = calculateConsecutiveLeaveGroups(uniqueDayRecords);
         let mealRefund = 0;
-        let tuitionRefund = 0;
         let maxLeave = 0;
         const mealRefundRate = getMealRefundRate(initHocPhi);
         const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-        const p6 = parseFloat(config?.nghi6ngay || '0');
-        const p12 = parseFloat(config?.nghi12ngay || '0');
 
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
-          if (count >= 12) {
-            tuitionRefund += count * tuitionRefundRate * (p12 / 100);
-          } else if (count >= 6) {
-            tuitionRefund += count * tuitionRefundRate * (p6 / 100);
-          }
+        });
+
+        let tuitionRefund = calculateConsecutiveTuitionRefund({
+          groups,
+          dailyRefundAmount: tuitionRefundRate,
+          config: consecutiveRefundConfig
         });
 
         if (nghiPhep >= 3) {
@@ -830,35 +788,35 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         .gte('ngay', sStart)
         .lte('ngay', sEnd);
       const attendance = attData || [];
-
       const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
-      const p6 = parseFloat(config?.nghi6ngay || '0');
-      const p12 = parseFloat(config?.nghi12ngay || '0');
 
       setBatchStudentsData(prev => (prev || []).map(row => {
         const studentAttendance = attendance.filter(a => a.mahv === row.mahv && a.ngay >= sStart && a.ngay <= sEnd);
 
         // Đếm lại
         const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-        const uniqueDayRecords = Array.from(new Map(studentAttendance.map(att => [att.ngay, att])).values());
+        const uniqueDayRecords = dedupeAttendanceRecordsByDay(studentAttendance);
 
         let diHoc = 0, nghiPhep = 0, nghiKP = 0;
         uniqueDayRecords.forEach(att => {
           const s = normalizeStatus(att.trangthai);
-          if (s.includes('có mặt')) diHoc++;
-          else if (s.includes('nghỉ phép') && !s.includes('không')) nghiPhep++;
-          else if (s.includes('không phép') || s.includes('nghỉ kp')) nghiKP++;
+          if (s === 'có mặt') diHoc++;
+          else if (s === 'nghỉ phép') nghiPhep++;
+          else if (s === 'nghỉ không phép') nghiKP++;
         });
 
         // Tính lại hoàn tiền
-        const groups = calculateConsecutiveLeave(uniqueDayRecords);
-        let mealRefund = 0, tuitionRefund = 0, maxLeave = 0;
+        const groups = calculateConsecutiveLeaveGroups(uniqueDayRecords);
+        let mealRefund = 0, maxLeave = 0;
         const mealRefundRate = getMealRefundRate(row.hocphi || 0);
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
-          if (count >= 12) tuitionRefund += count * tuitionRefundRate * (p12 / 100);
-          else if (count >= 6) tuitionRefund += count * tuitionRefundRate * (p6 / 100);
+        });
+        let tuitionRefund = calculateConsecutiveTuitionRefund({
+          groups,
+          dailyRefundAmount: tuitionRefundRate,
+          config: consecutiveRefundConfig
         });
         if (nghiPhep >= 3) mealRefund = nghiPhep * mealRefundRate;
 
