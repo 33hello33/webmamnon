@@ -163,6 +163,21 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     return Array.from(latestByStudent.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
 
+  const normalizeClassRecord = (classRecord) => {
+    if (!classRecord) return null;
+    const classId = classRecord.malop || classRecord.classid || '';
+    if (!classId) return null;
+    const className = classRecord.tenlop || classRecord.classname || classId;
+
+    return {
+      ...classRecord,
+      malop: classId,
+      tenlop: className,
+      classid: classRecord.classid || classId,
+      classname: classRecord.classname || className
+    };
+  };
+
   const getClassName = (malop) => {
     if (!malop) return 'Chưa xếp lớp';
     const cls = classes.find(c => c.malop === malop || c.classid === malop);
@@ -284,8 +299,11 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   };
 
   const buildAnnouncementTargets = (formState) => {
-    if (formState.type === 'all') return classes.map(c => c.malop);
-    return formState.selectedClasses;
+    const classIds = formState.type === 'all'
+      ? classes.map(c => c.malop || c.classid)
+      : formState.selectedClasses;
+
+    return Array.from(new Set((classIds || []).filter(Boolean)));
   };
 
   const uploadAttachments = async (files, prefix) => {
@@ -511,11 +529,19 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       setLoading(true);
       try {
         // Fetch Classes
-        const { data: classData } = await supabase
+        const { data: classData, error: classError } = await supabase
           .from('tbl_lop')
-          .select('malop, tenlop, classid, classname, giaovien, manv')
+          .select('malop, tenlop, manv, daxoa')
           .or('daxoa.neq."Đã Xóa",daxoa.is.null');
-        if (classData) setClasses(classData);
+        if (classError) {
+          console.error('Error fetching classes for ChatManager:', classError);
+        } else if (classData) {
+          const normalizedClasses = classData
+            .map(normalizeClassRecord)
+            .filter(Boolean)
+            .sort((a, b) => (a.tenlop || '').localeCompare(b.tenlop || '', 'vi'));
+          setClasses(normalizedClasses);
+        }
 
         // Fetch Staff / Teachers
         const { data: nvData } = await supabase.from('tbl_nv').select('manv, tennv, role');
