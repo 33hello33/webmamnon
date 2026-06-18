@@ -141,6 +141,33 @@ const addDaysToDateString = (dateStr, days) => {
    return `${nextYear}-${nextMonth}-${nextDay}`;
 };
 
+const getLastDayOfMonthString = (year, month) => {
+   const utcDate = new Date(Date.UTC(year, month, 0));
+   const nextYear = utcDate.getUTCFullYear();
+   const nextMonth = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+   const nextDay = String(utcDate.getUTCDate()).padStart(2, '0');
+   return `${nextYear}-${nextMonth}-${nextDay}`;
+};
+
+const getFeeDueBaseDate = (record) => {
+   const endDate = String(record?.ngayketthuc || '').slice(0, 10);
+   if (/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return endDate;
+
+   const latestPeriodKey = getLatestFeePeriodKey(record);
+   if (latestPeriodKey) {
+      const [year, month] = latestPeriodKey.split('-').map(Number);
+      if (year && month) return getLastDayOfMonthString(year, month);
+   }
+
+   const fallbackKey = getYearMonthKey(record?.ngaybatdau || record?.ngaylap);
+   if (fallbackKey) {
+      const [year, month] = fallbackKey.split('-').map(Number);
+      if (year && month) return getLastDayOfMonthString(year, month);
+   }
+
+   return '';
+};
+
 const resizeChatTextarea = (textarea, maxLines = 3) => {
    if (!textarea) return;
 
@@ -1415,9 +1442,9 @@ function ParentPortal({ parentData, setParentData }) {
       const latestNotify = parentData?.latestFee;
       const invoices = parentData?.invoices || [];
       const latestInv = [...invoices].sort(compareRecordTimeDesc)[0] || null;
-      const currentVietnamDate = getVietnamDateParts();
-      const currentYearMonth = `${currentVietnamDate.year}-${currentVietnamDate.month}`;
-      const currentDay = parseInt(currentVietnamDate.day, 10) || 0;
+      const currentYearMonth = `${getVietnamDateParts().year}-${getVietnamDateParts().month}`;
+      const currentDateIso = getVietnamDateString();
+      const overdueGraceDays = Math.max(0, parseInt(config?.ngayquahan || 0, 10));
 
       if (!latestNotify && !latestInv) return { text: 'Thanh toán', isPaid: true, isOverdue: false, statusLabel: 'Đã thanh toán' };
 
@@ -1452,9 +1479,11 @@ function ParentPortal({ parentData, setParentData }) {
       const matchedInvoice = invoices.find(inv => normalizeFeePeriod(inv) === noticePeriod) || null;
       const isPaid = Boolean(matchedInvoice);
       const monthText = getFeePeriodLabel(latestNotify);
-      const feeYearMonth = getYearMonthKey(latestNotify.ngaybatdau || latestNotify.ngaylap);
+      const feeYearMonth = getLatestFeePeriodKey(latestNotify) || getYearMonthKey(latestNotify.ngaybatdau || latestNotify.ngaylap);
       const isCurrentOrPastFee = feeYearMonth ? feeYearMonth <= currentYearMonth : true;
-      const isOverdue = !isPaid && isCurrentOrPastFee && currentDay > 10;
+      const dueBaseDate = getFeeDueBaseDate(latestNotify);
+      const overdueStartDate = dueBaseDate ? addDaysToDateString(dueBaseDate, overdueGraceDays) : '';
+      const isOverdue = !isPaid && isCurrentOrPastFee && overdueStartDate ? overdueStartDate < currentDateIso : false;
 
       if (isPaid) {
          return {
@@ -1473,7 +1502,8 @@ function ParentPortal({ parentData, setParentData }) {
          isOverdue,
          statusLabel: isOverdue ? 'Quá hạn' : (latestNotify.status || 'Chờ thanh toán'),
          record: latestNotify,
-         activeNotice: latestNotify
+         activeNotice: latestNotify,
+         overdueStartDate
       };
    })();
 
@@ -2072,7 +2102,7 @@ function ParentPortal({ parentData, setParentData }) {
                            {tuitionStatus.text}
                         </div>
                         <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '999px', padding: '10px 18px', fontSize: 'clamp(0.95rem, 3.8vw, 1.1rem)', fontWeight: 800 }}>
-                           Vui lòng hoàn tất thanh toán sau ngày 10
+                           Vui lòng hoàn tất thanh toán sau ngày {formatDateStringVi(tuitionStatus.overdueStartDate)}
                         </div>
                      </div>
                   )}
