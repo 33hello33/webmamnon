@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -1160,6 +1160,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          }
 
+         setAttChatMessages(prev => mergeTeacherThreadMessages(prev, insertedMessages));
          for (const message of insertedMessages) {
             await triggerPushNotification(supabase, 'hv_messages', message);
          }
@@ -1190,6 +1191,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (!error && data) {
+         setAttChatMessages(prev => mergeTeacherThreadMessages(prev, [data[0]]));
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setAttChatInput('');
          setTimeout(() => { if (attScrollRef.current) attScrollRef.current.scrollTop = attScrollRef.current.scrollHeight; }, 100);

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -580,6 +580,7 @@ function ParentPortal({ parentData, setParentData }) {
          return;
       }
       if (data) {
+         setChatMessages(prev => [...prev, data[0]]);
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
          setTimeout(() => scrollParentChatToBottom('smooth'), 100);
@@ -1956,6 +1957,7 @@ function ParentPortal({ parentData, setParentData }) {
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) { console.error('Lỗi khi gửi tin nhắn:', error); return; }
       if (data) {
+         setChatMessages(prev => [...prev, data[0]]);
          await triggerPushNotification(supabase, 'hv_messages', data[0]);
          setChatInput('');
          setTimeout(() => scrollParentChatToBottom('smooth'), 100);

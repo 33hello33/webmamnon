@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
@@ -430,6 +430,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
         }
       }
 
+      setMessages(prev => mergeThreadMessages(prev, insertedMessages));
       for (const message of insertedMessages) {
         await triggerPushNotification(supabase, 'hv_messages', message);
       }
@@ -1010,6 +1011,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
     const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
     if (!error && data) {
+      setMessages(prev => mergeThreadMessages(prev, [data[0]]));
       await triggerPushNotification(supabase, 'hv_messages', data[0]);
       setInputText('');
       setTimeout(scrollToBottom, 50);
