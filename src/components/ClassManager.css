@@ -124,11 +124,11 @@
   font-size: 0.9rem;
 }
 
-/* Right Pane: Details */
 .class-details-pane {
   max-height: unset;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   background: white;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
@@ -241,6 +241,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .section-head {
@@ -248,6 +250,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .section-head h3 {
@@ -275,8 +279,8 @@
   min-height: 0;
   max-height: none;
   height: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
 }
 
 .batch-notice-table {

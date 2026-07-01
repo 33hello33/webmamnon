@@ -1138,9 +1138,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   document.body.removeChild(link);
 
                   try {
-                    const fileName = `ThongBao_${notice.tenhv}_${notice.mahd}.png`;
+                    const cleanFileName = `${Date.now()}_${notice.mahd}.jpg`;
                     const blob = dataUrlToBlob(dataUrl);
-                    const pngFile = new File([blob], fileName, { type: 'image/png' });
+                    const pngFile = new File([blob], cleanFileName, { type: 'image/png' });
                     const file = await compressImage(pngFile, 150);
 
                     let imageUrl = '';
@@ -1154,7 +1154,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         config.r2_public_url
                       );
                     } else {
-                      const path = `chat-images/${notice.mahv}_${Date.now()}_${file.name}`;
+                      const path = `notice-images/${notice.mahv}/${cleanFileName}`;
                       const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
                       if (upErr) throw upErr;
                       const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
@@ -1185,9 +1185,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     document.body.removeChild(link);
 
                     try {
-                      const fileName = `ThongBao_${notice.tenhv}_${notice.mahd}_retry.png`;
+                      const cleanFileName = `${Date.now()}_${notice.mahd}.jpg`;
                       const blob = dataUrlToBlob(retryUrl);
-                      const pngFile = new File([blob], fileName, { type: 'image/png' });
+                      const pngFile = new File([blob], cleanFileName, { type: 'image/png' });
                       const file = await compressImage(pngFile, 150);
 
                       let imageUrl = '';
@@ -1201,7 +1201,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           config.r2_public_url
                         );
                       } else {
-                        const path = `chat-images/${notice.mahv}_${Date.now()}_${file.name}`;
+                        const path = `notice-images/${notice.mahv}/${cleanFileName}`;
                         const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
                         if (upErr) throw upErr;
                         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
