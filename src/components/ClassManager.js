@@ -61,11 +61,20 @@ const parseFormattedNumber = (val) => {
   return parseInt(val.toString().replace(/,/g, ''), 10) || 0;
 };
 
-const normalizeSurcharges = (value) => (
-  Array.isArray(value)
-    ? value.filter(item => item && (item.name || Number(item.amount)))
-    : []
-);
+const normalizeSurcharges = (value) => {
+  let arr = [];
+  if (Array.isArray(value)) {
+    arr = value;
+  } else if (typeof value === 'string') {
+    try {
+      arr = JSON.parse(value);
+      if (!Array.isArray(arr)) arr = [];
+    } catch (e) {
+      arr = [];
+    }
+  }
+  return arr.filter(item => item && (item.name || Number(item.amount)));
+};
 
 const sumSurcharges = (items) => (
   normalizeSurcharges(items).reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
@@ -896,17 +905,31 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
-        let newItem = { ...item, [field]: cleanVal };
+        
+        let newItem = { ...item };
+        
+        if (field === 'phuthu_name') {
+           if (!newItem.phuthu) newItem.phuthu = [];
+           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
+           newItem.phuthu[0].name = cleanVal;
+        } else if (field === 'phuthu_amount') {
+           if (!newItem.phuthu) newItem.phuthu = [];
+           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
+           newItem.phuthu[0].amount = cleanVal;
+        } else {
+           newItem[field] = cleanVal;
+        }
+
         if (field === 'hocphi') {
           const mealRefundRate = getMealRefundRate(cleanVal);
           newItem.truTienAn = (newItem.diemDanhInfo?.nghiPhep || 0) >= 3
             ? Math.round((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
             : 0;
         }
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
           const nocu = parseInt(newItem.noCu || 0);
@@ -993,6 +1016,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         tiennghiphep: n.truHocPhiStr,
         trutienan: n.truTienAnStr,
         trutiendangoai: n.truTienDaNgoaiStr,
+        phuthu: n.phuthu,
         daxoa: null
       }));
 
@@ -1014,6 +1038,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         "Hoàn tiền Ăn": n.truTienAn || 0,
         "Hoàn tiền học": n.truHocPhi || 0,
         "Trừ tiền dã ngoại": n.truTienDaNgoai || 0,
+        "Phụ thu": n.phuthu && n.phuthu.length > 0 ? n.phuthu.map(p => `${p.name}: ${p.amount}`).join(', ') : '',
         "Tổng cộng": n.tongcong || 0,
         "Hình thức": n.hinhthuc,
         "Ghi chú": n.ghichu
@@ -1144,18 +1169,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     const file = await compressImage(pngFile, 150);
 
                     let imageUrl = '';
+                    let r2Failed = false;
                     if (config?.r2_enabled) {
-                      imageUrl = await uploadToR2(
-                        file,
-                        config.r2_endpoint,
-                        config.r2_access_key_id,
-                        config.r2_secret_access_key,
-                        config.r2_bucket_name,
-                        config.r2_public_url
-                      );
-                    } else {
+                      try {
+                        imageUrl = await uploadToR2(
+                          file,
+                          config.r2_endpoint,
+                          config.r2_access_key_id,
+                          config.r2_secret_access_key,
+                          config.r2_bucket_name,
+                          config.r2_public_url
+                        );
+                        if (!imageUrl) r2Failed = true;
+                      } catch (e) {
+                        console.warn('Lỗi R2, chuyển sang Supabase', e);
+                        r2Failed = true;
+                      }
+                    }
+                    if (!config?.r2_enabled || r2Failed) {
                       const path = `notice-images/${notice.mahv}/${cleanFileName}`;
-                      const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                      const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
                       if (upErr) throw upErr;
                       const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
                       imageUrl = publicUrl;
@@ -1191,18 +1224,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       const file = await compressImage(pngFile, 150);
 
                       let imageUrl = '';
+                      let r2Failed = false;
                       if (config?.r2_enabled) {
-                        imageUrl = await uploadToR2(
-                          file,
-                          config.r2_endpoint,
-                          config.r2_access_key_id,
-                          config.r2_secret_access_key,
-                          config.r2_bucket_name,
-                          config.r2_public_url
-                        );
-                      } else {
+                        try {
+                          imageUrl = await uploadToR2(
+                            file,
+                            config.r2_endpoint,
+                            config.r2_access_key_id,
+                            config.r2_secret_access_key,
+                            config.r2_bucket_name,
+                            config.r2_public_url
+                          );
+                          if (!imageUrl) r2Failed = true;
+                        } catch (e) {
+                          console.warn('Lỗi R2 (retry), chuyển sang Supabase', e);
+                          r2Failed = true;
+                        }
+                      }
+                      if (!config?.r2_enabled || r2Failed) {
                         const path = `notice-images/${notice.mahv}/${cleanFileName}`;
-                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file);
+                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
                         if (upErr) throw upErr;
                         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
                         imageUrl = publicUrl;
@@ -2164,6 +2205,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '130px' }}>Trừ Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Trừ Học Phí</th>
                           <th style={{ minWidth: '130px' }}>Trừ Dã Ngoại</th>
+                          <th style={{ minWidth: '130px' }}>Lý Do Phụ Thu</th>
+                          <th style={{ minWidth: '130px' }}>Tiền Phụ Thu</th>
                           <th style={{ minWidth: '130px' }}>TỔNG THU</th>
                           <th style={{ width: '130px' }}>Hình thức</th>
                           <th style={{ minWidth: '250px' }}>Ghi chú</th>
@@ -2240,6 +2283,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   onChange={e => handleBatchStudentChange(row.mahv, 'truTienDaNgoai', e.target.value)}
                                   className="td-input"
                                   style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={(row.phuthu && row.phuthu.length > 0) ? row.phuthu[0].name : ''}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'phuthu_name', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', fontWeight: 600 }}
+                                  placeholder="Nhập lý do..."
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition((row.phuthu && row.phuthu.length > 0) ? row.phuthu[0].amount : '')}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'phuthu_amount', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#fef3c7', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#d97706' }}
+                                  placeholder="0"
                                 />
                               </td>
                               <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>

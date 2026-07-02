@@ -173,34 +173,40 @@ const buildStoredImageKey = (folder, studentId, recordId, extension = 'jpg') => 
 };
 
 const uploadGeneratedImage = async (file, storedImageKey, currentConfig) => {
+   let r2Failed = false;
    if (currentConfig?.r2_enabled) {
-      const uploadedUrl = await uploadToR2(
-         file,
-         currentConfig.r2_endpoint,
-         currentConfig.r2_access_key_id,
-         currentConfig.r2_secret_access_key,
-         currentConfig.r2_bucket_name,
-         currentConfig.r2_public_url,
-         { key: storedImageKey }
-      );
-      if (!uploadedUrl) {
-         throw new Error('Không nhận được đường dẫn ảnh từ Cloudflare R2.');
+      try {
+         const uploadedUrl = await uploadToR2(
+            file,
+            currentConfig.r2_endpoint,
+            currentConfig.r2_access_key_id,
+            currentConfig.r2_secret_access_key,
+            currentConfig.r2_bucket_name,
+            currentConfig.r2_public_url,
+            { key: storedImageKey }
+         );
+         if (uploadedUrl) return uploadedUrl;
+         r2Failed = true;
+      } catch (err) {
+         console.warn('R2 upload failed, falling back to Supabase', err);
+         r2Failed = true;
       }
-      return uploadedUrl;
    }
 
-   const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file, {
-      upsert: true,
-      contentType: file.type || 'image/jpeg',
-      cacheControl: '3600'
-   });
-   if (upErr) throw upErr;
+   if (!currentConfig?.r2_enabled || r2Failed) {
+      const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file, {
+         upsert: true,
+         contentType: file.type || 'image/jpeg',
+         cacheControl: '3600'
+      });
+      if (upErr) throw upErr;
 
-   const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
-   if (!publicUrl) {
-      throw new Error('Không nhận được đường dẫn ảnh từ Supabase Storage.');
+      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
+      if (!publicUrl) {
+         throw new Error('Không nhận được đường dẫn ảnh từ Supabase Storage.');
+      }
+      return publicUrl;
    }
-   return publicUrl;
 };
 
 const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl) => {
@@ -251,7 +257,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const [downloadingNotice, setDownloadingNotice] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
    const [studySummary, setStudySummary] = useState(null);
-   const [refundOverrides, setRefundOverrides] = useState({ meal: null, tuition: null });
+   const [refundOverrides, setRefundOverrides] = useState({ meal: null, tuition: null, ngoaiKhoa: null });
    const [ngoaiKhoaAdjustment, setNgoaiKhoaAdjustment] = useState({ totalDeduction: 0, period: '', items: [] });
    const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
@@ -545,9 +551,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       setSelectedStudent(st);
       setShowMobileDetails(true);
       setMessage({ type: '', text: '' });
-      setRefundOverrides({ meal: null, tuition: null });
+      setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
       setIsHinhThucLocked(true);
-      calculateOldDebt(st.mahv);
+      await calculateOldDebt(st.mahv);
 
       const firstMalop = st.malop_list && st.malop_list.length > 0 ? st.malop_list[0] : null;
       await updateClassContext(firstMalop, st);
@@ -681,8 +687,16 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             }
             giamHocphi = parseCur(recentDoc.giamhocphi);
 
-            // Hoàn trả tính lại từ điểm danh tháng liền trước → reset về null để tính tươi
-            setRefundOverrides({ meal: null, tuition: null });
+            // Lấy các khoản giảm trừ hoàn toàn từ chứng từ gần nhất
+            setRefundOverrides({ 
+               meal: parseCur(recentDoc.trutienan), 
+               tuition: parseCur(recentDoc.tiennghiphep),
+               ngoaiKhoa: parseCur(recentDoc.trutiendangoai)
+            });
+
+            if (recentDoc.nocu !== undefined && recentDoc.nocu !== null) {
+               setNoCu(parseCur(recentDoc.nocu));
+            }
 
             const studentHinhThuc = (student.hinhthucdong || '').trim();
             hinhThuc = studentHinhThuc || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
@@ -1150,7 +1164,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             period: `${mm}/${yyyy}`
          });
          // Reset hoàn trả để tính lại từ điểm danh mới
-         setRefundOverrides({ meal: null, tuition: null });
+         setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
       } catch (err) {
          console.error('Lỗi tải điểm danh khi chuyển tháng:', err);
       }
@@ -1463,7 +1477,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const actualMealRefund = refundOverrides.meal !== null ? refundOverrides.meal : roundedMealRefund;
    const actualTuitionRefund = refundOverrides.tuition !== null ? refundOverrides.tuition : roundedTuitionRefund;
 
-   const ngoaiKhoaDeduction = ngoaiKhoaAdjustment.totalDeduction || 0;
+   const ngoaiKhoaDeduction = refundOverrides.ngoaiKhoa !== null ? refundOverrides.ngoaiKhoa : (ngoaiKhoaAdjustment.totalDeduction || 0);
    const deductionSum = (actualMealRefund || 0) + (actualTuitionRefund || 0) + ngoaiKhoaDeduction;
 
    const hpVal = Number(invoiceData.hocphi) || 0;
