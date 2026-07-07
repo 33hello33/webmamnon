@@ -10,7 +10,7 @@ import { groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/
 import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '../utils/ngoaiKhoaUtils';
 import { saveImageToDevice } from '../utils/mobileImageSave';
 import { fetchParentStudentPortalData } from '../utils/parentPortalData';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone, CheckCircle2 } from 'lucide-react';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, Megaphone, BookOpen, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone, CheckCircle2 } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
    const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
@@ -130,6 +130,74 @@ const formatDateStringVi = (dateStr) => {
    return `${day}/${month}/${year}`;
 };
 
+const getNoticeTypeDetails = (notice, studentMahv) => {
+   const titleUpper = String(notice.title || '').toUpperCase().trim();
+   const dateMs = new Date(notice.date).getTime();
+
+   if (titleUpper === 'THỰC ĐƠN') {
+      const lastReadTime = parseInt(localStorage.getItem(`last_menu_time_${studentMahv}`) || '0');
+      return {
+         categoryTag: 'Thực đơn mới',
+         iconType: 'utensils',
+         colorScheme: 'green',
+         isUnread: dateMs > lastReadTime,
+         tabName: 'menu-tab'
+      };
+   } else if (titleUpper === 'CHƯƠNG TRÌNH HỌC') {
+      const lastReadTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${studentMahv}`) || '0');
+      return {
+         categoryTag: 'Chương trình học mới',
+         iconType: 'book',
+         colorScheme: 'purple',
+         isUnread: dateMs > lastReadTime,
+         tabName: 'chuongtrinhhoc-tab'
+      };
+   } else if (titleUpper === 'NGOẠI KHÓA') {
+      const lastReadTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${studentMahv}`) || '0');
+      return {
+         categoryTag: 'Ngoại khóa',
+         iconType: 'ngoaikhoa',
+         colorScheme: 'pink',
+         isUnread: dateMs > lastReadTime,
+         tabName: 'ngoaikhoa-tab'
+      };
+   } else {
+      const lastReadTime = parseInt(localStorage.getItem(`last_notice_time_${studentMahv}`) || '0');
+      return {
+         categoryTag: notice.type === 'general' ? 'Thông báo' : 'Bảng tin lớp',
+         iconType: 'notice',
+         colorScheme: 'yellow',
+         isUnread: dateMs > lastReadTime,
+         tabName: 'notices-tab'
+      };
+   }
+};
+
+const formatNoticeTime = (dateStr) => {
+   if (!dateStr) return '';
+   const date = new Date(dateStr);
+   if (Number.isNaN(date.getTime())) return '';
+
+   const now = new Date();
+   const isToday = date.getFullYear() === now.getFullYear() &&
+                   date.getMonth() === now.getMonth() &&
+                   date.getDate() === now.getDate();
+
+   const yesterday = new Date(now);
+   yesterday.setDate(now.getDate() - 1);
+   const isYesterday = date.getFullYear() === yesterday.getFullYear() &&
+                       date.getMonth() === yesterday.getMonth() &&
+                       date.getDate() === yesterday.getDate();
+
+   if (isToday) {
+      return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+   } else if (isYesterday) {
+      return 'Hôm qua';
+   } else {
+      return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+   }
+};
+
 const addDaysToDateString = (dateStr, days) => {
    const [year, month, day] = String(dateStr).split('-').map(Number);
    if (!year || !month || !day) return dateStr;
@@ -189,6 +257,8 @@ function ParentPortal({ parentData, setParentData }) {
    const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
    const { config } = useConfig();
    const [parentTab, setParentTab] = useState('menu');
+   const [updates30Days, setUpdates30Days] = useState([]);
+   const [loadingUpdates30Days, setLoadingUpdates30Days] = useState(false);
    const [chatMessages, setChatMessages] = useState([]);
    const [chatLoading, setChatLoading] = useState(false);
    const [chatInput, setChatInput] = useState('');
@@ -617,25 +687,39 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const fetchParentNotices = async () => {
-      if (!parentData?.student?.mahv || !parentData?.student?.malop) return;
+      if (!parentData?.student?.mahv) return;
 
-      const { data: generalNotices } = await supabase
-         .from('tbl_thongbao')
-         .select('*')
-         .eq('mahv', parentData.student.mahv)
-         .order('ngaylap', { ascending: false })
-         .limit(10);
+      let generalNotices = [];
+      try {
+         const { data, error } = await supabase
+            .from('tbl_thongbao')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .order('ngaylap', { ascending: false })
+            .limit(10);
+         if (!error && data) generalNotices = data;
+      } catch (err) {
+         console.warn('Error fetching general notices:', err);
+      }
 
-      const { data: classAnnouncements } = await supabase
-         .from('class_announcements')
-         .select('*')
-         .eq('malop', parentData.student.malop)
-         .eq('approved', true)
-         .order('created_at', { ascending: false })
-         .limit(10);
+      let classAnnouncements = [];
+      if (parentData?.student?.malop) {
+         try {
+            const { data, error } = await supabase
+               .from('class_announcements')
+               .select('*')
+               .eq('malop', parentData.student.malop)
+               .eq('approved', true)
+               .order('created_at', { ascending: false })
+               .limit(10);
+            if (!error && data) classAnnouncements = data;
+         } catch (err) {
+            console.warn('Error fetching class announcements:', err);
+         }
+      }
 
       const combined = [
-         ...(generalNotices || []).map(n => ({ ...n, type: 'general', date: n.ngaylap, title: n.tieude, content: n.ghichu })),
+         ...(generalNotices || []).map(n => ({ ...n, type: 'general', date: n.ngaylap, title: n.tieude, content: n.ghichu, image_url: n.image_url })),
          ...(classAnnouncements || []).map(n => ({ ...n, type: 'class', date: n.created_at, title: n.title, content: n.content, image_url: n.image_url, file_url: n.file_url, file_name: n.file_name }))
       ].sort((a, b) => {
          const dateA = new Date(a.date).getTime();
@@ -645,6 +729,77 @@ function ParentPortal({ parentData, setParentData }) {
 
       setParentNotices(combined);
    };
+
+    const fetch30DaysUpdates = async () => {
+       if (!parentData?.student?.mahv) return;
+
+       const thirtyDaysAgo = new Date();
+       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+       const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
+
+       let generalNotices = [];
+       try {
+          const { data, error } = await supabase
+             .from('tbl_thongbao')
+             .select('*')
+             .eq('mahv', parentData.student.mahv)
+             .gte('ngaylap', thirtyDaysAgoISO)
+             .order('ngaylap', { ascending: false });
+          if (!error && data) generalNotices = data;
+       } catch (err) {
+          console.warn('Error fetching general notices for 30 days:', err);
+       }
+
+       let classAnnouncements = [];
+       if (parentData?.student?.malop) {
+          try {
+             const { data, error } = await supabase
+                .from('class_announcements')
+                .select('*')
+                .eq('malop', parentData.student.malop)
+                .eq('approved', true)
+                .gte('created_at', thirtyDaysAgoISO)
+                .order('created_at', { ascending: false });
+             if (!error && data) classAnnouncements = data;
+          } catch (err) {
+             console.warn('Error fetching class announcements for 30 days:', err);
+          }
+       }
+
+       const combined = [
+          ...(generalNotices || []).map(n => ({ 
+             ...n, 
+             type: 'general', 
+             date: n.ngaylap, 
+             title: n.tieude, 
+             content: n.ghichu, 
+             image_url: n.image_url 
+          })),
+          ...(classAnnouncements || []).map(n => ({ 
+             ...n, 
+             type: 'class', 
+             date: n.created_at, 
+             title: n.title, 
+             content: n.content, 
+             image_url: n.image_url, 
+             file_url: n.file_url, 
+             file_name: n.file_name 
+          }))
+       ].sort((a, b) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return dateB - dateA;
+       });
+
+       setUpdates30Days(combined);
+    };
+
+    const handleShowAllUpdates = async () => {
+       setParentTab('all-updates-tab');
+       setLoadingUpdates30Days(true);
+       await fetch30DaysUpdates();
+       setLoadingUpdates30Days(false);
+    };
 
    const fetchNgoaiKhoaAnnouncements = async () => {
       const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 20);
@@ -1691,7 +1846,7 @@ function ParentPortal({ parentData, setParentData }) {
       if (!parentData) return;
 
       const refreshAnnouncementsForCurrentTab = async () => {
-         if (['notices-tab', 'menu-tab', 'chuongtrinhhoc-tab'].includes(parentTab)) {
+         if (['menu', 'notices-tab', 'menu-tab', 'chuongtrinhhoc-tab'].includes(parentTab)) {
             await fetchParentNotices();
          }
          if (parentTab === 'ngoaikhoa-tab') {
@@ -1789,7 +1944,7 @@ function ParentPortal({ parentData, setParentData }) {
       };
 
       if (parentTab === 'chat-tab') { fetchChatMessages(); fetchChatDocs(); }
-      if (parentTab === 'notices-tab' || parentTab === 'menu-tab' || parentTab === 'chuongtrinhhoc-tab') fetchParentNotices();
+      if (parentTab === 'notices-tab' || parentTab === 'menu-tab' || parentTab === 'chuongtrinhhoc-tab' || parentTab === 'menu') fetchParentNotices();
       if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
       if (parentTab === 'health-tab') fetchHealthHistory();
       if (parentTab === 'ngoaikhoa-tab') {
@@ -2014,7 +2169,7 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const groupedParentClassNotices = groupAnnouncementsForDisplay(
-      parentNotices.filter(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC')
+      parentNotices.filter(n => n.type === 'general' || (n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC'))
    );
    const groupedParentMenus = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'THỰC ĐƠN'));
    const groupedParentCurriculums = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC'));
@@ -2137,6 +2292,108 @@ function ParentPortal({ parentData, setParentData }) {
                </div>
 
                <div className="premium-main-content">
+                  {parentNotices && parentNotices.length > 0 && (
+                     <div className="latest-updates-box">
+                        <div className="latest-updates-header">
+                           <h3 className="latest-updates-title">Cập nhật mới nhất</h3>
+                           <button 
+                              className="latest-updates-more"
+                              onClick={handleShowAllUpdates}
+                              style={{ color: '#ef4444' }}
+                           >
+                              Xem tất cả
+                              <ArrowLeft size={14} style={{ transform: 'rotate(180deg)', color: '#ef4444' }} />
+                           </button>
+                        </div>
+                        <div className="latest-updates-list">
+                           {(() => {
+                              const updatesToShow = parentNotices
+                                 .map(notice => {
+                                    const details = getNoticeTypeDetails(notice, parentData.student.mahv);
+                                    return { ...notice, details };
+                                 })
+                                 .slice(0, 3);
+
+                              return updatesToShow.map((item, index) => {
+                                 let IconComponent = Megaphone;
+                                 if (item.details.iconType === 'utensils') IconComponent = Utensils;
+                                 else if (item.details.iconType === 'book') IconComponent = FileText;
+                                 else if (item.details.iconType === 'ngoaikhoa') IconComponent = Image;
+
+                                 let displayTitle = item.title || '';
+                                 if (displayTitle.toUpperCase() === 'THỰC ĐƠN') {
+                                    const dateObj = new Date(item.date);
+                                    const dd = String(dateObj.getDate()).padStart(2, '0');
+                                    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                    const yyyy = dateObj.getFullYear();
+                                    displayTitle = `Thực đơn ngày ${dd}/${mm}/${yyyy}`;
+                                 } else if (displayTitle.toUpperCase() === 'CHƯƠNG TRÌNH HỌC') {
+                                    displayTitle = `Chương trình học`;
+                                 } else if (displayTitle.toUpperCase() === 'NGOẠI KHÓA') {
+                                    displayTitle = `Ngoại khóa`;
+                                 }
+
+                                 return (
+                                    <div 
+                                       key={index}
+                                       className="latest-update-row"
+                                       onClick={() => {
+                                          setParentTab(item.details.tabName);
+                                          const dateMs = new Date(item.date).getTime();
+                                          if (item.details.tabName === 'menu-tab') {
+                                             localStorage.setItem(`last_menu_time_${parentData.student.mahv}`, String(dateMs));
+                                          } else if (item.details.tabName === 'chuongtrinhhoc-tab') {
+                                             localStorage.setItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`, String(dateMs));
+                                          } else if (item.details.tabName === 'ngoaikhoa-tab') {
+                                             localStorage.setItem(`last_ngoaikhoa_time_${parentData.student.mahv}`, String(dateMs));
+                                          } else if (item.details.tabName === 'notices-tab') {
+                                             localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(dateMs));
+                                          }
+                                          fetchUnreads();
+                                       }}
+                                    >
+                                       <div className={`update-icon-circle ${item.details.colorScheme}`}>
+                                          <IconComponent size={20} />
+                                       </div>
+                                       
+                                       {item.image_url && (
+                                          <img 
+                                             src={getDisplayUrl(item.image_url)} 
+                                             alt="thumbnail" 
+                                             className="update-image-thumb"
+                                             referrerPolicy="no-referrer"
+                                             onError={(e) => { e.target.style.display = 'none'; }}
+                                          />
+                                       )}
+
+                                       <div className="update-text-content">
+                                          <span className="update-tag-badge">
+                                             {item.details.categoryTag}
+                                          </span>
+                                          <h4 className="update-row-title">
+                                             {displayTitle}
+                                          </h4>
+                                          <p className="update-row-subtext">
+                                             {item.content}
+                                          </p>
+                                       </div>
+
+                                       <div className="update-status-col">
+                                          <span className="update-row-time">
+                                             {formatNoticeTime(item.date)}
+                                          </span>
+                                          {item.details.isUnread && (
+                                             <div className="update-row-unread-dot" />
+                                          )}
+                                       </div>
+                                    </div>
+                                 );
+                              });
+                           })()}
+                        </div>
+                     </div>
+                  )}
+
                   <div className="premium-section-title">Nhóm dịch vụ</div>
                   <div className="premium-service-grid">
                      <div className="premium-service-item" onClick={() => setParentTab('notices-tab')}>
@@ -2231,12 +2488,13 @@ function ParentPortal({ parentData, setParentData }) {
                   </button>
                   <h2 style={{ margin: 0, fontSize: parentTab === 'chat-tab' ? '1rem' : '1.2rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                      {parentTab === 'notices-tab' ? 'Bảng tin' :
-                        parentTab === 'attendance-tab' ? 'Điểm danh' :
-                           parentTab === 'fee-tab' ? 'Học phí' :
-                              parentTab === 'health-tab' ? 'Sức khỏe' :
-                                 parentTab === 'menu-tab' ? 'Thực đơn' :
-                                    parentTab === 'ngoaikhoa-tab' ? 'Ngoại khóa' :
-                                       parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
+                        parentTab === 'all-updates-tab' ? 'Tất cả cập nhật (30 ngày)' :
+                           parentTab === 'attendance-tab' ? 'Điểm danh' :
+                              parentTab === 'fee-tab' ? 'Học phí' :
+                                 parentTab === 'health-tab' ? 'Sức khỏe' :
+                                    parentTab === 'menu-tab' ? 'Thực đơn' :
+                                       parentTab === 'ngoaikhoa-tab' ? 'Ngoại khóa' :
+                                          parentTab === 'chat-tab' ? 'Liên lạc GV' : ''}
                   </h2>
                </div>
 
@@ -2277,6 +2535,142 @@ function ParentPortal({ parentData, setParentData }) {
                                  <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>Không có thông báo mới.</div>
                               )}
                            </div>
+                        </div>
+                     </div>
+                  )}
+
+                  {parentTab === 'all-updates-tab' && (
+                     <div id="all-updates-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div className="notices-section">
+                           {loadingUpdates30Days ? (
+                              <div style={{ textAlign: 'center', padding: '45px 20px', color: '#94a3b8' }}>
+                                 Đang tải danh sách cập nhật...
+                              </div>
+                           ) : updates30Days.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                 {updates30Days.map((item, idx) => {
+                                    const details = getNoticeTypeDetails(item, parentData.student.mahv);
+                                    const formattedTime = formatNoticeTime(item.date);
+                                    
+                                    const handleItemClick = () => {
+                                       const dateMs = new Date(item.date).getTime();
+                                       if (item.title === 'THỰC ĐƠN') {
+                                          localStorage.setItem(`last_menu_time_${parentData.student.mahv}`, String(dateMs));
+                                          setUnreadMenu(0);
+                                       } else if (item.title === 'NGOẠI KHÓA') {
+                                          localStorage.setItem(`last_ngoaikhoa_time_${parentData.student.mahv}`, String(dateMs));
+                                          setUnreadNgoaiKhoa(0);
+                                       } else if (item.title === 'CHƯƠNG TRÌNH HỌC') {
+                                          localStorage.setItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`, String(dateMs));
+                                          setUnreadChuongTrinhHoc(0);
+                                       } else {
+                                          localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(dateMs));
+                                          setUnreadNotices(0);
+                                       }
+                                       fetchUnreads();
+                                       
+                                       setUpdates30Days(prev => prev.map((u, i) => i === idx ? { ...u, isReadForce: true } : u));
+                                    };
+
+                                    const isUnread = !item.isReadForce && details.isUnread;
+
+                                    return (
+                                       <div 
+                                          key={idx} 
+                                          onClick={handleItemClick}
+                                          style={{ 
+                                             background: 'white', 
+                                             padding: '18px', 
+                                             borderRadius: '16px', 
+                                             border: '1px solid #e2e8f0', 
+                                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                                             position: 'relative',
+                                             transition: 'all 0.2s ease',
+                                             cursor: 'pointer'
+                                          }}
+                                       >
+                                          {isUnread && (
+                                             <span style={{
+                                                position: 'absolute',
+                                                top: '18px',
+                                                right: '18px',
+                                                width: '8px',
+                                                height: '8px',
+                                                borderRadius: '50%',
+                                                backgroundColor: '#ef4444',
+                                                boxShadow: '0 0 8px #ef4444'
+                                             }} />
+                                          )}
+
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                                             <div style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                borderRadius: '8px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                background: details.colorScheme === 'yellow' ? '#fef3c7' :
+                                                            details.colorScheme === 'green' ? '#dcfce7' :
+                                                            details.colorScheme === 'purple' ? '#f3e8ff' : '#fce7f3',
+                                                color: details.colorScheme === 'yellow' ? '#d97706' :
+                                                       details.colorScheme === 'green' ? '#15803d' :
+                                                       details.colorScheme === 'purple' ? '#7e22ce' : '#db2777'
+                                             }}>
+                                                {details.iconType === 'menu' ? <Utensils size={16} /> :
+                                                 details.iconType === 'ngoaikhoa' ? <Image size={16} /> :
+                                                 details.iconType === 'book' ? <BookOpen size={16} /> : <Megaphone size={16} />}
+                                             </div>
+                                             <div>
+                                                <span style={{ 
+                                                   fontSize: '0.75rem', 
+                                                   fontWeight: 700, 
+                                                   color: details.colorScheme === 'yellow' ? '#b45309' :
+                                                          details.colorScheme === 'green' ? '#166534' :
+                                                          details.colorScheme === 'purple' ? '#6b21a8' : '#9d174d'
+                                                }}>
+                                                   {details.categoryTag}
+                                                </span>
+                                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '10px' }}>
+                                                   {formattedTime || new Date(item.date).toLocaleDateString('vi-VN')}
+                                                </span>
+                                             </div>
+                                          </div>
+
+                                          <div style={{ color: '#1e293b', fontWeight: 700, fontSize: '1rem', marginBottom: '8px' }}>
+                                             {item.title || (item.type === 'class' ? 'Thông báo từ lớp' : 'Thông báo học phí/Phát sinh')}
+                                          </div>
+                                          <div style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                                             {item.content}
+                                          </div>
+
+                                          {item.image_url && (
+                                             <div
+                                                style={{ marginTop: '12px', borderRadius: '12px', overflow: 'hidden', cursor: 'zoom-in', background: '#f1f5f9', border: '1px solid #e2e8f0', maxWidth: '100%', maxHeight: '300px' }}
+                                                onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   setPreviewImage(item.image_url);
+                                                 }}
+                                             >
+                                                <img src={getDisplayUrl(item.image_url)} alt="attachment" style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
+                                             </div>
+                                          )}
+
+                                          {item.file_url && (
+                                             <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '10px' }}>
+                                                <ChatMediaAttachment fileUrl={item.file_url} fileName={item.file_name} mimeType={item.file_mime_type} />
+                                             </div>
+                                          )}
+                                       </div>
+                                    );
+                                 })}
+                              </div>
+                           ) : (
+                              <div style={{ textAlign: 'center', padding: '50px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
+                                 <Megaphone size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />
+                                 <p>Không có cập nhật nào trong 30 ngày gần đây.</p>
+                              </div>
+                           )}
                         </div>
                      </div>
                   )}
