@@ -230,8 +230,25 @@ function Login() {
             const currentTime = Date.now();
 
             if (!session.loginTime || currentTime - session.loginTime < ONE_MONTH_MS) {
+               // Hiển thị dữ liệu cached ngay lập tức để không bị chờ
                if (!isCancelled) {
                   setParentData(session.data || session);
+               }
+
+               // Background refresh: cập nhật thông tin học sinh mới nhất (lớp, avatar, v.v.)
+               const savedUsername = session?.username || session?.data?.student?.username || '';
+               const savedPassword = session?.password || session?.data?.student?.password || '';
+               if (savedUsername && savedPassword) {
+                  try {
+                     const result = await authenticateParent(savedUsername, savedPassword);
+                     if (result.ok && !isCancelled) {
+                        await completeParentLogin(result.students, savedUsername, savedPassword, {
+                           activeStudentId: session?.data?.activeStudentId || session?.activeStudentId || session?.data?.student?.mahv || session?.student?.mahv
+                        });
+                     }
+                  } catch (refreshErr) {
+                     console.warn('Background refresh thất bại, giữ dữ liệu cache:', refreshErr);
+                  }
                }
                return;
             }
