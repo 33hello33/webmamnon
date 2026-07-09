@@ -2759,26 +2759,33 @@ function ParentPortal({ parentData, setParentData }) {
                                                    disabled={ngoaiKhoaLoading}
                                                    style={{
                                                       flex: 1, padding: '12px', borderRadius: '12px',
-                                                      background: ngoaiKhoaReg?.codangky === true ? '#16a34a' : 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                                                      background: (ngoaiKhoaReg?.codangky === true || ngoaiKhoaReg?.codangky === 1) ? '#16a34a' : 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
                                                       color: 'white', border: 'none', fontWeight: 700,
                                                       opacity: ngoaiKhoaLoading ? 0.7 : 1, cursor: 'pointer',
                                                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                                                    }}
                                                 >
-                                                   {ngoaiKhoaReg?.codangky === true ? 'Đã đăng ký ✓' : 'Đăng ký tham gia'}
+                                                   {(ngoaiKhoaReg?.codangky === true || ngoaiKhoaReg?.codangky === 1) ? 'Đã đăng ký ✓' : 'Đăng ký tham gia'}
                                                 </button>
                                                 <button
-                                                   onClick={() => setShowDeclineReason(true)}
-                                                   disabled={ngoaiKhoaLoading}
+                                                   onClick={() => {
+                                                      if (!showDeclineReason) {
+                                                         setShowDeclineReason(true);
+                                                      } else {
+                                                         handleNgoaiKhoaSubmit(false);
+                                                      }
+                                                   }}
+                                                   disabled={ngoaiKhoaLoading || (showDeclineReason && !ngoaiKhoaReason.trim())}
                                                    style={{
                                                       flex: 1, padding: '12px', borderRadius: '12px',
-                                                      background: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? '#64748b' : 'white',
-                                                      color: (showDeclineReason || ngoaiKhoaReg?.codangky === false) ? 'white' : '#475569',
+                                                      background: (showDeclineReason || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? '#64748b' : 'white',
+                                                      color: (showDeclineReason || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 'white' : '#475569',
                                                       border: '1px solid #e2e8f0', fontWeight: 700,
-                                                      cursor: 'pointer'
+                                                      cursor: (ngoaiKhoaLoading || (showDeclineReason && !ngoaiKhoaReason.trim())) ? 'not-allowed' : 'pointer',
+                                                      opacity: (ngoaiKhoaLoading || (showDeclineReason && !ngoaiKhoaReason.trim())) ? 0.7 : 1
                                                    }}
                                                 >
-                                                   {ngoaiKhoaReg?.codangky === false ? 'Đã từ chối' : 'Không đăng ký'}
+                                                   {(ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 'Đã từ chối' : (ngoaiKhoaLoading && showDeclineReason ? 'Đang gửi...' : 'Không tham gia')}
                                                 </button>
                                              </div>
 
@@ -2792,13 +2799,6 @@ function ParentPortal({ parentData, setParentData }) {
                                                       rows="2"
                                                       style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none', marginBottom: '10px' }}
                                                    />
-                                                   <button
-                                                      onClick={() => handleNgoaiKhoaSubmit(false)}
-                                                      disabled={ngoaiKhoaLoading || !ngoaiKhoaReason.trim()}
-                                                      style={{ width: '100%', padding: '10px', borderRadius: '10px', background: '#475569', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}
-                                                   >
-                                                      {ngoaiKhoaLoading ? 'Đang gửi...' : 'Gửi lý do từ chối'}
-                                                   </button>
                                                 </div>
                                              )}
                                           </div>
