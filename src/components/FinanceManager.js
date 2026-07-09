@@ -292,6 +292,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [deletePassword, setDeletePassword] = useState('');
    const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
    const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
+   const [editPhieuModal, setEditPhieuModal] = useState({ isOpen: false, data: null, password: '' });
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
 
@@ -530,6 +531,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
+   const handleOpenEditPhieu = (phieu) => {
+      setEditPhieuModal({
+         isOpen: true,
+         data: { ...phieu, chiphi: pCur(phieu.chiphi) },
+         password: ''
+      });
+   };
+
+   const handleSaveEditPhieu = (e) => {
+      e.preventDefault();
+      setDeletePassword('');
+      setConfirmDialog({
+         isOpen: true,
+         title: `Xác nhận sửa phiếu ${editPhieuModal.data.loaiphieu === 'Thu' ? 'thu' : 'chi'}`,
+         message: 'Việc sửa phiếu sẽ ảnh hưởng đến báo cáo tài chính. Bạn có chắc chắn muốn cập nhật không?',
+         actionType: 'EDIT_PHIEU'
+      });
+   };
+
    const executeConfirmAction = async () => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
@@ -713,6 +733,37 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             fetchData();
             fetchBalances();
             alert("Cập nhật hóa đơn thành công!");
+         }
+      } else if (confirmDialog.actionType === 'EDIT_PHIEU') {
+         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         if (deletePassword !== auth.user?.password) {
+            alert('Mật khẩu không đúng, vui lòng thử lại!');
+            return;
+         }
+
+         const r = editPhieuModal.data;
+         const { error } = await supabase.from('tbl_phieuchi')
+            .update({
+               ngaylap: r.ngaylap,
+               hangmucchi: r.hangmucchi,
+               mota: r.mota,
+               chiphi: r.chiphi.toString(),
+               manv: r.manv,
+               hinhthuc: r.hinhthuc,
+               dasua: true
+            })
+            .eq('maphieuchi', r.maphieuchi);
+
+         if (error) {
+            alert("Lỗi khi cập nhật phiếu: " + error.message);
+         } else {
+            const detailDesc = `[SỬA PHIẾU ${r.loaiphieu === 'Thu' ? 'THU' : 'CHI'}] Mã: ${r.maphieuchi} | Tổng: ${fCur(r.chiphi)}`;
+            insertLog(detailDesc);
+            setEditPhieuModal({ isOpen: false, data: null, password: '' });
+            setDeletePassword('');
+            fetchData();
+            fetchBalances();
+            alert(`Cập nhật phiếu ${r.loaiphieu === 'Thu' ? 'thu' : 'chi'} thành công!`);
          }
       }
    };
@@ -1358,6 +1409,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {!deleted && (
                                           <>
                                              <button title="In chứng từ" className="btn-blue" onClick={() => handlePrint(r)}><Printer size={16} /></button>
+                                             <button title="Sửa chứng từ" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditPhieu(r)}><Edit2 size={16} /></button>
                                              <button title="Huỷ chứng từ" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /></button>
                                           </>
                                        )}
@@ -1394,6 +1446,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     {!deleted ? (
                                        <>
                                           <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrint(r)}><Printer size={16} /> In</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditPhieu(r)}><Edit2 size={14} /> Sửa</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /> Xóa</button>
                                        </>
                                     ) : (
@@ -3129,6 +3182,47 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
+         {editPhieuModal.isOpen && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px', width: '90%', borderRadius: '20px', overflow: 'hidden', padding: 0 }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Phiếu {editPhieuModal.data?.loaiphieu === 'Thu' ? 'Thu' : 'Chi'}</h3>
+                     <button type="button" className="tm-btn-icon" onClick={() => setEditPhieuModal({ isOpen: false, data: null, password: '' })} style={{ color: '#94a3b8' }}><X size={24} /></button>
+                  </div>
+                  <form onSubmit={handleSaveEditPhieu} style={{ padding: '1.5rem', background: '#fff' }}>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ngày lập</label>
+                           <input type="datetime-local" style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} value={editPhieuModal.data?.ngaylap ? editPhieuModal.data.ngaylap.slice(0, 16) : ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, ngaylap: e.target.value } }))} required />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hạng mục</label>
+                           <input type="text" style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem' }} value={editPhieuModal.data?.hangmucchi || ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, hangmucchi: e.target.value } }))} required />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Số tiền (VNĐ)</label>
+                           <input type="text" style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1.1rem', fontWeight: 700, color: '#0ea5e9' }} value={fCur(editPhieuModal.data?.chiphi)} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, chiphi: pCur(e.target.value) } }))} required />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
+                           <select style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem' }} value={editPhieuModal.data?.hinhthuc || ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} required>
+                              {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                           </select>
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú / Mô tả</label>
+                           <textarea style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.95rem', resize: 'none' }} value={editPhieuModal.data?.mota || ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, mota: e.target.value } }))} placeholder="Nhập mô tả..." />
+                        </div>
+                     </div>
+                     <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button type="button" onClick={() => setEditPhieuModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, height: '52px', background: '#f1f5f9', border: 'none', borderRadius: '12px', color: '#475569', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Bỏ qua</button>
+                        <button type="submit" style={{ flex: 2, height: '52px', background: '#3b82f6', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Lưu Cập Nhật</button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
 
       
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
