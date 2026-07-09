@@ -2030,6 +2030,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      value={searchTerm}
                      onChange={e => setSearchTerm(e.target.value)}
                      placeholder="Tìm kiếm..."
+                     autoComplete="off"
+                     name="fm-search-input"
                   />
                </div>
             </div>
@@ -2840,6 +2842,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
                         <input
                            type="password"
+                           autoComplete="new-password"
                            autoFocus
                            value={deletePassword}
                            onChange={(e) => setDeletePassword(e.target.value)}
