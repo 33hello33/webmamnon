@@ -1,19 +1,19 @@
 export const DEFAULT_CONSECUTIVE_REFUND_CONFIG = {
-  "6": { phantramgiam: 30 },
-  "12": { phantramgiam: 50 }
+  "6": { tiengiam: 0 },
+  "12": { tiengiam: 0 }
 };
 
 const clampPercent = (value, fallback = 0) => {
   const num = parseFloat(value);
   if (!Number.isFinite(num)) return fallback;
-  return Math.max(0, Math.min(100, num));
+  return Math.max(0, num);
 };
 
 const normalizeTierValue = (value, fallback = 0) => {
   if (value && typeof value === 'object') {
-    return { phantramgiam: clampPercent(value.phantramgiam ?? value.percent, fallback) };
+    return { tiengiam: clampPercent(value.tiengiam ?? value.phantramgiam ?? value.percent, fallback) };
   }
-  return { phantramgiam: clampPercent(value, fallback) };
+  return { tiengiam: clampPercent(value, fallback) };
 };
 
 const parseJsonConfig = (value) => {
@@ -83,7 +83,7 @@ export const getConsecutiveRefundRules = (config) => (
   Object.entries(normalizeConsecutiveRefundConfig(config))
     .map(([minDays, value]) => ({
       minDays: parseInt(minDays, 10),
-      percent: clampPercent(value?.phantramgiam ?? value?.percent, 0)
+      tiengiam: clampPercent(value?.tiengiam ?? value?.phantramgiam ?? value?.percent, 0)
     }))
     .filter((rule) => Number.isFinite(rule.minDays) && rule.minDays > 0)
     .sort((left, right) => right.minDays - left.minDays)
@@ -119,53 +119,24 @@ export const calculateConsecutiveLeaveGroups = (attendanceRecords = []) => {
 
   if (excusedLeaveDays.length === 0) return [];
 
-  const groups = [];
-  let currentGroup = [excusedLeaveDays[0]];
-
-  for (let index = 1; index < excusedLeaveDays.length; index += 1) {
-    const previousDate = new Date(excusedLeaveDays[index - 1]);
-    const currentDate = new Date(excusedLeaveDays[index]);
-    const diffInDays = Math.round((currentDate - previousDate) / (1000 * 60 * 60 * 24));
-
-    let isConsecutive = false;
-    if (diffInDays === 1) {
-      isConsecutive = true;
-    } else if (diffInDays === 2) {
-      const middleDay = new Date(previousDate);
-      middleDay.setDate(previousDate.getDate() + 1);
-      if (middleDay.getDay() === 0) {
-        isConsecutive = true;
-      }
-    }
-
-    if (isConsecutive) {
-      currentGroup.push(currentDate);
-    } else {
-      groups.push([...currentGroup]);
-      currentGroup = [currentDate];
-    }
-  }
-
-  groups.push(currentGroup);
-
-  return groups.map((group) => ({
-    ngay_bat_dau_nghi: group[0].toISOString().split('T')[0],
-    ngay_ket_thuc_nghi: group[group.length - 1].toISOString().split('T')[0],
-    so_ngay_nghi_lien_tuc: group.length
-  }));
+  return [{
+    ngay_bat_dau_nghi: excusedLeaveDays[0].toISOString().split('T')[0],
+    ngay_ket_thuc_nghi: excusedLeaveDays[excusedLeaveDays.length - 1].toISOString().split('T')[0],
+    so_ngay_nghi_lien_tuc: excusedLeaveDays.length
+  }];
 };
 
 export const calculateConsecutiveTuitionRefund = ({ groups = [], dailyRefundAmount = 0, config }) => {
-  const amountPerDay = Number(dailyRefundAmount) || 0;
-  if (amountPerDay <= 0 || !Array.isArray(groups) || groups.length === 0) return 0;
+  if (!Array.isArray(groups) || groups.length === 0) return 0;
 
   const rules = getConsecutiveRefundRules(config)
-    .filter((rule) => Number(rule.percent) > 0);
+    .filter((rule) => Number(rule.tiengiam) > 0)
+    .sort((left, right) => right.minDays - left.minDays);
 
   return groups.reduce((total, group) => {
     const leaveDays = Number(group?.so_ngay_nghi_lien_tuc) || 0;
     const matchedRule = rules.find((rule) => leaveDays >= rule.minDays);
     if (!matchedRule) return total;
-    return total + (leaveDays * amountPerDay * (matchedRule.percent / 100));
+    return total + (leaveDays * (Number(matchedRule.tiengiam) || 0));
   }, 0);
 };

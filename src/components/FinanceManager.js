@@ -2532,9 +2532,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         return null;
                      })()}
 
-                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0 || pCur(printHoaDon.trutiendangoai) > 0) && (
+                     {(pCur(printHoaDon.tiennghiphep) > 0 || pCur(printHoaDon.trutiendangoai) > 0) && (
                         <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
-                           {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
                            {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
                            {pCur(printHoaDon.trutiendangoai) > 0 && <div>Trừ tiền dã ngoại: <b>{fCur(printHoaDon.trutiendangoai)} đ</b></div>}
                         </div>
@@ -3274,12 +3273,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      )}
                      {downloadingInvoice?.deductionSum > 0 && (
                         <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span><b>-{fCur(downloadingInvoice?.actualMealRefund || 0)} đ</b>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span><b>-{fCur(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
-                           </div>
+                           {(downloadingInvoice?.actualTuitionRefund > 0) && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                 <span>- Hoàn trả học phí:</span><b>-{fCur(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                              </div>
+                           )}
                            {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
                                  <span>- Trừ tiền dã ngoại tháng trước:</span><b>-{fCur(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>

@@ -216,7 +216,7 @@ const ConfigManager = () => {
     while (newTiers[String(nextKey)]) {
       nextKey += 1;
     }
-    newTiers[String(nextKey)] = { phantramgiam: 0 };
+    newTiers[String(nextKey)] = { tiengiam: 0 };
     setFormData({ ...formData, nghilientiep: newTiers });
   };
 
@@ -227,10 +227,10 @@ const ConfigManager = () => {
     const safeKey = Number.isFinite(parsedNewKey) && parsedNewKey > 0 ? String(parsedNewKey) : oldKey;
     delete newTiers[oldKey];
     newTiers[safeKey] = {
-      phantramgiam: Math.max(0, Math.min(100, parseInt(percent, 10) || 0)),
+      tiengiam: Math.max(0, parseInt(percent, 10) || 0),
       ...(previous && typeof previous === 'object' ? previous : {})
     };
-    newTiers[safeKey].phantramgiam = Math.max(0, Math.min(100, parseInt(percent, 10) || 0));
+    newTiers[safeKey].tiengiam = Math.max(0, parseInt(percent, 10) || 0);
     setFormData({
       ...formData,
       nghilientiep: newTiers
@@ -327,18 +327,18 @@ const ConfigManager = () => {
       <div className="config-modal-overlay">
         <div className="config-modal">
           <div className="modal-header">
-            <h3>Cấu hình hoàn học phí liên tiếp</h3>
+            <h3>Cấu hình hoàn học phí</h3>
             <button type="button" className="btn-close" onClick={() => setIsNghiLienTiepModalOpen(false)}>×</button>
           </div>
           <div className="modal-body">
             <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
-              Thiết lập các mức hoàn học phí theo số ngày nghỉ phép liên tiếp.
-              Hệ thống sẽ chọn mức cao nhất phù hợp cho từng đợt nghỉ.
+              Thiết lập các mức hoàn học phí theo tổng số ngày nghỉ có phép.
+              Hệ thống sẽ chọn mức cao nhất phù hợp cho tổng ngày nghỉ và nhân với tổng số ngày đó.
             </p>
             <div className="tier-list">
               <div className="tier-header">
-                <span>Số ngày nghỉ</span>
-                <span>Giảm (%)</span>
+                <span>Tổng số ngày nghỉ</span>
+                <span>Số tiền giảm / ngày (VNĐ)</span>
                 <span></span>
               </div>
               {Object.entries(consecutiveRefundConfig).map(([key, val]) => (
@@ -347,16 +347,14 @@ const ConfigManager = () => {
                     type="number"
                     min="1"
                     value={key}
-                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, e.target.value.replace(/\D/g, ''), val?.phantramgiam)}
+                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, e.target.value.replace(/\D/g, ''), val?.tiengiam)}
                     placeholder="VD: 6"
                   />
                   <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={val?.phantramgiam || 0}
-                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, key, e.target.value)}
-                    placeholder="VD: 30"
+                    type="text"
+                    value={formatCurrency(val?.tiengiam || 0)}
+                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, key, e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
+                    placeholder="VD: 500000"
                   />
                   <button type="button" className="btn-remove-tier" onClick={() => handleRemoveConsecutiveRefundTier(key)}>×</button>
                 </div>
@@ -644,11 +642,11 @@ const ConfigManager = () => {
                   </div>
                 </div>
                 <div className="form-group" style={{ marginTop: '0.5rem' }}>
-                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền học trừ/ngày nghỉ</label>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Tiền học t7</label>
                   <input
                     type="text"
-                    value={formatCurrency(formData.trutiennghi || '')}
-                    onChange={(e) => setFormData({ ...formData, trutiennghi: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
+                    value={formatCurrency(formData.tienhoct7 || '')}
+                    onChange={(e) => setFormData({ ...formData, tienhoct7: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
                     placeholder="VD: 20,000"
                     style={{ fontSize: '0.9rem', padding: '4px 8px' }}
                   />
@@ -664,7 +662,7 @@ const ConfigManager = () => {
                   />
                 </div>
                 <div style={{ marginTop: '0.8rem', padding: '10px', background: '#fff5f7', borderRadius: '8px', border: '1px solid #fce7f3' }}>
-                  <div className="section-subtitle" style={{ fontSize: '0.8rem', fontWeight: 800, color: '#be185d', marginBottom: '8px', textTransform: 'uppercase' }}>Hoàn học phí liên tiếp</div>
+                  <div className="section-subtitle" style={{ fontSize: '0.8rem', fontWeight: 800, color: '#be185d', marginBottom: '8px', textTransform: 'uppercase' }}>Hoàn học phí</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       type="button"
