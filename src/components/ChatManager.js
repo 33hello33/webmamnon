@@ -386,6 +386,21 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     }
   };
 
+  // Notify the class teacher via push when admin sends a message/file in their class chat.
+  // The Edge Function routes description:'PH' + manv=teacherManv to the teacher's subscription.
+  const notifyClassTeacher = async (malop, content, tag) => {
+    const cls = classes.find(c => c.malop === malop || c.classid === malop);
+    const teacherManv = cls?.manv;
+    if (!teacherManv) return;
+    await triggerPushNotification(supabase, 'hv_messages', {
+      id: tag || `teacher-notify-${Date.now()}`,
+      mahv: '',
+      manv: teacherManv,
+      content: content || 'Có tin nhắn mới trong lớp của bạn.',
+      description: 'PH',
+    });
+  };
+
   const handleChatAttachmentUpload = async (selectedFiles, forcedType = null) => {
     const files = toFileArray(selectedFiles);
     if (!files.length || !selectedStudent) return;
@@ -433,6 +448,14 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       setMessages(prev => mergeThreadMessages(prev, insertedMessages));
       for (const message of insertedMessages) {
         await triggerPushNotification(supabase, 'hv_messages', message);
+      }
+      // Notify teacher of the class
+      if (insertedMessages.length > 0) {
+        await notifyClassTeacher(
+          selectedStudent?.malop,
+          'Có tệp đính kèm mới từ nhà trường.',
+          `admin-attach-${insertedMessages[0].id}`
+        );
       }
 
       if (documentPayloads.length > 0) {
@@ -1012,7 +1035,12 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
     if (!error && data) {
       setMessages(prev => mergeThreadMessages(prev, [data[0]]));
-      await triggerPushNotification(supabase, 'hv_messages', data[0]);
+      await triggerPushNotification(supabase, 'hv_messages', data[0]); // notify parent
+      await notifyClassTeacher(
+        selectedStudent?.malop,
+        data[0].content || 'Có tin nhắn mới từ nhà trường.',
+        `admin-msg-${data[0].id}`
+      );
       setInputText('');
       setTimeout(scrollToBottom, 50);
     }
@@ -1274,6 +1302,14 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
 
         if (autoApprove) {
           await fanOutAnnouncementsToStudentChats(insertedData, groupIdByClass);
+          // Notify each class teacher about the new announcement
+          for (const malop of targetClasses) {
+            await notifyClassTeacher(
+              malop,
+              announcementForm.content || 'Thông báo mới từ nhà trường.',
+              `announcement-teacher-${malop}-${Date.now()}`
+            );
+          }
         }
       }
 
@@ -1328,6 +1364,10 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           if (record?.approved !== false) {
             await triggerPushNotification(supabase, 'class_announcements', record);
           }
+        }
+        // Notify teachers of all target classes
+        for (const malop of targetClasses) {
+          await notifyClassTeacher(malop, 'Thực đơn mới vừa được cập nhật.', `menu-teacher-${malop}-${Date.now()}`);
         }
       }
 
@@ -1453,6 +1493,14 @@ ${ngoaiKhoaForm.content}
             await triggerPushNotification(supabase, 'class_announcements', record);
           }
         }
+        // Notify teachers of all target classes
+        for (const malop of targetClasses) {
+          await notifyClassTeacher(
+            malop,
+            `Hoạt động ngoại khóa mới: ${ngoaiKhoaForm.content || ''}`.trim(),
+            `ngoaikhoa-teacher-${malop}-${Date.now()}`
+          );
+        }
       }
 
       alert(`Đã gửi hoạt động ngoại khóa thành công tới ${targetClasses.length} lớp.`);
@@ -1560,6 +1608,13 @@ ${ngoaiKhoaForm.content}
           for (const message of insertedMessages || []) {
             await triggerPushNotification(supabase, 'hv_messages', message);
           }
+
+          // Notify the teacher that their announcement was approved
+          await notifyClassTeacher(
+            data.malop,
+            data.content || 'Thông báo của bạn vừa được duyệt.',
+            `approved-teacher-${data.id}`
+          );
         }
 
         if (data.image_url || data.file_url) {
