@@ -712,7 +712,9 @@ function ParentPortal({ parentData, setParentData }) {
                .eq('approved', true)
                .order('created_at', { ascending: false })
                .limit(10);
-            if (!error && data) classAnnouncements = data;
+            if (!error && data) {
+               classAnnouncements = data.filter(item => !String(item.content || '').startsWith('__NGOAI_KHOA_CLOSED__::'));
+            }
          } catch (err) {
             console.warn('Error fetching class announcements:', err);
          }
@@ -760,7 +762,9 @@ function ParentPortal({ parentData, setParentData }) {
                 .eq('approved', true)
                 .gte('created_at', thirtyDaysAgoISO)
                 .order('created_at', { ascending: false });
-             if (!error && data) classAnnouncements = data;
+             if (!error && data) {
+                classAnnouncements = data.filter(item => !String(item.content || '').startsWith('__NGOAI_KHOA_CLOSED__::'));
+             }
           } catch (err) {
              console.warn('Error fetching class announcements for 30 days:', err);
           }

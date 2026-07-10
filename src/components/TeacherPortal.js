@@ -869,9 +869,19 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          let query = supabase
             .from('class_announcements')
             .select('*')
-            .in('malop', classIds)
-            .gte('created_at', dateLimit.toISOString())
-            .order('created_at', { ascending: false })
+            .in('malop', classIds);
+
+         if (type === 'ngoaikhoa') {
+            query = query.eq('title', 'NGOẠI KHÓA');
+         } else if (type === 'curriculum') {
+            query = query.eq('title', 'CHƯƠNG TRÌNH HỌC');
+         }
+
+         if (type !== 'ngoaikhoa') {
+            query = query.gte('created_at', dateLimit.toISOString());
+         }
+
+         query = query.order('created_at', { ascending: false })
             .limit(200);
 
          if (type !== 'curriculum') {
@@ -890,7 +900,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          });
 
          if (type === 'ngoaikhoa') {
-            filteredData = getActiveNgoaiKhoaAnnouncements(filteredData);
+            filteredData = filteredData.filter(item => !String(item?.content || '').startsWith('__NGOAI_KHOA_CLOSED__::'));
          }
 
          setTeacherAnnouncements(filteredData.slice(0, 50));
