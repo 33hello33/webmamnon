@@ -537,12 +537,12 @@ function ParentPortal({ parentData, setParentData }) {
       if (Notification.permission === 'granted') {
          if ('serviceWorker' in navigator) {
             navigator.serviceWorker.ready.then((registration) => {
-               registration.showNotification(title, { body, icon: '/logo192.png' });
+               registration.showNotification(title, { body, icon: '/appleicon.png' });
             }).catch(() => {
-               new Notification(title, { body, icon: '/logo192.png' });
+               new Notification(title, { body, icon: '/appleicon.png' });
             });
          } else {
-            new Notification(title, { body, icon: '/logo192.png' });
+            new Notification(title, { body, icon: '/appleicon.png' });
          }
       }
    };
@@ -617,6 +617,17 @@ function ParentPortal({ parentData, setParentData }) {
          Notification.requestPermission();
       }
    }, []);
+
+   // Auto-subscribe parent to push notifications when student data is available
+   useEffect(() => {
+      const studentId = parentData?.student?.mahv;
+      if (!studentId) return;
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (Notification.permission !== 'granted') return;
+
+      subscribeToPushNotifications().catch(console.error);
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [parentData?.student?.mahv]);
 
    useEffect(() => {
       const fetchStaffDirectory = async () => {
