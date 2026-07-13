@@ -44,8 +44,8 @@ const ALL_TABS = [
     label: 'Quản lý thu chi',
     icon: Wallet,
     subTabs: [
-      { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'hoadon', label: 'QL phiếu thu HP' },
+      { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
     ]
@@ -57,9 +57,9 @@ const ALL_TABS = [
     icon: BookOpen,
     subTabs: [
       { id: 'classes', label: 'Lớp' },
-      { id: 'attendance_today', label: 'Danh sách đi học' },
       { id: 'attendance', label: 'Điểm danh' },
-      { id: 'leave_list', label: 'Danh sách nghỉ' }
+      { id: 'leave_list', label: 'Danh sách nghỉ' },
+      { id: 'attendance_today', label: 'Danh sách đi học' }
     ]
   },
   { id: 'invoices', label: 'Thu học phí', icon: Receipt },
