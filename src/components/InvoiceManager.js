@@ -633,101 +633,75 @@ export default function InvoiceManager() {
          selectedTienAnTier
       });
 
-      try {
-         // Thống kê điểm danh - Chỉ lấy từ hóa đơn/thông báo trước đó
-         const targetForStats = recentHD || (recentDoc?.ngaybatdau ? recentDoc : null);
-
-         if (targetForStats) {
-            const ensureIsoDate = (dStr) => {
-               if (!dStr) return null;
-               const s = String(dStr);
-               if (s.includes('T')) return s.split('T')[0];
-               if (s.includes('-') && s.length >= 10 && s.indexOf('-') === 4) return s.substring(0, 10);
-               const parts = s.split(/[\/\- :]/);
-               if (parts.length >= 3) {
-                  const d = parseInt(parts[0], 10);
-                  const m = parseInt(parts[1], 10);
-                  const y = parseInt(parts[2], 10);
-                  if (y > 2000) {
-                     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                  }
-               }
-               return s;
-            };
-
-            let statsStart = ensureIsoDate(targetForStats.ngaybatdau);
-            let statsEnd = ensureIsoDate(targetForStats.ngayketthuc);
-
-            // Fallback: Nếu không có ngày cụ thể nhưng có chuỗi thời lượng "MM/YYYY"
-            if ((!statsStart || !statsEnd) && targetForStats.thoiluong) {
-               const m = targetForStats.thoiluong.match(/(\d{2})\/(\d{4})/);
-               if (m) {
-                  const mm = parseInt(m[1]) - 1;
-                  const yyyy = parseInt(m[2]);
-                  statsStart = new Date(yyyy, mm, 1).toISOString().split('T')[0];
-                  statsEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
-               }
-            }
-
-            if (statsStart && statsEnd) {
-               let filterLop = malop;
-               let scheduleToUse = enrichedClass?.thoigianbieu;
-
-               if (targetForStats.malop) {
-                  filterLop = targetForStats.malop;
-                  if (filterLop !== malop) {
-                     const oldClass = classes.find(c => c.malop === filterLop);
-                     if (oldClass?.thoigianbieu) scheduleToUse = oldClass.thoigianbieu;
-                  }
-               }
-
-               let tongBuoi = 0;
-               if (scheduleToUse) {
-                  const activeDays = parseScheduleDays(scheduleToUse);
-                  let cDate = new Date(`${statsStart}T00:00:00`);
-                  const eDate = new Date(`${statsEnd}T23:59:59`);
-                  let safeCount = 0;
-                  while (cDate <= eDate && safeCount < 1000) {
-                     if (activeDays.includes(cDate.getDay())) tongBuoi++;
-                     cDate.setDate(cDate.getDate() + 1);
-                     safeCount++;
-                  }
-               }
-
-               let attendanceQuery = supabase.from('tbl_diemdanh').select('*')
-                  .eq('mahv', student.mahv)
-                  .gte('ngay', statsStart).lte('ngay', statsEnd);
-
-               const { data: attendance } = await attendanceQuery;
-
-               const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-               let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
-               (attendance || []).forEach(att => {
-                  const s = normalizeStatus(att.trangthai);
-                  if (s === 'có mặt') daHoc++;
-                  else if (s === 'nghỉ phép') nghiPhep++;
-                  else if (s === 'nghỉ không phép') nghiKhongPhep++;
-               });
-
-               const groups = calculateConsecutiveLeave(attendance || []);
-               const maxConsecutive = groups.length > 0 ? Math.max(...groups.map(g => g.so_ngay_nghi_lien_tuc)) : 0;
-
-               setStudySummary({
-                  daHoc,
-                  nghiPhep,
-                  nghiKhongPhep,
-                  tongBuoi,
-                  consecutiveLeave: groups,
-                  maxConsecutive,
-                  sourceHd: targetForStats.mahd,
-                  period: targetForStats.thoiluong || `${statsStart} - ${statsEnd}`
-               });
-            }
-         }
-      } catch (err) {
-         console.error('Lỗi tính thống kê điểm danh:', err);
-      }
+      // Logic thống kê điểm danh đã được chuyển sang useEffect bên dưới
    };
+
+   // Auto update study summary when invoice start date changes
+   useEffect(() => {
+      if (!selectedStudent || !invoiceData.ngayBatDau) return;
+
+      const fetchAttendance = async () => {
+         try {
+            const currentStart = new Date(invoiceData.ngayBatDau);
+            if (isNaN(currentStart.getTime())) return;
+            
+            // Calculate previous month based on ngayBatDau
+            const prevMonthDate = new Date(currentStart.getFullYear(), currentStart.getMonth() - 1, 1);
+            const statsStart = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1).toISOString().split('T')[0];
+            const statsEnd = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).toISOString().split('T')[0];
+
+            let scheduleToUse = activeClass?.thoigianbieu;
+            let tongBuoi = 0;
+            if (scheduleToUse) {
+               const activeDays = parseScheduleDays(scheduleToUse);
+               let cDate = new Date(`${statsStart}T00:00:00`);
+               const eDate = new Date(`${statsEnd}T23:59:59`);
+               let safeCount = 0;
+               while (cDate <= eDate && safeCount < 1000) {
+                  if (activeDays.includes(cDate.getDay())) tongBuoi++;
+                  cDate.setDate(cDate.getDate() + 1);
+                  safeCount++;
+               }
+            }
+
+            const { data: attendance } = await supabase.from('tbl_diemdanh')
+               .select('*')
+               .eq('mahv', selectedStudent.mahv)
+               .gte('ngay', statsStart)
+               .lte('ngay', statsEnd);
+
+            const normalizeStatus = (s) => (s || '').trim().toLowerCase();
+            let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
+            (attendance || []).forEach(att => {
+               const s = normalizeStatus(att.trangthai);
+               if (s === 'có mặt') daHoc++;
+               else if (s === 'nghỉ phép') nghiPhep++;
+               else if (s === 'nghỉ không phép') nghiKhongPhep++;
+            });
+
+            const groups = calculateConsecutiveLeave(attendance || []);
+            const maxConsecutive = groups.length > 0 ? Math.max(...groups.map(g => g.so_ngay_nghi_lien_tuc)) : 0;
+
+            const periodStr = `${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}/${prevMonthDate.getFullYear()}`;
+
+            setStudySummary({
+               daHoc,
+               nghiPhep,
+               nghiKhongPhep,
+               tongBuoi,
+               consecutiveLeave: groups,
+               maxConsecutive,
+               sourceHd: 'Tự động',
+               period: periodStr
+            });
+
+         } catch (err) {
+            console.error('Lỗi tính lại thống kê điểm danh:', err);
+         }
+      };
+
+      fetchAttendance();
+   }, [invoiceData.ngayBatDau, selectedStudent?.mahv, activeClass]);
 
    const showMessage = (type, text) => {
       setMessage({ type, text });
