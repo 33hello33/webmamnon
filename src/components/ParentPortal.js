@@ -1778,7 +1778,10 @@ function ParentPortal({ parentData, setParentData }) {
       // Notices (General + Class excluding Menu/NgoaiKhoa)
       const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
       const latestGenNotice = generalNotices?.[0];
-      const classNotices = (classAnnouncements || []).filter(n => n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
+      const classNotices = (classAnnouncements || []).filter(n => {
+         const t = String(n.title || '').toUpperCase().trim();
+         return t !== 'THỰC ĐƠN' && t !== 'NGOẠI KHÓA' && t !== 'CHƯƠNG TRÌNH HỌC';
+      });
       const latestClassNotice = classNotices?.[0];
 
       const currentLatestNoticeTime = Math.max(
@@ -1794,7 +1797,7 @@ function ParentPortal({ parentData, setParentData }) {
 
       // Menu
       const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
-      const latestMenu = (classAnnouncements || []).find(n => n.title === 'THỰC ĐƠN');
+      const latestMenu = (classAnnouncements || []).find(n => String(n.title || '').toUpperCase().trim() === 'THỰC ĐƠN');
       const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
       if (currentLatestMenuTime > lastMenuTime) {
          setUnreadMenu(1);
@@ -1816,7 +1819,7 @@ function ParentPortal({ parentData, setParentData }) {
 
       // Chuong trinh hoc
       const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
-      const latestChuongTrinhHoc = (classAnnouncements || []).find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
+      const latestChuongTrinhHoc = (classAnnouncements || []).find(n => String(n.title || '').toUpperCase().trim() === 'CHƯƠNG TRÌNH HỌC');
       const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
       if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
          setUnreadChuongTrinhHoc(1);
@@ -2011,7 +2014,10 @@ function ParentPortal({ parentData, setParentData }) {
             }
          } else if (parentTab === 'notices-tab') {
             if (parentNotices.length > 0) {
-               const latest = parentNotices.find(n => n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC');
+               const latest = parentNotices.find(n => {
+                  const t = String(n.title || '').toUpperCase().trim();
+                  return t !== 'THỰC ĐƠN' && t !== 'NGOẠI KHÓA' && t !== 'CHƯƠNG TRÌNH HỌC';
+               });
                if (latest) {
                   const time = new Date(latest.date).getTime();
                   localStorage.setItem(`last_notice_time_${parentData.student.mahv}`, String(time));
@@ -2019,7 +2025,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
             setUnreadNotices(0);
          } else if (parentTab === 'menu-tab') {
-            const latest = parentNotices.find(n => n.title === 'THỰC ĐƠN');
+            const latest = parentNotices.find(n => String(n.title || '').toUpperCase().trim() === 'THỰC ĐƠN');
             if (latest) {
                const time = new Date(latest.date).getTime();
                localStorage.setItem(`last_menu_time_${parentData.student.mahv}`, String(time));
@@ -2037,7 +2043,7 @@ function ParentPortal({ parentData, setParentData }) {
             }
             setUnreadNgoaiKhoa(0);
          } else if (parentTab === 'chuongtrinhhoc-tab') {
-            const latest = parentNotices.find(n => n.title === 'CHƯƠNG TRÌNH HỌC');
+            const latest = parentNotices.find(n => String(n.title || '').toUpperCase().trim() === 'CHƯƠNG TRÌNH HỌC');
             if (latest) {
                const time = new Date(latest.date).getTime();
                localStorage.setItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`, String(time));
@@ -2184,10 +2190,13 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const groupedParentClassNotices = groupAnnouncementsForDisplay(
-      parentNotices.filter(n => n.type === 'general' || (n.type === 'class' && n.title !== 'THỰC ĐƠN' && n.title !== 'NGOẠI KHÓA' && n.title !== 'CHƯƠNG TRÌNH HỌC'))
+      parentNotices.filter(n => {
+         const t = String(n.title || '').toUpperCase().trim();
+         return t !== 'THỰC ĐƠN' && t !== 'NGOẠI KHÓA' && t !== 'CHƯƠNG TRÌNH HỌC';
+      })
    );
-   const groupedParentMenus = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'THỰC ĐƠN'));
-   const groupedParentCurriculums = groupAnnouncementsForDisplay(parentNotices.filter(n => n.title === 'CHƯƠNG TRÌNH HỌC'));
+   const groupedParentMenus = groupAnnouncementsForDisplay(parentNotices.filter(n => String(n.title || '').toUpperCase().trim() === 'THỰC ĐƠN'));
+   const groupedParentCurriculums = groupAnnouncementsForDisplay(parentNotices.filter(n => String(n.title || '').toUpperCase().trim() === 'CHƯƠNG TRÌNH HỌC'));
 
    return (
       <div id="parent-dashboard" className={`parent-premium-mobile ${parentTab === 'chat-tab' ? 'chat-mode-active' : ''}`}>
