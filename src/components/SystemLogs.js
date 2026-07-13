@@ -258,13 +258,17 @@ export default function SystemLogs() {
                 
                 return (
                   <tr key={log.id} className={info.isError ? 'row-error' : ''}>
-                    <td className="time-cell">
-                      <Calendar size={12} />
-                      {new Date(log.created_at).toLocaleString('vi-VN')}
+                    <td>
+                      <div className="time-cell">
+                        <Calendar size={12} />
+                        {new Date(log.created_at).toLocaleString('vi-VN')}
+                      </div>
                     </td>
-                    <td className="user-cell">
-                      <div className="user-avatar">{userName.charAt(0).toUpperCase()}</div>
-                      <span>{userName}</span>
+                    <td>
+                      <div className="user-cell">
+                        <div className="user-avatar">{userName.charAt(0).toUpperCase()}</div>
+                        <span>{userName}</span>
+                      </div>
                     </td>
                     <td>
                       <div className={`action-badge ${info.action.toLowerCase()}`}>
@@ -272,9 +276,11 @@ export default function SystemLogs() {
                         {info.action}
                       </div>
                     </td>
-                    <td className="target-cell">
-                      <Tag size={12} />
-                      {info.target}
+                    <td>
+                      <div className="target-cell">
+                        <Tag size={12} />
+                        {info.target}
+                      </div>
                     </td>
                     <td className="detail-cell">
                       {info.details && <span className="item-name">{info.details}</span>}
