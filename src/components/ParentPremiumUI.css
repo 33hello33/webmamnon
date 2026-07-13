@@ -812,6 +812,11 @@ body:has(.chat-mode-active) {
     }
 }
 
+.premium-main-content {
+    min-width: 0;
+    width: 100%;
+}
+
 /* Latest Updates Section */
 .latest-updates-box {
     background: rgba(255, 255, 255, 0.7);
@@ -829,6 +834,7 @@ body:has(.chat-mode-active) {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
+    gap: 10px;
 }
 
 .latest-updates-title {
@@ -837,6 +843,10 @@ body:has(.chat-mode-active) {
     color: #1e293b;
     margin: 0;
     letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
 }
 
 .latest-updates-more {
@@ -851,6 +861,8 @@ body:has(.chat-mode-active) {
     padding: 4px 8px;
     border-radius: 8px;
     transition: all 0.2s ease;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .latest-updates-more:hover {
