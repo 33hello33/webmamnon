@@ -263,7 +263,8 @@ export default function InvoiceManager() {
                await new Promise(r => setTimeout(r, 1000));
                const node = document.getElementById('download-invoice-node');
                if (node) {
-                  // Capture setup: force visible and at top
+                  // Capture setup: force display+visible at top-left of viewport
+                  node.style.display = 'flex';
                   node.style.position = 'fixed';
                   node.style.top = '0';
                   node.style.left = '0';
@@ -280,8 +281,11 @@ export default function InvoiceManager() {
 
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
 
-                  // Restore hide
-                  node.style.position = 'static';
+                  // Restore: back off-screen
+                  node.style.position = 'fixed';
+                  node.style.top = '-9999px';
+                  node.style.left = '-9999px';
+                  node.style.zIndex = '-1000';
                   node.style.opacity = '0.01';
 
                   if (downloadingInvoice.isPrinting) {
@@ -341,7 +345,8 @@ export default function InvoiceManager() {
                await new Promise(r => setTimeout(r, 1500));
                const node = document.getElementById('download-notice-node');
                if (node) {
-                  // Capture setup
+                  // Capture setup: force display+visible at top-left of viewport
+                  node.style.display = 'flex';
                   node.style.position = 'fixed';
                   node.style.top = '0';
                   node.style.left = '0';
@@ -358,8 +363,11 @@ export default function InvoiceManager() {
 
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
 
-                  // Restore hide
-                  node.style.position = 'static';
+                  // Restore: back off-screen
+                  node.style.position = 'fixed';
+                  node.style.top = '-9999px';
+                  node.style.left = '-9999px';
+                  node.style.zIndex = '-1000';
                   node.style.opacity = '0.01';
 
                   if (downloadingNotice.isPrinting) {
@@ -370,9 +378,9 @@ export default function InvoiceManager() {
                               <head>
                                  <title>Print Notice</title>
                                  <style>
-                                    @page { size: A4 landscape; margin: 0; }
+                                    @page { size: A5 portrait; margin: 0; }
                                     body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
-                                    img { width: 297mm; height: 210mm; object-fit: contain; }
+                                    img { width: 148.5mm; height: 210mm; object-fit: contain; }
                                  </style>
                               </head>
                               <body>
@@ -1678,7 +1686,7 @@ export default function InvoiceManager() {
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+            <div id="download-invoice-node" className="im-print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                {[1, 2].map(copyNum => (
                   <div key={copyNum} className="receipt-copy">
                      {/* HEADER */}
@@ -1746,9 +1754,9 @@ export default function InvoiceManager() {
                            )}
                         </div>
 
-                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
-                           <span style={{ fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
-                           <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
+                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                           <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
+                           <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
                         </div>
 
                         <div className="p-row" style={{ marginTop: '4px' }}>
@@ -1783,9 +1791,8 @@ export default function InvoiceManager() {
             </div>
 
             {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               {[1, 2].map(copyNum => (
-                  <div key={copyNum} className="receipt-copy">
+            <div id="download-notice-node" className="im-print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+                  <div className="receipt-copy" style={{ borderRight: 'none' }}>
                      {/* HEADER */}
                      <div className="p-header">
                         <div style={{ width: '80px' }}>
@@ -1849,9 +1856,9 @@ export default function InvoiceManager() {
                            </div>
                         </div>
 
-                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#000', color: '#fff !important', borderRadius: '4px' }}>
-                           <span style={{ color: '#fff !important', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
-                           <span style={{ marginLeft: 'auto', color: '#fff !important', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
+                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                           <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
+                           <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
                         </div>
 
                         <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
@@ -1880,7 +1887,6 @@ export default function InvoiceManager() {
                         </div>
                      </div>
                   </div>
-               ))}
             </div>
          </div>
 

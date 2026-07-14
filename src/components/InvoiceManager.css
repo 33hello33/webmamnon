@@ -709,154 +709,138 @@
 /* =======================================
    A5 PRINT LAYOUT
    ======================================= */
-.print-a5-receipt {
-  display: none !important;
+/* 
+  QUAN TRỌNG: KHÔNG dùng display:none vì html-to-image (toPng) không thể 
+  render node bị ẩn bởi display:none — sẽ ra ảnh trắng / 0 byte.
+  Thay vào đó: ẩn bằng opacity + vị trí ngoài viewport.
+  JS sẽ tạm thời đưa node vào position:fixed top:0 + opacity:1 trước khi capture.
+*/
+.im-print-a5-receipt {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1000;
+  display: flex;
+  width: 297mm;
+  height: 210mm;
+  background: white;
 }
 
-@media print {
-  body > *:not(.print-a5-receipt) {
-    display: none !important;
-  }
+/* 
+  InvoiceManager dùng toPng (html-to-image) để xuất ảnh, KHÔNG dùng window.print().
+  → Không cần @media print ở đây — tất cả style cần áp dụng lúc toPng capture (screen scope).
+  → @media print ở đây đã bị xóa vì nó phá hỏng window.print() của FinanceManager.
+*/
 
-  body,
-  html {
-    background: white !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 297mm;
-    height: 210mm;
-    overflow: hidden !important;
-  }
+.im-print-a5-receipt .receipt-copy {
+  width: 148.5mm;
+  height: 209mm;
+  padding: 1mm 2mm;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
 
-  @page {
-    size: A4 landscape;
-    margin: 0;
-  }
+.im-print-a5-receipt .receipt-copy:first-child {
+  border-right: 1px dashed #ccc;
+}
 
-  .print-a5-receipt {
-    display: flex !important;
-    visibility: visible !important;
-    position: static !important;
-    width: 297mm;
-    height: 209mm;
-    overflow: hidden;
-    background: white;
-    box-sizing: border-box;
-    page-break-inside: avoid;
-    page-break-after: avoid;
-    font-family: "Inter", "Segoe UI", Arial, sans-serif;
-    color: #000;
-  }
+.im-print-a5-receipt .receipt-copy * {
+  color: #000;
+  line-height: 1.25 !important;
+}
 
-  .receipt-copy {
-    width: 148.5mm;
-    height: 209mm;
-    padding: 1mm 2mm;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-  }
+.im-print-a5-receipt .p-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 10px;
+}
 
-  .receipt-copy:first-child {
-    border-right: 1px dashed #ccc;
-  }
+.im-print-a5-receipt .p-header h3 {
+  margin: 0;
+  font-size: 11pt;
+  font-weight: 900;
+  text-transform: uppercase;
+}
 
-  .receipt-copy * {
-    visibility: visible !important;
-    color: #000 !important;
-    line-height: 1.25 !important;
-  }
+.im-print-a5-receipt .p-header p {
+  margin: 1px 0;
+  font-size: 8pt;
+  color: #333 !important;
+}
 
-  .p-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    gap: 10px;
-  }
+.im-print-a5-receipt .p-title-area {
+  text-align: center;
+  margin-bottom: 15px;
+}
 
-  .p-header h3 {
-    margin: 0;
-    font-size: 11pt !important;
-    font-weight: 900;
-    text-transform: uppercase;
-  }
+.im-print-a5-receipt .p-title-area h2 {
+  margin: 0;
+  font-size: 16pt;
+  font-weight: 900;
+  text-transform: uppercase;
+  text-decoration: underline;
+}
 
-  .p-header p {
-    margin: 1px 0;
-    font-size: 8pt !important;
-    color: #333 !important;
-  }
+.im-print-a5-receipt .p-content {
+  margin-bottom: 10px;
+}
 
-  .p-title-area {
-    text-align: center;
-    margin-bottom: 15px;
-  }
+.im-print-a5-receipt .p-row {
+  margin-bottom: 8px;
+  font-size: 13pt;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
 
-  .p-title-area h2 {
-    margin: 0;
-    font-size: 16pt !important;
-    font-weight: 900;
-    text-transform: uppercase;
-    text-decoration: underline;
-  }
+.im-print-a5-receipt .p-label {
+  font-weight: 600;
+  min-width: 100px;
+}
 
-  .p-content {
-    margin-bottom: 10px;
-  }
+.im-print-a5-receipt .p-value {
+  flex: 1;
+  border-bottom: 1px dotted #999;
+  font-weight: 800;
+}
 
-  .p-row {
-    margin-bottom: 8px;
-    font-size: 13pt !important;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
+.im-print-a5-receipt .p-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 12.5pt;
+}
 
-  .p-label {
-    font-weight: 600;
-    min-width: 100px;
-  }
+.im-print-a5-receipt .p-signatures {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  text-align: center;
+  margin-top: 10px;
+  font-size: 9.5pt;
+}
 
-  .p-value {
-    flex: 1;
-    border-bottom: 1px dotted #999;
-    font-weight: 800;
-  }
+.im-print-a5-receipt .sig-box h4 {
+  margin: 0 0 2px 0;
+  font-size: 9pt;
+  font-weight: 900;
+}
 
-  .p-footer {
-    margin-top: auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    font-size: 12.5pt !important;
-  }
+.im-print-a5-receipt .sig-box p {
+  margin: 0;
+  font-style: italic;
+  font-size: 8pt;
+}
 
-  .p-signatures {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    text-align: center;
-    margin-top: 10px;
-    font-size: 9.5pt !important;
-  }
-
-  .sig-box h4 {
-    margin: 0 0 2px 0;
-    font-size: 9pt !important;
-    font-weight: 900;
-  }
-
-  .sig-box p {
-    margin: 0;
-    font-style: italic;
-    font-size: 8pt !important;
-  }
-
-  .sig-name {
-    margin-top: 35px;
-    font-weight: 800;
-  }
+.im-print-a5-receipt .sig-name {
+  margin-top: 35px;
+  font-weight: 800;
 }
 
 
