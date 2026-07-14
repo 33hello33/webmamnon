@@ -54,6 +54,7 @@ const ConfigManager = () => {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isTruTienAnModalOpen, setIsTruTienAnModalOpen] = useState(false);
+  const [localTruTienAn, setLocalTruTienAn] = useState([]);
 
   useEffect(() => {
     if (config) {
@@ -228,24 +229,34 @@ const ConfigManager = () => {
 
   const trutienanTiers = (typeof formData.trutienan === 'object' && formData.trutienan !== null) ? formData.trutienan : {};
 
-  const handleAddTier = () => {
-    const newTiers = { ...trutienanTiers };
-    newTiers["0"] = { tru_nghi: 0 };
-    setFormData({ ...formData, trutienan: newTiers });
+  const openTruTienAnModal = () => {
+    const arr = Object.entries(trutienanTiers).map(([k, v]) => ({
+      id: Math.random().toString(),
+      muc_tien: k,
+      tru_nghi: v.tru_nghi
+    }));
+    setLocalTruTienAn(arr);
+    setIsTruTienAnModalOpen(true);
   };
 
-  const handleUpdateTier = (oldKey, newKey, truNghi) => {
-    const newTiers = { ...trutienanTiers };
-    const val = newTiers[oldKey];
-    delete newTiers[oldKey];
-    newTiers[newKey] = { tru_nghi: parseInt(truNghi) || 0 };
-    setFormData({ ...formData, trutienan: newTiers });
+  const handleAddTierLocal = () => {
+    setLocalTruTienAn([...localTruTienAn, { id: Math.random().toString(), muc_tien: "", tru_nghi: 0 }]);
   };
 
-  const handleRemoveTier = (key) => {
-    const newTiers = { ...trutienanTiers };
-    delete newTiers[key];
+  const handleRemoveTierLocal = (idToRemove) => {
+    setLocalTruTienAn(localTruTienAn.filter(t => t.id !== idToRemove));
+  };
+
+  const closeAndSaveTruTienAnModal = () => {
+    const newTiers = {};
+    localTruTienAn.forEach(item => {
+      const m = String(item.muc_tien).replace(/,/g, '').trim();
+      if (m !== "") {
+        newTiers[m] = { tru_nghi: parseInt(item.tru_nghi) || 0 };
+      }
+    });
     setFormData({ ...formData, trutienan: newTiers });
+    setIsTruTienAnModalOpen(false);
   };
 
   const renderTruTienAnModal = () => {
@@ -256,7 +267,7 @@ const ConfigManager = () => {
         <div className="config-modal">
           <div className="modal-header">
             <h3>Cấu hình mức trừ tiền ăn</h3>
-            <button className="btn-close" onClick={() => setIsTruTienAnModalOpen(false)}>×</button>
+            <button type="button" className="btn-close" onClick={closeAndSaveTruTienAnModal}>×</button>
           </div>
           <div className="modal-body">
             <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
@@ -269,30 +280,38 @@ const ConfigManager = () => {
                 <span>Tiền trừ/ngày (VNĐ)</span>
                 <span></span>
               </div>
-              {Object.entries(trutienanTiers).map(([key, val]) => (
-                <div key={key} className="tier-item">
+              {localTruTienAn.map((item, index) => (
+                <div key={item.id} className="tier-item">
                   <input
                     type="text"
-                    value={formatCurrency(key)}
-                    onChange={(e) => handleUpdateTier(key, e.target.value.replace(/,/g, ''), val.tru_nghi)}
+                    value={formatCurrency(item.muc_tien)}
+                    onChange={(e) => {
+                      const arr = [...localTruTienAn];
+                      arr[index].muc_tien = e.target.value.replace(/,/g, '');
+                      setLocalTruTienAn(arr);
+                    }}
                     placeholder="VD: 650000"
                   />
                   <input
                     type="text"
-                    value={formatCurrency(val.tru_nghi)}
-                    onChange={(e) => handleUpdateTier(key, key, e.target.value.replace(/,/g, ''))}
+                    value={formatCurrency(item.tru_nghi)}
+                    onChange={(e) => {
+                      const arr = [...localTruTienAn];
+                      arr[index].tru_nghi = e.target.value.replace(/,/g, '');
+                      setLocalTruTienAn(arr);
+                    }}
                     placeholder="VD: 20000"
                   />
-                  <button className="btn-remove-tier" onClick={() => handleRemoveTier(key)}>×</button>
+                  <button type="button" className="btn-remove-tier" onClick={() => handleRemoveTierLocal(item.id)}>×</button>
                 </div>
               ))}
-              <button className="btn-add-tier" onClick={handleAddTier}>
+              <button type="button" className="btn-add-tier" onClick={handleAddTierLocal}>
                 <Plus size={16} /> Thêm mức mới
               </button>
             </div>
           </div>
           <div className="modal-footer">
-            <button className="btn-confirm" onClick={() => setIsTruTienAnModalOpen(false)}>Xong</button>
+            <button type="button" className="btn-confirm" onClick={closeAndSaveTruTienAnModal}>Xong</button>
           </div>
         </div>
       </div>,
@@ -480,7 +499,7 @@ const ConfigManager = () => {
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       type="button"
-                      onClick={() => setIsTruTienAnModalOpen(true)}
+                      onClick={openTruTienAnModal}
                       style={{
                         flex: 1,
                         padding: '8px',
