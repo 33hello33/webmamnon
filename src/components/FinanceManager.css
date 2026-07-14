@@ -705,114 +705,114 @@
   min-width: 90px !important;
 }
 
-.p-header {
+.print-a5-receipt .p-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-    margin-bottom: 20px;
-  }
+  margin-bottom: 20px;
+}
 
-  .p-header-left h3 {
-    margin: 0 0 5px 0;
-    font-size: 16pt;
-    font-weight: bold;
-  }
+.print-a5-receipt .p-header-left h3 {
+  margin: 0 0 5px 0;
+  font-size: 16pt;
+  font-weight: bold;
+}
 
-  .p-header-left p {
-    margin: 2px 0;
-    font-size: 12pt;
-  }
+.print-a5-receipt .p-header-left p {
+  margin: 2px 0;
+  font-size: 12pt;
+}
 
-  .p-logo-placeholder {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: 2px solid #e2e8f0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 14pt;
-    color: #3b82f6 !important; /* Keep blue for logo, might override * color if not careful, but !important above wins */
-  }
+.print-a5-receipt .p-logo-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14pt;
+  color: #3b82f6 !important;
+}
 
-  .p-title-area {
-    text-align: center;
-    margin-bottom: 12px;
-  }
+.print-a5-receipt .p-title-area {
+  text-align: center;
+  margin-bottom: 12px;
+}
 
-  .p-title-area h2 {
-    margin: 0 0 5px 0;
-    font-size: 20pt;
-    font-weight: bold;
-    text-transform: uppercase;
-  }
+.print-a5-receipt .p-title-area h2 {
+  margin: 0 0 5px 0;
+  font-size: 20pt;
+  font-weight: bold;
+  text-transform: uppercase;
+}
 
-  .p-title-area p {
-    margin: 0;
-    font-style: italic;
-    font-size: 11pt;
-  }
+.print-a5-receipt .p-title-area p {
+  margin: 0;
+  font-style: italic;
+  font-size: 11pt;
+}
 
-  .p-code-area {
-    text-align: right;
-    font-size: 11pt;
-    margin-bottom: 10px;
-    padding-right: 20px;
-  }
+.print-a5-receipt .p-code-area {
+  text-align: right;
+  font-size: 11pt;
+  margin-bottom: 10px;
+  padding-right: 20px;
+}
 
-  .p-content {
-    margin-bottom: 25px;
-    padding: 0 10px;
-  }
+.print-a5-receipt .p-content {
+  margin-bottom: 25px;
+  padding: 0 10px;
+}
 
-  .p-row {
-    margin-bottom: 8px;
-    font-size: 12pt;
-    display: flex;
-    align-items: baseline;
-  }
+.print-a5-receipt .p-row {
+  margin-bottom: 8px;
+  font-size: 12pt;
+  display: flex;
+  align-items: baseline;
+}
 
-  .p-label {
-    min-width: 140px;
-    display: inline-block;
-  }
+.print-a5-receipt .p-label {
+  min-width: 140px;
+  display: inline-block;
+}
 
-  .p-value {
-    flex: 1;
-    border-bottom: 1px dotted #999;
-    padding-bottom: 2px;
-  }
+.print-a5-receipt .p-value {
+  flex: 1;
+  border-bottom: 1px dotted #999;
+  padding-bottom: 2px;
+}
 
-  .p-signatures {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    text-align: center;
-    margin-bottom: 30px;
-  }
+.print-a5-receipt .p-signatures {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  text-align: center;
+  margin-bottom: 30px;
+}
 
-  .sig-box h4 {
-    margin: 0 0 5px 0;
-    font-size: 12pt;
-    font-weight: bold;
-  }
+.print-a5-receipt .sig-box h4 {
+  margin: 0 0 5px 0;
+  font-size: 12pt;
+  font-weight: bold;
+}
 
-  .sig-box p {
-    margin: 0;
-    font-style: italic;
-    font-size: 11pt;
-  }
+.print-a5-receipt .sig-box p {
+  margin: 0;
+  font-style: italic;
+  font-size: 11pt;
+}
 
-  .sig-name {
-    margin-top: 50px;
-    font-weight: bold;
-    font-size: 12pt;
-  }
+.print-a5-receipt .sig-name {
+  margin-top: 50px;
+  font-weight: bold;
+  font-size: 12pt;
+}
 
-  .p-footer-note {
-    font-size: 12pt;
-    padding-left: 10px;
-  }
+.print-a5-receipt .p-footer-note {
+  font-size: 12pt;
+  padding-left: 10px;
+}
 
 .p-luong-table {
   width: 100%;

@@ -264,6 +264,7 @@ export default function InvoiceManager() {
                const node = document.getElementById('download-invoice-node');
                if (node) {
                   // Capture setup: force visible and at top
+                  node.style.display = 'flex';
                   node.style.position = 'fixed';
                   node.style.top = '0';
                   node.style.left = '0';
@@ -281,7 +282,10 @@ export default function InvoiceManager() {
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
 
                   // Restore hide
-                  node.style.position = 'static';
+                  node.style.position = 'fixed';
+                  node.style.top = '-9999px';
+                  node.style.left = '-9999px';
+                  node.style.zIndex = '-1000';
                   node.style.opacity = '0.01';
 
                   if (downloadingInvoice.isPrinting) {
@@ -342,6 +346,7 @@ export default function InvoiceManager() {
                const node = document.getElementById('download-notice-node');
                if (node) {
                   // Capture setup
+                  node.style.display = 'flex';
                   node.style.position = 'fixed';
                   node.style.top = '0';
                   node.style.left = '0';
@@ -359,7 +364,10 @@ export default function InvoiceManager() {
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
 
                   // Restore hide
-                  node.style.position = 'static';
+                  node.style.position = 'fixed';
+                  node.style.top = '-9999px';
+                  node.style.left = '-9999px';
+                  node.style.zIndex = '-1000';
                   node.style.opacity = '0.01';
 
                   if (downloadingNotice.isPrinting) {
@@ -370,9 +378,9 @@ export default function InvoiceManager() {
                               <head>
                                  <title>Print Notice</title>
                                  <style>
-                                    @page { size: A4 landscape; margin: 0; }
+                                    @page { size: A5 portrait; margin: 0; }
                                     body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
-                                    img { width: 297mm; height: 210mm; object-fit: contain; }
+                                    img { width: 148.5mm; height: 210mm; object-fit: contain; }
                                  </style>
                               </head>
                               <body>
@@ -629,7 +637,7 @@ export default function InvoiceManager() {
 
       let finalDiscountPercent = parseInt(student['giamhp%'], 10) || 0;
       let finalGiamHocphi = giamHocphi;
-      
+
       if (finalDiscountPercent > 0) {
          finalGiamHocphi = Math.round((hocphi * finalDiscountPercent) / 100);
       } else if (hocphi > 0 && giamHocphi > 0) {
@@ -653,7 +661,7 @@ export default function InvoiceManager() {
          try {
             const currentStart = new Date(invoiceData.ngayBatDau);
             if (isNaN(currentStart.getTime())) return;
-            
+
             // Calculate previous month based on ngayBatDau
             const prevMonthDate = new Date(currentStart.getFullYear(), currentStart.getMonth() - 1, 1);
             const statsStart = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1).toISOString().split('T')[0];
@@ -1755,9 +1763,9 @@ export default function InvoiceManager() {
                            )}
                         </div>
 
-                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
-                           <span style={{ fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
-                           <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
+                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                           <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
+                           <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
                         </div>
 
                         <div className="p-row" style={{ marginTop: '4px' }}>
@@ -1791,107 +1799,115 @@ export default function InvoiceManager() {
                ))}
             </div>
 
-            {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               {[1, 2].map(copyNum => (
-                  <div key={copyNum} className="receipt-copy">
-                     {/* HEADER */}
-                     <div className="p-header">
-                        <div style={{ width: '80px' }}>
-                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                        </div>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
-                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
-                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
-                        </div>
-                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
-                           <div style={{ fontWeight: 800 }}>Mã TB: {downloadingNotice?.mahd}</div>
-                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
-                        </div>
+            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+               <div className="receipt-copy" style={{ borderRight: 'none' }}>
+                  {/* HEADER */}
+                  <div className="p-header">
+                     <div style={{ width: '80px' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-
-                     <div className="p-title-area">
-                        <h2 style={{ fontSize: '15pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                        <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                        <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
                      </div>
-
-                     <div className="p-content">
-                        <div className="p-row">
-                           <span className="p-label">Họ tên:</span>
-                           <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingNotice?.tenhv}</span>
-                           <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
-                           <span className="p-value">{downloadingNotice?.tenlop}</span>
-                        </div>
-                        <div className="p-row">
-                           <span className="p-label">SĐT liên hệ:</span>
-                           <span className="p-value">{downloadingNotice?.sdt || ""}</span>
-                           <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
-                           <span className="p-value">{downloadingNotice?.thoiluong}</span>
-                        </div>
-
-                        <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
-                           <div className="p-row">
-                              <span style={{ flex: 1 }}>- Học phí: <b>{downloadingNotice?.hocphi} đ</b></span>
-                              <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></span>
-                           </div>
-                           <div className="p-row">
-                              <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingNotice?.giamhocphi} đ</b></span>
-                              <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{formatCurrency(noCu)} đ</b></span>
-                           </div>
-
-                           {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
-                              <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
-                                 {downloadingNotice.phuthu.map((pt, i) => (
-                                    <div key={i} className="p-row" style={{ marginBottom: 0 }}>
-                                       <span>+ {pt.name || 'Phụ thu'}:</span>
-                                       <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
-                                    </div>
-                                 ))}
-                              </div>
-                           )}
-
-                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
-                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                 <span>Trừ ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} n): <b>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b></span>
-                                 <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
-                              </div>
-                           </div>
-                        </div>
-
-                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#000', color: '#fff !important', borderRadius: '4px' }}>
-                           <span style={{ color: '#fff !important', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
-                           <span style={{ marginLeft: 'auto', color: '#fff !important', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
-                        </div>
-
-                        <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
-                           <span>HÌNH THỨC:</span>
-                           <span className="p-value">{downloadingNotice?.hinhthuc}</span>
-                        </div>
-                        {downloadingNotice?.ghichu && (
-                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
-                              <span>Ghi chú: {downloadingNotice.ghichu}</span>
-                           </div>
-                        )}
-                        <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
-                           * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
-                        </div>
-                     </div>
-
-                     <div className="p-signatures">
-                        <div className="sig-box">
-                           <h4>Người nộp tiền</h4>
-                           <p>(Ký, họ tên)</p>
-                        </div>
-                        <div className="sig-box">
-                           <h4>Nhà trường</h4>
-                           <p>(Ký, đóng dấu)</p>
-                           <div className="sig-name">{cashier}</div>
-                        </div>
+                     <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                        <div style={{ fontWeight: 800 }}>Mã TB: {downloadingNotice?.mahd}</div>
+                        <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
                      </div>
                   </div>
-               ))}
+
+                  <div className="p-title-area">
+                     <h2 style={{ fontSize: '15pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
+                  </div>
+
+                  <div className="p-content">
+                     <div className="p-row">
+                        <span className="p-label">Họ tên:</span>
+                        <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingNotice?.tenhv}</span>
+                        <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                        <span className="p-value">{downloadingNotice?.tenlop}</span>
+                     </div>
+                     <div className="p-row">
+                        <span className="p-label">SĐT liên hệ:</span>
+                        <span className="p-value">{downloadingNotice?.sdt || ""}</span>
+                        <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                        <span className="p-value">{downloadingNotice?.thoiluong}</span>
+                     </div>
+
+                     <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                        <div className="p-row">
+                           <span style={{ flex: 1 }}>- Học phí: <b>{downloadingNotice?.hocphi} đ</b></span>
+                           <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></span>
+                        </div>
+                        <div className="p-row">
+                           <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingNotice?.giamhocphi} đ</b></span>
+                           <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{formatCurrency(noCu)} đ</b></span>
+                        </div>
+
+                        {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                           <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                              {downloadingNotice.phuthu.map((pt, i) => (
+                                 <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                    <span>+ {pt.name || 'Phụ thu'}:</span>
+                                    <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+
+                        <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                           <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                              <span>Trừ ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} n): <b>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b></span>
+                              <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                        <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
+                        <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
+                     </div>
+
+                     <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
+                        <span>HÌNH THỨC:</span>
+                        <span className="p-value">{downloadingNotice?.hinhthuc}</span>
+                     </div>
+                     {downloadingNotice?.ghichu && (
+                        <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                           <span>Ghi chú: {downloadingNotice.ghichu}</span>
+                        </div>
+                     )}
+                     <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
+                        * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
+                     </div>
+                  </div>
+
+                  <div className="p-signatures">
+                     <div className="sig-box">
+                        <h4>Người nộp tiền</h4>
+                        <p>(Ký, họ tên)</p>
+                     </div>
+                     <div className="sig-box">
+                        <h4>Nhà trường</h4>
+                        <p>(Ký, đóng dấu)</p>
+                        <div className="sig-name">{cashier}</div>
+                     </div>
+                  </div>
+               </div>
             </div>
          </div>
+
+         {(downloadingNotice || downloadingInvoice) && (
+            <div style={{ zIndex: 9999, position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.8)" }}>
+               <div style={{ padding: "20px 40px", background: "white", borderRadius: "8px", boxShadow: "0 4px 20px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", alignItems: "center", gap: "15px" }}>
+                  <div style={{ border: "4px solid #e2e8f0", borderTop: "4px solid #0ea5e9", borderRadius: "50%", width: "40px", height: "40px", animation: "im-spin 1s linear infinite" }}></div>
+                  <p style={{ fontWeight: "bold", color: "#0f172a", margin: 0, fontSize: "1.1rem" }}>Đang chuẩn bị file in...</p>
+                  <p style={{ color: "#64748b", margin: 0, fontSize: "0.9rem" }}>Vui lòng đợi trong giây lát</p>
+               </div>
+               <style>{`@keyframes im-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+            </div>
+         )}
 
          {previewImg && (
             <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
@@ -1910,3 +1926,5 @@ export default function InvoiceManager() {
       </div>
    );
 }
+
+
