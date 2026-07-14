@@ -627,9 +627,18 @@ export default function InvoiceManager() {
          }
       }
 
+      let finalDiscountPercent = parseInt(student['giamhp%'], 10) || 0;
+      let finalGiamHocphi = giamHocphi;
+      
+      if (finalDiscountPercent > 0) {
+         finalGiamHocphi = Math.round((hocphi * finalDiscountPercent) / 100);
+      } else if (hocphi > 0 && giamHocphi > 0) {
+         finalDiscountPercent = parseFloat(((giamHocphi / hocphi) * 100).toFixed(2));
+      }
+
       setInvoiceData({
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
-         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu,
+         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi: finalGiamHocphi, discountPercent: finalDiscountPercent, hinhThuc, ghiChu, phuthu,
          selectedTienAnTier
       });
 

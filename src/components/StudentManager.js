@@ -19,8 +19,9 @@ const INITIAL_FORM = {
   ngaysinh: new Date().toISOString().split('T')[0],
   gioitinh: 'Nam', cccd: '', tinhtrangsk: '',
   nghenghiepba: '', nghenghiepme: '',
-  ngaysinhba: new Date().toISOString().split('T')[0],
-  ngaysinhme: new Date().toISOString().split('T')[0]
+  ngaysinhba: '',
+  ngaysinhme: '',
+  'giamhp%': 0
 };
 
 export default function StudentManager({ activeSubTab }) {
@@ -836,7 +837,7 @@ export default function StudentManager({ activeSubTab }) {
               </div>
               <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
                 <label>Ngày sinh Ba</label>
-                <input type="date" name="ngaysinhba" value={formData.ngaysinhba} onChange={handleChange} />
+                <input type="text" name="ngaysinhba" value={formData.ngaysinhba || ''} onChange={handleChange} placeholder="Ví dụ: 1990 hoặc 01/01/1990" />
               </div>
               <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
                 <label>Nghề nghiệp Ba</label>
@@ -853,7 +854,7 @@ export default function StudentManager({ activeSubTab }) {
               </div>
               <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
                 <label>Ngày sinh Mẹ</label>
-                <input type="date" name="ngaysinhme" value={formData.ngaysinhme} onChange={handleChange} />
+                <input type="text" name="ngaysinhme" value={formData.ngaysinhme || ''} onChange={handleChange} placeholder="Ví dụ: 1990 hoặc 01/01/1990" />
               </div>
               <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
                 <label>Nghề nghiệp Mẹ</label>
@@ -890,6 +891,18 @@ Mối liên hệ với bé :
               <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
                 <label>Tình trạng sức khỏe</label>
                 <input type="text" name="tinhtrangsk" value={formData.tinhtrangsk} onChange={handleChange} />
+              </div>
+              <div className="sm-form-group" style={{ gridColumn: 'span 2' }}>
+                <label>Giảm Học Phí (%)</label>
+                <input 
+                  type="number" 
+                  name="giamhp%" 
+                  min="0" 
+                  max="100" 
+                  value={formData['giamhp%'] || 0} 
+                  onChange={handleChange} 
+                  placeholder="Nhập phần trăm giảm học phí (0-100)" 
+                />
               </div>
 
               <div className="form-actions full-width">
