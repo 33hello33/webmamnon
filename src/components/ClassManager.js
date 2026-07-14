@@ -604,13 +604,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           nocu += parseCur(b.conno);
         });
 
+        let calculatedGiamHocPhi = 0;
+        const discountPercent = parseInt(s['giamhp%'], 10) || 0;
+        if (discountPercent > 0) {
+            calculatedGiamHocPhi = Math.round((initHocPhi * discountPercent) / 100);
+        }
+
         return {
           mahv: s.mahv,
           tenhv: s.tenhv,
           sobuoihoc: `${initSoLuong} ${initLoaiDong.toLowerCase()}`,
           hocphi: initHocPhi,
           tienan: monthlyMealFee,
-          giamhocphi: 0,
+          giamhocphi: calculatedGiamHocPhi,
           coMat,
           nghiPhep,
           nghiKP,
@@ -619,7 +625,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           trutienan: mealRefund,
           trutiennghi: tuitionRefund,
           nocu: nocu,
-          tongcong: Math.max(0, initHocPhi + monthlyMealFee + nocu - mealRefund - tuitionRefund),
+          tongcong: Math.max(0, initHocPhi + monthlyMealFee + nocu - mealRefund - tuitionRefund - calculatedGiamHocPhi),
           ngaybatdau: startStr,
           ngayketthuc: finalKetThuc,
           hinhthuc: walletsConfig[0]?.name || 'Tiền mặt',
