@@ -99,6 +99,13 @@ const ConfigManager = () => {
       ngayquahan: Math.max(0, parseInt(formData.ngayquahan) || 0)
     };
 
+    // Remove legacy Google Drive fields if they still exist in state
+    Object.keys(payload).forEach(key => {
+      if (key.startsWith('gdrive_') || key.startsWith('google_drive_')) {
+        delete payload[key];
+      }
+    });
+
     try {
       const { data: existing } = await supabase.from('tbl_config').select('id').single();
       let error;
