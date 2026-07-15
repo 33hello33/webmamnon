@@ -47,7 +47,8 @@ const ALL_TABS = [
       { id: 'hoadon', label: 'QL phiếu thu HP' },
       { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
-      { id: 'billhang', label: 'QL bill hàng' }
+      { id: 'billhang', label: 'QL bill hàng' },
+      { id: 'phieuthongbao', label: 'Doanh thu dự kiến' }
     ]
   },
   { id: 'student_list', label: 'Học sinh', icon: GraduationCap },
