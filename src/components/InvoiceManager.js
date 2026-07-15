@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -603,6 +604,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
       let hocphi = defaultFee;
       let giamHocphi = 0;
+      let discountPercent = 0;
       let hinhThuc = (student.hinhthucdong || '').trim() || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
       let ghiChu = '';
       let phuthu = [];
@@ -685,7 +687,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             if (loadedHocPhi > 0) {
                hocphi = loadedHocPhi;
             }
-            giamHocphi = parseCur(recentDoc.giamhocphi);
 
             // Lấy các khoản giảm trừ hoàn toàn từ chứng từ gần nhất
             setRefundOverrides({ 
@@ -765,6 +766,37 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             }
          }
 
+         // --- Tính toán mức Giảm Học Phí (Ưu tiên: TB gần nhất -> % giảm của HS -> HD gần nhất) ---
+         const parseCurGlobal = (v) => {
+            const s = String(v || 0).trim();
+            const isNegative = s.startsWith('-');
+            const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+            return isNegative ? -n : n;
+         };
+         
+         const recentTBDoc = validTBs.length > 0 ? validTBs.slice().sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap))[0] : null;
+         const recentHDDoc = validHDs.length > 0 ? validHDs.slice().sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap))[0] : null;
+
+         let foundDiscount = false;
+         
+         if (recentTBDoc && parseCurGlobal(recentTBDoc.giamhocphi) > 0) {
+            giamHocphi = parseCurGlobal(recentTBDoc.giamhocphi);
+            discountPercent = 0;
+            foundDiscount = true;
+         }
+         
+         if (!foundDiscount && student['giamhp%'] && parseFloat(student['giamhp%']) > 0) {
+            discountPercent = parseFloat(student['giamhp%']);
+            giamHocphi = Math.round((hocphi * discountPercent) / 100);
+            foundDiscount = true;
+         }
+
+         if (!foundDiscount && recentHDDoc && parseCurGlobal(recentHDDoc.giamhocphi) > 0) {
+            giamHocphi = parseCurGlobal(recentHDDoc.giamhocphi);
+            discountPercent = 0;
+            foundDiscount = true;
+         }
+
       } catch (err) {
          console.error('Lỗi fetch dữ liệu ban đầu:', err);
       }
@@ -804,7 +836,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          ...prev,
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
          hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu,
-         discountPercent: 0
+         discountPercent
       }));
 
       try {
@@ -2225,6 +2257,24 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                </div>
             </div>
          </div>
+
+         {(downloadingInvoice || downloadingNotice) && createPortal(
+            <div className="sp-modal-overlay" style={{ zIndex: 9999, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
+               <div className="sp-success-modal animate-slide-up" style={{ padding: '30px', maxWidth: '100%', width: '350px', background: 'white', borderRadius: '16px', position: 'relative', textAlign: 'center' }}>
+                  <div style={{ border: '4px solid #f3f3f3', borderTop: '4px solid #3b82f6', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: '0 auto 15px auto' }} />
+                  <style>
+                     {`
+                        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                     `}
+                  </style>
+                  <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.1rem', fontWeight: 700 }}>
+                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh hóa đơn...'}
+                  </h3>
+                  <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Vui lòng đợi giây lát</p>
+               </div>
+            </div>,
+            document.body
+         )}
 
          {previewImg && (
             <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>

@@ -691,17 +691,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const phuthu = normalizeSurcharges(studentRaw.phuthu);
         const surchargeSum = sumSurcharges(phuthu);
 
+        let giamhocphi = 0;
+        const giamhp_percent = parseFloat(studentRaw['giamhp%']) || 0;
+        if (giamhp_percent > 0) {
+          giamhocphi = Math.round((initHocPhi * giamhp_percent) / 100);
+        }
+
         return {
           mahv: currentMahv,
           tenhv: currentTenhv,
           hocphi: initHocPhi,
-          giamhocphi: 0,
+          giamhocphi,
+          giamhp_percent,
           noCu: stNoCu,
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
           nghiLienTiep: maxLeave,
-          tongcong: Math.max(0, initHocPhi + stNoCu + surchargeSum - totalRefund),
+          tongcong: Math.max(0, initHocPhi + stNoCu + surchargeSum - totalRefund - giamhocphi),
           ngaybatdau: startStr,
           hinhthuc: stHinhThuc,
           phuthu,
@@ -887,12 +894,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         : 0;
       const surchargeSum = sumSurcharges(item.phuthu);
       const truTienDaNgoai = parseInt(item.truTienDaNgoai || 0);
-      const tc = Math.max(0, hpNumber + currentNoCu + surchargeSum - (parseInt(batchNoticeData.giamHocphi) || 0) - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
+
+      let calculatedGiamHocPhi = parseInt(batchNoticeData.giamHocphi) || 0;
+      if (!calculatedGiamHocPhi && item.giamhp_percent > 0) {
+        calculatedGiamHocPhi = Math.round((hpNumber * item.giamhp_percent) / 100);
+      }
+
+      const tc = Math.max(0, hpNumber + currentNoCu + surchargeSum - calculatedGiamHocPhi - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
 
       return {
         ...item,
         hocphi: hpNumber,
-        giamhocphi: batchNoticeData.giamHocphi || 0,
+        giamhocphi: calculatedGiamHocPhi,
         truTienAn: recalculatedMealRefund,
         ngaybatdau: batchNoticeData.ngayBatDau,
         ghichu: buildCombinedNote(batchNoticeData.ghiChu, item.ngoaiKhoaAutoNote),
@@ -928,6 +941,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           newItem.truTienAn = (newItem.diemDanhInfo?.nghiPhep || 0) >= 3
             ? Math.round((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
             : 0;
+          if (newItem.giamhp_percent > 0) {
+            newItem.giamhocphi = Math.round((cleanVal * newItem.giamhp_percent) / 100);
+          }
         }
         if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);

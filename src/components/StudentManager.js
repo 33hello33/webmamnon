@@ -25,7 +25,8 @@ const INITIAL_FORM = {
   ngaysinhba: toLocalISODate(),
   ngaysinhme: toLocalISODate(),
   username: '', password: '',
-  hinhthucdong: 'Tiền mặt'
+  hinhthucdong: 'Tiền mặt',
+  'giamhp%': 0
 };
 
 export default function StudentManager({ activeSubTab, currentUser }) {
@@ -954,6 +955,10 @@ export default function StudentManager({ activeSubTab, currentUser }) {
                       {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
                       {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#ef4444', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>% Giảm Học Phí</label>
+                    <input type="number" name="giamhp%" value={formData['giamhp%'] || ''} onChange={handleChange} min="0" max="100" placeholder="0 - 100" style={{ fontWeight: 600, borderColor: '#fca5a5' }} />
                   </div>
 
                 </div>
