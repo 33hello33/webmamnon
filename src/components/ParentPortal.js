@@ -1872,45 +1872,54 @@ function ParentPortal({ parentData, setParentData }) {
       refreshLatestFeeData();
    }, [parentData?.student?.mahv, refreshLatestFeeData]);
 
+   // ── Stable Realtime subscriptions ──────────────────────────────────────────
+   // Keyed ONLY on student identity so channels are NEVER torn down on tab switch.
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
-      if (!parentData) return;
+      if (!parentData?.student?.mahv) return;
+      const mahv = parentData.student.mahv;
+      const malop = parentData.student.malop;
 
-      const refreshAnnouncementsForCurrentTab = async () => {
-         if (['menu', 'notices-tab', 'menu-tab', 'chuongtrinhhoc-tab'].includes(parentTab)) {
-            await fetchParentNotices();
-         }
-         if (parentTab === 'ngoaikhoa-tab') {
-            await fetchNgoaiKhoaAnnouncements();
-         }
-      };
+      const unreadChan = supabase.channel(`parent_unread_${mahv}`)
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${mahv}` }, () => {
+            fetchUnreads();
+         })
+         .subscribe();
 
-      const refreshHealthForCurrentTab = async () => {
-         if (parentTab === 'health-tab') {
-            await fetchHealthHistory();
-         }
-      };
+      const chatChan = supabase.channel(`parent_chat_${mahv}`)
+         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${mahv}` }, (payload) => {
+            const isMe = payload.new.description === 'PH';
+            if (!isMe) {
+               showNotification('Tin nhắn mới từ nhà trường', payload.new.content || 'Bạn có một tệp đính kèm mới');
+            }
+            setChatMessages(prev => {
+               if (prev.some(m => m.id === payload.new.id)) return prev;
+               setTimeout(() => scrollParentChatToBottom('smooth'), 100);
+               return [...prev, payload.new];
+            });
+            fetchUnreads();
+         })
+         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${mahv}` }, (payload) => {
+            setChatMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+         })
+         .subscribe();
 
-      const unreadChan = supabase.channel(`parent_unread_${parentData.student.mahv}`)
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, () => { fetchUnreads(); }).subscribe();
-
-      fetchUnreads();
-
-      const noticeChan = supabase.channel(`parent_notices_${parentData.student.mahv}`)
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+      const noticeChan = supabase.channel(`parent_notices_${mahv}`)
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${mahv}` }, async (payload) => {
             await refreshLatestFeeData();
             await fetchUnreads();
-            await refreshAnnouncementsForCurrentTab();
+            await fetchParentNotices();
             if (payload.eventType !== 'INSERT') return;
             const isTuition = payload.new.tieude?.toLowerCase().includes('học phí');
             showNotification(isTuition ? 'Thông báo học phí' : 'Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hd', filter: `mahv=eq.${parentData.student.mahv}` }, async () => {
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hd', filter: `mahv=eq.${mahv}` }, async () => {
             await refreshLatestFeeData();
             await fetchUnreads();
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'class_announcements', filter: `malop=eq.${parentData.student.malop}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'class_announcements', filter: `malop=eq.${malop}` }, async (payload) => {
             await fetchUnreads();
-            await refreshAnnouncementsForCurrentTab();
+            await fetchParentNotices();
             const approvedNow = payload.new?.approved !== false;
             const justApproved = payload.eventType === 'UPDATE' && payload.old?.approved === false && payload.new?.approved === true;
             if (payload.eventType === 'INSERT' && !approvedNow) return;
@@ -1919,41 +1928,48 @@ function ParentPortal({ parentData, setParentData }) {
             const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${mahv}` }, async (payload) => {
             await fetchUnreads();
-            await refreshHealthForCurrentTab();
-            if (payload.eventType !== 'INSERT') return;
-            showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
+            if (payload.eventType === 'INSERT') showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hv', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hv', filter: `mahv=eq.${mahv}` }, async (payload) => {
             setParentData(prev => {
                if (!prev?.student) return prev;
-               return {
-                  ...prev,
-                  student: {
-                     ...prev.student,
-                     ...payload.new
-                  }
-               };
+               return { ...prev, student: { ...prev.student, ...payload.new } };
             });
-            await refreshHealthForCurrentTab();
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'dangkyngoaikhoa', filter: `mahv=eq.${parentData.student.mahv}` }, async (payload) => {
-            if (parentTab === 'ngoaikhoa-tab') {
-               await fetchNgoaiKhoaRegistration();
-            }
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'dangkyngoaikhoa', filter: `mahv=eq.${mahv}` }, async (payload) => {
             if (payload.eventType === 'INSERT' && payload.new?.codangky !== undefined) {
                showNotification('Ngoại khóa', payload.new.codangky ? 'Đăng ký ngoại khóa đã được ghi nhận' : 'Phản hồi không tham gia ngoại khóa đã được ghi nhận');
             }
          })
          .subscribe();
 
-      // If we are on the menu, we can still subscribe to changes but we don't fetch full tab data
-      if (parentTab === 'menu') {
-         // Menu specific logic if any
-      }
+      // Service Worker push signal: refresh unreads when a push arrives in foreground
+      const handleSwMessage = (event) => {
+         if (event.data?.type === 'PUSH_RECEIVED') {
+            fetchUnreads();
+         }
+      };
+      navigator.serviceWorker?.addEventListener('message', handleSwMessage);
 
-      // Rest of the tab-specific data fetching
+      fetchUnreads();
+
+      return () => {
+         supabase.removeChannel(unreadChan);
+         supabase.removeChannel(chatChan);
+         supabase.removeChannel(noticeChan);
+         navigator.serviceWorker?.removeEventListener('message', handleSwMessage);
+      };
+   }, [parentData?.student?.mahv, parentData?.student?.malop]); // ← stable: never includes parentTab or calendarDate
+
+   // ── Tab-driven data fetching ────────────────────────────────────────────────
+   // Runs when the user switches tabs or the student changes.
+   // Does NOT create any Realtime channels.
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   useEffect(() => {
+      if (!parentData?.student?.mahv) return;
+
       const fetchChatDocs = async () => {
          const { data } = await supabase.from('documents').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: false });
          if (data) setChatDocuments((data || []).filter(doc => doc.category !== tuitionTransferProofCategory));
@@ -1965,7 +1981,6 @@ function ParentPortal({ parentData, setParentData }) {
          const month = calendarDate.getMonth();
          const startDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
          const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
-
          try {
             const { data } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', parentData.student.mahv).gte('ngay', startDay).lte('ngay', endDay);
             setMonthlyAttendance(data || []);
@@ -1981,32 +1996,7 @@ function ParentPortal({ parentData, setParentData }) {
          fetchNgoaiKhoaAnnouncements();
          fetchNgoaiKhoaRegistration();
       }
-
-
-
-      const channel = supabase.channel(`parent_chat_${parentData.student.mahv}`)
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => {
-            const isMe = payload.new.description === 'PH';
-            if (!isMe) {
-               showNotification('Tin nhắn mới từ nhà trường', payload.new.content || 'Bạn có một tệp đính kèm mới');
-            }
-            setChatMessages(prev => {
-               const exists = prev.some(m => m.id === payload.new.id);
-               if (exists) return prev;
-               setTimeout(() => scrollParentChatToBottom('smooth'), 100);
-               return [...prev, payload.new];
-            });
-         })
-         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${parentData.student.mahv}` }, (payload) => {
-            setChatMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
-         }).subscribe();
-
-      return () => {
-         if (channel) supabase.removeChannel(channel);
-         supabase.removeChannel(unreadChan);
-         supabase.removeChannel(noticeChan);
-      };
-   }, [parentData?.student?.mahv, parentData?.student?.malop, parentTab, calendarDate]);
+   }, [parentData?.student?.mahv, parentTab, calendarDate]);
 
    useEffect(() => {
       if (!parentData) return;

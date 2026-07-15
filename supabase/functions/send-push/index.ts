@@ -282,49 +282,52 @@ serve(async (req) => {
       });
     }
 
-    const results = [];
+    const pushPayload = JSON.stringify({
+      title: context.message.title,
+      body: context.message.body,
+      icon: "/logo192.png",
+      badge: "/logo192.png",
+      url: context.message.url,
+      badgeCount: context.message.badgeCount,
+      incrementBadgeBy: context.message.incrementBadgeBy,
+      tag: context.message.tag,
+    });
 
-    for (const target of context.targets) {
-      const subscriptionLookup = target.role === "teacher"
-        ? await getTeacherSubscription(supabase, target.userId)
-        : await supabase
-          .from("push_subscriptions")
-          .select("subscription")
-          .eq("user_id", target.userId)
-          .eq("role", target.role)
-          .maybeSingle();
+    const settled = await Promise.allSettled(
+      context.targets.map(async (target) => {
+        const subscriptionLookup = target.role === "teacher"
+          ? await getTeacherSubscription(supabase, target.userId)
+          : await supabase
+            .from("push_subscriptions")
+            .select("subscription")
+            .eq("user_id", target.userId)
+            .eq("role", target.role)
+            .maybeSingle();
 
-      const { data: subscriptionData, error: subError } = subscriptionLookup;
+        const { data: subscriptionData, error: subError } = subscriptionLookup;
 
-      if (subError || !subscriptionData?.subscription) {
-        console.log("No subscription found for target:", target);
-        results.push({ ...target, sent: false, reason: "no_subscription" });
-        continue;
-      }
+        if (subError || !subscriptionData?.subscription) {
+          console.log("No subscription found for target:", target);
+          return { ...target, sent: false, reason: "no_subscription" };
+        }
 
-      const pushPayload = JSON.stringify({
-        title: context.message.title,
-        body: context.message.body,
-        icon: "/logo192.png",
-        badge: "/logo192.png",
-        url: context.message.url,
-        badgeCount: context.message.badgeCount,
-        incrementBadgeBy: context.message.incrementBadgeBy,
-        tag: context.message.tag,
-      });
+        try {
+          await webpush.sendNotification(subscriptionData.subscription, pushPayload);
+          return { ...target, sent: true };
+        } catch (pushError) {
+          console.error("Error sending push notification:", target, pushError);
+          return {
+            ...target,
+            sent: false,
+            reason: pushError instanceof Error ? pushError.message : "push_failed",
+          };
+        }
+      })
+    );
 
-      try {
-        await webpush.sendNotification(subscriptionData.subscription, pushPayload);
-        results.push({ ...target, sent: true });
-      } catch (pushError) {
-        console.error("Error sending push notification:", target, pushError);
-        results.push({
-          ...target,
-          sent: false,
-          reason: pushError instanceof Error ? pushError.message : "push_failed",
-        });
-      }
-    }
+    const results = settled.map((s) =>
+      s.status === "fulfilled" ? s.value : { sent: false, reason: "promise_rejected" }
+    );
 
     return new Response(JSON.stringify({ success: true, results }), {
       headers: { "Content-Type": "application/json", ...corsHeaders },

@@ -190,6 +190,12 @@ self.addEventListener('push', event => {
 
         await self.registration.showNotification(String(title), options);
         await syncAppBadge(nextBadgeCount);
+
+        // Inform all open foreground clients so they can refresh state immediately
+        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of clientList) {
+          client.postMessage({ type: 'PUSH_RECEIVED', payload: data });
+        }
       })()
     );
   } catch (error) {
