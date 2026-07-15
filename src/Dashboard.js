@@ -34,7 +34,6 @@ import TaskManager from './components/TaskManager';
 import FinanceManager from './components/FinanceManager';
 import ConfigManager from './components/ConfigManager';
 import Statistics from './components/Statistics';
-import ChatManager from './components/ChatManager';
 import SystemLogs from './components/SystemLogs';
 
 const ALL_TABS = [
@@ -74,7 +73,6 @@ const ALL_TABS = [
     ]
   },
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
-  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare },
   { id: 'employees', label: 'Nhân viên', icon: Users },
   { id: 'tasks', label: 'Công việc', icon: Briefcase },
   { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
@@ -108,7 +106,6 @@ function Dashboard() {
     if (config) {
       if (config.giaoviec === false) filtered = filtered.filter(t => t.id !== 'tasks');
       if (config.thongke === false) filtered = filtered.filter(t => t.id !== 'statistics');
-      if (config.chat === false) filtered = filtered.filter(t => t.id !== 'chat');
     }
 
     if (user.role === 'Quản lý') return filtered;
@@ -432,7 +429,6 @@ function Dashboard() {
           }}>
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'statistics' && <Statistics />}
-            {currentTab?.id === 'chat' && <ChatManager currentUser={user} />}
             {currentTab?.id === 'finances' && <FinanceManager activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'invoices' && <InvoiceManager />}
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}

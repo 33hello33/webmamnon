@@ -36,7 +36,6 @@ const formatCurrency = (val) => {
 const ROLES = ['Quản lý', 'Nhân viên VP', 'Giáo viên'];
 const TAB_OPTIONS = [
   { id: 'statistics', label: 'Thống kê' },
-  { id: 'chat', label: 'Phụ huynh' },
   { id: 'finances', label: 'Quản lý thu chi' },
   { id: 'invoices', label: 'Thu học phí' },
   { id: 'sales', label: 'Bán hàng' },
