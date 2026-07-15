@@ -5,7 +5,7 @@ import { supabase, generateId, insertLog } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2
+   Printer, History, Clock, Edit2, Receipt
 } from 'lucide-react';
 
 import './FinanceManager.css';
@@ -510,7 +510,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [activeDateRangeStr, setActiveDateRangeStr] = useState('');
    const [hinhThucFilter, setHinhThucFilter] = useState('');
    const [stats, setStats] = useState({
-      phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0
+      phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0, doanhThuDuKien: 0
    });
    const [loaiPhieuFilter, setLoaiPhieuFilter] = useState('all');
 
@@ -737,6 +737,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
+   const handleConfirmCreateInvoice = (r) => {
+      setConfirmDialog({
+         isOpen: true,
+         title: 'Xác nhận tạo hóa đơn',
+         message: `Bạn có chắc chắn muốn tạo hóa đơn học phí từ phiếu thông báo [${r.mahd}] không?`,
+         actionType: 'CREATE_INVOICE',
+         payload: { notice: r }
+      });
+   };
+
    const executeConfirmAction = async (submittedPassword) => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
@@ -754,6 +764,63 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             const detailDesc = `[XÓA] Bảng: ${table} | Mã: ${idVal}`;
             insertLog(detailDesc);
             fetchData();
+         }
+      } else if (confirmDialog.actionType === 'CREATE_INVOICE') {
+         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         if (submittedPassword !== auth.user?.password) {
+            alert('Mật khẩu không đúng, vui lòng thử lại!');
+            return;
+         }
+
+         const { notice } = confirmDialog.payload;
+         const currentUser = auth.user?.username || auth.user?.tennv || 'Hệ thống';
+         const manv = auth.user?.manv || '';
+
+         const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
+         let nextNum = 1;
+         if (recentHD && recentHD.length > 0 && recentHD[0].mahd) {
+            const numPart = recentHD[0].mahd.replace(/\D/g, '');
+            if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
+         }
+         const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
+         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+
+         const insertPayload = {
+            mahd: newMaHD,
+            ngaylap: localNow,
+            mahv: notice.mahv || null,
+            tenlop: notice.tenlop || null,
+            ngaybatdau: notice.ngaybatdau || null,
+            ngayketthuc: notice.ngayketthuc || null,
+            manv: manv,
+            hocphi: notice.hocphi || null,
+            giamhocphi: notice.giamhocphi || null,
+            phuthu: notice.phuthu || null,
+            tongcong: notice.tongcong || null,
+            dadong: notice.dadong || null,
+            conno: notice.conno || null,
+            hinhthuc: notice.hinhthuc || null,
+            ghichu: notice.ghichu || null,
+            daxoa: null,
+            malop: notice.malop || '',
+            thoiluong: notice.thoiluong || '',
+            sobuoihoc: notice.sobuoihoc || '0',
+            tienan: notice.tienan || '0',
+            nocu: notice.nocu || '0',
+            tiennghiphep: notice.tiennghiphep || '0',
+            trutienan: notice.trutienan || '0',
+            dasua: false
+         };
+
+         const { error } = await supabase.from('tbl_hd').insert([insertPayload]);
+
+         if (error) {
+            alert('Lỗi khi tạo hóa đơn: ' + error.message);
+         } else {
+            insertLog(`[TẠO HÓA ĐƠN] Từ TB: ${notice.mahd} -> HĐ: ${newMaHD}`);
+            await supabase.from('tbl_thongbao').update({ daxoa: 'Đã tạo HĐ' }).eq('mahd', notice.mahd);
+            fetchData();
+            alert('Tạo hóa đơn thành công!');
          }
       } else if (confirmDialog.actionType === 'EDIT_BILL') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -1111,17 +1178,43 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          return q;
       };
 
-      const [resChi, resKho, resHd, resBill] = await Promise.all([
+      const [resChi, resKho, resHd, resBill, resTb] = await Promise.all([
          buildQuery('tbl_phieuchi', 'ngaylap'),
          buildQuery('tbl_nhapkho', 'ngaynhap'),
          buildQuery('tbl_hd', 'ngaylap'),
-         buildQuery('tbl_billhanghoa', 'ngaylap')
+         buildQuery('tbl_billhanghoa', 'ngaylap'),
+         buildQuery('tbl_thongbao', 'ngaylap')
       ]);
 
       const chiList = resChi.data || [];
       const khoList = resKho.data || [];
       const hdList = resHd.data || [];
       const billList = resBill.data || [];
+      let tbList = resTb.data || [];
+
+      // Lọc thông báo: chỉ lấy thông báo mới nhất của 1 học sinh, loại nếu có hóa đơn mới hơn hoặc bằng
+      const latestHdMap = {};
+      hdList.forEach(item => {
+         if (isDeleted(item)) return;
+         const mahv = item.mahv;
+         if (!mahv) return;
+         const d = new Date(item.ngaylap).getTime();
+         if (!latestHdMap[mahv] || d > latestHdMap[mahv]) latestHdMap[mahv] = d;
+      });
+
+      const tbMap = {};
+      tbList.forEach(item => {
+         const mahv = item.mahv;
+         if (!mahv) return;
+         const d = new Date(item.ngaylap).getTime();
+         
+         if (!isDeleted(item) && latestHdMap[mahv] && latestHdMap[mahv] >= d) return;
+
+         if (!tbMap[mahv] || d > tbMap[mahv].time) {
+            tbMap[mahv] = { time: d, record: item };
+         }
+      });
+      tbList = Object.values(tbMap).map(x => x.record);
 
       const filterByWallet = (list) => {
          if (!hinhThucFilter) return list;
@@ -1135,18 +1228,21 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalKho = filterByWallet(khoList);
       const finalHd = filterByWallet(hdList);
       const finalBill = filterByWallet(billList);
+      const finalTb = filterByWallet(tbList);
 
       setStats({
          phieuChi: finalChi.filter(c => !isDeleted(c) && (!c.loaiphieu || c.loaiphieu === 'Chi')).reduce((s, c) => s + pCur(c.chiphi), 0),
          thuKhac: finalChi.filter(c => !isDeleted(c) && c.loaiphieu === 'Thu').reduce((s, c) => s + pCur(c.chiphi), 0),
          nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
          thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
-         thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0)
+         thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0),
+         doanhThuDuKien: finalTb.filter(t => !isDeleted(t)).reduce((s, t) => s + pCur(t.tongcong), 0)
       });
 
       let activeDataRaw = [];
       if (activeSubTab === 'phieuchi') activeDataRaw = chiList;
       else if (activeSubTab === 'hoadon') activeDataRaw = hdList;
+      else if (activeSubTab === 'phieuthongbao') activeDataRaw = tbList;
       else if (activeSubTab === 'nhapkho') activeDataRaw = khoList;
       else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') activeDataRaw = billList;
 
@@ -1196,6 +1292,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       } else if (activeSubTab === 'hoadon') {
          headers = ['Mã HĐ', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Đã thu', 'Còn nợ'];
          mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.dadong), fCur(i.conno)]);
+      } else if (activeSubTab === 'phieuthongbao') {
+         headers = ['Mã TB', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Học phí', 'Giảm', 'Phụ thu', 'Trừ ăn', 'Trừ nghỉ', 'Tổng cộng'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, fCur(i.hocphi), fCur(i.giamhocphi), fCur(calcTotal(i.phuthu)), fCur(i.trutienan), fCur(i.tiennghiphep), fCur(i.tongcong)]);
       } else if (activeSubTab === 'nhapkho') {
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
          mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
@@ -1368,7 +1467,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (rawMatch) return true;
 
             // Tab-specific name search
-            if (activeSubTab === 'hoadon') {
+            if (activeSubTab === 'hoadon' || activeSubTab === 'phieuthongbao') {
                const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
                if (studentName.includes(lowerQ)) return true;
 
@@ -1624,6 +1723,93 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        </>
                                     ) : (
                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
+                              </div>
+                           </div>
+                        );
+                     })}
+                  </div>
+               </>
+            );
+         case 'phieuthongbao':
+            return (
+               <>
+                  <div className="table-scroll-wrapper">
+                     <table className="fm-table">
+                        <thead>
+                           <tr>
+                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã TB <SortIcon columnKey="mahd" /></th>
+                              <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Học sinh <SortIcon columnKey="mahv" /></th>
+                              <th>Lớp</th>
+                              <th className="text-right">Học phí</th>
+                              <th className="text-right">Giảm</th>
+                              <th className="text-right">Phụ thu</th>
+                              <th className="text-right">Trừ ăn</th>
+                              <th className="text-right">Trừ nghỉ</th>
+                              <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-center">Hành động</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
+                                    <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
+                                    <td>{formatDate(r.ngaylap)}</td>
+                                    <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                    <td>{r.tenlop}</td>
+                                    <td className="text-right">{fCur(r.hocphi)}</td>
+                                    <td className="text-right text-orange-600">-{fCur(r.giamhocphi)}</td>
+                                    <td className="text-right text-blue-600">{fCur(calcTotal(r.phuthu))}</td>
+                                    <td className="text-right text-red-600">-{fCur(r.trutienan)}</td>
+                                    <td className="text-right text-red-600">-{fCur(r.tiennghiphep)}</td>
+                                    <td className="text-right font-bold text-success">{fCur(r.tongcong)}</td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted ? (
+                                          <>
+                                             <button title="Tải thông báo" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><DownloadCloud size={16} /></button>
+                                             <button title="Xác nhận tạo hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleConfirmCreateInvoice(r)}><CheckCircle2 size={16} /></button>
+                                             <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /></button>
+                                          </>
+                                       ) : (
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>{r.daxoa || 'ĐÃ XÓA'}</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  </div>
+
+                  {/* Card View for Mobile */}
+                  <div className="fm-card-list">
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
+                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                              </div>
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                                 <div className="fm-card-row price-row" style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #e2e8f0' }}>
+                                    <span>Tổng cộng:</span>
+                                    <strong className="text-slate-900">{fCur(r.tongcong)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <>
+                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><DownloadCloud size={16} /> Tải</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmCreateInvoice(r)}><CheckCircle2 size={14} /> Tạo HĐ</button>
+                                          <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>{r.daxoa || 'ĐÃ XÓA'}</span>
                                     )}
                                  </div>
                               </div>
@@ -1953,6 +2139,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Phiếu thu khác</span>
                      <span className="fm-stat-value text-primary">{fCur(stats.thuKhac)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card" onClick={() => handleTabClick('phieuthongbao')} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon" style={{ color: '#f59e0b', background: '#fef3c7' }}><Receipt size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Doanh thu dự kiến</span>
+                     <span className="fm-stat-value text-warning">{fCur(stats.doanhThuDuKien)}</span>
                   </div>
                </div>
             </div>
@@ -2392,7 +2585,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
 
                      <div className="p-title-area">
-                        <h2 style={{ fontSize: '14pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
+                        <h2 style={{ fontSize: '14pt' }}>{printHoaDon.mahd?.startsWith('TB') ? 'PHIẾU THÔNG BÁO HỌC PHÍ' : 'BIÊN LAI THU HỌC PHÍ'}</h2>
                      </div>
 
                      <div className="p-content">
@@ -2475,10 +2668,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{fCur(printHoaDon.tongcong)} đ</span>
                         </div>
 
-                        <div className="p-row" style={{ marginTop: '4px' }}>
-                           <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
-                           <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
-                        </div>
+                        {!printHoaDon.mahd?.startsWith('TB') && (
+                           <div className="p-row" style={{ marginTop: '4px' }}>
+                              <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
+                              <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
+                           </div>
+                        )}
 
                         <div className="p-row" style={{ fontSize: '8.5pt' }}>
                            <span>HÌNH THỨC:</span>

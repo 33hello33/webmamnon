@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase, insertLog } from '../supabase';
 import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap, Printer } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -1685,7 +1686,9 @@ export default function InvoiceManager() {
          )}
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
+         {(downloadingInvoice || downloadingNotice) && document.body && createPortal(
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+            {downloadingInvoice && (
             <div id="download-invoice-node" className="im-print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                {[1, 2].map(copyNum => (
                   <div key={copyNum} className="receipt-copy">
@@ -1789,8 +1792,10 @@ export default function InvoiceManager() {
                   </div>
                ))}
             </div>
+            )}
 
             {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
+            {downloadingNotice && (
             <div id="download-notice-node" className="im-print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                   <div className="receipt-copy" style={{ borderRight: 'none' }}>
                      {/* HEADER */}
@@ -1888,7 +1893,24 @@ export default function InvoiceManager() {
                      </div>
                   </div>
             </div>
-         </div>
+            )}
+         </div>,
+         document.body
+         )}
+
+         {(downloadingInvoice || downloadingNotice) && createPortal(
+            <div className="sp-modal-overlay" style={{ zIndex: 4000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', padding: '15px' }}>
+               <div className="sp-success-modal animate-slide-up" style={{ padding: '30px', maxWidth: '100%', width: '350px', background: 'white', borderRadius: '16px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                  <div style={{ display: 'inline-block', width: '45px', height: '45px', border: '4px solid #e2e8f0', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '20px' }}></div>
+                  <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem', fontWeight: 700 }}>
+                     {downloadingInvoice ? 'Đang xuất Hóa đơn...' : 'Đang xuất Thông báo...'}
+                  </h3>
+                  <p style={{ marginTop: '12px', color: '#64748b', fontSize: '0.95rem', lineHeight: 1.5 }}>Vui lòng đợi trong giây lát, hệ thống đang tạo hình ảnh chất lượng cao.</p>
+               </div>
+               <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+            </div>,
+            document.body
+         )}
 
          {previewImg && (
             <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>

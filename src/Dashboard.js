@@ -45,6 +45,7 @@ const ALL_TABS = [
     icon: Wallet,
     subTabs: [
       { id: 'hoadon', label: 'QL phiếu thu HP' },
+      { id: 'phieuthongbao', label: 'Doanh thu dự kiến' },
       { id: 'phieuchi', label: 'QL phiếu thu/chi' },
       { id: 'nhapkho', label: 'QL Nhập kho' },
       { id: 'billhang', label: 'QL bill hàng' }
