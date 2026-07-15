@@ -245,11 +245,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return getTeacherStaffDisplayName(message.manv);
    };
 
-   useEffect(() => {
-      if ('Notification' in window && Notification.permission === 'default') {
-         Notification.requestPermission();
-      }
-   }, []);
+   // Không tự động hỏi quyền thông báo khi mở app
+   // Chỉ hỏi khi người dùng chủ động nhấn nút bật thông báo
 
    useEffect(() => {
       const fetchStaffDirectory = async () => {
@@ -275,10 +272,14 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return () => window.removeEventListener('resize', handleResize);
    }, []);
 
+   // Auto-subscribe giáo viên chỉ khi quyền đã được cấp trước đó
    useEffect(() => {
-      if (attendanceUser?.manv || attendanceUser?.username) {
-         subscribeTeacherPushNotifications().catch(console.error);
-      }
+      if (!attendanceUser?.manv && !attendanceUser?.username) return;
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (Notification.permission !== 'granted') return;
+
+      subscribeTeacherPushNotifications().catch(console.error);
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [attendanceUser?.manv, attendanceUser?.username]);
 
    // ----- Attendance Features -----
@@ -331,6 +332,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const mobileChatPanelHeight = '90dvh';
    const attChatInputRef = React.useRef(null);
    const attChatStudentIdRef = React.useRef('');
+   // Ref keeps current student list accessible inside stable Realtime callbacks
+   // without causing the channel to re-subscribe on every list change.
+   const attAllStudentsRef = React.useRef(attAllStudents);
 
    useEffect(() => {
       resizeChatTextarea(attChatInputRef.current, 3);
@@ -339,6 +343,23 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    useEffect(() => {
       attChatStudentIdRef.current = attChatSelectedStudent?.mahv || '';
    }, [attChatSelectedStudent]);
+
+   // Keep the ref in sync with state without triggering subscription re-runs
+   useEffect(() => {
+      attAllStudentsRef.current = attAllStudents;
+   }, [attAllStudents]);
+
+   // Service Worker push signal: refresh unreads immediately when a push arrives
+   useEffect(() => {
+      const handleSwMessage = (event) => {
+         if (event.data?.type === 'PUSH_RECEIVED') {
+            fetchAttUnreads();
+         }
+      };
+      navigator.serviceWorker?.addEventListener('message', handleSwMessage);
+      return () => navigator.serviceWorker?.removeEventListener('message', handleSwMessage);
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, []);
 
    // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
@@ -376,13 +397,28 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
 
       try {
-         const permission = await Notification.requestPermission();
-         if (permission !== 'granted') {
-            console.warn('Người dùng đã từ chối nhận thông báo.');
+         // Nếu đã từ chối thì hướng dẫn bật lại trong Cài đặt
+         if (Notification.permission === 'denied') {
+            alert(
+               'Thông báo đã bị tắt.\n\n' +
+               'Để nhận thông báo tin nhắn phụ huynh, vui lòng:\n' +
+               '• iOS: Vào Cài đặt → Safari → Thông báo → Bật cho trang web này\n' +
+               '• Android: Vào Cài đặt → Ứng dụng → Trình duyệt → Thông báo → Bật'
+            );
             return;
          }
 
-         const registration = await navigator.serviceWorker.ready;
+         const permission = await Notification.requestPermission();
+         if (permission !== 'granted') {
+            console.warn('Người dùng chưa cho phép nhận thông báo.');
+            return;
+         }
+
+         // Thêm timeout để tránh trường hợp serviceWorker.ready treo vô thời hạn trên Android
+         const swReadyTimeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Service Worker chưa sẵn sàng (timeout 10s). Vui lòng thử lại.')), 10000)
+         );
+         const registration = await Promise.race([navigator.serviceWorker.ready, swReadyTimeout]);
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
          const urlBase64ToUint8Array = (base64String) => {
@@ -930,62 +966,69 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       fetchAllStudentsData();
       if (attendanceUser) {
          fetchAttUnreads();
+         // No polling — Realtime subscription in the stable channel handles live updates
          if (attTab === 'chat') {
             fetchAttSummaries();
-            const interval = setInterval(() => { fetchAttUnreads(); }, 30000);
-            return () => clearInterval(interval);
          }
       }
    }, [attendanceUser, attTab, attDateFilter, attAllStudents, attClasses]);
 
+   // ── Stable global monitor — keyed only on teacher identity ─────────────────
+   // Uses attAllStudentsRef so it NEVER needs to re-subscribe when the student
+   // list loads or changes. Badge updates are event-driven, not polled.
    // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
-      if (attendanceUser) {
-         fetchAttUnreads();
-         fetchAttSummaries();
-         const channel = supabase.channel('teacher_chat_monitor')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
-               const isPH = payload.new.description === 'PH' || (!payload.new.manv);
-               if (isPH) {
-                  // Only notify if student is in teacher's classes
-                  if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
-                     if (Notification.permission === 'granted') {
-                        if ('serviceWorker' in navigator) {
-                           navigator.serviceWorker.ready.then(registration => {
-                              registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
-                           }).catch(() => {
-                              new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
-                           });
-                        } else {
-                           new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
-                        }
-                     }
+      if (!attendanceUser) return;
+      const teacherId = attendanceUser.manv || attendanceUser.username || 'unknown';
+
+      fetchAttUnreads();
+      fetchAttSummaries();
+
+      const channel = supabase.channel(`teacher_chat_monitor_${teacherId}`)
+         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+            const currentStudents = attAllStudentsRef.current;
+            const isPH = payload.new.description === 'PH' || (!payload.new.manv);
+            const belongsToTeacher = currentStudents.some(s => s.mahv === payload.new.mahv);
+
+            if (isPH && belongsToTeacher) {
+               if (Notification.permission === 'granted') {
+                  if ('serviceWorker' in navigator) {
+                     navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
+                     }).catch(() => {
+                        new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
+                     });
+                  } else {
+                     new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
                   }
                }
-               if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
-                  setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev, [payload.new]));
-               }
-               fetchAttUnreads();
-            })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, (payload) => {
-               if (attAllStudents.some(s => s.mahv === payload.new.mahv)) {
-                  setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev.filter((message) => message.id !== payload.new.id), [payload.new]));
-               }
-               fetchAttUnreads();
-            })
-            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, (payload) => {
-               const studentId = payload.old?.mahv;
-               const deletedId = payload.old?.id;
-               if (studentId && attAllStudents.some(s => s.mahv === studentId)) {
-                  setAttLatestMessages((prev) => prev.filter((message) => message.id !== deletedId));
-                  refreshTeacherSummaryForStudent(studentId);
-               }
-               fetchAttUnreads();
-            })
-            .subscribe();
-         return () => supabase.removeChannel(channel);
-      }
-   }, [attendanceUser, attDateFilter, attAllStudents]);
+            }
+
+            if (belongsToTeacher) {
+               setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev, [payload.new]));
+            }
+            fetchAttUnreads();
+         })
+         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, (payload) => {
+            if (attAllStudentsRef.current.some(s => s.mahv === payload.new.mahv)) {
+               setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev.filter((message) => message.id !== payload.new.id), [payload.new]));
+            }
+            fetchAttUnreads();
+         })
+         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, (payload) => {
+            const studentId = payload.old?.mahv;
+            const deletedId = payload.old?.id;
+            if (studentId && attAllStudentsRef.current.some(s => s.mahv === studentId)) {
+               setAttLatestMessages((prev) => prev.filter((message) => message.id !== deletedId));
+               refreshTeacherSummaryForStudent(studentId);
+            }
+            fetchAttUnreads();
+         })
+         .subscribe();
+
+      return () => supabase.removeChannel(channel);
+   // Keyed only on teacher identity — NOT attAllStudents
+   }, [attendanceUser?.manv, attendanceUser?.username]);
 
    const scrollTeacherChatToBottom = () => {
       setTimeout(() => {

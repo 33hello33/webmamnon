@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-const CACHE_NAME = 'kindergarten-v3';
+const CACHE_NAME = 'kindergarten-v4';
 const META_CACHE_NAME = 'kindergarten-meta-v1';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
@@ -15,8 +15,16 @@ const urlsToCache = [
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME).then(cache => {
+      // Cache từng file riêng lẻ, không dùng addAll để tránh trường hợp 1 file lỗi làm treo toàn bộ SW
+      return Promise.allSettled(
+        urlsToCache.map(url =>
+          fetch(url).then(resp => {
+            if (resp && resp.status === 200) return cache.put(url, resp);
+          }).catch(() => { /* bỏ qua nếu URL không load được */ })
+        )
+      );
+    })
   );
 });
 
@@ -172,14 +180,13 @@ self.addEventListener('push', event => {
       badge: data.badge || '/appleicon.png',
       tag: notificationTag,
       renotify: true,
-      requireInteraction: true,
+      // requireInteraction không được hỗ trợ trên một số Android, có thể gây crash
       silent: false,
       timestamp: Date.now(),
       data: {
         url: data.url || '/',
         tag: notificationTag
       },
-      vibrate: [100, 50, 100],
     };
 
     event.waitUntil(
@@ -190,6 +197,12 @@ self.addEventListener('push', event => {
 
         await self.registration.showNotification(String(title), options);
         await syncAppBadge(nextBadgeCount);
+
+        // Inform all open foreground clients so they can refresh state immediately
+        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of clientList) {
+          client.postMessage({ type: 'PUSH_RECEIVED', payload: data });
+        }
       })()
     );
   } catch (error) {
