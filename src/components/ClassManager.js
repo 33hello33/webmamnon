@@ -686,17 +686,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const phuthu = normalizeSurcharges(studentRaw.phuthu);
         const surchargeSum = sumSurcharges(phuthu);
 
+        let giamhocphi = 0;
+        const giamhp_percent = parseFloat(studentRaw['giamhp%']) || 0;
+        if (giamhp_percent > 0) {
+          giamhocphi = Math.round((initHocPhi * giamhp_percent) / 100);
+        }
+
         return {
           mahv: currentMahv,
           tenhv: currentTenhv,
           hocphi: initHocPhi,
-          giamhocphi: 0,
+          giamhocphi,
+          giamhp_percent,
           noCu: stNoCu,
           truTienAn: 0,
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
           tienhoct7: extraSaturdayFee,
-          tongcong: Math.max(0, initHocPhi + stNoCu + extraSaturdayFee + surchargeSum - tuitionRefund - truTienDaNgoai),
+          tongcong: Math.max(0, initHocPhi + stNoCu + extraSaturdayFee + surchargeSum - tuitionRefund - truTienDaNgoai - giamhocphi),
           ngaybatdau: startStr,
           hinhthuc: stHinhThuc,
           phuthu,
@@ -881,12 +888,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const extraSaturdayFee = (item.diemDanhInfo?.t7DaHoc || 0) * tienhoct7_val;
       const surchargeSum = sumSurcharges(item.phuthu);
       const truTienDaNgoai = parseInt(item.truTienDaNgoai || 0);
-      const tc = Math.max(0, hpNumber + currentNoCu + extraSaturdayFee + surchargeSum - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.truHocPhi || 0) - truTienDaNgoai);
+
+      let calculatedGiamHocPhi = parseInt(batchNoticeData.giamHocphi) || 0;
+      if (!calculatedGiamHocPhi && item.giamhp_percent > 0) {
+        calculatedGiamHocPhi = Math.round((hpNumber * item.giamhp_percent) / 100);
+      }
+
+      const tc = Math.max(0, hpNumber + currentNoCu + extraSaturdayFee + surchargeSum - calculatedGiamHocPhi - (item.truHocPhi || 0) - truTienDaNgoai);
 
       return {
         ...item,
         hocphi: hpNumber,
-        giamhocphi: batchNoticeData.giamHocphi || 0,
+        giamhocphi: calculatedGiamHocPhi,
         truTienAn: 0,
         tienhoct7: extraSaturdayFee,
         ngaybatdau: batchNoticeData.ngayBatDau,
@@ -920,6 +933,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
         if (field === 'hocphi') {
           // Bỏ tính lại hoàn tiền ăn
+          if (newItem.giamhp_percent > 0) {
+            newItem.giamhocphi = Math.round((cleanVal * newItem.giamhp_percent) / 100);
+          }
         }
         if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'tienhoct7', 'phuthu_amount'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
