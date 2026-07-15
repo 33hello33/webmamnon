@@ -708,7 +708,13 @@ function ParentPortal({ parentData, setParentData }) {
             .eq('mahv', parentData.student.mahv)
             .order('ngaylap', { ascending: false })
             .limit(10);
-         if (!error && data) generalNotices = data;
+         if (!error && data) {
+            generalNotices = data.filter(n => {
+               if (n.mahd) return false;
+               if (!n.tieude || !n.tieude.trim()) return false;
+               return true;
+            });
+         }
       } catch (err) {
          console.warn('Error fetching general notices:', err);
       }
@@ -758,7 +764,13 @@ function ParentPortal({ parentData, setParentData }) {
              .eq('mahv', parentData.student.mahv)
              .gte('ngaylap', thirtyDaysAgoISO)
              .order('ngaylap', { ascending: false });
-          if (!error && data) generalNotices = data;
+          if (!error && data) {
+             generalNotices = data.filter(n => {
+                if (n.mahd) return false;
+                if (!n.tieude || !n.tieude.trim()) return false;
+                return true;
+             });
+          }
        } catch (err) {
           console.warn('Error fetching general notices for 30 days:', err);
        }
