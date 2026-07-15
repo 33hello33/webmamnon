@@ -53,8 +53,6 @@ const ConfigManager = () => {
   const [formData, setFormData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
-  const [isTruTienAnModalOpen, setIsTruTienAnModalOpen] = useState(false);
-  const [localTruTienAn, setLocalTruTienAn] = useState([]);
 
   useEffect(() => {
     if (config) {
@@ -79,7 +77,7 @@ const ConfigManager = () => {
           songaynghilientiep: 7,
           phantramgiam: 50
         }),
-        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan
+        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? '' : config.trutienan
       });
     }
   }, [config]);
@@ -232,98 +230,6 @@ const ConfigManager = () => {
       cdd.selected = [...cdd.selected, val];
     }
     setFormData({ ...formData, cotdiemdanh: cdd });
-  };
-
-  const trutienanTiers = (typeof formData.trutienan === 'object' && formData.trutienan !== null) ? formData.trutienan : {};
-
-  const openTruTienAnModal = () => {
-    const arr = Object.entries(trutienanTiers).map(([k, v]) => ({
-      id: Math.random().toString(),
-      muc_tien: k,
-      tru_nghi: v.tru_nghi
-    }));
-    setLocalTruTienAn(arr);
-    setIsTruTienAnModalOpen(true);
-  };
-
-  const handleAddTierLocal = () => {
-    setLocalTruTienAn([...localTruTienAn, { id: Math.random().toString(), muc_tien: "", tru_nghi: 0 }]);
-  };
-
-  const handleRemoveTierLocal = (idToRemove) => {
-    setLocalTruTienAn(localTruTienAn.filter(t => t.id !== idToRemove));
-  };
-
-  const closeAndSaveTruTienAnModal = () => {
-    const newTiers = {};
-    localTruTienAn.forEach(item => {
-      const m = String(item.muc_tien).replace(/,/g, '').trim();
-      if (m !== "") {
-        newTiers[m] = { tru_nghi: parseInt(item.tru_nghi) || 0 };
-      }
-    });
-    setFormData({ ...formData, trutienan: newTiers });
-    setIsTruTienAnModalOpen(false);
-  };
-
-  const renderTruTienAnModal = () => {
-    if (!isTruTienAnModalOpen) return null;
-
-    return createPortal(
-      <div className="config-modal-overlay">
-        <div className="config-modal">
-          <div className="modal-header">
-            <h3>Cấu hình mức trừ tiền ăn</h3>
-            <button type="button" className="btn-close" onClick={closeAndSaveTruTienAnModal}>×</button>
-          </div>
-          <div className="modal-body">
-            <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
-              Thiết lập số tiền hoàn trả (trừ) mỗi ngày nghỉ có phép dựa trên mức học phí tháng.
-              Ví dụ: Nếu tiền ăn là 650,000đ thì trừ 20,000đ/ngày.
-            </p>
-            <div className="tier-list">
-              <div className="tier-header">
-                <span>Mức tiền ăn (VNĐ)</span>
-                <span>Tiền trừ/ngày (VNĐ)</span>
-                <span></span>
-              </div>
-              {localTruTienAn.map((item, index) => (
-                <div key={item.id} className="tier-item">
-                  <input
-                    type="text"
-                    value={formatCurrency(item.muc_tien)}
-                    onChange={(e) => {
-                      const arr = [...localTruTienAn];
-                      arr[index].muc_tien = e.target.value.replace(/,/g, '');
-                      setLocalTruTienAn(arr);
-                    }}
-                    placeholder="VD: 650000"
-                  />
-                  <input
-                    type="text"
-                    value={formatCurrency(item.tru_nghi)}
-                    onChange={(e) => {
-                      const arr = [...localTruTienAn];
-                      arr[index].tru_nghi = e.target.value.replace(/,/g, '');
-                      setLocalTruTienAn(arr);
-                    }}
-                    placeholder="VD: 20000"
-                  />
-                  <button type="button" className="btn-remove-tier" onClick={() => handleRemoveTierLocal(item.id)}>×</button>
-                </div>
-              ))}
-              <button type="button" className="btn-add-tier" onClick={handleAddTierLocal}>
-                <Plus size={16} /> Thêm mức mới
-              </button>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn-confirm" onClick={closeAndSaveTruTienAnModal}>Xong</button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
   };
 
   return (
@@ -502,25 +408,15 @@ const ConfigManager = () => {
               </label>
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền ăn trừ/ngày nghỉ</label>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền ăn 1 ngày</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={openTruTienAnModal}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        fontSize: '0.85rem',
-                        background: '#fdf2f8',
-                        border: '1px solid #fce7f3',
-                        borderRadius: '8px',
-                        color: '#be185d',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {Object.keys(trutienanTiers).length > 0 ? `Đã cấu hình ${Object.keys(trutienanTiers).length} mức` : 'Nhấp để cấu hình chi tiết'}
-                    </button>
+                    <input
+                      type="text"
+                      value={formatCurrency(formData.trutienan || '')}
+                      onChange={(e) => setFormData({ ...formData, trutienan: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
+                      placeholder="VD: 30,000"
+                      style={{ fontSize: '0.9rem', padding: '4px 8px', flex: 1 }}
+                    />
                   </div>
                 </div>
                 <div className="form-group" style={{ marginTop: '0.5rem' }}>
@@ -645,7 +541,6 @@ const ConfigManager = () => {
             </table>
           </div>
         </section>
-        {renderTruTienAnModal()}
       </form>
     </div>
   );

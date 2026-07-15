@@ -908,41 +908,17 @@ export default function InvoiceManager() {
 
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
-   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const { getTruTienAn } = useConfig();
-   const trutienan_config = config?.trutienan || {};
-
-   // Tìm tier được chọn hoặc tự động (chọn tier có key gần nhất với hocphi nếu tự động, hoặc lấy tier đầu tiên)
-   let activeTier = null;
-   if (invoiceData.selectedTienAnTier) {
-      activeTier = invoiceData.selectedTienAnTier;
-   } else if (trutienan_config && typeof trutienan_config === 'object') {
-      // Tự động tìm mức phù hợp hoặc lấy mức đầu tiên làm mặc định
-      const keys = Object.keys(trutienan_config);
-      if (keys.length > 0) {
-         // Thử tìm mức trùng khớp với hocphi (mặc định cũ) hoặc lấy mức đầu tiên
-         const matchKey = keys.find(k => parseInt(k) === invoiceData.hocphi) || keys[0];
-         activeTier = {
-            amount: parseInt(matchKey),
-            tru_nghi: trutienan_config[matchKey].tru_nghi
-         };
-      }
-   }
-
-   const trutienan_val = activeTier ? activeTier.tru_nghi : 0;
+   // Tính tiền ăn (Số ngày học + nghỉ không phép) * số tiền ăn 1 ngày
+   const dailyMealFee = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
    let tuitionRefund = 0;
-   let mealRefund = 0;
    const nlConfig = typeof config?.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : (config?.nghilientiep || { songaynghilientiep: 7, phantramgiam: 50 });
    const threshold = nlConfig.songaynghilientiep || 7;
    const percent = nlConfig.phantramgiam || 0;
 
    if (studySummary) {
-      // 1. Hoàn trả tiền ăn: Tất cả ngày nghỉ phép (không cần liên tiếp)
-      mealRefund = (studySummary.nghiPhep || 0) * trutienan_val;
-
       // 2. Hoàn trả học phí: Nghỉ liên tiếp từ threshold ngày trở lên
       if (studySummary.consecutiveLeave) {
          studySummary.consecutiveLeave.forEach(group => {
@@ -954,14 +930,15 @@ export default function InvoiceManager() {
       }
    }
 
-   const actualMealRefund = mealRefund;
+   const actualMealRefund = 0; // Không hoàn trả tiền ăn nữa
    const actualTuitionRefund = tuitionRefund;
-   const deductionSum = studySummary ? (actualMealRefund + actualTuitionRefund) : 0;
+   const deductionSum = studySummary ? actualTuitionRefund : 0;
 
    const workingDaysCount = getWorkingDaysInMonth(invoiceData.ngayBatDau);
    const isMonthly = (invoiceData.loaiDong || '').toLowerCase().includes('tháng');
-   // Tiền ăn là cố định theo mức (key của tier)
-   const monthlyMealFee = isMonthly && activeTier ? activeTier.amount : 0;
+   // Tiền ăn = (số ngày học + số ngày nghỉ ko phép) * số tiền ăn 1 ngày
+   const monthlyMealFee = (isMonthly && studySummary) ? ((studySummary.daHoc || 0) + (studySummary.nghiKhongPhep || 0)) * dailyMealFee : 0;
+   const trutienan_val = dailyMealFee; // Giữ lại biến cho màn hình in nếu cần
 
    const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum + monthlyMealFee - invoiceData.giamHocphi - deductionSum;
    const conLai = tongCong - invoiceData.daDong;
@@ -1415,10 +1392,6 @@ export default function InvoiceManager() {
                               {deductionSum > 0 && (
                                  <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                       <span>Hoàn trả tiền ăn:</span>
-                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(actualMealRefund)}đ</span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
                                        <span>Hoàn trả học phí (Nghỉ liên tiếp ≥{threshold} ngày):</span>
                                        <span style={{ fontWeight: 700 }}>-{formatCurrency(actualTuitionRefund)}đ</span>
                                     </div>
@@ -1510,24 +1483,8 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item">
                               <label>Tiền ăn</label>
-                              <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
-                                 {config?.trutienan && (
-                                    <select
-                                       style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', fontWeight: 700, color: '#2563eb', background: '#f8fafc' }}
-                                       value={invoiceData.selectedTienAnTier ? Object.entries(config.trutienan).find(([k, v]) => v.tru_nghi === invoiceData.selectedTienAnTier.tru_nghi)?.[0] : ''}
-                                       onChange={(e) => {
-                                          const key = e.target.value;
-                                          if (key) {
-                                             setInvoiceData(prev => ({ ...prev, selectedTienAnTier: { amount: parseInt(key), ...config.trutienan[key] } }));
-                                          }
-                                       }}
-                                    >
-                                       {!invoiceData.selectedTienAnTier && <option value="">Chọn mức...</option>}
-                                       {Object.entries(typeof config.trutienan === 'object' ? config.trutienan : {}).map(([key, val]) => (
-                                          <option key={key} value={key}>{formatCurrency(key)} đ</option>
-                                       ))}
-                                    </select>
-                                 )}
+                              <div className="fi-val-display text-primary" style={{ height: '38px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }}>
+                                 {monthlyMealFee > 0 ? `${formatCurrency(monthlyMealFee)} ₫` : '0 ₫'}
                               </div>
                            </div>
                            <div className="im-fi-item">
@@ -1756,10 +1713,9 @@ export default function InvoiceManager() {
                               </div>
                            )}
 
-                           {(downloadingInvoice?.actualMealRefund > 0 || downloadingInvoice?.actualTuitionRefund > 0) && (
+                           {downloadingInvoice?.actualTuitionRefund > 0 && (
                               <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
                                  <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                    <span>Trừ ăn ({downloadingInvoice?.studySummary?.nghiPhep || 0} n): <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b></span>
                                     <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b></span>
                                  </div>
                               </div>
@@ -1861,12 +1817,13 @@ export default function InvoiceManager() {
                            </div>
                         )}
 
-                        <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
-                           <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                              <span>Trừ ăn ({downloadingNotice?.studySummary?.nghiPhep || 0} n): <b>-{formatCurrency(downloadingNotice?.actualMealRefund || 0)} đ</b></span>
-                              <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                        {downloadingNotice?.actualTuitionRefund > 0 && (
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                              </div>
                            </div>
-                        </div>
+                        )}
                      </div>
 
                      <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>

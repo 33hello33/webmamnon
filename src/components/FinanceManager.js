@@ -2650,11 +2650,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  }
                               } catch (e) { } return null;
                            })()}
-                           {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
+                           {pCur(printHoaDon.tiennghiphep) > 0 && (
                               <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
                                  <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                    {pCur(printHoaDon.trutienan) > 0 && <span>Trừ ăn: <b>-{fCur(printHoaDon.trutienan)} đ</b></span>}
-                                    {pCur(printHoaDon.tiennghiphep) > 0 && <span style={{ marginLeft: 'auto' }}>Trừ HP nghỉ: <b>-{fCur(printHoaDon.tiennghiphep)} đ</b></span>}
+                                    <span style={{ marginLeft: 'auto' }}>Trừ HP nghỉ: <b>-{fCur(printHoaDon.tiennghiphep)} đ</b></span>
                                  </div>
                               </div>
                            )}
