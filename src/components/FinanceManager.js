@@ -2582,7 +2582,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
 
                      <div className="p-title-area">
-                        <h2 style={{ fontSize: '14pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
+                        <h2 style={{ fontSize: '14pt' }}>{printHoaDon.mahd?.startsWith('TB') ? 'PHIẾU THÔNG BÁO HỌC PHÍ' : 'BIÊN LAI THU HỌC PHÍ'}</h2>
                      </div>
 
                      <div className="p-content">
@@ -2665,10 +2665,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{fCur(printHoaDon.tongcong)} đ</span>
                         </div>
 
-                        <div className="p-row" style={{ marginTop: '4px' }}>
-                           <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
-                           <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
-                        </div>
+                        {!printHoaDon.mahd?.startsWith('TB') && (
+                           <div className="p-row" style={{ marginTop: '4px' }}>
+                              <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
+                              <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
+                           </div>
+                        )}
 
                         <div className="p-row" style={{ fontSize: '8.5pt' }}>
                            <span>HÌNH THỨC:</span>

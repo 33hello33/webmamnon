@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase, insertLog } from '../supabase';
 import { Search, Receipt, User, Wallet, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, BookOpen, GraduationCap, Printer } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -1694,7 +1695,9 @@ export default function InvoiceManager() {
          )}
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
+         {(downloadingInvoice || downloadingNotice) && document.body && createPortal(
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+            {downloadingInvoice && (
             <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                {[1, 2].map(copyNum => (
                   <div key={copyNum} className="receipt-copy">
@@ -1798,7 +1801,9 @@ export default function InvoiceManager() {
                   </div>
                ))}
             </div>
+            )}
 
+            {downloadingNotice && (
             <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                <div className="receipt-copy" style={{ borderRight: 'none' }}>
                   {/* HEADER */}
@@ -1896,7 +1901,10 @@ export default function InvoiceManager() {
                   </div>
                </div>
             </div>
-         </div>
+            )}
+         </div>,
+         document.body
+         )}
 
          {(downloadingNotice || downloadingInvoice) && (
             <div style={{ zIndex: 9999, position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.8)" }}>
