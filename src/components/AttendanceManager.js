@@ -341,7 +341,10 @@ export default function AttendanceManager({ students, showMessage }) {
         // Loại bỏ các bản ghi trùng lặp trong cùng một ngày (chỉ lấy bản ghi cuối cùng)
         const uniqueDayRecords = Array.from(new Map(records.map(r => [r.ngay, r])).values());
 
-        const coMat = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('có mặt')).length;
+        const coMat = uniqueDayRecords.filter(r => {
+          const st = normalizeStatus(r.trangthai);
+          return st.includes('có mặt') || st.includes('trả trễ');
+        }).length;
         const nghiPhep = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('nghỉ phép') && !normalizeStatus(r.trangthai).includes('không')).length;
         const khongPhep = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
 
@@ -461,6 +464,9 @@ export default function AttendanceManager({ students, showMessage }) {
           if (s.includes('có mặt')) strSt = 'CM';
           else if (s.includes('nghỉ phép') && !s.includes('không')) strSt = 'P';
           else if (s.includes('không phép')) strSt = 'K';
+          else if (s === 'trả trễ 1') strSt = 'T1';
+          else if (s === 'trả trễ 2') strSt = 'T2';
+          else if (s === 'trả trễ 3') strSt = 'T3';
           else strSt = st;
         }
         rowData[formattedDate] = strSt;
@@ -479,6 +485,9 @@ export default function AttendanceManager({ students, showMessage }) {
     if (s === 'có mặt') symb = <span className="text-success font-bold" style={{ fontSize: '1.2rem' }}>✓</span>;
     else if (s === 'nghỉ phép') symb = <span className="text-warning font-bold">P</span>;
     else if (s === 'nghỉ không phép') symb = <span className="text-danger font-bold">K</span>;
+    else if (s === 'trả trễ 1') symb = <span className="font-bold" style={{ color: '#ca8a04' }}>T1</span>;
+    else if (s === 'trả trễ 2') symb = <span className="font-bold" style={{ color: '#b45309' }}>T2</span>;
+    else if (s === 'trả trễ 3') symb = <span className="font-bold" style={{ color: '#991b1b' }}>T3</span>;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }} title={remark || ''}>
@@ -748,6 +757,21 @@ export default function AttendanceManager({ students, showMessage }) {
                                 {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangKP')) && (
                                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#dc2626', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Nghỉ không phép' ? '#fef2f2' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ không phép' ? '1px solid #fee2e2' : '1px solid #e2e8f0' }}>
                                     <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Nghỉ không phép'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Nghỉ không phép')} /> Nghỉ KP
+                                  </label>
+                                )}
+                                {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('traTre1')) && (
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#b45309', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Trả trễ 1' ? '#fef3c7' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Trả trễ 1' ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
+                                    <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Trả trễ 1'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Trả trễ 1')} /> Trễ 1
+                                  </label>
+                                )}
+                                {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('traTre2')) && (
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#9a3412', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Trả trễ 2' ? '#ffedd5' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Trả trễ 2' ? '1px solid #fed7aa' : '1px solid #e2e8f0' }}>
+                                    <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Trả trễ 2'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Trả trễ 2')} /> Trễ 2
+                                  </label>
+                                )}
+                                {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('traTre3')) && (
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#7f1d1d', fontWeight: 600, fontSize: '0.85rem', background: rec.trangthai === 'Trả trễ 3' ? '#fee2e2' : 'transparent', padding: '0.4rem 0.6rem', borderRadius: '8px', border: rec.trangthai === 'Trả trễ 3' ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
+                                    <input type="radio" disabled={isAttendanceHoliday} checked={rec.trangthai === 'Trả trễ 3'} onChange={() => handleUpdateMarkRecord(st.mahv, 'trangthai', 'Trả trễ 3')} /> Trễ 3
                                   </label>
                                 )}
                               </div>

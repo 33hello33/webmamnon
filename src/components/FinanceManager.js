@@ -2544,14 +2544,29 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         try {
                            const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
                            if (Array.isArray(pts) && pts.length > 0) {
+                              let lateFeeSum = 0;
+                              const otherFees = [];
+                              pts.forEach(pt => {
+                                 if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
+                                    lateFeeSum += Number(pt.amount) || 0;
+                                 } else {
+                                    otherFees.push(pt);
+                                 }
+                              });
                               return (
                                  <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                                    {pts.map((pt, i) => (
+                                    {otherFees.map((pt, i) => (
                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
                                           <span>+ {pt.name || 'Phụ thu'}:</span>
                                           <b>{fCur(pt.amount)} đ</b>
                                        </div>
                                     ))}
+                                    {lateFeeSum > 0 && (
+                                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                          <span>+ Phụ thu trả trễ:</span>
+                                          <b>{fCur(lateFeeSum)} đ</b>
+                                       </div>
+                                    )}
                                  </div>
                               );
                            }
@@ -3263,15 +3278,32 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
                         <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
-                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
-                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                           {downloadingInvoice.phuthu.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                 <span>+ {pt.name || 'Phụ thu'}:</span><b>{fCur(pt.amount)} đ</b>
-                              </div>
-                           ))}
-                        </div>
-                     )}
+                     {(() => {
+                        if (!downloadingInvoice?.phuthu || downloadingInvoice.phuthu.length === 0) return null;
+                        let lateFeeSum = 0;
+                        const otherFees = [];
+                        downloadingInvoice.phuthu.forEach(pt => {
+                           if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
+                              lateFeeSum += Number(pt.amount) || 0;
+                           } else {
+                              otherFees.push(pt);
+                           }
+                        });
+                        return (
+                           <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                              {otherFees.map((pt, i) => (
+                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                    <span>+ {pt.name || 'Phụ thu'}:</span><b>{fCur(pt.amount)} đ</b>
+                                 </div>
+                              ))}
+                              {lateFeeSum > 0 && (
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                    <span>+ Phụ thu trả trễ:</span><b>{fCur(lateFeeSum)} đ</b>
+                                 </div>
+                              )}
+                           </div>
+                        );
+                     })()}
                      {downloadingInvoice?.deductionSum > 0 && (
                         <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>

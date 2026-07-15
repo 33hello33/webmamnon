@@ -66,12 +66,6 @@ const getNextNoticeNumber = async () => {
    return maxNumber + 1;
 };
 
-const normalizeSurcharges = (value) => (
-   Array.isArray(value)
-      ? value.filter(item => item && (item.name || Number(item.amount)))
-      : []
-);
-
 const getNgoaiKhoaPeriodKey = (snapshot, fallbackDate) => {
    const endedAt = snapshot?.endedAt || fallbackDate;
    return formatMonthYear(endedAt);
@@ -874,7 +868,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
             uniqueAttendance.forEach(att => {
                const s = normalizeStatus(att.trangthai);
-               if (s === 'có mặt' || s.includes('trả trễ')) daHoc++;
+               if (s === 'có mặt') daHoc++;
                else if (s === 'nghỉ phép') nghiPhep++;
                else if (s === 'nghỉ không phép') nghiKhongPhep++;
             });
@@ -1178,7 +1172,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
          uniqueAttendance.forEach(att => {
             const s = normalizeStatus(att.trangthai);
-            if (s === 'có mặt' || s.includes('trả trễ')) daHoc++;
+            if (s === 'có mặt') daHoc++;
             else if (s === 'nghỉ phép') nghiPhep++;
             else if (s === 'nghỉ không phép') nghiKhongPhep++;
          });
@@ -1457,10 +1451,87 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       }
    };
 
-   const filteredStudents = students.filter(s =>
-      (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.sdt && s.sdt.includes(searchTerm)) ||
-      (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
+   const classNameMap = React.useMemo(() => (
+      new Map((classes || []).map(cls => [cls.malop, cls.tenlop || cls.malop || 'Chưa xếp lớp']))
+   ), [classes]);
+
+   const getStudentClassNames = React.useCallback((student) => {
+      const classIds = Array.isArray(student?.malop_list) && student.malop_list.length > 0
+         ? student.malop_list
+         : (student?.malop ? [student.malop] : []);
+
+      if (classIds.length === 0) return ['Chưa xếp lớp'];
+      return classIds.map((classId) => classNameMap.get(classId) || classId || 'Chưa xếp lớp');
+   }, [classNameMap]);
+
+   const filteredStudents = React.useMemo(() => {
+      const keyword = searchTerm.toLowerCase().trim();
+
+      return (students || [])
+         .filter((s) => {
+            if (!keyword) return true;
+            return (
+               (s.tenhv && s.tenhv.toLowerCase().includes(keyword)) ||
+               (s.sdt && s.sdt.includes(searchTerm)) ||
+               (s.mahv && s.mahv.toLowerCase().includes(keyword)) ||
+               getStudentClassNames(s).some((className) => className.toLowerCase().includes(keyword))
+            );
+         })
+         .sort((left, right) => {
+            const leftClass = getStudentClassNames(left)[0] || 'Chưa xếp lớp';
+            const rightClass = getStudentClassNames(right)[0] || 'Chưa xếp lớp';
+            if (leftClass === 'Chưa xếp lớp' && rightClass !== 'Chưa xếp lớp') return 1;
+            if (leftClass !== 'Chưa xếp lớp' && rightClass === 'Chưa xếp lớp') return -1;
+            const classCompare = leftClass.localeCompare(rightClass, 'vi', { sensitivity: 'base' });
+            if (classCompare !== 0) return classCompare;
+
+            const nameCompare = String(left.tenhv || '').localeCompare(String(right.tenhv || ''), 'vi', { sensitivity: 'base' });
+            if (nameCompare !== 0) return nameCompare;
+
+            return String(left.mahv || '').localeCompare(String(right.mahv || ''), 'vi', { sensitivity: 'base' });
+         });
+   }, [students, searchTerm, getStudentClassNames]);
+
+   const groupedFilteredStudents = React.useMemo(() => {
+      const groupedMap = new Map();
+
+      filteredStudents.forEach((student) => {
+         const primaryClassName = getStudentClassNames(student)[0] || 'Chưa xếp lớp';
+         if (!groupedMap.has(primaryClassName)) {
+            groupedMap.set(primaryClassName, []);
+         }
+         groupedMap.get(primaryClassName).push(student);
+      });
+
+      return Array.from(groupedMap.entries()).map(([groupName, items]) => ({
+         groupName,
+         items
+      }));
+   }, [filteredStudents, getStudentClassNames]);
+
+   const renderedStudentList = groupedFilteredStudents.length > 0 ? groupedFilteredStudents.map((group) => (
+      <div key={group.groupName} className="im-student-group">
+         <div className="im-student-group-title">
+            <span>{group.groupName}</span>
+            <span>{group.items.length} HS</span>
+         </div>
+         <div className="im-student-group-list">
+            {group.items.map((st) => {
+               const isActive = selectedStudent?.mahv === st.mahv;
+               return (
+                  <div key={st.mahv} className={`im-student-card ${isActive ? 'active' : ''}`} onClick={() => handleSelectStudent(st)}>
+                     <div className="im-card-name">
+                        {st.tenhv}
+                     </div>
+                     <div className="im-card-sub">SDT: {st.sdt || 'SĐT: Trống'}</div>
+                     <div className="im-card-sub">Lớp: {getStudentClassNames(st).join(', ')}</div>
+                  </div>
+               );
+            })}
+         </div>
+      </div>
+   )) : (
+      <div className="im-s-empty">Không tìm thấy học sinh hiển thị.</div>
    );
 
    useEffect(() => {
@@ -1485,7 +1556,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          onFocusStudentHandled();
       }
    }, [focusStudentId, students, onFocusStudentHandled]);
-
    const autoLateFeeSurcharges = buildLateFeeSurcharges(studySummary || {}, config?.tientratre);
    const effectiveSurcharges = mergeLateFeeSurcharges(invoiceData.phuthu, studySummary || {}, config?.tientratre);
    const surchargeSum = effectiveSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -1548,22 +1618,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                />
             </div>
             <div className="im-student-list">
-               {filteredStudents.length > 0 ? filteredStudents.map(st => {
-                  const isActive = selectedStudent?.mahv === st.mahv;
-                  return (
-                     <div key={st.mahv} className={`im-student-card ${isActive ? 'active' : ''}`} onClick={() => handleSelectStudent(st)}>
-                        <div className="im-card-name">
-                           {st.tenhv}
-                        </div>
-                        <div className="im-card-sub">SDT: {st.sdt || 'SĐT: Trống'}</div>
-                        <div className="im-card-sub">Lớp: {st.malop_list && st.malop_list.length > 0
-                           ? st.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ')
-                           : 'Chưa xếp lớp'}</div>
-                     </div>
-                  );
-               }) : (
-                  <div className="im-s-empty">Không tìm thấy học sinh hiển thị.</div>
-               )}
+               {renderedStudentList}
             </div>
          </div>
 
@@ -1663,13 +1718,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                  <div className="ss-badge ss-present">
                                     <span className="ss-num">{studySummary.daHoc}</span>
                                     <span className="ss-txt">Đã học</span>
-                                    {((studySummary.traTre1 || 0) > 0 || (studySummary.traTre2 || 0) > 0 || (studySummary.traTre3 || 0) > 0) && (
-                                       <div style={{ fontSize: '0.7rem', marginTop: '4px', textAlign: 'center', lineHeight: '1.2', opacity: 0.9 }}>
-                                          {studySummary.traTre1 > 0 && <div>Trễ 1: {studySummary.traTre1}</div>}
-                                          {studySummary.traTre2 > 0 && <div>Trễ 2: {studySummary.traTre2}</div>}
-                                          {studySummary.traTre3 > 0 && <div>Trễ 3: {studySummary.traTre3}</div>}
-                                       </div>
-                                    )}
                                  </div>
                                  <div className="ss-badge ss-excused">
                                     <span className="ss-num">{studySummary.nghiPhep}</span>
@@ -1679,7 +1727,18 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     <span className="ss-num">{studySummary.nghiKhongPhep || 0}</span>
                                     <span className="ss-txt">Không phép</span>
                                  </div>
-
+                                 <div className="ss-badge ss-total">
+                                    <span className="ss-num">{studySummary.traTre1 || 0}</span>
+                                    <span className="ss-txt">Trả trễ 1</span>
+                                 </div>
+                                 <div className="ss-badge ss-total">
+                                    <span className="ss-num">{studySummary.traTre2 || 0}</span>
+                                    <span className="ss-txt">Trả trễ 2</span>
+                                 </div>
+                                 <div className="ss-badge ss-total">
+                                    <span className="ss-num">{studySummary.traTre3 || 0}</span>
+                                    <span className="ss-txt">Trả trễ 3</span>
+                                 </div>
                                  <div className="ss-badge ss-total">
                                     <span className="ss-num">{studySummary.tongBuoi}</span>
                                     <span className="ss-txt">Tổng buổi</span>
@@ -1694,22 +1753,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     ⚠️ Có đợt nghỉ dài: {studySummary.consecutiveLeave.filter(l => l.so_ngay_nghi_lien_tuc >= 3).map(l => `${l.so_ngay_nghi_lien_tuc} ngày (${l.ngay_bat_dau_nghi} -> ${l.ngay_ket_thuc_nghi})`).join(', ')}
                                  </div>
                               )}
-                              {(deductionSum > 0 || (autoLateFeeSurcharges && autoLateFeeSurcharges.length > 0)) && (
+                              {deductionSum > 0 && (
                                  <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
-                                    {autoLateFeeSurcharges && autoLateFeeSurcharges.length > 0 && (
-                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: deductionSum > 0 ? '6px' : '0' }}>
-                                          <span style={{ color: '#b45309', fontWeight: 600 }}>Phụ thu trả trễ:</span>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                             <span style={{ fontWeight: 700, color: '#b45309' }}>+</span>
-                                             <span style={{ fontWeight: 700, color: '#b45309' }}>{formatCurrency(autoLateFeeSurcharges.reduce((sum, fee) => sum + (Number(fee.amount) || 0), 0))}</span>
-                                             <span style={{ fontWeight: 700, color: '#b45309' }}>đ</span>
-                                          </div>
-                                       </div>
-                                    )}
-                                    {deductionSum > 0 && (
-                                       <>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                             <span>Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                       <span>Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
                                           <span style={{ fontWeight: 700 }}>-</span>
                                           <input
@@ -1753,8 +1800,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
                                        Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
                                     </div>
-                                    </>
-                                    )}
                                  </div>
                               )}
                            </>
@@ -1802,6 +1847,19 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         ) : (
                            <div style={{ textAlign: 'center', padding: '15px', border: '1px dashed #e2e8f0', borderRadius: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
                               Chưa có khoản phụ thu nào được thêm.
+                           </div>
+                        )}
+                        {autoLateFeeSurcharges.length > 0 && (
+                           <div style={{ marginTop: '12px', padding: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px' }}>
+                              <div style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: '8px' }}>Phụ phí trả trễ tự động</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                 {autoLateFeeSurcharges.map((item) => (
+                                    <div key={item.autoKey} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '0.9rem', color: '#1e3a8a' }}>
+                                       <span>{item.name}</span>
+                                       <strong>{formatCurrency(item.amount)}đ</strong>
+                                    </div>
+                                 ))}
+                              </div>
                            </div>
                         )}
                      </div>
@@ -2086,34 +2144,16 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
                         <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
-                     {(() => {
-                        if (!downloadingInvoice?.phuthu || downloadingInvoice.phuthu.length === 0) return null;
-                        let lateFeeSum = 0;
-                        const otherFees = [];
-                        downloadingInvoice.phuthu.forEach(pt => {
-                           if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
-                              lateFeeSum += Number(pt.amount) || 0;
-                           } else {
-                              otherFees.push(pt);
-                           }
-                        });
-                        return (
-                           <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                              {otherFees.map((pt, i) => (
-                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                    <span>+ {pt.name || 'Phụ thu'}:</span>
-                                    <b>{formatCurrency(pt.amount)} đ</b>
-                                 </div>
-                              ))}
-                              {lateFeeSum > 0 && (
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                    <span>+ Phụ thu trả trễ:</span>
-                                    <b>{formatCurrency(lateFeeSum)} đ</b>
-                                 </div>
-                              )}
-                           </div>
-                        );
-                     })()}
+                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                           {downloadingInvoice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                 <span>+ {pt.name || 'Phụ thu'}:</span>
+                                 <b>{formatCurrency(pt.amount)} đ</b>
+                              </div>
+                           ))}
+                        </div>
+                     )}
                      {downloadingInvoice?.deductionSum > 0 && (
                         <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -2215,35 +2255,17 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         </div>
                      )}
 
-                     {(() => {
-                        if (!downloadingNotice?.phuthu || downloadingNotice.phuthu.length === 0) return null;
-                        let lateFeeSum = 0;
-                        const otherFees = [];
-                        downloadingNotice.phuthu.forEach(pt => {
-                           if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
-                              lateFeeSum += Number(pt.amount) || 0;
-                           } else {
-                              otherFees.push(pt);
-                           }
-                        });
-                        return (
-                           <>
-                              <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
-                              {otherFees.map((pt, i) => (
-                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
-                                 </div>
-                              ))}
-                              {lateFeeSum > 0 && (
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)} đ</div>
-                                 </div>
-                              )}
-                           </>
-                        );
-                     })()}
+                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {downloadingNotice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                                 <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
+                              </div>
+                           ))}
+                        </>
+                     )}
 
                      {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
                         <>
@@ -2284,7 +2306,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}):
                            <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>,
                            <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>,
-                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
+                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>,
+                           <span> Trả trễ 1: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.traTre1 || 0}</b></span>,
+                           <span> Trả trễ 2: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.traTre2 || 0}</b></span>,
+                           <span> Trả trễ 3: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.traTre3 || 0}</b></span>
                         </div>
                      )}
                      {downloadingNotice?.ghichu && (

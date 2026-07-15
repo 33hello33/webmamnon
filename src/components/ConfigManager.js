@@ -3,6 +3,7 @@ import { supabase, insertLog } from '../supabase';
 import { createPortal } from 'react-dom';
 import { useConfig } from '../ConfigContext';
 import { DEFAULT_CONSECUTIVE_REFUND_CONFIG, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
+import { normalizeLateFeeConfig } from '../utils/lateFeeConfig';
 import HolidayManager from './HolidayManager';
 import {
   Save,
@@ -75,10 +76,11 @@ const ConfigManager = () => {
           selected: ['khoa', 'buoi', 'thang']
         },
         cotdiemdanh: config.cotdiemdanh || {
-          available: ['comat', 'vangP', 'vangKP'],
+          available: ['comat', 'vangP', 'vangKP', 'traTre1', 'traTre2', 'traTre3'],
           selected: ['comat', 'vangP', 'vangKP']
         },
         nghilientiep: normalizeConsecutiveRefundConfig(config.nghilientiep, config),
+        tientratre: normalizeLateFeeConfig(config.tientratre),
         trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
         tiendangoai: config.tiendangoai || '0',
         xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
@@ -101,7 +103,8 @@ const ConfigManager = () => {
       hangmucchi: formData.hangmucchi.split('\n').map(s => s.trim()).filter(s => s),
       sonhanvientrogiang: Math.max(0, Math.min(3, parseInt(formData.sonhanvientrogiang) || 0)),
       ngayquahan: Math.max(0, parseInt(formData.ngayquahan) || 0),
-      nghilientiep: normalizeConsecutiveRefundConfig(formData.nghilientiep, formData)
+      nghilientiep: normalizeConsecutiveRefundConfig(formData.nghilientiep, formData),
+      tientratre: formData.tientratre
     };
 
     try {
@@ -719,6 +722,49 @@ const ConfigManager = () => {
                 />
                 <span>Nghỉ không phép</span>
               </label>
+
+              <div style={{ marginTop: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>Phí trả trễ</div>
+
+                {['traTre1', 'traTre2', 'traTre3'].map((key, index) => {
+                  const label = `Trả trễ ${index + 1}`;
+                  const isChecked = formData.cotdiemdanh?.selected?.includes(key);
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem', width: '100px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleCotDiemDanh(key)}
+                        />
+                        <span>{label}</span>
+                      </label>
+                      {isChecked && (
+                        <input
+                          type="text"
+                          value={formatCurrency(formData.tientratre?.[key]?.amount || 0)}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/,/g, '').replace(/\D/g, '');
+                            setFormData(prev => ({
+                              ...prev,
+                              tientratre: {
+                                ...prev.tientratre,
+                                [key]: {
+                                  ...(prev.tientratre?.[key] || {}),
+                                  label,
+                                  amount: parseInt(val, 10) || 0
+                                }
+                              }
+                            }));
+                          }}
+                          placeholder="Mức phí (VNĐ)"
+                          style={{ padding: '4px 8px', fontSize: '0.85rem', width: '120px' }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
                 <div className="form-group">
