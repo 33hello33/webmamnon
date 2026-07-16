@@ -635,14 +635,53 @@ function ParentPortal({ parentData, setParentData }) {
    // Không tự động hỏi quyền thông báo khi mở app
    // Chỉ hỏi khi người dùng chủ động nhấn nút bật thông báo
 
-   // Auto-subscribe parent to push notifications when student data is available
+   // Auto-re-register push subscription silently when student data is available (only if already granted)
    useEffect(() => {
       const studentId = parentData?.student?.mahv;
       if (!studentId) return;
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
       if (Notification.permission !== 'granted') return;
 
-      subscribeToPushNotifications().catch(console.error);
+      // Silently refresh subscription without calling requestPermission() again
+      const refreshSubscription = async () => {
+         try {
+            const registration = await navigator.serviceWorker.ready;
+            const existingSubscription = await registration.pushManager.getSubscription();
+            if (!existingSubscription) return; // No subscription yet, user needs to click the button
+
+            const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
+            const urlBase64ToUint8Array = (base64String) => {
+               const padding = '='.repeat((4 - base64String.length % 4) % 4);
+               const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+               const rawData = window.atob(base64);
+               const outputArray = new Uint8Array(rawData.length);
+               for (let i = 0; i < rawData.length; ++i) {
+                  outputArray[i] = rawData.charCodeAt(i);
+               }
+               return outputArray;
+            };
+
+            const subscription = existingSubscription || await registration.pushManager.subscribe({
+               userVisibleOnly: true,
+               applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+            });
+
+            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+               user_id: studentId,
+               role: 'parent',
+               subscription: subscription,
+               updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+
+            if (dbError) {
+               console.error('Lỗi khi làm mới Subscription:', dbError);
+            }
+         } catch (err) {
+            console.error('Lỗi khi tự động làm mới subscription:', err);
+         }
+      };
+
+      refreshSubscription();
    // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [parentData?.student?.mahv]);
 
