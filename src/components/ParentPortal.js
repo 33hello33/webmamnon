@@ -2958,6 +2958,9 @@ function ParentPortal({ parentData, setParentData }) {
                                        if (rec) {
                                           const s = (rec.trangthai || '').toLowerCase();
                                           if (s === 'có mặt') { bg = '#f0fdf4'; color = '#16a34a'; }
+                                          else if (s === 'trả trễ 1') { bg = '#dcfce7'; color = '#15803d'; }
+                                          else if (s === 'trả trễ 2') { bg = '#bbf7d0'; color = '#166534'; }
+                                          else if (s === 'trả trễ 3') { bg = '#86efac'; color = '#14532d'; }
                                           else if (s === 'nghỉ phép') { bg = '#fffbeb'; color = '#d97706'; }
                                           else if (s === 'nghỉ không phép') { bg = '#fef2f2'; color = '#dc2626'; }
                                        }
@@ -2967,7 +2970,15 @@ function ParentPortal({ parentData, setParentData }) {
                                              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: color }}>{d}</div>
                                              {rec && (
                                                 <>
-                                                   <div style={{ fontSize: '0.65rem', fontWeight: 800, color: color, lineHeight: 1 }}>{rec.trangthai.split(' ')[0]}</div>
+                                                   <div style={{ fontSize: '0.65rem', fontWeight: 800, color: color, lineHeight: 1 }}>
+                                                      {(() => {
+                                                         const s = (rec.trangthai || '').toLowerCase();
+                                                         if (s === 'trả trễ 1') return 'T1';
+                                                         if (s === 'trả trễ 2') return 'T2';
+                                                         if (s === 'trả trễ 3') return 'T3';
+                                                         return rec.trangthai.split(' ')[0];
+                                                      })()}
+                                                   </div>
                                                    {rec.ghichu && <div style={{ fontSize: '0.6rem', color: '#64748b', lineHeight: 1.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.ghichu}</div>}
                                                 </>
                                              )}

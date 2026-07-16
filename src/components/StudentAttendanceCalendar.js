@@ -106,6 +106,9 @@ export default function StudentAttendanceCalendar({ studentId, studentName, onCl
                 if (record) {
                   const s = (record.trangthai || '').trim().toLowerCase();
                   if (s === 'có mặt') statusClass = 'present';
+                  else if (s === 'trả trễ 1') statusClass = 'late-1';
+                  else if (s === 'trả trễ 2') statusClass = 'late-2';
+                  else if (s === 'trả trễ 3') statusClass = 'late-3';
                   else if (s === 'nghỉ phép') statusClass = 'excused';
                   else if (s === 'nghỉ không phép') statusClass = 'unexcused';
                 }
@@ -115,7 +118,15 @@ export default function StudentAttendanceCalendar({ studentId, studentName, onCl
                     <div className="cell-date">{day}</div>
                     {record && (
                       <div className="cell-content">
-                        <strong>{record.trangthai}</strong>
+                        <strong>
+                           {(() => {
+                              const s = (record.trangthai || '').toLowerCase();
+                              if (s === 'trả trễ 1') return 'T1';
+                              if (s === 'trả trễ 2') return 'T2';
+                              if (s === 'trả trễ 3') return 'T3';
+                              return record.trangthai.split(' ')[0];
+                           })()}
+                        </strong>
                         {record.ghichu && <p className="cell-notes">{record.ghichu}</p>}
                       </div>
                     )}
@@ -127,9 +138,12 @@ export default function StudentAttendanceCalendar({ studentId, studentName, onCl
           </div>
 
           <div className="calendar-legend">
-            <div className="legend-item"><div className="legend-color present"></div> Có mặt</div>
-            <div className="legend-item"><div className="legend-color excused"></div> Nghỉ phép</div>
-            <div className="legend-item"><div className="legend-color unexcused"></div> Nghỉ không phép</div>
+            <div className="legend-item"><div className="legend-color present"></div> Có mặt: {attendance.filter(a => {
+               const s = (a.trangthai || '').toLowerCase();
+               return s === 'có mặt' || s.includes('trả trễ');
+            }).length}</div>
+            <div className="legend-item"><div className="legend-color excused"></div> Nghỉ phép: {attendance.filter(a => (a.trangthai || '').toLowerCase() === 'nghỉ phép').length}</div>
+            <div className="legend-item"><div className="legend-color unexcused"></div> Nghỉ KP: {attendance.filter(a => (a.trangthai || '').toLowerCase() === 'nghỉ không phép').length}</div>
           </div>
         </div>
       </div>
