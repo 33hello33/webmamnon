@@ -246,12 +246,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    };
 
    useEffect(() => {
-      if ('Notification' in window && Notification.permission === 'default') {
-         Notification.requestPermission();
-      }
-   }, []);
-
-   useEffect(() => {
       const fetchStaffDirectory = async () => {
          const { data, error } = await supabase.from('tbl_nv').select('manv, tennv');
          if (error) {
@@ -275,10 +269,61 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return () => window.removeEventListener('resize', handleResize);
    }, []);
 
+   // Auto-re-register push subscription silently when teacher logs in (only if already granted)
    useEffect(() => {
-      if (attendanceUser?.manv || attendanceUser?.username) {
-         subscribeTeacherPushNotifications().catch(console.error);
-      }
+      const staffId = attendanceUser?.manv || attendanceUser?.username;
+      if (!staffId) return;
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (Notification.permission !== 'granted') return;
+
+      const refreshSubscription = async () => {
+         try {
+            const registration = await navigator.serviceWorker.ready;
+            const existingSubscription = await registration.pushManager.getSubscription();
+            if (!existingSubscription) return; // No subscription yet — user must click the Bell button
+
+            const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
+            const urlBase64ToUint8Array = (base64String) => {
+               const padding = '='.repeat((4 - base64String.length % 4) % 4);
+               const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+               const rawData = window.atob(base64);
+               const outputArray = new Uint8Array(rawData.length);
+               for (let i = 0; i < rawData.length; ++i) {
+                  outputArray[i] = rawData.charCodeAt(i);
+               }
+               return outputArray;
+            };
+
+            const subscription = existingSubscription || await registration.pushManager.subscribe({
+               userVisibleOnly: true,
+               applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+            });
+
+            const teacherIds = [...new Set([
+               attendanceUser.manv,
+               attendanceUser.username,
+               attendanceUser.tennv
+            ].map(v => String(v || '').trim()).filter(Boolean))];
+
+            const payloads = teacherIds.map((id) => ({
+               user_id: id,
+               role: 'teacher',
+               subscription,
+               updated_at: new Date().toISOString()
+            }));
+
+            const { error: dbError } = await supabase
+               .from('push_subscriptions')
+               .upsert(payloads, { onConflict: 'user_id' });
+
+            if (dbError) console.error('Lỗi khi làm mới subscription giáo viên:', dbError);
+         } catch (err) {
+            console.error('Lỗi khi tự động làm mới subscription giáo viên:', err);
+         }
+      };
+
+      refreshSubscription();
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [attendanceUser?.manv, attendanceUser?.username]);
 
    // ----- Attendance Features -----
@@ -383,22 +428,24 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    const subscribeTeacherPushNotifications = async () => {
       if (!attendanceUser?.manv && !attendanceUser?.username) {
-         console.warn('Chưa xác định được tài khoản giáo viên để bật thông báo.');
+         alert('Chưa xác định được tài khoản giáo viên để bật thông báo.');
          return;
       }
-      if (!('serviceWorker' in navigator)) {
-         console.warn('Trình duyệt không hỗ trợ Service Worker.');
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+         alert('Trình duyệt không hỗ trợ thông báo đẩy (Push Notifications).');
          return;
       }
-      if (!('PushManager' in window)) {
-         console.warn('Trình duyệt không hỗ trợ Push Notifications.');
+
+      // Handle already-denied case without calling requestPermission (avoids long block)
+      if (Notification.permission === 'denied') {
+         alert('Bạn đã tắt thông báo cho trang này. Để bật lại, hãy vào Cài đặt trình duyệt → Quyền riêng tư → Thông báo và cho phép trang này.');
          return;
       }
 
       try {
          const permission = await Notification.requestPermission();
          if (permission !== 'granted') {
-            console.warn('Người dùng đã từ chối nhận thông báo.');
+            alert('Bạn đã từ chối nhận thông báo. Hãy cho phép trong cài đặt trình duyệt để nhận được tin nhắn từ phụ huynh.');
             return;
          }
 
@@ -441,10 +488,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
          if (dbError) throw dbError;
 
-         console.log(existingSubscription ? 'Thông báo đã được bật sẵn cho giáo viên.' : 'Đã bật thông báo cho giáo viên thành công!');
+         alert(existingSubscription ? 'Đã bật thông báo thành công (subscription đã có sẵn).' : 'Đã bật thông báo thành công!');
       } catch (err) {
          console.error('Lỗi khi đăng ký nhận thông báo cho giáo viên:', err);
-         console.error('Có lỗi khi bật thông báo: ' + err.message);
+         alert('Có lỗi xảy ra khi bật thông báo: ' + err.message);
       }
    };
 
