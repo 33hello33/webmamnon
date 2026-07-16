@@ -1337,7 +1337,7 @@ export default function InvoiceManager() {
                               </div>
                            </div>
                            <div className="im-field-hz">
-                              <label>Giảng Viên:</label>
+                              <label>Giáo Viên:</label>
                               <div className="val-text flex-center"><GraduationCap size={16} /> {classTeacher?.tenhv || classTeacher?.tennv || activeClass?.manv || 'Không rõ'}</div>
                            </div>
                            <div className="im-field-hz" style={{ marginTop: '10px', gridColumn: 'span 2' }}>

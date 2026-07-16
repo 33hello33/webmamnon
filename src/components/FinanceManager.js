@@ -2488,7 +2488,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   {/* TITLE */}
                   <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     PHIẾU LƯƠNG GIẢNG VIÊN
+                     PHIẾU LƯƠNG GIÁO VIÊN
                   </div>
 
                   {/* INFO */}
@@ -2497,7 +2497,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>Họ và tên: <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b></div>
                         <div>Kỳ lương: <b>Tháng {printLuong.luongthang || ((new Date(printLuong.ngaylap).getMonth() + 1).toString().padStart(2, '0') + '/' + new Date(printLuong.ngaylap).getFullYear())}</b></div>
                      </div>
-                     <div>Chức vụ: <b>Giảng Viên / Trợ Giảng</b></div>
+                     <div>Chức vụ: <b>Giáo Viên</b></div>
 
                      {/* BẢNG LƯƠNG */}
                      <div style={{ marginTop: '15px', marginBottom: '15px' }}>

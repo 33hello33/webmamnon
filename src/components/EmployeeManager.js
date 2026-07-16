@@ -36,7 +36,7 @@ export default function EmployeeManager({ currentUser }) {
     try {
       let query = supabase.from('tbl_nv').select('*').order('manv', { ascending: true });
       
-      // Phân quyền: Nhân viên VP chỉ quản lý được khối Giáo viên / Trợ giảng
+      // Phân quyền: Nhân viên VP chỉ quản lý được khối Giáo viên
       if (currentUser?.role === 'Nhân viên VP') {
         query = query.in('role', ['Giáo viên', 'Trợ giảng']);
       }
@@ -360,7 +360,7 @@ export default function EmployeeManager({ currentUser }) {
                       </>
                     )}
                     <option value="Giáo viên">Giáo viên</option>
-                    <option value="Trợ giảng">Trợ giảng</option>
+                    <option value="Trợ giảng">Giáo viên</option>
                   </select>
                 </div>
                 <div className="form-group">

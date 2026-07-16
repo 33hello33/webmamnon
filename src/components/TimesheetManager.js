@@ -393,9 +393,9 @@ export default function TimesheetManager() {
       const finalNote = note ? `${note}${extrasStr ? ' | ' + extrasStr : ''}` : extrasStr;
 
       const excelData = [
-         ['BẢNG KÊ CHI TIẾT LƯƠNG GIẢNG VIÊN'],
+         ['BẢNG KÊ CHI TIẾT LƯƠNG GIÁO VIÊN'],
          [`Kỳ chấm công: Tháng ${globalDate.getMonth() + 1} / ${globalDate.getFullYear()}`],
-         ['Tên giảng viên:', activeTeacher.tennv],
+         ['Tên giáo viên:', activeTeacher.tennv],
          ['Ngày xuất:', new Date().toLocaleDateString('vi-VN')],
          [''],
          ['STT', 'Tên Lớp', 'Lịch Học', 'Phân Loại', 'Số buổi dạy', 'Lương/Buổi', 'Thành tiền']
@@ -509,7 +509,7 @@ export default function TimesheetManager() {
                {!activeTeacher ? (
                   <div className="tm-empty-state">
                      <Clock size={48} className="text-muted" style={{ opacity: 0.3, marginBottom: '20px' }} />
-                     <h3>Chọn Giảng Viên</h3>
+                     <h3>Chọn Giáo Viên</h3>
                      <p>Bấm vào danh sách bên trái để lấy danh sách lớp học và bắt đầu chấm công ghi nhận lương.</p>
                   </div>
                ) : (
@@ -754,7 +754,7 @@ export default function TimesheetManager() {
                   </div>
 
                   <div style={{ textAlign: 'right' }}>
-                     <div>Giảng viên: <b>{activeTeacher.manv}</b></div>
+                     <div>Giáo viên: <b>{activeTeacher.manv}</b></div>
                      <div>
                         Ngày in:{" "}
                         {new Date().toLocaleDateString("vi-VN")}
@@ -769,7 +769,7 @@ export default function TimesheetManager() {
 
                {/* TITLE */}
                <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "18pt", margin: "10px 0" }}>
-                  PHIẾU LƯƠNG GIẢNG VIÊN
+                  PHIẾU LƯƠNG GIÁO VIÊN
                </div>
 
                {/* INFO */}
@@ -781,7 +781,7 @@ export default function TimesheetManager() {
                   </div>
 
                   <div>
-                     Chức vụ: <b>{activeTeacher.chucvu || 'Giảng Viên'}</b>
+                     Chức vụ: <b>{activeTeacher.chucvu || 'Giáo Viên'}</b>
                   </div>
 
                   {/* BẢNG LƯƠNG */}
