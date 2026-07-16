@@ -407,14 +407,14 @@ const ConfigManager = () => {
               </label>
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền ăn 1 ngày</label>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Các mức tiền ăn/ngày (mỗi mức 1 dòng)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
-                      type="text"
-                      value={formatCurrency(formData.trutienan || '')}
-                      onChange={(e) => setFormData({ ...formData, trutienan: e.target.value.replace(/,/g, '').replace(/\D/g, '') })}
-                      placeholder="VD: 30,000"
-                      style={{ fontSize: '0.9rem', padding: '4px 8px', flex: 1 }}
+                    <textarea
+                      rows="3"
+                      value={formData.trutienan || ''}
+                      onChange={(e) => setFormData({ ...formData, trutienan: e.target.value })}
+                      placeholder="VD:&#10;Không ăn sáng: 30000&#10;Ăn sáng: 40000"
+                      style={{ fontSize: '0.9rem', padding: '8px', width: '100%', resize: 'vertical', border: '1px solid #ccc', borderRadius: '4px' }}
                     />
                   </div>
                 </div>

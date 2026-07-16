@@ -189,6 +189,19 @@ export default function InvoiceManager() {
       { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
    ].filter(w => w.name && w.name.trim() !== '') : []);
 
+   const mealTiers = [];
+   if (config?.trutienan) {
+      const lines = String(config.trutienan).split('\n').map(l => l.trim()).filter(Boolean);
+      lines.forEach(line => {
+         const parts = line.split(':');
+         if (parts.length === 2) {
+            mealTiers.push({ name: parts[0].trim(), val: parseInt(parts[1].replace(/\D/g, ''), 10) || 0 });
+         } else {
+            mealTiers.push({ name: line, val: parseInt(line.replace(/\D/g, ''), 10) || 0 });
+         }
+      });
+   }
+
    const [students, setStudents] = useState([]);
    const [classes, setClasses] = useState([]);
    const [employees, setEmployees] = useState([]);
@@ -591,16 +604,18 @@ export default function InvoiceManager() {
             if (recentDoc.tienan) {
                try {
                   const taData = typeof recentDoc.tienan === 'string' ? JSON.parse(recentDoc.tienan) : recentDoc.tienan;
-                  if (taData && taData.amount) {
-                     const tierKey = String(taData.amount);
-                     if (config?.trutienan && config.trutienan[tierKey]) {
-                        selectedTienAnTier = { amount: taData.amount, ...config.trutienan[tierKey] };
-                     }
+                  if (taData && taData.tierName) {
+                     const found = mealTiers.find(t => t.name === taData.tierName);
+                     if (found) selectedTienAnTier = found;
                   }
                } catch (e) {
                   console.error('Error parsing tienan from recent Doc:', e);
                }
             }
+         }
+         
+         if (!selectedTienAnTier && mealTiers.length > 0) {
+            selectedTienAnTier = mealTiers[0];
          }
 
       } catch (err) {
@@ -909,7 +924,7 @@ export default function InvoiceManager() {
    const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
    // Tính tiền ăn (Số ngày học + nghỉ không phép) * số tiền ăn 1 ngày
-   const dailyMealFee = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+   const dailyMealFee = invoiceData.selectedTienAnTier ? invoiceData.selectedTienAnTier.val : 0;
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
    // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
@@ -999,7 +1014,7 @@ export default function InvoiceManager() {
          malop: activeClass?.malop || '',
          thoiluong: currentTimePeriod,
          sobuoihoc: sobuoihocFinal,
-         tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee }) : null
+         tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee, tierName: invoiceData.selectedTienAnTier?.name, val: invoiceData.selectedTienAnTier?.val }) : null
       };
 
       try {
@@ -1114,7 +1129,7 @@ export default function InvoiceManager() {
             thoiluong: currentTimePeriod,
             sobuoihoc: sobuoihocFinal,
             nocu: formatCurrency(noCu),
-            tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee }) : null
+            tienan: monthlyMealFee > 0 ? JSON.stringify({ days: workingDaysCount, amount: monthlyMealFee, tierName: invoiceData.selectedTienAnTier?.name, val: invoiceData.selectedTienAnTier?.val }) : null
          };
 
          const res = await supabase.from('tbl_hd').insert([insertData]);
@@ -1483,8 +1498,24 @@ export default function InvoiceManager() {
                            </div>
                            <div className="im-fi-item">
                               <label>Tiền ăn</label>
-                              <div className="fi-val-display text-primary" style={{ height: '38px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }}>
-                                 {monthlyMealFee > 0 ? `${formatCurrency(monthlyMealFee)} ₫` : '0 ₫'}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                                 {mealTiers.length > 0 && (
+                                    <select
+                                       value={invoiceData.selectedTienAnTier?.name || ''}
+                                       onChange={(e) => {
+                                          const tier = mealTiers.find(t => t.name === e.target.value);
+                                          setInvoiceData(prev => ({ ...prev, selectedTienAnTier: tier }));
+                                       }}
+                                       style={{ padding: '4px', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', height: '38px', fontSize: '0.9rem' }}
+                                    >
+                                       {mealTiers.map((t, idx) => (
+                                          <option key={idx} value={t.name}>{t.name} ({formatCurrency(t.val)})</option>
+                                       ))}
+                                    </select>
+                                 )}
+                                 <div className="fi-val-display text-primary" style={{ height: '38px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }}>
+                                    {monthlyMealFee > 0 ? `${formatCurrency(monthlyMealFee)} ₫` : '0 ₫'}
+                                 </div>
                               </div>
                            </div>
                            <div className="im-fi-item">

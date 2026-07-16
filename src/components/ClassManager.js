@@ -166,6 +166,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
   ].filter(w => w.name && w.name.trim() !== '') : []), [config]);
 
+  const mealTiers = React.useMemo(() => {
+    const tiers = [];
+    if (config?.trutienan) {
+      const lines = String(config.trutienan).split('\n').map(l => l.trim()).filter(Boolean);
+      lines.forEach(line => {
+        const parts = line.split(':');
+        if (parts.length === 2) {
+          tiers.push({ name: parts[0].trim(), val: parseInt(parts[1].replace(/\D/g, ''), 10) || 0 });
+        } else {
+          tiers.push({ name: line, val: parseInt(line.replace(/\D/g, ''), 10) || 0 });
+        }
+      });
+    }
+    return tiers;
+  }, [config?.trutienan]);
+
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -362,7 +378,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   };
 
   const openSelectionAlert = (title, message) => {
-    setSelectionAlert({ open: true, title, message });
+    window.alert(message);
   };
 
   useEffect(() => {
@@ -452,8 +468,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       // 1. Fetch latest docs to determine attendance range (previous cycle) AND fetch current debt/overpayment
       const studentIds = activeStudents.map(s => s.mahv);
       const [{ data: allHDs }, { data: allTBs }, { data: debtHDs }, { data: debtBills }] = await Promise.all([
-        supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
-        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa').in('mahv', studentIds),
+        supabase.from('tbl_hd').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa, tienan').in('mahv', studentIds),
+        supabase.from('tbl_thongbao').select('mahv, ngaybatdau, ngayketthuc, ngaylap, mahd, thoiluong, daxoa, tienan').in('mahv', studentIds),
         supabase.from('tbl_hd').select('mahv, conno, daxoa').in('mahv', studentIds),
         supabase.from('tbl_billhanghoa').select('mahv, conno, daxoa, daxacnhan').in('mahv', studentIds)
       ]);
@@ -481,12 +497,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       };
 
       const studentRanges = {};
+      const studentTienAnTiers = {};
       activeStudents.forEach(s => {
         const docs = [
           ...(allHDs || []).filter(x => x.mahv === s.mahv && (x.daxoa || '').toLowerCase() !== 'đã xóa'),
           ...(allTBs || []).filter(x => x.mahv === s.mahv && (x.daxoa || '').toLowerCase() !== 'đã xóa')
         ].sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
 
+        let lastTienAnTier = mealTiers.length > 0 ? mealTiers[0] : null;
         const recent = docs[0];
         if (recent) {
           let sStart = ensureIsoDate(recent.ngaybatdau);
@@ -502,9 +520,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               sEnd = new Date(yyyy, mm + 1, 0).toISOString().split('T')[0];
             }
           }
-
+          if (recent.tienan) {
+             try {
+                const taData = typeof recent.tienan === 'string' ? JSON.parse(recent.tienan) : recent.tienan;
+                if (taData && taData.tierName) {
+                   const found = mealTiers.find(t => t.name === taData.tierName);
+                   if (found) lastTienAnTier = found;
+                }
+             } catch(e){}
+          }
           if (sStart && sEnd) studentRanges[s.mahv] = { start: sStart, end: sEnd };
         }
+        studentTienAnTiers[s.mahv] = lastTienAnTier;
       });
 
       const trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
@@ -582,7 +609,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const consecutiveGroups = calculateConsecutiveLeave(studentAttendance);
         const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
         const soNgayNghi = nghiPhep + nghiKP;
-        const dailyMealFee = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+        const selectedTienAnTier = studentTienAnTiers[s.mahv];
+        const dailyMealFee = selectedTienAnTier ? selectedTienAnTier.val : 0;
         const mealRefund = 0; // Không hoàn trả tiền ăn nữa
         const workingDays = calculateWorkingDaysInMonth(startStr);
         const isMonthly = (initLoaiDong.toLowerCase().includes('tháng') || initLoaiDong.toLowerCase().includes('khóa'));
@@ -614,6 +642,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         return {
           mahv: s.mahv,
           tenhv: s.tenhv,
+          selectedTienAnTier,
           sobuoihoc: `${initSoLuong} ${initLoaiDong.toLowerCase()}`,
           hocphi: initHocPhi,
           tienan: monthlyMealFee,
@@ -758,7 +787,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const consecutiveGroups = calculateConsecutiveLeave(stAttendance);
       const maxConsecutive = consecutiveGroups.length > 0 ? Math.max(...consecutiveGroups.map(g => g.length)) : 0;
       
-      const dailyMealFee = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const dailyMealFee = item.selectedTienAnTier ? item.selectedTienAnTier.val : 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
       
       const newTruTienAn = 0; // Không hoàn trả tiền ăn nữa
@@ -802,7 +831,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     setBatchStudentsData(prev => (prev || []).map(item => {
       let sobuoi = `${batchNoticeData.soLuong} ${batchNoticeData.loaiDong.toLowerCase()}`;
-      const dailyMealFee = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const dailyMealFee = item.selectedTienAnTier ? item.selectedTienAnTier.val : 0;
       const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
       const isMonthly = (batchNoticeData.loaiDong.toLowerCase().includes('tháng') || batchNoticeData.loaiDong.toLowerCase().includes('khóa'));
       const monthlyMealFee = isMonthly ? ((item.coMat || 0) + (item.nghiKP || 0)) * dailyMealFee : 0;
@@ -853,8 +882,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let newItem = { ...item, [field]: cleanVal };
 
         // Auto recalculate refunds if leave days or meal tier change
-        if (field === 'nghiPhep' || field === 'maxConsecutive' || field === 'coMat' || field === 'nghiKP') {
-          const dailyMealFee = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+        if (field === 'nghiPhep' || field === 'maxConsecutive' || field === 'coMat' || field === 'nghiKP' || field === 'selectedTienAnTier') {
+          const dailyMealFee = newItem.selectedTienAnTier ? newItem.selectedTienAnTier.val : 0;
           const isMonthly = (batchNoticeData.loaiDong.toLowerCase().includes('tháng') || batchNoticeData.loaiDong.toLowerCase().includes('khóa'));
           if (isMonthly) {
              newItem.tienan = ((newItem.coMat || 0) + (newItem.nghiKP || 0)) * dailyMealFee;
@@ -924,7 +953,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           hocphi: formatTuition(row.hocphi),
           tienan: row.tienan > 0 ? JSON.stringify({
             days: calculateWorkingDaysInMonth(row.ngaybatdau),
-            amount: row.tienan
+            amount: row.tienan,
+            tierName: row.selectedTienAnTier?.name,
+            val: row.selectedTienAnTier?.val
           }) : null,
           giamhocphi: formatTuition(row.giamhocphi),
           trutienan: formatTuition(row.trutienan),
@@ -2007,8 +2038,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'visible', width: 'fit-content', minWidth: '100%' }}>
                   <div className="inline-table" style={{ width: '100%', overflow: 'visible' }}>
+                    <style>{`
+                      .data-table th {
+                        position: sticky;
+                        top: 0;
+                        background: #f8fafc;
+                        z-index: 10;
+                      }
+                      .data-table thead {
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                      }
+                    `}</style>
                     <table className="data-table" style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '1500px', width: '100%' }}>
-                      <thead style={{ position: 'sticky', top: '-15px', background: '#f8fafc', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                      <thead style={{ background: '#f8fafc' }}>
                         <tr style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           <th style={{ width: '40px', padding: '12px' }}></th>
                           <th style={{ width: '40px', minWidth: '40px' }}>STT</th>
@@ -2016,7 +2058,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '160px' }}>Học Sinh</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Thời lượng</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Học phí</th>
-                          <th style={{ width: '130px', minWidth: '130px' }}>Tiền ăn</th>
+                          <th style={{ width: '230px', minWidth: '230px' }}>Tiền ăn</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Phụ Thu</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Nợ Cũ</th>
@@ -2054,13 +2096,30 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               />
                             </td>
                             <td>
-                              <input
-                                type="text"
-                                value={formatTuition(row.tienan)}
-                                onChange={e => handleBatchStudentChange(row.mahv, 'tienan', e.target.value)}
-                                className="td-input"
-                                style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
-                              />
+                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                 {mealTiers.length > 0 && (
+                                    <select
+                                       value={row.selectedTienAnTier?.name || ''}
+                                       onChange={(e) => {
+                                          const tier = mealTiers.find(t => t.name === e.target.value);
+                                          handleBatchStudentChange(row.mahv, 'selectedTienAnTier', tier);
+                                       }}
+                                       className="td-input"
+                                       style={{ flex: 1, minWidth: '100px', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }}
+                                    >
+                                       {mealTiers.map((t, idx) => (
+                                          <option key={idx} value={t.name}>{t.name} ({formatTuition(t.val)})</option>
+                                       ))}
+                                    </select>
+                                 )}
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.tienan)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'tienan', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '90px', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
+                                />
+                              </div>
                             </td>
                             <td>
                               <input
