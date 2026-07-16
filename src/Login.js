@@ -480,10 +480,10 @@ function Login() {
                      </div>
                   )}
 
-                  <form onSubmit={loginMode === 'login' ? handleLogin : handleParentLogin} className="login-form">
+                  <form onSubmit={loginMode === 'parent' ? handleParentLogin : handleLogin} className="login-form">
                      <div className="input-group">
                         <div className="input-icon"><User size={18} /></div>
-                        <input type="text" placeholder={loginMode === 'login' ? "Tên đăng nhập nhân viên" : "Tên đăng nhập phụ huynh"} value={username} onChange={(e) => setUsername(e.target.value)} />
+                        <input type="text" placeholder={loginMode === 'parent' ? "Tên đăng nhập phụ huynh" : "Tên đăng nhập nhân viên"} value={username} onChange={(e) => setUsername(e.target.value)} />
                      </div>
 
                      <div className="input-group">
@@ -517,7 +517,7 @@ function Login() {
                            <Key size={18} />
                         </button>
                         <button
-                           onClick={() => { setAttendanceUser(null); setPassword(''); }}
+                           onClick={() => { setAttendanceUser(null); setPassword(''); setLoginMode('login'); }}
                            title="Đăng xuất"
                            style={{ width: '36px', height: '36px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fee2e2', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}
                         >
