@@ -608,12 +608,13 @@ function ParentPortal({ parentData, setParentData }) {
 
          // Save subscription to Supabase
          if (parentData?.student?.mahv) {
-            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+            await supabase.from('push_subscriptions').delete().match({ user_id: parentData.student.mahv, role: 'parent' });
+            const { error: dbError } = await supabase.from('push_subscriptions').insert({
                user_id: parentData.student.mahv,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id,role' });
+            });
 
             if (dbError) {
                console.error('Lỗi khi lưu Subscription vào DB:', dbError);
@@ -660,12 +661,13 @@ function ParentPortal({ parentData, setParentData }) {
                applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
             });
 
-            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+            await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
+            const { error: dbError } = await supabase.from('push_subscriptions').insert({
                user_id: studentId,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id,role' });
+            });
 
             if (dbError) {
                console.error('Lỗi khi làm mới Subscription:', dbError);
@@ -1939,11 +1941,12 @@ function ParentPortal({ parentData, setParentData }) {
       syncAppBadge(totalUnread);
    };
 
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
       if (!parentData) return;
 
       refreshLatestFeeData();
-   }, [parentData?.student?.mahv, refreshLatestFeeData]);
+   }, [parentData?.student?.mahv]);
 
    // ── Sync on Foreground / Push Received ────────────────────────────────────
    useEffect(() => {

@@ -312,9 +312,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                updated_at: new Date().toISOString()
             }));
 
+            await supabase.from('push_subscriptions').delete().in('user_id', teacherIds).eq('role', 'teacher');
             const { error: dbError } = await supabase
                .from('push_subscriptions')
-               .upsert(payloads, { onConflict: 'user_id' });
+               .insert(payloads);
 
             if (dbError) console.error('Lỗi khi làm mới subscription giáo viên:', dbError);
          } catch (err) {
@@ -493,9 +494,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             updated_at: new Date().toISOString()
          }));
 
+         await supabase.from('push_subscriptions').delete().in('user_id', teacherIds).eq('role', 'teacher');
          const { error: dbError } = await supabase
             .from('push_subscriptions')
-            .upsert(payloads, { onConflict: 'user_id' });
+            .insert(payloads);
 
          if (dbError) throw dbError;
 
