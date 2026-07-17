@@ -285,8 +285,8 @@ serve(async (req) => {
     const pushPayload = JSON.stringify({
       title: context.message.title,
       body: context.message.body,
-      icon: "/logo192.png",
-      badge: "/logo192.png",
+      icon: "/appleicon.png",
+      badge: "/appleicon.png",
       url: context.message.url,
       badgeCount: context.message.badgeCount,
       incrementBadgeBy: context.message.incrementBadgeBy,

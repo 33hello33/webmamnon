@@ -1,8 +1,8 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-const CACHE_NAME = 'kindergarten-v3';
-const META_CACHE_NAME = 'kindergarten-meta-v1';
+const CACHE_NAME = 'kindergarten-v4';
+const META_CACHE_NAME = 'kindergarten-meta-v2';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
   '/',
@@ -17,6 +17,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
+      .then(() => self.clients.claim())
   );
 });
 

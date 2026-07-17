@@ -307,6 +307,9 @@ function ParentPortal({ parentData, setParentData }) {
    const [staffDirectory, setStaffDirectory] = useState({});
    const leaveSubmitLockRef = useRef(false);
    const medicineSubmitLockRef = useRef(false);
+   const parentDataRef = useRef(parentData);
+   // Always keep parentDataRef pointing to the latest parentData so realtime callbacks never read stale state
+   parentDataRef.current = parentData;
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
    const parentChildren = React.useMemo(() => {
@@ -596,7 +599,7 @@ function ParentPortal({ parentData, setParentData }) {
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id' });
+            }, { onConflict: 'user_id,role' });
 
             if (dbError) {
                console.error('Lỗi khi lưu Subscription vào DB:', dbError);
@@ -648,7 +651,7 @@ function ParentPortal({ parentData, setParentData }) {
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id' });
+            }, { onConflict: 'user_id,role' });
 
             if (dbError) {
                console.error('Lỗi khi làm mới Subscription:', dbError);
@@ -1800,12 +1803,15 @@ function ParentPortal({ parentData, setParentData }) {
    };
 
    const fetchUnreads = async () => {
-      if (!parentData) return;
+      // Use parentDataRef.current to always read the latest parentData,
+      // even when called from inside a realtime channel closure where parentData would be stale.
+      const currentParentData = parentDataRef.current;
+      if (!currentParentData) return;
 
       let totalUnread = 0;
 
       // 1. Fetch Chat Unreads
-      const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', parentData.student.mahv).is('is_read', false);
+      const { data: chatData } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', currentParentData.student.mahv).is('is_read', false);
       let chatCount = 0;
       if (chatData) {
          chatData.forEach(d => {
@@ -1817,11 +1823,11 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
-      const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', parentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
-      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', parentData.student.malop).eq('approved', true).order('created_at', { ascending: false }).limit(20);
+      const { data: generalNotices } = await supabase.from('tbl_thongbao').select('id, ngaylap').eq('mahv', currentParentData.student.mahv).order('ngaylap', { ascending: false }).limit(1);
+      const { data: classAnnouncements } = await supabase.from('class_announcements').select('id, created_at, title').eq('malop', currentParentData.student.malop).eq('approved', true).order('created_at', { ascending: false }).limit(20);
 
       // Notices (General + Class excluding Menu/NgoaiKhoa)
-      const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${parentData.student.mahv}`) || '0');
+      const lastNoticeTime = parseInt(localStorage.getItem(`last_notice_time_${currentParentData.student.mahv}`) || '0');
       const latestGenNotice = generalNotices?.[0];
       const classNotices = (classAnnouncements || []).filter(n => {
          const t = String(n.title || '').toUpperCase().trim();
@@ -1841,7 +1847,7 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // Menu
-      const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${parentData.student.mahv}`) || '0');
+      const lastMenuTime = parseInt(localStorage.getItem(`last_menu_time_${currentParentData.student.mahv}`) || '0');
       const latestMenu = (classAnnouncements || []).find(n => String(n.title || '').toUpperCase().trim() === 'THỰC ĐƠN');
       const currentLatestMenuTime = latestMenu ? new Date(latestMenu.created_at).getTime() : 0;
       if (currentLatestMenuTime > lastMenuTime) {
@@ -1852,7 +1858,7 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // Ngoai Khoa
-      const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${parentData.student.mahv}`) || '0');
+      const lastNgoaiKhoaTime = parseInt(localStorage.getItem(`last_ngoaikhoa_time_${currentParentData.student.mahv}`) || '0');
       const latestNgoaiKhoa = getActiveNgoaiKhoaAnnouncements(classAnnouncements || [])[0];
       const currentLatestNgoaiKhoaTime = latestNgoaiKhoa ? new Date(latestNgoaiKhoa.created_at).getTime() : 0;
       if (currentLatestNgoaiKhoaTime > lastNgoaiKhoaTime) {
@@ -1863,7 +1869,7 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // Chuong trinh hoc
-      const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${parentData.student.mahv}`) || '0');
+      const lastChuongTrinhHocTime = parseInt(localStorage.getItem(`last_chuongtrinhhoc_time_${currentParentData.student.mahv}`) || '0');
       const latestChuongTrinhHoc = (classAnnouncements || []).find(n => String(n.title || '').toUpperCase().trim() === 'CHƯƠNG TRÌNH HỌC');
       const currentLatestChuongTrinhHocTime = latestChuongTrinhHoc ? new Date(latestChuongTrinhHoc.created_at).getTime() : 0;
       if (currentLatestChuongTrinhHocTime > lastChuongTrinhHocTime) {
@@ -1874,8 +1880,8 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // 3. Fetch Health Unreads
-      const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${parentData.student.mahv}`) || '0');
-      const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', parentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
+      const lastHealthTime = parseInt(localStorage.getItem(`last_health_time_${currentParentData.student.mahv}`) || '0');
+      const { data: latestHealth } = await supabase.from('suckhoedinhky').select('id, ngay').eq('mahv', currentParentData.student.mahv).order('ngay', { ascending: false }).limit(1).maybeSingle();
       const currentLatestHealthTime = latestHealth ? new Date(latestHealth.ngay).getTime() : 0;
       if (currentLatestHealthTime > lastHealthTime) {
          setUnreadHealth(1);
@@ -1885,8 +1891,8 @@ function ParentPortal({ parentData, setParentData }) {
       }
 
       // 4. Fetch Tuition (latestFee) Unreads
-      const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${parentData.student.mahv}`) || '0');
-      const latestFee = parentData?.latestFee;
+      const lastFeeTime = parseInt(localStorage.getItem(`last_fee_time_${currentParentData.student.mahv}`) || '0');
+      const latestFee = currentParentData?.latestFee;
       if (latestFee) {
          const currentFeeTime = new Date(latestFee.ngaylap).getTime();
          if (currentFeeTime > lastFeeTime) {
