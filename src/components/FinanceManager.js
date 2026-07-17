@@ -107,7 +107,7 @@ const READ_NUMBER_VN = (number) => {
    return result.charAt(0).toUpperCase() + result.slice(1);
 };
 
-const ConfirmActionModal = ({ isOpen, title, message, actionType, onCancel, onConfirm }) => {
+const ConfirmActionModal = ({ isOpen, title, message, actionType, onCancel, onConfirm, requirePassword = true }) => {
    const [password, setPassword] = useState('');
 
    useEffect(() => {
@@ -138,7 +138,7 @@ const ConfirmActionModal = ({ isOpen, title, message, actionType, onCancel, onCo
                {message}
             </p>
 
-            {actionType && (
+            {actionType && requirePassword && (
                <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
                   <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
                   <input
@@ -743,7 +743,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          title: 'Xác nhận tạo hóa đơn',
          message: `Bạn có chắc chắn muốn tạo hóa đơn học phí từ phiếu thông báo [${r.mahd}] không?`,
          actionType: 'CREATE_INVOICE',
-         payload: { notice: r }
+         payload: { notice: r },
+         requirePassword: false
       });
    };
 
@@ -767,11 +768,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
       } else if (confirmDialog.actionType === 'CREATE_INVOICE') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (submittedPassword !== auth.user?.password) {
-            alert('Mật khẩu không đúng, vui lòng thử lại!');
-            return;
-         }
-
          const { notice } = confirmDialog.payload;
          const currentUser = auth.user?.username || auth.user?.tennv || 'Hệ thống';
          const manv = auth.user?.manv || '';
@@ -797,8 +793,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             giamhocphi: notice.giamhocphi || null,
             phuthu: notice.phuthu || null,
             tongcong: notice.tongcong || null,
-            dadong: notice.dadong || null,
-            conno: notice.conno || null,
+            dadong: notice.tongcong || null,
+            conno: '0',
             hinhthuc: notice.hinhthuc || null,
             ghichu: notice.ghichu || null,
             daxoa: null,
@@ -819,8 +815,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          } else {
             insertLog(`[TẠO HÓA ĐƠN] Từ TB: ${notice.mahd} -> HĐ: ${newMaHD}`);
             await supabase.from('tbl_thongbao').update({ daxoa: 'Đã tạo HĐ' }).eq('mahd', notice.mahd);
-            fetchData();
-            alert('Tạo hóa đơn thành công!');
+            await fetchData();
+            setTimeout(() => {
+               alert('Tạo hóa đơn thành công!');
+            }, 100);
          }
       } else if (confirmDialog.actionType === 'EDIT_BILL') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -1206,9 +1204,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       tbList.forEach(item => {
          const mahv = item.mahv;
          if (!mahv) return;
+         if (isDeleted(item)) return;
+
          const d = new Date(item.ngaylap).getTime();
-         
-         if (!isDeleted(item) && latestHdMap[mahv] && latestHdMap[mahv] >= d) return;
+         if (latestHdMap[mahv] && latestHdMap[mahv] >= d) return;
 
          if (!tbMap[mahv] || d > tbMap[mahv].time) {
             tbMap[mahv] = { time: d, record: item };
@@ -2103,6 +2102,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             )}
 
             <div className="fm-stats-grid">
+               <div className="fm-stat-card" onClick={() => handleTabClick('hoadon')} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-hocphi"><GraduationCap size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Thu học phí</span>
+                     <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
+                  </div>
+               </div>
                <div className="fm-stat-card" onClick={() => handleTabClick('phieuchi', 'Chi')} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-chi"><TrendingDown size={24} /></div>
                   <div className="fm-stat-info">
@@ -2115,13 +2121,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Nhập kho</span>
                      <span className="fm-stat-value" style={{ color: '#ec4899' }}>{fCur(stats.nhapKho)}</span>
-                  </div>
-               </div>
-               <div className="fm-stat-card" onClick={() => handleTabClick('hoadon')} style={{ cursor: 'pointer' }}>
-                  <div className="fm-stat-icon ico-hocphi"><GraduationCap size={24} /></div>
-                  <div className="fm-stat-info">
-                     <span className="fm-stat-label">Thu học phí</span>
-                     <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
                   </div>
                </div>
                <div className="fm-stat-card" onClick={() => handleTabClick('billhang')} style={{ cursor: 'pointer' }}>
@@ -2931,6 +2930,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             actionType={confirmDialog.actionType}
             onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
             onConfirm={executeConfirmAction}
+            requirePassword={confirmDialog.requirePassword !== false}
          />
 
          <EditInvoiceModal
