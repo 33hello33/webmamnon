@@ -1,7 +1,8 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-const CACHE_NAME = 'kindergarten-v4';
+// v5 - non-blocking install to fix activation timeout on mobile
+const CACHE_NAME = 'kindergarten-v5';
 const META_CACHE_NAME = 'kindergarten-meta-v2';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
@@ -13,11 +14,15 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', event => {
+  // skipWaiting FIRST so SW moves to activate immediately
   self.skipWaiting();
+  // Cache files individually - don't let any single failure block SW activation
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-      .then(() => self.clients.claim())
+    caches.open(CACHE_NAME).then(cache => {
+      return Promise.allSettled(
+        urlsToCache.map(url => cache.add(url).catch(() => { /* ignore cache failures */ }))
+      );
+    })
   );
 });
 
