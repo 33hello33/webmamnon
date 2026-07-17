@@ -595,7 +595,11 @@ function ParentPortal({ parentData, setParentData }) {
          };
 
          const existingSubscription = await registration.pushManager.getSubscription();
-         const subscription = existingSubscription || await registration.pushManager.subscribe({
+         if (existingSubscription) {
+            await existingSubscription.unsubscribe();
+         }
+         
+         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });

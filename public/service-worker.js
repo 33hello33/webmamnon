@@ -191,17 +191,27 @@ self.addEventListener('push', event => {
 
     event.waitUntil(
       (async () => {
-        const nextBadgeCount = Number.isFinite(incomingBadgeCount)
-          ? Math.max(0, incomingBadgeCount)
-          : (await readStoredBadgeCount()) + (Number.isFinite(incrementBadgeBy) ? incrementBadgeBy : 1);
-
+        // Show notification first to guarantee it appears even if badge math fails
         await self.registration.showNotification(String(title), options);
-        await syncAppBadge(nextBadgeCount);
 
-        // Inform all open foreground clients so they can refresh state immediately
-        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        for (const client of clientList) {
-          client.postMessage({ type: 'PUSH_RECEIVED', payload: data });
+        try {
+          const nextBadgeCount = Number.isFinite(incomingBadgeCount)
+            ? Math.max(0, incomingBadgeCount)
+            : (await readStoredBadgeCount()) + (Number.isFinite(incrementBadgeBy) ? incrementBadgeBy : 1);
+          
+          await syncAppBadge(nextBadgeCount);
+        } catch (badgeErr) {
+          console.error('Failed to sync badge during push', badgeErr);
+        }
+
+        try {
+          // Inform all open foreground clients so they can refresh state immediately
+          const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+          for (const client of clientList) {
+            client.postMessage({ type: 'PUSH_RECEIVED', payload: data });
+          }
+        } catch (msgErr) {
+          console.error('Failed to postMessage to clients', msgErr);
         }
       })()
     );
