@@ -162,7 +162,13 @@ self.addEventListener('push', event => {
   if (!event.data) return;
 
   try {
-    const data = event.data.json();
+    let data = {};
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { body: event.data.text() };
+    }
+
     const incomingBadgeCount = Number(data.badgeCount);
     const incrementBadgeBy = Number(data.incrementBadgeBy ?? 1);
     const title = data.title || 'Thông báo mới';
