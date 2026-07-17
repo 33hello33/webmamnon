@@ -1057,7 +1057,9 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          })
          .subscribe();
 
-      return () => supabase.removeChannel(channel);
+      return () => {
+         supabase.removeChannel(channel);
+      };
    // Keyed only on teacher identity — NOT attAllStudents
    }, [attendanceUser?.manv, attendanceUser?.username]);
 

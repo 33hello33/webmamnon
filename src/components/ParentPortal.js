@@ -308,8 +308,11 @@ function ParentPortal({ parentData, setParentData }) {
    const leaveSubmitLockRef = useRef(false);
    const medicineSubmitLockRef = useRef(false);
    const parentDataRef = useRef(parentData);
-   // Always keep parentDataRef pointing to the latest parentData so realtime callbacks never read stale state
+   const parentTabRef = useRef(parentTab);
+   const previousChatCountRef = useRef(0);
+   // Always keep refs pointing to the latest data so realtime/polling callbacks never read stale state
    parentDataRef.current = parentData;
+   parentTabRef.current = parentTab;
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
    const parentChildren = React.useMemo(() => {
@@ -1821,6 +1824,25 @@ function ParentPortal({ parentData, setParentData }) {
          });
          setUnreadChatCount(chatCount);
          totalUnread += chatCount;
+
+         if (chatCount > previousChatCountRef.current) {
+            if (parentTabRef.current === 'chat-tab') {
+               // If user is already on chat tab, automatically fetch new messages and mark as read
+               // We use a timeout to ensure state updates have propagated
+               setTimeout(() => {
+                  fetchChatMessages();
+                  const markThread = async () => {
+                     const { data: toUpdate } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', currentParentData.student.mahv).is('is_read', false);
+                     if (toUpdate) {
+                        const ids = toUpdate.filter(d => Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH')).map(d => d.id);
+                        if (ids.length > 0) await supabase.from('hv_messages').update({ is_read: true }).in('id', ids);
+                     }
+                  };
+                  markThread();
+               }, 100);
+            }
+         }
+         previousChatCountRef.current = chatCount;
       }
 
       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
