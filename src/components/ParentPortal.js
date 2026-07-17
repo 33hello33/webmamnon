@@ -618,6 +618,8 @@ function ParentPortal({ parentData, setParentData }) {
 
             if (dbError) {
                console.error('Lỗi khi lưu Subscription vào DB:', dbError);
+               alert('Lỗi DB khi lưu đăng ký: ' + (dbError.message || JSON.stringify(dbError)));
+               return;
             }
          }
 
