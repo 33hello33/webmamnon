@@ -357,7 +357,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           file_url: announcement.file_url || null,
           file_name: announcement.file_name || '',
           file_mime_type: announcement.file_mime_type || '',
-          description
+          description,
+          is_read: false
         });
 
         if (announcement.image_url || announcement.file_url) {
@@ -428,7 +429,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
           file_url: attachmentType !== 'image' ? upload.url : null,
           file_name: upload.fileName,
           file_mime_type: upload.mimeType,
-          description: buildGroupedMessageDescription('', groupId)
+          description: buildGroupedMessageDescription('', groupId),
+          is_read: false
         };
 
         const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -1029,7 +1031,8 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
     const newMessage = {
       mahv: selectedStudent.mahv,
       manv: currentUser.manv || currentUser.username,
-      content: inputText
+      content: inputText,
+      is_read: false
     };
 
     const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
@@ -1598,7 +1601,8 @@ ${ngoaiKhoaForm.content}
           file_url: data.file_url || null,
           file_name: data.file_name || '',
           file_mime_type: data.file_mime_type || '',
-          description: buildGroupedMessageDescription('THONG_BAO')
+          description: buildGroupedMessageDescription('THONG_BAO'),
+          is_read: false
         }));
 
         if (chatPayloads.length > 0) {

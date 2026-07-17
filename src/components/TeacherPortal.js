@@ -1227,7 +1227,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                file_url: attachmentType !== 'image' ? upload.url : null,
                file_name: upload.fileName,
                file_mime_type: upload.mimeType,
-               description: buildGroupedMessageDescription('', groupId)
+               description: buildGroupedMessageDescription('', groupId),
+               is_read: false
             };
 
             const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -1271,7 +1272,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       const newMessage = {
          mahv: attChatSelectedStudent.mahv,
          manv: attendanceUser.manv || attendanceUser.username,
-         content: attChatInput
+         content: attChatInput,
+         is_read: false
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (!error && data) {
@@ -1340,7 +1342,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                image_url: type === 'image' ? finalUrl : null,
                file_url: type !== 'image' ? finalUrl : null,
                file_name: file.name,
-               file_mime_type: file.type
+               file_mime_type: file.type,
+               is_read: false
             };
 
             const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -1489,7 +1492,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      file_url: announcement.file_url || null,
                      file_name: announcement.file_name || '',
                      file_mime_type: announcement.file_mime_type || '',
-                     description: broadcastDescription
+                     description: broadcastDescription,
+                     is_read: false
                   });
 
                   if (announcement.image_url || announcement.file_url) {

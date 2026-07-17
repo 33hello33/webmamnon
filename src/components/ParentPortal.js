@@ -689,7 +689,8 @@ function ParentPortal({ parentData, setParentData }) {
          mahv: parentData.student.mahv,
          manv: parentData.teacherManv,
          content: content,
-         description: 'PH'
+         description: 'PH',
+         is_read: false
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) {
@@ -1911,6 +1912,41 @@ function ParentPortal({ parentData, setParentData }) {
       refreshLatestFeeData();
    }, [parentData?.student?.mahv, refreshLatestFeeData]);
 
+   // ── Sync on Foreground / Push Received ────────────────────────────────────
+   useEffect(() => {
+      const handleVisibilityChange = () => {
+         if (!document.hidden) {
+            fetchUnreads();
+            if (parentTab === 'chat-tab') {
+               fetchChatMessages();
+            }
+         }
+      };
+
+      const handleServiceWorkerMessage = (event) => {
+         const data = event.data || {};
+         if (data.type === 'PUSH_RECEIVED') {
+            fetchUnreads();
+            if (parentTab === 'chat-tab') {
+               fetchChatMessages();
+            }
+         }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+      }
+
+      return () => {
+         document.removeEventListener('visibilitychange', handleVisibilityChange);
+         if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+         }
+      };
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [parentTab]);
+
    // ── Stable Realtime subscriptions ──────────────────────────────────────────
    // Keyed ONLY on student identity so channels are NEVER torn down on tab switch.
    // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2169,7 +2205,8 @@ function ParentPortal({ parentData, setParentData }) {
          mahv: parentData.student.mahv,
          manv: parentData.teacherManv,
          content: chatInput,
-         description: 'PH'
+         description: 'PH',
+         is_read: false
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) { console.error('Lỗi khi gửi tin nhắn:', error); return; }
