@@ -418,11 +418,18 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          else if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
       }
 
-      if (navigator.serviceWorker?.controller) {
-         navigator.serviceWorker.controller.postMessage({
-            type: 'SYNC_APP_BADGE',
-            count: badgeCount
-         });
+      // Fallback for browsers/OS that don't support setAppBadge
+      document.title = badgeCount > 0 ? `(${badgeCount}) Mầm Non` : 'Mầm Non';
+
+      if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.ready.then(registration => {
+            if (registration.active) {
+               registration.active.postMessage({
+                  type: 'SYNC_APP_BADGE',
+                  count: badgeCount
+               });
+            }
+         }).catch(console.error);
       }
    };
 

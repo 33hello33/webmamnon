@@ -531,11 +531,18 @@ function ParentPortal({ parentData, setParentData }) {
          }
       }
 
-      if (navigator.serviceWorker?.controller) {
-         navigator.serviceWorker.controller.postMessage({
-            type: 'SYNC_APP_BADGE',
-            count: badgeCount
-         });
+      // Fallback for browsers/OS that don't support setAppBadge (e.g., Safari not added to Home Screen)
+      document.title = badgeCount > 0 ? `(${badgeCount}) Mầm Non` : 'Mầm Non';
+
+      if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.ready.then(registration => {
+            if (registration.active) {
+               registration.active.postMessage({
+                  type: 'SYNC_APP_BADGE',
+                  count: badgeCount
+               });
+            }
+         }).catch(console.error);
       }
    };
 
