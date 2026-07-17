@@ -245,9 +245,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       return getTeacherStaffDisplayName(message.manv);
    };
 
-   // Không tự động hỏi quyền thông báo khi mở app
-   // Chỉ hỏi khi người dùng chủ động nhấn nút bật thông báo
-
    useEffect(() => {
       const fetchStaffDirectory = async () => {
          const { data, error } = await supabase.from('tbl_nv').select('manv, tennv');
@@ -315,9 +312,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                updated_at: new Date().toISOString()
             }));
 
+            await supabase.from('push_subscriptions').delete().in('user_id', teacherIds).eq('role', 'teacher');
             const { error: dbError } = await supabase
                .from('push_subscriptions')
-               .upsert(payloads, { onConflict: 'user_id' });
+               .insert(payloads);
 
             if (dbError) console.error('Lỗi khi làm mới subscription giáo viên:', dbError);
          } catch (err) {
@@ -326,7 +324,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       };
 
       refreshSubscription();
-   // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [attendanceUser?.manv, attendanceUser?.username]);
 
    // ----- Attendance Features -----
@@ -405,7 +403,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       };
       navigator.serviceWorker?.addEventListener('message', handleSwMessage);
       return () => navigator.serviceWorker?.removeEventListener('message', handleSwMessage);
-   // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, []);
 
    // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -421,11 +419,18 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          else if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
       }
 
-      if (navigator.serviceWorker?.controller) {
-         navigator.serviceWorker.controller.postMessage({
-            type: 'SYNC_APP_BADGE',
-            count: badgeCount
-         });
+      // Fallback for browsers/OS that don't support setAppBadge
+      document.title = badgeCount > 0 ? `(${badgeCount}) Mầm Non` : 'Mầm Non';
+
+      if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.ready.then(registration => {
+            if (registration.active) {
+               registration.active.postMessage({
+                  type: 'SYNC_APP_BADGE',
+                  count: badgeCount
+               });
+            }
+         }).catch(console.error);
       }
    };
 
@@ -439,29 +444,57 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          return;
       }
 
-      try {
-         // Nếu đã từ chối thì hướng dẫn bật lại trong Cài đặt
-         if (Notification.permission === 'denied') {
-            alert(
-               'Thông báo đã bị tắt.\n\n' +
-               'Để nhận thông báo tin nhắn phụ huynh, vui lòng:\n' +
-               '• iOS: Vào Cài đặt → Safari → Thông báo → Bật cho trang web này\n' +
-               '• Android: Vào Cài đặt → Ứng dụng → Trình duyệt → Thông báo → Bật'
-            );
-            return;
-         }
+      // Handle already-denied case without calling requestPermission (avoids long block)
+      if (Notification.permission === 'denied') {
+         alert('Bạn đã tắt thông báo cho trang này. Để bật lại, hãy vào Cài đặt trình duyệt → Quyền riêng tư → Thông báo và cho phép trang này.');
+         return;
+      }
 
+      try {
          const permission = await Notification.requestPermission();
          if (permission !== 'granted') {
             alert('Bạn đã từ chối nhận thông báo. Hãy cho phép trong cài đặt trình duyệt để nhận được tin nhắn từ phụ huynh.');
             return;
          }
 
-         // Thêm timeout để tránh trường hợp serviceWorker.ready treo vô thời hạn trên Android
-         const swReadyTimeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Service Worker chưa sẵn sàng (timeout 10s). Vui lòng thử lại.')), 10000)
-         );
-         const registration = await Promise.race([navigator.serviceWorker.ready, swReadyTimeout]);
+         let registration;
+         try {
+            registration = await Promise.race([
+               navigator.serviceWorker.ready,
+               new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ]);
+         } catch (swErr) {
+            // Try to find existing registration first
+            const regs = await navigator.serviceWorker.getRegistrations();
+            if (regs.length > 0 && regs[0].active) {
+               registration = regs[0];
+            } else {
+               // Register fresh and wait for activation
+               try {
+                  const newReg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+                  // Wait up to 8s for activation
+                  registration = await Promise.race([
+                     new Promise(resolve => {
+                        if (newReg.active) { resolve(newReg); return; }
+                        const sw = newReg.installing || newReg.waiting;
+                        if (!sw) { resolve(newReg); return; }
+                        sw.addEventListener('statechange', function handler() {
+                           if (sw.state === 'activated') {
+                              sw.removeEventListener('statechange', handler);
+                              resolve(newReg);
+                           }
+                        });
+                     }),
+                     new Promise((_, reject) => setTimeout(() => reject(new Error('SW activation timeout')), 8000))
+                  ]);
+               } catch (regErr) {
+                  console.error('Không đăng ký được SW:', regErr);
+                  alert('Có lỗi xảy ra khi khởi tạo Service Worker.');
+                  return;
+               }
+            }
+         }
+
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
          const urlBase64ToUint8Array = (base64String) => {
@@ -476,7 +509,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          };
 
          const existingSubscription = await registration.pushManager.getSubscription();
-         const subscription = existingSubscription || await registration.pushManager.subscribe({
+         if (existingSubscription) {
+            await existingSubscription.unsubscribe();
+         }
+
+         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
@@ -494,9 +531,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             updated_at: new Date().toISOString()
          }));
 
+         await supabase.from('push_subscriptions').delete().in('user_id', teacherIds).eq('role', 'teacher');
          const { error: dbError } = await supabase
             .from('push_subscriptions')
-            .upsert(payloads, { onConflict: 'user_id' });
+            .insert(payloads);
 
          if (dbError) throw dbError;
 
@@ -1069,8 +1107,10 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          })
          .subscribe();
 
-      return () => supabase.removeChannel(channel);
-   // Keyed only on teacher identity — NOT attAllStudents
+      return () => {
+         supabase.removeChannel(channel);
+      };
+      // Keyed only on teacher identity — NOT attAllStudents
    }, [attendanceUser?.manv, attendanceUser?.username]);
 
    const scrollTeacherChatToBottom = () => {
@@ -1239,7 +1279,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                file_url: attachmentType !== 'image' ? upload.url : null,
                file_name: upload.fileName,
                file_mime_type: upload.mimeType,
-               description: buildGroupedMessageDescription('', groupId)
+               description: buildGroupedMessageDescription('', groupId),
+               is_read: false
             };
 
             const { data, error } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -1283,7 +1324,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       const newMessage = {
          mahv: attChatSelectedStudent.mahv,
          manv: attendanceUser.manv || attendanceUser.username,
-         content: attChatInput
+         content: attChatInput,
+         is_read: false
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (!error && data) {
@@ -1352,7 +1394,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                image_url: type === 'image' ? finalUrl : null,
                file_url: type !== 'image' ? finalUrl : null,
                file_name: file.name,
-               file_mime_type: file.type
+               file_mime_type: file.type,
+               is_read: false
             };
 
             const { data } = await supabase.from('hv_messages').insert([msgPayload]).select();
@@ -1501,7 +1544,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      file_url: announcement.file_url || null,
                      file_name: announcement.file_name || '',
                      file_mime_type: announcement.file_mime_type || '',
-                     description: broadcastDescription
+                     description: broadcastDescription,
+                     is_read: false
                   });
 
                   if (announcement.image_url || announcement.file_url) {
@@ -2358,11 +2402,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         <button type="button" onClick={closeClassBroadcastModal} disabled={uploading} style={{ padding: '0.8rem 1.1rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', cursor: 'pointer', fontWeight: 700 }}>
                            {'H\u1ee7y'}
                         </button>
-                           <button
-                              type="submit"
-                              disabled={uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0)}
-                              style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: classBroadcastMode === 'curriculum' ? '#0f766e' : '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0) ? 0.65 : 1 }}
-                           >
+                        <button
+                           type="submit"
+                           disabled={uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0)}
+                           style={{ padding: '0.8rem 1.15rem', borderRadius: '12px', border: 'none', background: classBroadcastMode === 'curriculum' ? '#0f766e' : '#ec4899', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: uploading || (!classBroadcastText.trim() && classBroadcastMedia.length === 0) ? 0.65 : 1 }}
+                        >
                            {uploading ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
                            <span>{classBroadcastMode === 'curriculum' ? 'Gửi chương trình học' : 'G\u1eedi t\u1edbi c\u1ea3 l\u1edbp'}</span>
                         </button>
