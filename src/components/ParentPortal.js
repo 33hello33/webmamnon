@@ -180,14 +180,14 @@ const formatNoticeTime = (dateStr) => {
 
    const now = new Date();
    const isToday = date.getFullYear() === now.getFullYear() &&
-                   date.getMonth() === now.getMonth() &&
-                   date.getDate() === now.getDate();
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
 
    const yesterday = new Date(now);
    yesterday.setDate(now.getDate() - 1);
    const isYesterday = date.getFullYear() === yesterday.getFullYear() &&
-                       date.getMonth() === yesterday.getMonth() &&
-                       date.getDate() === yesterday.getDate();
+      date.getMonth() === yesterday.getMonth() &&
+      date.getDate() === yesterday.getDate();
 
    if (isToday) {
       return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -308,8 +308,11 @@ function ParentPortal({ parentData, setParentData }) {
    const leaveSubmitLockRef = useRef(false);
    const medicineSubmitLockRef = useRef(false);
    const parentDataRef = useRef(parentData);
-   // Always keep parentDataRef pointing to the latest parentData so realtime callbacks never read stale state
+   const parentTabRef = useRef(parentTab);
+   const previousChatCountRef = useRef(0);
+   // Always keep refs pointing to the latest data so realtime/polling callbacks never read stale state
    parentDataRef.current = parentData;
+   parentTabRef.current = parentTab;
    const hotlineNumber = String(config?.sdtcongty || config?.hotline || config?.phone || '').trim();
    const normalizedHotlineNumber = hotlineNumber.replace(/[^\d]/g, '');
    const parentChildren = React.useMemo(() => {
@@ -528,11 +531,18 @@ function ParentPortal({ parentData, setParentData }) {
          }
       }
 
-      if (navigator.serviceWorker?.controller) {
-         navigator.serviceWorker.controller.postMessage({
-            type: 'SYNC_APP_BADGE',
-            count: badgeCount
-         });
+      // Fallback for browsers/OS that don't support setAppBadge (e.g., Safari not added to Home Screen)
+      document.title = badgeCount > 0 ? `(${badgeCount}) Mầm Non` : 'Mầm Non';
+
+      if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.ready.then(registration => {
+            if (registration.active) {
+               registration.active.postMessage({
+                  type: 'SYNC_APP_BADGE',
+                  count: badgeCount
+               });
+            }
+         }).catch(console.error);
       }
    };
 
@@ -567,12 +577,46 @@ function ParentPortal({ parentData, setParentData }) {
             return;
          }
 
-         const registration = await navigator.serviceWorker.ready;
+         let registration;
+         try {
+            registration = await Promise.race([
+               navigator.serviceWorker.ready,
+               new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ]);
+         } catch (swErr) {
+            // Try to find existing registration first
+            const regs = await navigator.serviceWorker.getRegistrations();
+            if (regs.length > 0 && regs[0].active) {
+               registration = regs[0];
+            } else {
+               // Register fresh and wait for activation
+               try {
+                  const newReg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+                  // Wait up to 8s for activation
+                  registration = await Promise.race([
+                     new Promise(resolve => {
+                        if (newReg.active) { resolve(newReg); return; }
+                        const sw = newReg.installing || newReg.waiting;
+                        if (!sw) { resolve(newReg); return; }
+                        sw.addEventListener('statechange', function handler() {
+                           if (sw.state === 'activated') {
+                              sw.removeEventListener('statechange', handler);
+                              resolve(newReg);
+                           }
+                        });
+                     }),
+                     new Promise((_, reject) => setTimeout(() => reject(new Error('SW activation timeout')), 8000))
+                  ]);
+               } catch (regErr) {
+                  console.error('Không đăng ký được SW:', regErr);
+                  alert('Có lỗi xảy ra khi khởi tạo Service Worker.');
+                  return;
+               }
+            }
+         }
 
-         // In a real app, replace this with your VAPID public key
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
-         // Convert VAPID key to Uint8Array
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
             const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -585,28 +629,34 @@ function ParentPortal({ parentData, setParentData }) {
          };
 
          const existingSubscription = await registration.pushManager.getSubscription();
-         const subscription = existingSubscription || await registration.pushManager.subscribe({
+         if (existingSubscription) {
+            await existingSubscription.unsubscribe();
+         }
+
+         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
 
-         console.log('Push Subscription Endpoint:', JSON.stringify(subscription));
-
          // Save subscription to Supabase
-         if (parentData?.student?.mahv) {
-            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
-               user_id: parentData.student.mahv,
+         const studentId = parentData?.student?.mahv;
+         if (studentId) {
+            await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
+            const { error: dbError } = await supabase.from('push_subscriptions').insert({
+               user_id: studentId,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id,role' });
+            });
 
             if (dbError) {
                console.error('Lỗi khi lưu Subscription vào DB:', dbError);
+               alert('Lỗi DB khi lưu đăng ký: ' + (dbError.message || JSON.stringify(dbError)));
+               return;
             }
          }
 
-         alert(existingSubscription ? 'Đã bật thông báo thành công (Đã có Subscription).' : 'Đã bật thông báo thành công!');
+         alert('Đã bật thông báo thành công!');
 
       } catch (err) {
          console.error('Lỗi khi đăng ký nhận thông báo:', err);
@@ -646,12 +696,13 @@ function ParentPortal({ parentData, setParentData }) {
                applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
             });
 
-            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
+            await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
+            const { error: dbError } = await supabase.from('push_subscriptions').insert({
                user_id: studentId,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id,role' });
+            });
 
             if (dbError) {
                console.error('Lỗi khi làm mới Subscription:', dbError);
@@ -662,7 +713,7 @@ function ParentPortal({ parentData, setParentData }) {
       };
 
       refreshSubscription();
-   // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [parentData?.student?.mahv]);
 
    useEffect(() => {
@@ -689,7 +740,8 @@ function ParentPortal({ parentData, setParentData }) {
          mahv: parentData.student.mahv,
          manv: parentData.teacherManv,
          content: content,
-         description: 'PH'
+         description: 'PH',
+         is_read: false
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) {
@@ -785,84 +837,84 @@ function ParentPortal({ parentData, setParentData }) {
       setParentNotices(combined);
    };
 
-    const fetch30DaysUpdates = async () => {
-       if (!parentData?.student?.mahv) return;
+   const fetch30DaysUpdates = async () => {
+      if (!parentData?.student?.mahv) return;
 
-       const thirtyDaysAgo = new Date();
-       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-       const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
 
-       let generalNotices = [];
-       try {
-          const { data, error } = await supabase
-             .from('tbl_thongbao')
-             .select('*')
-             .eq('mahv', parentData.student.mahv)
-             .gte('ngaylap', thirtyDaysAgoISO)
-             .order('ngaylap', { ascending: false });
-          if (!error && data) {
-             generalNotices = data.filter(n => {
-                if (n.mahd) return false;
-                if (!n.tieude || !n.tieude.trim()) return false;
-                return true;
-             });
-          }
-       } catch (err) {
-          console.warn('Error fetching general notices for 30 days:', err);
-       }
+      let generalNotices = [];
+      try {
+         const { data, error } = await supabase
+            .from('tbl_thongbao')
+            .select('*')
+            .eq('mahv', parentData.student.mahv)
+            .gte('ngaylap', thirtyDaysAgoISO)
+            .order('ngaylap', { ascending: false });
+         if (!error && data) {
+            generalNotices = data.filter(n => {
+               if (n.mahd) return false;
+               if (!n.tieude || !n.tieude.trim()) return false;
+               return true;
+            });
+         }
+      } catch (err) {
+         console.warn('Error fetching general notices for 30 days:', err);
+      }
 
-       let classAnnouncements = [];
-       if (parentData?.student?.malop) {
-          try {
-             const { data, error } = await supabase
-                .from('class_announcements')
-                .select('*')
-                .eq('malop', parentData.student.malop)
-                .eq('approved', true)
-                .gte('created_at', thirtyDaysAgoISO)
-                .order('created_at', { ascending: false });
-             if (!error && data) {
-                classAnnouncements = data.filter(item => !String(item.content || '').startsWith('__NGOAI_KHOA_CLOSED__::'));
-             }
-          } catch (err) {
-             console.warn('Error fetching class announcements for 30 days:', err);
-          }
-       }
+      let classAnnouncements = [];
+      if (parentData?.student?.malop) {
+         try {
+            const { data, error } = await supabase
+               .from('class_announcements')
+               .select('*')
+               .eq('malop', parentData.student.malop)
+               .eq('approved', true)
+               .gte('created_at', thirtyDaysAgoISO)
+               .order('created_at', { ascending: false });
+            if (!error && data) {
+               classAnnouncements = data.filter(item => !String(item.content || '').startsWith('__NGOAI_KHOA_CLOSED__::'));
+            }
+         } catch (err) {
+            console.warn('Error fetching class announcements for 30 days:', err);
+         }
+      }
 
-       const combined = [
-          ...(generalNotices || []).map(n => ({ 
-             ...n, 
-             type: 'general', 
-             date: n.ngaylap, 
-             title: n.tieude, 
-             content: n.ghichu, 
-             image_url: n.image_url 
-          })),
-          ...(classAnnouncements || []).map(n => ({ 
-             ...n, 
-             type: 'class', 
-             date: n.created_at, 
-             title: n.title, 
-             content: n.content, 
-             image_url: n.image_url, 
-             file_url: n.file_url, 
-             file_name: n.file_name 
-          }))
-       ].sort((a, b) => {
-          const dateA = new Date(a.date).getTime();
-          const dateB = new Date(b.date).getTime();
-          return dateB - dateA;
-       });
+      const combined = [
+         ...(generalNotices || []).map(n => ({
+            ...n,
+            type: 'general',
+            date: n.ngaylap,
+            title: n.tieude,
+            content: n.ghichu,
+            image_url: n.image_url
+         })),
+         ...(classAnnouncements || []).map(n => ({
+            ...n,
+            type: 'class',
+            date: n.created_at,
+            title: n.title,
+            content: n.content,
+            image_url: n.image_url,
+            file_url: n.file_url,
+            file_name: n.file_name
+         }))
+      ].sort((a, b) => {
+         const dateA = new Date(a.date).getTime();
+         const dateB = new Date(b.date).getTime();
+         return dateB - dateA;
+      });
 
-       setUpdates30Days(combined);
-    };
+      setUpdates30Days(combined);
+   };
 
-    const handleShowAllUpdates = async () => {
-       setParentTab('all-updates-tab');
-       setLoadingUpdates30Days(true);
-       await fetch30DaysUpdates();
-       setLoadingUpdates30Days(false);
-    };
+   const handleShowAllUpdates = async () => {
+      setParentTab('all-updates-tab');
+      setLoadingUpdates30Days(true);
+      await fetch30DaysUpdates();
+      setLoadingUpdates30Days(false);
+   };
 
    const fetchNgoaiKhoaAnnouncements = async () => {
       const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 20);
@@ -1820,6 +1872,25 @@ function ParentPortal({ parentData, setParentData }) {
          });
          setUnreadChatCount(chatCount);
          totalUnread += chatCount;
+
+         if (chatCount > previousChatCountRef.current) {
+            if (parentTabRef.current === 'chat-tab') {
+               // If user is already on chat tab, automatically fetch new messages and mark as read
+               // We use a timeout to ensure state updates have propagated
+               setTimeout(() => {
+                  fetchChatMessages();
+                  const markThread = async () => {
+                     const { data: toUpdate } = await supabase.from('hv_messages').select('id, manv, description').eq('mahv', currentParentData.student.mahv).is('is_read', false);
+                     if (toUpdate) {
+                        const ids = toUpdate.filter(d => Boolean(d.manv && d.manv.trim() !== '' && d.description !== 'PH')).map(d => d.id);
+                        if (ids.length > 0) await supabase.from('hv_messages').update({ is_read: true }).in('id', ids);
+                     }
+                  };
+                  markThread();
+               }, 100);
+            }
+         }
+         previousChatCountRef.current = chatCount;
       }
 
       // 2. Fetch Notices, Menu, Ngoai Khoa Unreads
@@ -1905,12 +1976,47 @@ function ParentPortal({ parentData, setParentData }) {
       syncAppBadge(totalUnread);
    };
 
-
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
       if (!parentData) return;
 
       refreshLatestFeeData();
-   }, [parentData?.student?.mahv, refreshLatestFeeData]);
+   }, [parentData?.student?.mahv]);
+
+   // ── Sync on Foreground / Push Received ────────────────────────────────────
+   useEffect(() => {
+      const handleVisibilityChange = () => {
+         if (!document.hidden) {
+            fetchUnreads();
+            if (parentTab === 'chat-tab') {
+               fetchChatMessages();
+            }
+         }
+      };
+
+      const handleServiceWorkerMessage = (event) => {
+         const data = event.data || {};
+         if (data.type === 'PUSH_RECEIVED') {
+            fetchUnreads();
+            if (parentTab === 'chat-tab') {
+               fetchChatMessages();
+            }
+         }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+      }
+
+      return () => {
+         document.removeEventListener('visibilitychange', handleVisibilityChange);
+         if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+         }
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [parentTab]);
 
    // ── Stable Realtime subscriptions ──────────────────────────────────────────
    // Keyed ONLY on student identity so channels are NEVER torn down on tab switch.
@@ -2170,7 +2276,8 @@ function ParentPortal({ parentData, setParentData }) {
          mahv: parentData.student.mahv,
          manv: parentData.teacherManv,
          content: chatInput,
-         description: 'PH'
+         description: 'PH',
+         is_read: false
       };
       const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
       if (error) { console.error('Lỗi khi gửi tin nhắn:', error); return; }
@@ -2362,7 +2469,7 @@ function ParentPortal({ parentData, setParentData }) {
                      <div className="latest-updates-box">
                         <div className="latest-updates-header">
                            <h3 className="latest-updates-title">Cập nhật mới nhất</h3>
-                           <button 
+                           <button
                               className="latest-updates-more"
                               onClick={handleShowAllUpdates}
                               style={{ color: '#ef4444' }}
@@ -2400,7 +2507,7 @@ function ParentPortal({ parentData, setParentData }) {
                                  }
 
                                  return (
-                                    <div 
+                                    <div
                                        key={index}
                                        className="latest-update-row"
                                        onClick={() => {
@@ -2421,11 +2528,11 @@ function ParentPortal({ parentData, setParentData }) {
                                        <div className={`update-icon-circle ${item.details.colorScheme}`}>
                                           <IconComponent size={20} />
                                        </div>
-                                       
+
                                        {item.image_url && (
-                                          <img 
-                                             src={getDisplayUrl(item.image_url)} 
-                                             alt="thumbnail" 
+                                          <img
+                                             src={getDisplayUrl(item.image_url)}
+                                             alt="thumbnail"
                                              className="update-image-thumb"
                                              referrerPolicy="no-referrer"
                                              onError={(e) => { e.target.style.display = 'none'; }}
@@ -2617,7 +2724,7 @@ function ParentPortal({ parentData, setParentData }) {
                                  {updates30Days.map((item, idx) => {
                                     const details = getNoticeTypeDetails(item, parentData.student.mahv);
                                     const formattedTime = formatNoticeTime(item.date);
-                                    
+
                                     const handleItemClick = () => {
                                        const dateMs = new Date(item.date).getTime();
                                        if (item.title === 'THỰC ĐƠN') {
@@ -2634,21 +2741,21 @@ function ParentPortal({ parentData, setParentData }) {
                                           setUnreadNotices(0);
                                        }
                                        fetchUnreads();
-                                       
+
                                        setUpdates30Days(prev => prev.map((u, i) => i === idx ? { ...u, isReadForce: true } : u));
                                     };
 
                                     const isUnread = !item.isReadForce && details.isUnread;
 
                                     return (
-                                       <div 
-                                          key={idx} 
+                                       <div
+                                          key={idx}
                                           onClick={handleItemClick}
-                                          style={{ 
-                                             background: 'white', 
-                                             padding: '18px', 
-                                             borderRadius: '16px', 
-                                             border: '1px solid #e2e8f0', 
+                                          style={{
+                                             background: 'white',
+                                             padding: '18px',
+                                             borderRadius: '16px',
+                                             border: '1px solid #e2e8f0',
                                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                                              position: 'relative',
                                              transition: 'all 0.2s ease',
@@ -2677,23 +2784,23 @@ function ParentPortal({ parentData, setParentData }) {
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
                                                 background: details.colorScheme === 'yellow' ? '#fef3c7' :
-                                                            details.colorScheme === 'green' ? '#dcfce7' :
-                                                            details.colorScheme === 'purple' ? '#f3e8ff' : '#fce7f3',
+                                                   details.colorScheme === 'green' ? '#dcfce7' :
+                                                      details.colorScheme === 'purple' ? '#f3e8ff' : '#fce7f3',
                                                 color: details.colorScheme === 'yellow' ? '#d97706' :
-                                                       details.colorScheme === 'green' ? '#15803d' :
-                                                       details.colorScheme === 'purple' ? '#7e22ce' : '#db2777'
+                                                   details.colorScheme === 'green' ? '#15803d' :
+                                                      details.colorScheme === 'purple' ? '#7e22ce' : '#db2777'
                                              }}>
                                                 {details.iconType === 'menu' ? <Utensils size={16} /> :
-                                                 details.iconType === 'ngoaikhoa' ? <Image size={16} /> :
-                                                 details.iconType === 'book' ? <BookOpen size={16} /> : <Megaphone size={16} />}
+                                                   details.iconType === 'ngoaikhoa' ? <Image size={16} /> :
+                                                      details.iconType === 'book' ? <BookOpen size={16} /> : <Megaphone size={16} />}
                                              </div>
                                              <div>
-                                                <span style={{ 
-                                                   fontSize: '0.75rem', 
-                                                   fontWeight: 700, 
+                                                <span style={{
+                                                   fontSize: '0.75rem',
+                                                   fontWeight: 700,
                                                    color: details.colorScheme === 'yellow' ? '#b45309' :
-                                                          details.colorScheme === 'green' ? '#166534' :
-                                                          details.colorScheme === 'purple' ? '#6b21a8' : '#9d174d'
+                                                      details.colorScheme === 'green' ? '#166534' :
+                                                         details.colorScheme === 'purple' ? '#6b21a8' : '#9d174d'
                                                 }}>
                                                    {details.categoryTag}
                                                 </span>
@@ -2716,7 +2823,7 @@ function ParentPortal({ parentData, setParentData }) {
                                                 onClick={(e) => {
                                                    e.stopPropagation();
                                                    setPreviewImage(item.image_url);
-                                                 }}
+                                                }}
                                              >
                                                 <img src={getDisplayUrl(item.image_url)} alt="attachment" style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', display: 'block' }} referrerPolicy="no-referrer" />
                                              </div>
@@ -2902,22 +3009,22 @@ function ParentPortal({ parentData, setParentData }) {
                                              fontSize: '0.95rem',
                                              lineHeight: '1.7',
                                              whiteSpace: 'pre-wrap',
-                                              marginBottom: (item._attachments || []).some((attachment) => attachment.image_url) ? '15px' : '0'
-                                           }}>
-                                              {item.content}
-                                           </div>
-                                           {(item._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
-                                              <div
-                                                 key={attachment.id || `${idx}-curriculum-image-${attachmentIndex}`}
-                                                 style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginTop: attachmentIndex > 0 ? '10px' : '0' }}
-                                                 onClick={() => setPreviewImage(attachment.image_url)}
-                                              >
-                                                 <img src={getDisplayUrl(attachment.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
-                                              </div>
-                                           ))}
-                                        </div>
-                                     </div>
-                                  ))
+                                             marginBottom: (item._attachments || []).some((attachment) => attachment.image_url) ? '15px' : '0'
+                                          }}>
+                                             {item.content}
+                                          </div>
+                                          {(item._attachments || []).filter((attachment) => attachment.image_url).map((attachment, attachmentIndex) => (
+                                             <div
+                                                key={attachment.id || `${idx}-curriculum-image-${attachmentIndex}`}
+                                                style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', cursor: 'zoom-in', marginTop: attachmentIndex > 0 ? '10px' : '0' }}
+                                                onClick={() => setPreviewImage(attachment.image_url)}
+                                             >
+                                                <img src={getDisplayUrl(attachment.image_url)} alt="chuongtrinhhoc" style={{ width: '100%', display: 'block' }} referrerPolicy="no-referrer" />
+                                             </div>
+                                          ))}
+                                       </div>
+                                    </div>
+                                 ))
                               ) : (
                                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '1px dashed #e2e8f0' }}>
                                     <FileText size={40} style={{ marginBottom: '15px', opacity: 0.3 }} />

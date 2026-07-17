@@ -1,7 +1,8 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-const CACHE_NAME = 'kindergarten-v4';
+// v5 - non-blocking install to fix activation timeout on mobile
+const CACHE_NAME = 'kindergarten-v5';
 const META_CACHE_NAME = 'kindergarten-meta-v2';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
@@ -13,11 +14,15 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', event => {
+  // skipWaiting FIRST so SW moves to activate immediately
   self.skipWaiting();
+  // Cache files individually - don't let any single failure block SW activation
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-      .then(() => self.clients.claim())
+    caches.open(CACHE_NAME).then(cache => {
+      return Promise.allSettled(
+        urlsToCache.map(url => cache.add(url).catch(() => { /* ignore cache failures */ }))
+      );
+    })
   );
 });
 
@@ -162,7 +167,13 @@ self.addEventListener('push', event => {
   if (!event.data) return;
 
   try {
-    const data = event.data.json();
+    let data = {};
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { body: event.data.text() };
+    }
+
     const incomingBadgeCount = Number(data.badgeCount);
     const incrementBadgeBy = Number(data.incrementBadgeBy ?? 1);
     const title = data.title || 'Thông báo mới';
@@ -185,17 +196,27 @@ self.addEventListener('push', event => {
 
     event.waitUntil(
       (async () => {
-        const nextBadgeCount = Number.isFinite(incomingBadgeCount)
-          ? Math.max(0, incomingBadgeCount)
-          : (await readStoredBadgeCount()) + (Number.isFinite(incrementBadgeBy) ? incrementBadgeBy : 1);
-
+        // Show notification first to guarantee it appears even if badge math fails
         await self.registration.showNotification(String(title), options);
-        await syncAppBadge(nextBadgeCount);
 
-        // Inform all open foreground clients so they can refresh state immediately
-        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        for (const client of clientList) {
-          client.postMessage({ type: 'PUSH_RECEIVED', payload: data });
+        try {
+          const nextBadgeCount = Number.isFinite(incomingBadgeCount)
+            ? Math.max(0, incomingBadgeCount)
+            : (await readStoredBadgeCount()) + (Number.isFinite(incrementBadgeBy) ? incrementBadgeBy : 1);
+
+          await syncAppBadge(nextBadgeCount);
+        } catch (badgeErr) {
+          console.error('Failed to sync badge during push', badgeErr);
+        }
+
+        try {
+          // Inform all open foreground clients so they can refresh state immediately
+          const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+          for (const client of clientList) {
+            client.postMessage({ type: 'PUSH_RECEIVED', payload: data });
+          }
+        } catch (msgErr) {
+          console.error('Failed to postMessage to clients', msgErr);
         }
       })()
     );
