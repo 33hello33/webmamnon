@@ -562,27 +562,29 @@ function ParentPortal({ parentData, setParentData }) {
 
    const subscribeToPushNotifications = async () => {
       if (!('serviceWorker' in navigator)) {
-         alert('Trình duyệt không hỗ trợ Service Worker.');
+         alert('[B1 FAIL] Trình duyệt không hỗ trợ Service Worker.');
          return;
       }
       if (!('PushManager' in window)) {
-         alert('Trình duyệt không hỗ trợ Push Notifications.');
+         alert('[B1 FAIL] Trình duyệt không hỗ trợ Push Notifications.');
          return;
       }
+      alert('[B1 OK] serviceWorker + PushManager OK. Xin quyền...');
 
       try {
          const permission = await Notification.requestPermission();
          if (permission !== 'granted') {
-            alert('Bạn đã từ chối nhận thông báo.');
+            alert('[B2 FAIL] Từ chối thông báo. Permission: ' + permission);
             return;
          }
+         alert('[B2 OK] Quyền thông báo: ' + permission);
 
          const registration = await navigator.serviceWorker.ready;
+         alert('[B3 OK] ServiceWorker ready. Scope: ' + registration.scope);
 
-         // In a real app, replace this with your VAPID public key
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
+         alert('[B4] VAPID key length: ' + publicVapidKey.length + '\n' + publicVapidKey.substring(0, 30) + '...');
 
-         // Convert VAPID key to Uint8Array
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
             const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -594,6 +596,7 @@ function ParentPortal({ parentData, setParentData }) {
             return outputArray;
          };
 
+         alert('[B5] Đang subscribe pushManager...');
          const existingSubscription = await registration.pushManager.getSubscription();
          if (existingSubscription) {
             await existingSubscription.unsubscribe();
@@ -603,31 +606,34 @@ function ParentPortal({ parentData, setParentData }) {
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
-
-         console.log('Push Subscription Endpoint:', JSON.stringify(subscription));
+         alert('[B5 OK] Subscribed! Endpoint: ' + subscription.endpoint.substring(0, 50) + '...');
 
          // Save subscription to Supabase
-         if (parentData?.student?.mahv) {
-            await supabase.from('push_subscriptions').delete().match({ user_id: parentData.student.mahv, role: 'parent' });
+         const studentId = parentData?.student?.mahv;
+         alert('[B6] mahv = ' + studentId);
+         if (studentId) {
+            await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
             const { error: dbError } = await supabase.from('push_subscriptions').insert({
-               user_id: parentData.student.mahv,
+               user_id: studentId,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
             });
 
             if (dbError) {
-               console.error('Lỗi khi lưu Subscription vào DB:', dbError);
-               alert('Lỗi DB khi lưu đăng ký: ' + (dbError.message || JSON.stringify(dbError)));
+               alert('[B6 FAIL] Lỗi DB: ' + (dbError.message || JSON.stringify(dbError)));
                return;
             }
+            alert('[B6 OK] Đã lưu vào DB thành công!');
+         } else {
+            alert('[B6 FAIL] mahv là null/undefined - không lưu được!');
          }
 
-         alert(existingSubscription ? 'Đã bật thông báo thành công (Đã có Subscription).' : 'Đã bật thông báo thành công!');
+         alert('✅ Đã bật thông báo thành công!');
 
       } catch (err) {
+         alert('[CATCH] Lỗi: ' + (err.message || String(err)));
          console.error('Lỗi khi đăng ký nhận thông báo:', err);
-         alert('Có lỗi xảy ra khi đăng ký nhận thông báo: ' + err.message);
       }
    };
 
