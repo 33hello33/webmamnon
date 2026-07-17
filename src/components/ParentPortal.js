@@ -584,25 +584,42 @@ function ParentPortal({ parentData, setParentData }) {
          try {
             registration = await Promise.race([
                navigator.serviceWorker.ready,
-               new Promise((_, reject) => setTimeout(() => reject(new Error('serviceWorker.ready timeout sau 10s')), 10000))
+               new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
             ]);
          } catch (swErr) {
-            // serviceWorker.ready timed out - try to register manually
-            alert('[B3 WARN] ready timeout, thử đăng ký thủ công...');
-            try {
-               registration = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
-               await new Promise(resolve => setTimeout(resolve, 2000));
-               if (registration.installing || registration.waiting) {
-                  registration.installing?.skipWaiting?.();
-                  registration.waiting?.postMessage?.({ type: 'SKIP_WAITING' });
-                  await new Promise(resolve => setTimeout(resolve, 2000));
+            alert('[B3 WARN] serviceWorker.ready timeout. Tìm SW hiện có...');
+            // Try to find existing registration first
+            const regs = await navigator.serviceWorker.getRegistrations();
+            alert('[B3] Số SW đã đăng ký: ' + regs.length + (regs[0] ? ' | scope: ' + regs[0].scope : ''));
+            if (regs.length > 0 && regs[0].active) {
+               registration = regs[0];
+            } else {
+               // Register fresh and wait for activation
+               try {
+                  const newReg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+                  alert('[B3] SW mới đăng ký, state: ' + (newReg.active?.state || newReg.installing?.state || newReg.waiting?.state || 'unknown'));
+                  // Wait up to 8s for activation
+                  registration = await Promise.race([
+                     new Promise(resolve => {
+                        if (newReg.active) { resolve(newReg); return; }
+                        const sw = newReg.installing || newReg.waiting;
+                        if (!sw) { resolve(newReg); return; }
+                        sw.addEventListener('statechange', function handler() {
+                           if (sw.state === 'activated') {
+                              sw.removeEventListener('statechange', handler);
+                              resolve(newReg);
+                           }
+                        });
+                     }),
+                     new Promise((_, reject) => setTimeout(() => reject(new Error('SW activation timeout')), 8000))
+                  ]);
+               } catch (regErr) {
+                  alert('[B3 FAIL] ' + regErr.message);
+                  return;
                }
-            } catch (regErr) {
-               alert('[B3 FAIL] Không đăng ký được SW: ' + regErr.message);
-               return;
             }
          }
-         alert('[B3 OK] ServiceWorker ready. Scope: ' + registration.scope);
+         alert('[B3 OK] SW active. Scope: ' + registration.scope + ' | hasPushManager: ' + !!registration.pushManager);
 
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
          alert('[B4] VAPID key length: ' + publicVapidKey.length + '\n' + publicVapidKey.substring(0, 30) + '...');
