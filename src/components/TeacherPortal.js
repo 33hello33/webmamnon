@@ -457,7 +457,44 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             return;
          }
 
-         const registration = await navigator.serviceWorker.ready;
+         let registration;
+         try {
+            registration = await Promise.race([
+               navigator.serviceWorker.ready,
+               new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ]);
+         } catch (swErr) {
+            // Try to find existing registration first
+            const regs = await navigator.serviceWorker.getRegistrations();
+            if (regs.length > 0 && regs[0].active) {
+               registration = regs[0];
+            } else {
+               // Register fresh and wait for activation
+               try {
+                  const newReg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+                  // Wait up to 8s for activation
+                  registration = await Promise.race([
+                     new Promise(resolve => {
+                        if (newReg.active) { resolve(newReg); return; }
+                        const sw = newReg.installing || newReg.waiting;
+                        if (!sw) { resolve(newReg); return; }
+                        sw.addEventListener('statechange', function handler() {
+                           if (sw.state === 'activated') {
+                              sw.removeEventListener('statechange', handler);
+                              resolve(newReg);
+                           }
+                        });
+                     }),
+                     new Promise((_, reject) => setTimeout(() => reject(new Error('SW activation timeout')), 8000))
+                  ]);
+               } catch (regErr) {
+                  console.error('Không đăng ký được SW:', regErr);
+                  alert('Có lỗi xảy ra khi khởi tạo Service Worker.');
+                  return;
+               }
+            }
+         }
+
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
 
          const urlBase64ToUint8Array = (base64String) => {
