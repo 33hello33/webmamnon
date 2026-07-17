@@ -562,24 +562,21 @@ function ParentPortal({ parentData, setParentData }) {
 
    const subscribeToPushNotifications = async () => {
       if (!('serviceWorker' in navigator)) {
-         alert('[B1 FAIL] Trình duyệt không hỗ trợ Service Worker.');
+         alert('Trình duyệt không hỗ trợ Service Worker.');
          return;
       }
       if (!('PushManager' in window)) {
-         alert('[B1 FAIL] Trình duyệt không hỗ trợ Push Notifications.');
+         alert('Trình duyệt không hỗ trợ Push Notifications.');
          return;
       }
-      alert('[B1 OK] serviceWorker + PushManager OK. Xin quyền...');
 
       try {
          const permission = await Notification.requestPermission();
          if (permission !== 'granted') {
-            alert('[B2 FAIL] Từ chối thông báo. Permission: ' + permission);
+            alert('Bạn đã từ chối nhận thông báo.');
             return;
          }
-         alert('[B2 OK] Quyền thông báo: ' + permission);
 
-         alert('[B3] Đang chờ ServiceWorker ready...');
          let registration;
          try {
             registration = await Promise.race([
@@ -587,17 +584,14 @@ function ParentPortal({ parentData, setParentData }) {
                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
             ]);
          } catch (swErr) {
-            alert('[B3 WARN] serviceWorker.ready timeout. Tìm SW hiện có...');
             // Try to find existing registration first
             const regs = await navigator.serviceWorker.getRegistrations();
-            alert('[B3] Số SW đã đăng ký: ' + regs.length + (regs[0] ? ' | scope: ' + regs[0].scope : ''));
             if (regs.length > 0 && regs[0].active) {
                registration = regs[0];
             } else {
                // Register fresh and wait for activation
                try {
                   const newReg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
-                  alert('[B3] SW mới đăng ký, state: ' + (newReg.active?.state || newReg.installing?.state || newReg.waiting?.state || 'unknown'));
                   // Wait up to 8s for activation
                   registration = await Promise.race([
                      new Promise(resolve => {
@@ -614,15 +608,14 @@ function ParentPortal({ parentData, setParentData }) {
                      new Promise((_, reject) => setTimeout(() => reject(new Error('SW activation timeout')), 8000))
                   ]);
                } catch (regErr) {
-                  alert('[B3 FAIL] ' + regErr.message);
+                  console.error('Không đăng ký được SW:', regErr);
+                  alert('Có lỗi xảy ra khi khởi tạo Service Worker.');
                   return;
                }
             }
          }
-         alert('[B3 OK] SW active. Scope: ' + registration.scope + ' | hasPushManager: ' + !!registration.pushManager);
 
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
-         alert('[B4] VAPID key length: ' + publicVapidKey.length + '\n' + publicVapidKey.substring(0, 30) + '...');
 
          const urlBase64ToUint8Array = (base64String) => {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -635,7 +628,6 @@ function ParentPortal({ parentData, setParentData }) {
             return outputArray;
          };
 
-         alert('[B5] Đang subscribe pushManager...');
          const existingSubscription = await registration.pushManager.getSubscription();
          if (existingSubscription) {
             await existingSubscription.unsubscribe();
@@ -645,11 +637,9 @@ function ParentPortal({ parentData, setParentData }) {
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
          });
-         alert('[B5 OK] Subscribed! Endpoint: ' + subscription.endpoint.substring(0, 50) + '...');
 
          // Save subscription to Supabase
          const studentId = parentData?.student?.mahv;
-         alert('[B6] mahv = ' + studentId);
          if (studentId) {
             await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
             const { error: dbError } = await supabase.from('push_subscriptions').insert({
@@ -660,19 +650,17 @@ function ParentPortal({ parentData, setParentData }) {
             });
 
             if (dbError) {
-               alert('[B6 FAIL] Lỗi DB: ' + (dbError.message || JSON.stringify(dbError)));
+               console.error('Lỗi khi lưu Subscription vào DB:', dbError);
+               alert('Lỗi DB khi lưu đăng ký: ' + (dbError.message || JSON.stringify(dbError)));
                return;
             }
-            alert('[B6 OK] Đã lưu vào DB thành công!');
-         } else {
-            alert('[B6 FAIL] mahv là null/undefined - không lưu được!');
          }
 
-         alert('✅ Đã bật thông báo thành công!');
+         alert('Đã bật thông báo thành công!');
 
       } catch (err) {
-         alert('[CATCH] Lỗi: ' + (err.message || String(err)));
          console.error('Lỗi khi đăng ký nhận thông báo:', err);
+         alert('Có lỗi xảy ra khi đăng ký nhận thông báo: ' + err.message);
       }
    };
 
