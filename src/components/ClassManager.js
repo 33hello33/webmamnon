@@ -2223,115 +2223,111 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {noticesToPrint.length > 0 && (
         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: 'auto', overflow: 'visible', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
           {noticesToPrint.map((printHoaDon, idx) => (
-            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '210mm', height: '148mm', background: '#ffffff', padding: '20px 35px', boxSizing: 'border-box', display: 'block', marginBottom: '50px', position: 'relative', overflow: 'hidden' }}>
-              {/* HEADER */}
-              <div className="p-header" style={{ marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {/* LEFT: Logo */}
-                <div style={{ width: '180px', textAlign: 'left' }}>
-                  {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
-                  {!config?.logo && <div style={{ height: 20 }}></div>}
-                </div>
-
-                {/* CENTER: Info */}
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase' }}>
-                    {config?.tencongty || 'E-Skills Academy'}
-                  </h3>
-                  <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                  <p style={{ margin: '2px 0', fontSize: '11px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
-                </div>
-
-                {/* RIGHT: Invoice info */}
-                <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                  <div>Mã HD: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
-                  <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
-                </div>
-              </div>
-
-              {/* TITLE */}
-              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "16pt", margin: "5px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                THÔNG BÁO THU HỌC PHÍ
-              </div>
-
-              {/* INFO */}
-              <div style={{ fontSize: "12pt", lineHeight: "1.5", color: '#000' }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div>Họ và tên: <b style={{ fontWeight: 950 }}>{printHoaDon.tenhv}</b></div>
-                  <div>SĐT: <b style={{ fontWeight: 900 }}>{printHoaDon.sdt || ""}</b></div>
-                </div>
-
-                <div>
-                  Khóa học: <b style={{ fontWeight: 900 }}>{printHoaDon.tenlop}</b>
-                </div>
-
-                <div>
-                  Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{printHoaDon.thoiluong || "..."}</b>
-                </div>
-
-                {/* FEES BREAKDOWN */}
-                <div style={{ borderTop: '2px solid #000', marginTop: '10px', paddingTop: '8px' }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                    <div>Học phí: <b style={{ fontWeight: 900 }}>{printHoaDon.hocphi} đ</b></div>
-                    <div>Tiền ăn ({calculateWorkingDaysInMonth(printHoaDon.ngaybatdau)} ngày): <b style={{ fontWeight: 900 }}>{(() => {
-                      let ta_val = printHoaDon.tienan;
-                      try {
-                        if (typeof ta_val === 'string' && ta_val.startsWith('{')) {
-                          ta_val = JSON.parse(ta_val).amount;
-                        }
-                      } catch (e) {}
-                      return formatTuition(ta_val || 0);
-                    })()} đ</b></div>
+            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', position: 'relative', overflow: 'hidden' }}>
+               <div className="receipt-copy" style={{ borderRight: 'none', width: '100%' }}>
+                  {/* HEADER */}
+                  <div className="p-header">
+                     <div style={{ width: '80px' }}>
+                        {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                     </div>
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'E-Skills Academy'}</h3>
+                        <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                        <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                     </div>
+                     <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                        <div style={{ fontWeight: 800 }}>Mã TB: {printHoaDon.mahd}</div>
+                        <div style={{ fontSize: '8pt', opacity: 0.8 }}>{printHoaDon.ngaylap ? new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
+                     </div>
                   </div>
-                  <div style={{ borderTop: '1px dashed #ccc', margin: '10px 0', paddingTop: '10px' }}>
-                    {Array.isArray(printHoaDon.phuthu) && printHoaDon.phuthu.length > 0 ? (
-                      printHoaDon.phuthu.map((pt, i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: '2px' }}>
-                          <div>+ {pt.name || 'Phụ thu'}: </div>
-                          <b style={{ fontWeight: 900 }}>{formatTuition(pt.amount)} đ</b>
+
+                  <div className="p-title-area">
+                     <h2 style={{ fontSize: '15pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
+                  </div>
+
+                  <div className="p-content">
+                     <div className="p-row">
+                        <span className="p-label">Họ tên:</span>
+                        <span className="p-value" style={{ fontSize: '11pt' }}>{printHoaDon.tenhv}</span>
+                        <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                        <span className="p-value">{printHoaDon.tenlop}</span>
+                     </div>
+                     <div className="p-row">
+                        <span className="p-label">SĐT liên hệ:</span>
+                        <span className="p-value">{printHoaDon.sdt || ""}</span>
+                        <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                        <span className="p-value">{printHoaDon.thoiluong}</span>
+                     </div>
+
+                     <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                        <div className="p-row">
+                           <span style={{ flex: 1 }}>- Học phí: <b>{printHoaDon.hocphi} đ</b></span>
+                           <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{(() => {
+                              let ta_val = printHoaDon.tienan;
+                              try {
+                                if (typeof ta_val === 'string' && ta_val.startsWith('{')) {
+                                  ta_val = JSON.parse(ta_val).amount;
+                                }
+                              } catch (e) {}
+                              return formatTuition(ta_val || 0);
+                           })()} đ</b></span>
                         </div>
-                      ))
-                    ) : (
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Phụ thu: </div>
-                        <b style={{ fontWeight: 900 }}>0 đ</b>
-                      </div>
-                    )}
+                        <div className="p-row">
+                           <span style={{ flex: 1 }}>- Ưu đãi: <b>{printHoaDon.giamhocphi} đ</b></span>
+                           <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{formatTuition(printHoaDon.nocu || 0)} đ</b></span>
+                        </div>
+
+                        {printHoaDon.phuthu && printHoaDon.phuthu.length > 0 && (
+                           <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                              {printHoaDon.phuthu.map((pt, i) => (
+                                 <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                    <span>+ {pt.name || 'Phụ thu'}:</span>
+                                    <span style={{ marginLeft: 'auto' }}><b>{formatTuition(pt.amount)} đ</b></span>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+
+                        {(printHoaDon.tiennghiphep && parseFloat(printHoaDon.tiennghiphep.toString().replace(/,/g, '')) > 0) && (
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{printHoaDon.tiennghiphep} đ</b></span>
+                              </div>
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                        <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
+                        <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 900, fontSize: '12pt' }}>{printHoaDon.tongcong} đ</span>
+                     </div>
+
+                     <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
+                        <span>HÌNH THỨC:</span>
+                        <span className="p-value">{printHoaDon.hinhthuc}</span>
+                     </div>
+                     {printHoaDon.ghichu && (
+                        <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                           <span>Ghi chú: {printHoaDon.ghichu}</span>
+                        </div>
+                     )}
+                     <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
+                        * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
+                     </div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <div>Giảm HP: <b style={{ fontWeight: 900 }}>{printHoaDon.giamhocphi} đ</b></div>
-                    <div>Nợ cũ: <b style={{ fontWeight: 800 }}>{formatTuition(printHoaDon.nocu || 0)} đ</b></div>
+
+                  <div className="p-signatures">
+                     <div className="sig-box">
+                        <h4>Người nộp tiền</h4>
+                        <p>(Ký, họ tên)</p>
+                     </div>
+                     <div className="sig-box">
+                        <h4>Nhà trường</h4>
+                        <p>(Ký, đóng dấu)</p>
+                        <div className="sig-name">{printHoaDon.manv || printHoaDon.nhanvien || 'Ban Tuyển Sinh'}</div>
+                     </div>
                   </div>
-                </div>
-
-                <div style={{ padding: '8px 0', borderTop: '1px dashed #ccc' }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <div>Hoàn học phí ({printHoaDon.maxConsecutive} ngày nghỉ liên tiếp):</div>
-                    <b style={{ fontWeight: 800 }}>-{printHoaDon.tiennghiphep} đ</b>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2px solid #000', borderBottom: '1.5px solid #000', padding: '6px 0', marginBottom: '10px', fontSize: '14pt', background: '#f8fafc' }}>
-                  <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                  <div style={{ color: '#000' }}>{printHoaDon.tongcong} đ</div>
-                </div>
-
-                <div style={{ marginBottom: '15px' }}>
-                  Ghi chú: <b style={{ fontWeight: 800 }}>{printHoaDon.ghichu || ""}</b>
-                </div>
-
-                <div style={{ fontSize: '14pt', fontWeight: '950', marginTop: '10px' }}>
-                  Hình thức thanh toán: <span style={{ color: '#000' }}>{printHoaDon.hinhthuc}</span>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 5, fontSize: "12pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8, flex: 1 }}>
-                  (Ký tên / Xác nhận)
-                </div>
-                <div style={{ lineHeight: '1.4', textAlign: 'right' }}>
-                  Nhân viên thu tiền: <b style={{ fontWeight: 950 }}>{printHoaDon.manv || printHoaDon.nhanvien || 'Ban Tuyển Sinh'}</b>
-                </div>
-              </div>
+               </div>
             </div>
           ))}
         </div>
