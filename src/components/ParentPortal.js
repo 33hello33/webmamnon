@@ -579,7 +579,29 @@ function ParentPortal({ parentData, setParentData }) {
          }
          alert('[B2 OK] Quyền thông báo: ' + permission);
 
-         const registration = await navigator.serviceWorker.ready;
+         alert('[B3] Đang chờ ServiceWorker ready...');
+         let registration;
+         try {
+            registration = await Promise.race([
+               navigator.serviceWorker.ready,
+               new Promise((_, reject) => setTimeout(() => reject(new Error('serviceWorker.ready timeout sau 10s')), 10000))
+            ]);
+         } catch (swErr) {
+            // serviceWorker.ready timed out - try to register manually
+            alert('[B3 WARN] ready timeout, thử đăng ký thủ công...');
+            try {
+               registration = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+               await new Promise(resolve => setTimeout(resolve, 2000));
+               if (registration.installing || registration.waiting) {
+                  registration.installing?.skipWaiting?.();
+                  registration.waiting?.postMessage?.({ type: 'SKIP_WAITING' });
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+               }
+            } catch (regErr) {
+               alert('[B3 FAIL] Không đăng ký được SW: ' + regErr.message);
+               return;
+            }
+         }
          alert('[B3 OK] ServiceWorker ready. Scope: ' + registration.scope);
 
          const publicVapidKey = process.env.REACT_APP_VAPID_PUBLIC_KEY || '';
