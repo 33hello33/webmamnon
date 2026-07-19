@@ -2229,8 +2229,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       {noticesToPrint.length > 0 && (
         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: 'auto', overflow: 'visible', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
           {noticesToPrint.map((printHoaDon, idx) => (
-            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', position: 'relative', overflow: 'hidden' }}>
-               <div className="receipt-copy" style={{ borderRight: 'none', width: '100%' }}>
+            <div key={idx} id={`print-notice-${idx}`} className="print-a5-receipt" style={{ width: '148.5mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', position: 'relative', overflow: 'hidden' }}>
+               <div className="receipt-copy" style={{ borderRight: 'none', width: '100%', height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
                   {/* HEADER */}
                   <div className="p-header">
                      <div style={{ width: '80px' }}>

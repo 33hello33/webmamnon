@@ -1695,9 +1695,9 @@ export default function InvoiceManager() {
          {(downloadingInvoice || downloadingNotice) && document.body && createPortal(
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
             {downloadingInvoice && (
-            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
                {[1, 2].map(copyNum => (
-                  <div key={copyNum} className="receipt-copy">
+                  <div key={copyNum} className="receipt-copy" style={{ height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
                      {/* HEADER */}
                      <div className="p-header">
                         <div style={{ width: '80px' }}>
@@ -1808,8 +1808,8 @@ export default function InvoiceManager() {
             )}
 
             {downloadingNotice && (
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148.5mm', height: '210mm', background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               <div className="receipt-copy" style={{ borderRight: 'none' }}>
+            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148.5mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+               <div className="receipt-copy" style={{ borderRight: 'none', height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
                   {/* HEADER */}
                   <div className="p-header">
                      <div style={{ width: '80px' }}>
