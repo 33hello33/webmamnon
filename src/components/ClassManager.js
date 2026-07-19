@@ -611,10 +611,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const soNgayNghi = nghiPhep + nghiKP;
         const selectedTienAnTier = studentTienAnTiers[s.mahv];
         const dailyMealFee = selectedTienAnTier ? selectedTienAnTier.val : 0;
-        const mealRefund = 0; // Không hoàn trả tiền ăn nữa
-        const workingDays = calculateWorkingDaysInMonth(startStr);
         const isMonthly = (initLoaiDong.toLowerCase().includes('tháng') || initLoaiDong.toLowerCase().includes('khóa'));
-        const monthlyMealFee = isMonthly ? (coMat + nghiKP) * dailyMealFee : 0;
+        const mealRefund = isMonthly ? nghiPhep * dailyMealFee : 0;
+        const workingDays = calculateWorkingDaysInMonth(startStr);
+        const monthlyMealFee = isMonthly ? workingDays * dailyMealFee : 0;
 
         // Tuition refund logic
         const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
@@ -790,15 +790,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const dailyMealFee = item.selectedTienAnTier ? item.selectedTienAnTier.val : 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
       
-      const newTruTienAn = 0; // Không hoàn trả tiền ăn nữa
+      const isMonthly = (batchNoticeData.loaiDong.toLowerCase().includes('tháng') || batchNoticeData.loaiDong.toLowerCase().includes('khóa'));
+      const newTruTienAn = isMonthly ? nghiPhep * dailyMealFee : 0;
       let newTruTuition = 0;
       const thresholdCfg = (config?.nghilientiep ? (typeof config.nghilientiep === 'string' ? JSON.parse(config.nghilientiep) : config.nghilientiep) : { songaynghilientiep: 7, phantramgiam: 50 });
       if (maxConsecutive >= (thresholdCfg.songaynghilientiep || 7)) {
         newTruTuition = maxConsecutive * trutiennghi_val;
       }
 
-      const isMonthly = (batchNoticeData.loaiDong.toLowerCase().includes('tháng') || batchNoticeData.loaiDong.toLowerCase().includes('khóa'));
-      const newMonthlyMealFee = isMonthly ? (coMat + nghiKP) * dailyMealFee : 0;
+      const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
+      const newMonthlyMealFee = isMonthly ? workingDays * dailyMealFee : 0;
       const hp = parseInt(item.hocphi || 0);
       const ta = newMonthlyMealFee;
       const ghp = parseInt(item.giamhocphi || 0);
@@ -834,7 +835,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const dailyMealFee = item.selectedTienAnTier ? item.selectedTienAnTier.val : 0;
       const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
       const isMonthly = (batchNoticeData.loaiDong.toLowerCase().includes('tháng') || batchNoticeData.loaiDong.toLowerCase().includes('khóa'));
-      const monthlyMealFee = isMonthly ? ((item.coMat || 0) + (item.nghiKP || 0)) * dailyMealFee : 0;
+      const monthlyMealFee = isMonthly ? workingDays * dailyMealFee : 0;
       const ptTotal = (batchNoticeData.phuthu || []).reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0);
       const tc = Math.max(0, hpNumber + monthlyMealFee + (item.nocu || 0) + ptTotal - (parseInt(batchNoticeData.giamHocphi) || 0) - (item.trutienan || 0) - (item.trutiennghi || 0));
 
@@ -885,10 +886,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (field === 'nghiPhep' || field === 'maxConsecutive' || field === 'coMat' || field === 'nghiKP' || field === 'selectedTienAnTier') {
           const dailyMealFee = newItem.selectedTienAnTier ? newItem.selectedTienAnTier.val : 0;
           const isMonthly = (batchNoticeData.loaiDong.toLowerCase().includes('tháng') || batchNoticeData.loaiDong.toLowerCase().includes('khóa'));
+          const workingDays = calculateWorkingDaysInMonth(batchNoticeData.ngayBatDau);
           if (isMonthly) {
-             newItem.tienan = ((newItem.coMat || 0) + (newItem.nghiKP || 0)) * dailyMealFee;
+             newItem.tienan = workingDays * dailyMealFee;
           }
-          newItem.trutienan = 0;
+          newItem.trutienan = isMonthly ? (newItem.nghiPhep || 0) * dailyMealFee : 0;
 
           const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
@@ -2058,7 +2060,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '160px' }}>Học Sinh</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Thời lượng</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Học phí</th>
-                          <th style={{ width: '230px', minWidth: '230px' }}>Tiền ăn</th>
+                          <th style={{ width: '230px', minWidth: '230px' }}>Tiền ăn {batchNoticeData.ngayBatDau ? `(T${new Date(batchNoticeData.ngayBatDau).getMonth() + 1})` : ''}</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Phụ Thu</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Nợ Cũ</th>
@@ -2067,6 +2069,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '80px', minWidth: '80px' }}>Liên Tiếp</th>
                           <th style={{ width: '80px', minWidth: '80px' }}>Không Phép</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>Hoàn Học Phí</th>
+                          <th style={{ width: '130px', minWidth: '130px' }}>Hoàn Tiền Ăn</th>
                           <th style={{ width: '130px', minWidth: '130px' }}>TỔNG THU</th>
                           <th style={{ width: '130px' }}>Hình thức</th>
                           <th style={{ minWidth: '150px' }}>Ghi chú</th>
@@ -2096,7 +2099,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               />
                             </td>
                             <td>
-                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                  {mealTiers.length > 0 && (
                                     <select
                                        value={row.selectedTienAnTier?.name || ''}
@@ -2105,7 +2108,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                           handleBatchStudentChange(row.mahv, 'selectedTienAnTier', tier);
                                        }}
                                        className="td-input"
-                                       style={{ flex: 1, minWidth: '100px', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }}
+                                       style={{ width: '100%', minWidth: '100px', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', fontSize: '0.8rem' }}
                                     >
                                        {mealTiers.map((t, idx) => (
                                           <option key={idx} value={t.name}>{t.name} ({formatTuition(t.val)})</option>
@@ -2117,7 +2120,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   value={formatTuition(row.tienan)}
                                   onChange={e => handleBatchStudentChange(row.mahv, 'tienan', e.target.value)}
                                   className="td-input"
-                                  style={{ width: '90px', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
+                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}
                                 />
                               </div>
                             </td>
@@ -2169,6 +2172,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                             
                             <td>
                               <input type="text" value={formatTuition(row.trutiennghi)} onChange={e => handleBatchStudentChange(row.mahv, 'trutiennghi', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
+                            </td>
+                            <td>
+                              <input type="text" value={formatTuition(row.trutienan)} onChange={e => handleBatchStudentChange(row.mahv, 'trutienan', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#fef2f2', borderRadius: '4px', padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#ef4444' }} />
                             </td>
                             <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
                             <td>
@@ -2292,6 +2298,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                            <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
                               <div className="p-row" style={{ fontSize: '8.5pt' }}>
                                  <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{printHoaDon.tiennghiphep} đ</b></span>
+                              </div>
+                           </div>
+                        )}
+                        
+                        {(printHoaDon.trutienan && parseFloat(printHoaDon.trutienan.toString().replace(/,/g, '')) > 0) && (
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{printHoaDon.trutienan} đ</b></span>
                               </div>
                            </div>
                         )}

@@ -945,14 +945,15 @@ export default function InvoiceManager() {
       }
    }
 
-   const actualMealRefund = 0; // Không hoàn trả tiền ăn nữa
-   const actualTuitionRefund = tuitionRefund;
-   const deductionSum = studySummary ? actualTuitionRefund : 0;
-
    const workingDaysCount = getWorkingDaysInMonth(invoiceData.ngayBatDau);
    const isMonthly = (invoiceData.loaiDong || '').toLowerCase().includes('tháng');
-   // Tiền ăn = (số ngày học + số ngày nghỉ ko phép) * số tiền ăn 1 ngày
-   const monthlyMealFee = (isMonthly && studySummary) ? ((studySummary.daHoc || 0) + (studySummary.nghiKhongPhep || 0)) * dailyMealFee : 0;
+
+   const actualMealRefund = (studySummary && isMonthly) ? (studySummary.nghiPhep || 0) * dailyMealFee : 0;
+   const actualTuitionRefund = tuitionRefund;
+   const deductionSum = (studySummary ? actualTuitionRefund : 0) + actualMealRefund;
+
+   // Tiền ăn tháng này = số ngày làm việc trong tháng * số tiền ăn 1 ngày
+   const monthlyMealFee = isMonthly ? workingDaysCount * dailyMealFee : 0;
    const trutienan_val = dailyMealFee; // Giữ lại biến cho màn hình in nếu cần
 
    const tongCong = noCu + unpaidBillsTotal + invoiceData.hocphi + surchargeSum + monthlyMealFee - invoiceData.giamHocphi - deductionSum;
@@ -1406,10 +1407,18 @@ export default function InvoiceManager() {
                               )}
                               {deductionSum > 0 && (
                                  <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                       <span>Hoàn trả học phí (Nghỉ liên tiếp ≥{threshold} ngày):</span>
-                                       <span style={{ fontWeight: 700 }}>-{formatCurrency(actualTuitionRefund)}đ</span>
-                                    </div>
+                                    {actualTuitionRefund > 0 && (
+                                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                          <span>Hoàn trả học phí (Nghỉ liên tiếp ≥{threshold} ngày):</span>
+                                          <span style={{ fontWeight: 700 }}>-{formatCurrency(actualTuitionRefund)}đ</span>
+                                       </div>
+                                    )}
+                                    {actualMealRefund > 0 && (
+                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                          <span>Hoàn trả tiền ăn (Nghỉ phép tháng trước):</span>
+                                          <span style={{ fontWeight: 700 }}>-{formatCurrency(actualMealRefund)}đ</span>
+                                       </div>
+                                    )}
                                     <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
                                        Tổng hoàn trả từ lịch nghỉ: -{formatCurrency(deductionSum)}đ
                                     </div>
@@ -1497,7 +1506,7 @@ export default function InvoiceManager() {
                               </div>
                            </div>
                            <div className="im-fi-item">
-                              <label>Tiền ăn</label>
+                              <label>Tiền ăn {invoiceData.ngayBatDau ? `(T${new Date(invoiceData.ngayBatDau).getMonth() + 1})` : ''}</label>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                                  {mealTiers.length > 0 && (
                                     <select
@@ -1751,6 +1760,14 @@ export default function InvoiceManager() {
                                  </div>
                               </div>
                            )}
+                           
+                           {downloadingInvoice?.actualMealRefund > 0 && (
+                              <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                 <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                    <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualMealRefund || 0))} đ</b></span>
+                                 </div>
+                              </div>
+                           )}
                         </div>
 
                         <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
@@ -1852,6 +1869,14 @@ export default function InvoiceManager() {
                            <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
                               <div className="p-row" style={{ fontSize: '8.5pt' }}>
                                  <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                              </div>
+                           </div>
+                        )}
+                        
+                        {downloadingNotice?.actualMealRefund > 0 && (
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{formatCurrency(Math.round(downloadingNotice?.actualMealRefund || 0))} đ</b></span>
                               </div>
                            </div>
                         )}
