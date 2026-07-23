@@ -1,8 +1,8 @@
 /* eslint-disable no-restricted-globals */
 
 // This service worker is required for PWA features and background notifications
-// v5 - non-blocking install to fix activation timeout on mobile
-const CACHE_NAME = 'kindergarten-v5';
+// v6 - optimized for Samsung WebAPK and mobile hardware compatibility
+const CACHE_NAME = 'kindergarten-v6';
 const META_CACHE_NAME = 'kindergarten-meta-v2';
 const BADGE_STATE_URL = '/__badge_state__';
 const urlsToCache = [
@@ -117,16 +117,20 @@ const writeStoredBadgeCount = async (count) => {
 const syncAppBadge = async (count) => {
   if (!self.navigator) return;
 
-  const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
-  await writeStoredBadgeCount(badgeCount);
+  try {
+    const badgeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+    await writeStoredBadgeCount(badgeCount);
 
-  if (badgeCount > 0 && 'setAppBadge' in self.navigator) {
-    await self.navigator.setAppBadge(badgeCount);
-    return;
-  }
+    if (badgeCount > 0 && 'setAppBadge' in self.navigator) {
+      await self.navigator.setAppBadge(badgeCount);
+      return;
+    }
 
-  if (badgeCount === 0 && 'clearAppBadge' in self.navigator) {
-    await self.navigator.clearAppBadge();
+    if (badgeCount === 0 && 'clearAppBadge' in self.navigator) {
+      await self.navigator.clearAppBadge();
+    }
+  } catch (err) {
+    console.warn('Sync app badge failed gracefully:', err);
   }
 };
 
