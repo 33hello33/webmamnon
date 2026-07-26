@@ -24,7 +24,7 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
-import { supabase } from './supabase';
+import { supabase, getActiveSchema, setActiveSchema } from './supabase';
 import { useConfig } from './ConfigContext';
 import { deleteFromR2 } from './utils/cloudflareR2';
 import { triggerPushNotification } from './utils/pushNotifications';
@@ -561,6 +561,9 @@ function Dashboard() {
       } else if (session.loginType === 'attendance' || session.user?.role === 'Giáo viên') {
         navigate('/login');
       } else {
+        if (session.schema) {
+          setActiveSchema(session.schema);
+        }
         setUser(session.user);
       }
     } catch (e) {
@@ -593,6 +596,42 @@ function Dashboard() {
             <h2>{currentTab?.label || 'Đang tải...'}</h2>
           </div>
           <div className="top-actions" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+            {String(user?.role || '').trim().toLowerCase() === 'quản lý' && (
+              <div className="schema-selector">
+                <select
+                  value={getActiveSchema()}
+                  onChange={(e) => {
+                    const newSchema = e.target.value;
+                    setActiveSchema(newSchema);
+                    const sessionStr = localStorage.getItem('auth_session');
+                    if (sessionStr) {
+                      try {
+                        const sess = JSON.parse(sessionStr);
+                        sess.schema = newSchema;
+                        localStorage.setItem('auth_session', JSON.stringify(sess));
+                      } catch (err) { }
+                    }
+                    window.location.reload();
+                  }}
+                  className="schema-select"
+                  style={{
+                    padding: '0.45rem 1rem',
+                    borderRadius: '12px',
+                    border: '1px solid #3b82f6',
+                    outline: 'none',
+                    background: '#eff6ff',
+                    color: '#1d4ed8',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                  }}
+                >
+                  <option value="anchau">🏢 Cơ Sở An Châu</option>
+                  <option value="golden">🏢 Cơ Sở Golden</option>
+                </select>
+              </div>
+            )}
+
             <div className="theme-selector">
               <select
                 value={theme}

@@ -104,6 +104,15 @@ export const ConfigProvider = ({ children }) => {
 
   useEffect(() => {
     fetchConfig();
+
+    const handleSchemaChange = () => {
+      fetchConfig();
+    };
+
+    window.addEventListener('schema_changed', handleSchemaChange);
+    return () => {
+      window.removeEventListener('schema_changed', handleSchemaChange);
+    };
   }, []);
 
   const getTruTienAn = (hocphiInput) => {

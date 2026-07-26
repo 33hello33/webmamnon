@@ -3,10 +3,54 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
-export const supabase = createClient(
+export const baseSupabase = createClient(
    supabaseUrl || 'https://placeholder.supabase.co',
    supabaseKey || 'placeholder-key'
 );
+
+export const SCHEMA_CS1 = process.env.REACT_APP_SUPABASE_SCHEMA_CS1 || 'anchau';
+export const SCHEMA_CS2 = process.env.REACT_APP_SUPABASE_SCHEMA_CS2 || 'golden';
+
+export const getActiveSchema = () => {
+   return localStorage.getItem('selected_schema') || SCHEMA_CS1;
+};
+
+export const setActiveSchema = (schema) => {
+   if (schema === SCHEMA_CS1 || schema === SCHEMA_CS2 || schema === 'anchau' || schema === 'golden') {
+      const prevSchema = localStorage.getItem('selected_schema');
+      localStorage.setItem('selected_schema', schema);
+      if (prevSchema !== schema) {
+         window.dispatchEvent(new CustomEvent('schema_changed', { detail: { schema } }));
+      }
+   }
+};
+
+export const supabaseCs1 = baseSupabase.schema(SCHEMA_CS1);
+export const supabaseCs2 = baseSupabase.schema(SCHEMA_CS2);
+
+export const getSupabaseForSchema = (schemaName) => {
+   const schema = schemaName || getActiveSchema();
+   return baseSupabase.schema(schema);
+};
+
+export const supabase = new Proxy({}, {
+   get(target, prop) {
+      const activeSchema = getActiveSchema();
+      const schemaClient = baseSupabase.schema(activeSchema);
+      if (typeof schemaClient[prop] !== 'undefined') {
+         const val = schemaClient[prop];
+         if (typeof val === 'function') {
+            return val.bind(schemaClient);
+         }
+         return val;
+      }
+      const val = baseSupabase[prop];
+      if (typeof val === 'function') {
+         return val.bind(baseSupabase);
+      }
+      return val;
+   }
+});
 
 const getManv = () => {
    try {
