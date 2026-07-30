@@ -300,10 +300,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [transferMode, setTransferMode] = useState('single');
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [selectionAlert, setSelectionAlert] = useState({ open: false, title: '', message: '' });
-  const [isNoidungModalOpen, setIsNoidungModalOpen] = useState(false);
-  const [noidungFilter, setNoidungFilter] = useState('this_month');
-  const [noidungList, setNoidungList] = useState([]);
-  const [noidungLoading, setNoidungLoading] = useState(false);
+
   const isProcessingRef = React.useRef(false);
   const batchStudentCount = batchStudentsData.length;
   const batchNgayBatDau = batchNoticeData.ngayBatDau;
@@ -356,54 +353,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     fetchTeachers();
   }, []);
 
-  const fetchNoidungDay = useCallback(async (filter) => {
-    if (!selectedClassId) return;
-    setNoidungLoading(true);
-    try {
-      let startD, endD;
-      const today = new Date();
-      const now = new Date(today - today.getTimezoneOffset() * 60000);
-      const todayIso = now.toISOString().split('T')[0];
 
-      if (filter === 'this_week') {
-        const day = now.getDay() || 7;
-        const wStart = new Date(now);
-        wStart.setHours(-24 * (day - 1));
-        startD = wStart.toISOString().split('T')[0];
-        endD = todayIso;
-      } else if (filter === 'this_month') {
-        startD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-        endD = todayIso;
-      } else if (filter === 'last_month') {
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        startD = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
-        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-        endD = lastDay.toISOString().split('T')[0];
-      }
-
-      const { data, error } = await supabase
-        .from('tbl_noidungday')
-        .select('*')
-        .eq('malop', selectedClassId)
-        .gte('ngay', startD)
-        .lte('ngay', endD)
-        .order('ngay', { ascending: false });
-
-      if (error) throw error;
-      setNoidungList(data || []);
-    } catch (err) {
-      console.error(err);
-      showMessage('error', 'Lỗi tải nội dung dạy: ' + err.message);
-    } finally {
-      setNoidungLoading(false);
-    }
-  }, [selectedClassId, showMessage]);
-
-  useEffect(() => {
-    if (isNoidungModalOpen) {
-      fetchNoidungDay(noidungFilter);
-    }
-  }, [isNoidungModalOpen, noidungFilter, fetchNoidungDay]);
 
   const classStudents = React.useMemo(() => {
     if (!selectedClassId || !students) return [];
@@ -1509,6 +1459,146 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     XLSX.writeFile(wb, `DS_HocSinh_${selectedClass?.malop || 'Lop'}.xlsx`);
   };
 
+  const handleExportHealthReport = async () => {
+    if (!selectedClass) return;
+    if (classStudents.length === 0) return showMessage('error', 'Lớp này hiện không có học sinh');
+
+    setLoading(true);
+    try {
+      const studentIds = classStudents.map(s => s.mahv);
+
+      // Fetch health records for all students in the class
+      const { data: healthData, error } = await supabase
+        .from('suckhoedinhky')
+        .select('*')
+        .in('mahv', studentIds)
+        .order('ngay', { ascending: false });
+
+      if (error) throw error;
+
+      // Group health records by student and pick the latest record of each month (sorted newest to oldest month)
+      const studentHealthMap = {};
+      (healthData || []).forEach(item => {
+        if (!item.ngay || !item.mahv) return;
+        const monthKey = item.ngay.substring(0, 7); // Format: YYYY-MM
+        if (!studentHealthMap[item.mahv]) {
+          studentHealthMap[item.mahv] = { seenMonths: new Set(), records: [] };
+        }
+        if (!studentHealthMap[item.mahv].seenMonths.has(monthKey)) {
+          studentHealthMap[item.mahv].seenMonths.add(monthKey);
+          studentHealthMap[item.mahv].records.push(item);
+        }
+      });
+
+      // Get teacher names
+      const teacher1Obj = teachers.find(t => t.manv === selectedClass.manv);
+      const gv1Name = teacher1Obj?.tennv || selectedClass.manv || '';
+
+      const ta1Id = selectedClass.manv1;
+      const ta1Obj = teachers.find(t => t.manv === ta1Id);
+      const gv2Name = ta1Obj?.tennv || ta1Id || '';
+
+      const gvInfo = [gv1Name, gv2Name].filter(Boolean).join(' - ');
+
+      const todayStr = new Date().toLocaleDateString('vi-VN');
+
+      const rows = [
+        [`${selectedClass.tenlop || ''} - ${selectedClass.malop || ''}`],
+        [gvInfo ? `Giáo viên: ${gvInfo}` : 'Giáo viên: '],
+        [`Ngày xuất: ${todayStr}`],
+        [], // Dòng 4: để trống
+        ['STT', 'Mã HV', 'Tên HV', 'SĐT', 'Tháng', 'Chiều cao', 'Cân nặng', 'Nhận xét SK']
+      ];
+
+      const merges = [];
+      let stt = 1;
+      let currentRowIndex = 5; // Dòng 5 (0-indexed) là tiêu đề bảng (rows[4]), các dòng dữ liệu bắt đầu từ index 5
+
+      classStudents.forEach(st => {
+        const hState = studentHealthMap[st.mahv];
+        const studentComment = st.ghichusuckhoe || st.tinhtrangsk || '';
+        const recordsCount = (hState && hState.records.length > 0) ? hState.records.length : 1;
+
+        if (hState && hState.records.length > 0) {
+          hState.records.forEach(rec => {
+            const dateObj = new Date(rec.ngay);
+            const monthStr = !isNaN(dateObj.getTime())
+              ? `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`
+              : rec.ngay.substring(0, 7);
+
+            rows.push([
+              stt,
+              st.mahv || '',
+              st.tenhv || '',
+              st.sdt || '',
+              monthStr,
+              rec.chieucao || '',
+              rec.cannang || '',
+              studentComment
+            ]);
+          });
+        } else {
+          // If no health record, create one row for student
+          rows.push([
+            stt,
+            st.mahv || '',
+            st.tenhv || '',
+            st.sdt || '',
+            '',
+            '',
+            '',
+            studentComment
+          ]);
+        }
+
+        // Nếu học sinh có nhiều hơn 1 dòng (nhiều tháng sức khỏe), tạo merge ô cho STT (cột 0), Mã HV (cột 1), Tên HV (cột 2), SĐT (cột 3), Nhận xét SK (cột 7)
+        if (recordsCount > 1) {
+          const startR = currentRowIndex;
+          const endR = currentRowIndex + recordsCount - 1;
+          [0, 1, 2, 3, 7].forEach(colIndex => {
+            merges.push({ s: { r: startR, c: colIndex }, e: { r: endR, c: colIndex } });
+          });
+        }
+
+        currentRowIndex += recordsCount;
+        stt++;
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+
+      if (merges.length > 0) {
+        ws['!merges'] = merges;
+      }
+
+      // Add column widths
+      ws['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 12 }, // Mã HV
+        { wch: 25 }, // Tên HV
+        { wch: 14 }, // SĐT
+        { wch: 12 }, // Tháng
+        { wch: 12 }, // Chiều cao
+        { wch: 12 }, // Cân nặng
+        { wch: 30 }  // Nhận xét SK
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Báo Cáo Sức Khỏe');
+
+      const fileDate = new Date().toISOString().split('T')[0];
+      const tenLopClean = (selectedClass.tenlop || selectedClass.malop || 'Lop').replace(/[\/\\?%*:|"<>]/g, '_');
+      const fileName = `BCSK_${tenLopClean}_${fileDate}.xlsx`;
+
+      XLSX.writeFile(wb, fileName);
+      showMessage('success', 'Đã tải báo cáo sức khỏe thành công!');
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'Lỗi khi xuất báo cáo sức khỏe: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="class-manager animate-fade-in">
       {/* Search and Action Bar */}
@@ -1589,9 +1679,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     <span className="class-id">Mã số: {selectedClass.malop}</span>
                   </div>
                   <div className="class-actions">
-                    <button className="btn btn-outline" style={{ borderLeft: '4px solid #db2777' }} onClick={() => setIsNoidungModalOpen(true)}>
-                      <FileText size={16} /> Lịch Sử Nội Dung Dạy
-                    </button>
                     <button className="btn btn-outline" onClick={handleOpenEdit}><Edit size={16} /> Sửa Lớp</button>
                     <button className="btn btn-danger" onClick={handleDelete}><Trash2 size={16} /> Xóa Lớp</button>
                   </div>
@@ -1663,16 +1750,20 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <h3>Danh sách học sinh ({classStudents.length})</h3>
                   <div className="student-actions">
                     {config?.xuatthongbaohangloat !== false && (
-                      <button className="btn btn-outline" onClick={handleOpenBatchNotice}>
+                      <button className="btn" style={{ background: '#f59e0b', color: '#ffffff', border: 'none' }} onClick={handleOpenBatchNotice}>
                         <MessageSquare size={16} /> Xuất thông báo hàng loạt
                       </button>
                     )}
                     <button
-                      className="btn btn-outline"
+                      className="btn"
+                      style={{ background: '#f97316', color: '#ffffff', border: 'none' }}
                       onClick={handleOpenBulkTransfer}
                       title={selectedStudentIds.length > 0 ? `Đã chọn ${selectedStudentIds.length} học sinh` : 'Chọn học sinh trước khi chuyển lớp hàng loạt'}
                     >
                       <ArrowRightLeft size={16} /> Chuyển lớp hàng loạt
+                    </button>
+                    <button className="btn btn-success" onClick={handleExportHealthReport}>
+                      <Download size={16} /> Báo cáo sức khỏe
                     </button>
                     <button className="btn btn-success" onClick={handleExportStudents}>
                       <Download size={16} /> Xuất Excel
@@ -2596,70 +2687,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
 
 
-
-      {/* Lesson Content Modal */}
-      {isNoidungModalOpen && createPortal(
-        <div className="modal-overlay" style={{ zIndex: 1000 }}>
-          <div className="modal-content" style={{ maxWidth: '800px', width: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#db2777', color: 'white', padding: '8px', borderRadius: '8px' }}>
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Nội dung dạy: {selectedClass?.tenlop}</h3>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Theo dõi tiến độ giảng dạy của lớp</p>
-                </div>
-              </div>
-              <button className="close-btn" onClick={() => setIsNoidungModalOpen(false)}><X size={20} /></button>
-            </div>
-
-            <div className="modal-body" style={{ padding: '20px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'white', padding: '12px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <label style={{ fontWeight: 600, color: '#334155' }}>Khoảng thời gian:</label>
-                <select
-                  value={noidungFilter}
-                  onChange={(e) => setNoidungFilter(e.target.value)}
-                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', minWidth: '150px' }}
-                >
-                  <option value="this_week">Trong tuần này</option>
-                  <option value="this_month">Trong tháng này</option>
-                  <option value="last_month">Trong tháng trước</option>
-                </select>
-              </div>
-
-              {noidungLoading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Đang tải dữ liệu...</div>
-              ) : noidungList.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {noidungList.map((item) => (
-                    <div key={item.id} style={{ background: 'white', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.95rem' }}>
-                          📅 {new Date(item.ngay).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        </span>
-                      </div>
-                      <div style={{ color: '#334155', lineHeight: '1.6', fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
-                        {item.noidungday || <i style={{ color: '#94a3b8' }}>Không có nội dung được ghi lại.</i>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '12px', border: '2px dashed #e2e8f0' }}>
-                  <div style={{ color: '#94a3b8', marginBottom: '10px' }}><FileText size={48} strokeWidth={1} /></div>
-                  <p style={{ color: '#64748b', fontSize: '1.1rem' }}>Chưa có nội dung dạy nào trong khoảng thời gian này.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e2e8f0', textAlign: 'right', background: 'white' }}>
-              <button className="btn btn-primary" onClick={() => setIsNoidungModalOpen(false)}>Đóng</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Delete Confirmation Modal */}
       {isDeleteOpen && createPortal(
