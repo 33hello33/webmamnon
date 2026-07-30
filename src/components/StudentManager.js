@@ -140,7 +140,18 @@ export default function StudentManager({ activeSubTab, currentUser }) {
         .eq('mahv', selectedStudentId)
         .order('ngay', { ascending: false });
       if (error) throw error;
-      setHealthHistory(data || []);
+      // Nhóm theo Năm-Tháng (YYYY-MM) và chỉ lấy bản ghi gần nhất mỗi tháng
+      const latestPerMonth = [];
+      const seenMonths = new Set();
+      (data || []).forEach(item => {
+        if (!item.ngay) return;
+        const monthKey = item.ngay.substring(0, 7); // Format: YYYY-MM
+        if (!seenMonths.has(monthKey)) {
+          seenMonths.add(monthKey);
+          latestPerMonth.push(item);
+        }
+      });
+      setHealthHistory(latestPerMonth);
     } catch (err) {
       console.error(err);
       showMessage('error', 'Lỗi tải hồ sơ sức khỏe');
