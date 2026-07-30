@@ -13,14 +13,16 @@ export default function SalesPOS() {
       { id: 'vi3', name: config.vi3?.name || '' },
       { id: 'vi4', name: config.vi4?.name || '' }
    ].filter(w => w.name.trim() !== '') : []), [config]);
+   const [customerType, setCustomerType] = useState('student'); // 'student' | 'employee'
    const [students, setStudents] = useState([]);
+   const [employees, setEmployees] = useState([]);
    const [products, setProducts] = useState([]);
    const [classes, setClasses] = useState([]);
 
-   const [studentSearch, setStudentSearch] = useState('');
+   const [customerSearch, setCustomerSearch] = useState('');
    const [productSearch, setProductSearch] = useState('');
 
-   const [selectedStudent, setSelectedStudent] = useState(null);
+   const [selectedCustomer, setSelectedCustomer] = useState(null);
    const [cart, setCart] = useState([]);
 
    // Bill details
@@ -35,7 +37,7 @@ export default function SalesPOS() {
    const [message, setMessage] = useState({ type: '', text: '' });
    const [isSaving, setIsSaving] = useState(false);
    const [successModal, setSuccessModal] = useState({ isOpen: false, title: '', message: '' });
-   const [currentStep, setCurrentStep] = useState(1); // 1: Students, 2: Products, 3: Bill
+   const [currentStep, setCurrentStep] = useState(1); // 1: Customer, 2: Products, 3: Bill
    const [posPrintData, setPosPrintData] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
 
@@ -47,9 +49,15 @@ export default function SalesPOS() {
          malop_list: s.malop ? [s.malop] : []
       }));
       setStudents(st || []);
+
+      // nv (nhân viên / giáo viên)
+      const { data: nvRaw } = await supabase.from('tbl_nv').select('*').or('trangthai.neq."Đã Nghỉ",trangthai.is.null').order('tennv');
+      setEmployees(nvRaw || []);
+
       // hanghoa
       const { data: hh } = await supabase.from('tbl_hanghoa').select('*').order('tenhang');
       setProducts((hh || []).filter(p => !p.daxoa || p.daxoa.toLowerCase() !== 'đã xóa'));
+
       // lop
       const { data: cls } = await supabase.from('tbl_lop').select('malop, tenlop').or('daxoa.neq."Đã Xóa",daxoa.is.null');
       setClasses(cls || []);
@@ -59,8 +67,8 @@ export default function SalesPOS() {
 
    const fCur = (val) => val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : '0';
    const pCur = (val) => parseInt(String(val).replace(/,/g, ''), 10) || 0;
-   const buildBillFileName = (studentName, billCode) => {
-      const safeName = String(studentName || '')
+   const buildBillFileName = (customerName, billCode) => {
+      const safeName = String(customerName || '')
          .trim()
          .toUpperCase()
          .replace(/[\\/:*?"<>|]/g, '')
@@ -68,10 +76,16 @@ export default function SalesPOS() {
       return `BH_${safeName} _${billCode}.png`;
    };
 
-   const calculateOldDebt = async (mahv) => {
+   const calculateOldDebt = async (id, isEmp = false) => {
       try {
          let totalDebt = 0;
-         const { data: bills } = await supabase.from('tbl_billhanghoa').select('conno, daxoa').eq('mahv', mahv);
+         let query = supabase.from('tbl_billhanghoa').select('conno, daxoa');
+         if (isEmp) {
+            query = query.eq('manv', id);
+         } else {
+            query = query.eq('mahv', id);
+         }
+         const { data: bills } = await query;
          (bills || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa').forEach(x => totalDebt += pCur(x.conno));
          setNoCu(totalDebt);
       } catch (e) {
@@ -79,10 +93,11 @@ export default function SalesPOS() {
       }
    };
 
-   const handleSelectStudent = (st) => {
-      setSelectedStudent(st);
+   const handleSelectCustomer = (cust) => {
+      setSelectedCustomer(cust);
       setIsHinhThucLocked(true);
-      calculateOldDebt(st.mahv);
+      const isEmp = customerType === 'employee';
+      calculateOldDebt(isEmp ? cust.manv : cust.mahv, isEmp);
       if (window.innerWidth <= 991) setCurrentStep(2);
    };
 
@@ -132,19 +147,21 @@ export default function SalesPOS() {
    const conLai = tongCongBill - pCur(daDong);
 
    useEffect(() => {
-      if (selectedStudent) {
-         setHinhThuc(selectedStudent.hinhthucdong || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt'));
+      if (selectedCustomer) {
+         setHinhThuc(selectedCustomer.hinhthucdong || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt'));
       }
-   }, [selectedStudent, walletsConfig]);
+   }, [selectedCustomer, walletsConfig]);
 
    const handleSaveBill = async () => {
-      if (!selectedStudent) return window.alert('Vui lòng chọn học sinh để lưu Bill!');
+      if (!selectedCustomer) return window.alert('Vui lòng chọn khách hàng (Học sinh hoặc Nhân viên) để lưu Bill!');
       if (cart.length === 0) return window.alert('Giỏ hàng trống!');
       setIsSaving(true);
 
       try {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          const cashier = auth.user?.tennv || auth.user?.username || '';
+         const isEmp = customerType === 'employee';
+         const custName = isEmp ? selectedCustomer.tennv : selectedCustomer.tenhv;
 
          // Generate mabill
          const { data: recentBill } = await supabase.from('tbl_billhanghoa').select('mabill').order('mabill', { ascending: false }).limit(1);
@@ -174,7 +191,8 @@ export default function SalesPOS() {
          const insertData = {
             mabill: newMaBill,
             ngaylap: localNow,
-            mahv: selectedStudent.mahv,
+            mahv: isEmp ? null : selectedCustomer.mahv,
+            manv: isEmp ? selectedCustomer.manv : null,
             hanghoa: serializedHangHoa,
             nhanvien: cashier,
             chietkhau: fCur(pCur(giamGia)),
@@ -194,19 +212,21 @@ export default function SalesPOS() {
             throw res.error;
          }
 
-         const logDesc = `[BÁN HÀNG POS] Mã: ${newMaBill} | Học sinh: ${selectedStudent.tenhv} | Tổng: ${fCur(tongCongBill)} | Giam: ${fCur(pCur(giamGia))}`;
+         const logDesc = `[BÁN HÀNG POS] Mã: ${newMaBill} | ${isEmp ? 'Nhân viên' : 'Học sinh'}: ${custName} | Tổng: ${fCur(tongCongBill)} | Giam: ${fCur(pCur(giamGia))}`;
          insertLog(logDesc);
 
          // Cập nhật nợ cũ trong tbl_billhanghoa (gộp vào bill mới)
          if (noCu > 0) {
-            await supabase.from('tbl_billhanghoa')
-               .update({ conno: '0' })
-               .eq('mahv', selectedStudent.mahv)
-               .neq('mabill', newMaBill);
+            let updateQuery = supabase.from('tbl_billhanghoa').update({ conno: '0' });
+            if (isEmp) {
+               updateQuery = updateQuery.eq('manv', selectedCustomer.manv);
+            } else {
+               updateQuery = updateQuery.eq('mahv', selectedCustomer.mahv);
+            }
+            await updateQuery.neq('mabill', newMaBill);
          }
 
-         // Trừ kho & đẩy chi tiết vào bảng phụ nếu có, nhưng hiện hệ thống dùng JSON logic hoặc ko yêu cầu tbl_chitiet. 
-         // Chỉ trừ tồn kho thôi.
+         // Trừ tồn kho
          for (const item of cart) {
             const dbProd = products.find(p => p.mahang === item.mahang);
             if (dbProd) {
@@ -216,22 +236,6 @@ export default function SalesPOS() {
          }
 
          fetchBaseData();
-
-         const printObj = {
-            mabill: newMaBill,
-            ngaylap: localNow,
-            tenhv: selectedStudent.tenhv,
-            sdt: selectedStudent.sdt,
-            cart: [...cart],
-            nocu: noCu,
-            tongcong: tongCongBill,
-            chietkhau: pCur(giamGia),
-            dadong: pCur(daDong),
-            conno: conLai,
-            nhanvien: cashier,
-            hinhthuc: hinhThuc,
-            noidung: ghiChu
-         };
 
          setSuccessModal({
             isOpen: true,
@@ -243,8 +247,9 @@ export default function SalesPOS() {
          const finalPrintData = {
             mabill: newMaBill,
             ngaylap: localNow,
-            tenhv: selectedStudent.tenhv,
-            sdt: selectedStudent.sdt,
+            tenhv: custName,
+            loaiKhach: isEmp ? (selectedCustomer.role || 'Nhân viên/Giáo viên') : 'Học sinh',
+            sdt: selectedCustomer.sdt,
             cart: [...cart],
             nocu: noCu,
             tongcong: tongGiaoDich,
@@ -271,7 +276,7 @@ export default function SalesPOS() {
                   } else {
                      // Desktop: Auto download
                      const link = document.createElement('a');
-                     link.download = buildBillFileName(selectedStudent?.tenhv, newMaBill);
+                     link.download = buildBillFileName(custName, newMaBill);
                      link.href = dataUrl;
                      link.click();
                   }
@@ -281,7 +286,7 @@ export default function SalesPOS() {
                   setGiamGia('');
                   setGhiChu('');
                   setIsHinhThucLocked(true);
-                  setSelectedStudent(null);
+                  setSelectedCustomer(null);
                   setPosPrintData(null);
                   if (window.innerWidth <= 991) setCurrentStep(1);
                })
@@ -302,29 +307,92 @@ export default function SalesPOS() {
 
          {/* MOBILE TAB NAVIGATION */}
          <div className="sp-mobile-tabs">
-            <button className={currentStep === 1 ? 'active' : ''} onClick={() => setCurrentStep(1)}>1. Học Sinh</button>
+            <button className={currentStep === 1 ? 'active' : ''} onClick={() => setCurrentStep(1)}>1. Khách Hàng</button>
             <button className={currentStep === 2 ? 'active' : ''} onClick={() => setCurrentStep(2)}>2. Hàng Hóa</button>
             <button className={currentStep === 3 ? 'active' : ''} onClick={() => setCurrentStep(3)}>3. Thanh Toán ({cart.length})</button>
          </div>
 
-         {/* CỘT 1: DANH SÁCH HỌC SINH */}
+         {/* CỘT 1: DANH SÁCH KHÁCH HÀNG */}
          <div className={`sp-col-1 ${currentStep === 1 ? 'mobile-active' : 'mobile-hide'}`}>
-            <div className="sp-col-header">DANH SÁCH HỌC SINH</div>
+            <div className="sp-col-header" style={{ borderBottom: 'none', paddingBottom: '0.5rem' }}>
+               DANH SÁCH KHÁCH HÀNG
+            </div>
+            
+            {/* SWITCH HỌC SINH / NHÂN VIÊN */}
+            <div style={{ display: 'flex', gap: '4px', padding: '0 1rem 0.5rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
+               <button
+                  onClick={() => { setCustomerType('student'); setSelectedCustomer(null); setNoCu(0); }}
+                  style={{
+                     flex: 1,
+                     padding: '0.4rem 0.5rem',
+                     fontSize: '0.85rem',
+                     fontWeight: customerType === 'student' ? 'bold' : 'normal',
+                     borderRadius: '6px',
+                     border: '1px solid',
+                     borderColor: customerType === 'student' ? '#0284c7' : '#cbd5e1',
+                     background: customerType === 'student' ? '#e0f2fe' : '#f8fafc',
+                     color: customerType === 'student' ? '#0369a1' : '#64748b',
+                     cursor: 'pointer'
+                  }}
+               >
+                  Học Sinh
+               </button>
+               <button
+                  onClick={() => { setCustomerType('employee'); setSelectedCustomer(null); setNoCu(0); }}
+                  style={{
+                     flex: 1,
+                     padding: '0.4rem 0.5rem',
+                     fontSize: '0.85rem',
+                     fontWeight: customerType === 'employee' ? 'bold' : 'normal',
+                     borderRadius: '6px',
+                     border: '1px solid',
+                     borderColor: customerType === 'employee' ? '#0284c7' : '#cbd5e1',
+                     background: customerType === 'employee' ? '#e0f2fe' : '#f8fafc',
+                     color: customerType === 'employee' ? '#0369a1' : '#64748b',
+                     cursor: 'pointer'
+                  }}
+               >
+                  Nhân Viên / GV
+               </button>
+            </div>
+
             <div className="sp-search">
                <Search size={16} className="text-muted" />
-               <input type="text" placeholder="Tìm theo tên học sinh" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+               <input
+                  type="text"
+                  placeholder={customerType === 'student' ? "Tìm theo tên học sinh" : "Tìm theo tên nhân viên/GV"}
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
+               />
             </div>
+
             <div className="sp-items-container">
-               {students.filter(s => (s.tenhv && s.tenhv.toLowerCase().includes(studentSearch.toLowerCase())) || (s.sdt && s.sdt.includes(studentSearch))).map(st => (
-                  <div key={st.mahv} className={`sp-item-card ${selectedStudent?.mahv === st.mahv ? 'active' : ''}`} onClick={() => handleSelectStudent(st)}>
-                     <div className="sp-ic-title">{st.tenhv}</div>
-                     <div className="sp-ic-sub">SDT: {st.sdt || '_'}</div>
-                     <div className="sp-ic-sub">Lớp: {st.malop_list && st.malop_list.length > 0
-                        ? st.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ')
-                        : 'Học sinh bảo lưu'}</div>
-                  </div>
-               ))}
-               {students.length === 0 && <div className="text-center p-4 text-muted">Đang tải HS...</div>}
+               {customerType === 'student' ? (
+                  students
+                     .filter(s => (s.tenhv && s.tenhv.toLowerCase().includes(customerSearch.toLowerCase())) || (s.sdt && s.sdt.includes(customerSearch)))
+                     .map(st => (
+                        <div key={st.mahv} className={`sp-item-card ${selectedCustomer?.mahv === st.mahv ? 'active' : ''}`} onClick={() => handleSelectCustomer(st)}>
+                           <div className="sp-ic-title">{st.tenhv}</div>
+                           <div className="sp-ic-sub">SĐT: {st.sdt || '_'}</div>
+                           <div className="sp-ic-sub">Lớp: {st.malop_list && st.malop_list.length > 0
+                              ? st.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ')
+                              : 'Học sinh bảo lưu'}</div>
+                        </div>
+                     ))
+               ) : (
+                  employees
+                     .filter(e => (e.tennv && e.tennv.toLowerCase().includes(customerSearch.toLowerCase())) || (e.sdt && e.sdt.includes(customerSearch)) || (e.username && e.username.toLowerCase().includes(customerSearch.toLowerCase())))
+                     .map(emp => (
+                        <div key={emp.manv} className={`sp-item-card ${selectedCustomer?.manv === emp.manv ? 'active' : ''}`} onClick={() => handleSelectCustomer(emp)}>
+                           <div className="sp-ic-title">{emp.tennv}</div>
+                           <div className="sp-ic-sub">SĐT: {emp.sdt || '_'}</div>
+                           <div className="sp-ic-sub">Chức vụ/Vai trò: {emp.role || emp.chucvu || 'Nhân viên'}</div>
+                        </div>
+                     ))
+               )}
+
+               {customerType === 'student' && students.length === 0 && <div className="text-center p-4 text-muted">Đang tải HS...</div>}
+               {customerType === 'employee' && employees.length === 0 && <div className="text-center p-4 text-muted">Đang tải NV...</div>}
             </div>
          </div>
 
@@ -379,12 +447,12 @@ export default function SalesPOS() {
             <div className="sp-bill-info">
                <div className="sp-student-info">
                   <div className="sp-info-row">
-                     <span className="lbl">Họ và tên:</span>
-                     <span className="val">{selectedStudent?.tenhv || '_'}</span>
+                     <span className="lbl">{customerType === 'student' ? 'Họ và tên học sinh:' : 'Họ và tên nhân viên:'}</span>
+                     <span className="val">{selectedCustomer ? (customerType === 'student' ? selectedCustomer.tenhv : selectedCustomer.tennv) : '_'}</span>
                   </div>
                   <div className="sp-info-row">
                      <span className="lbl">Sđt:</span>
-                     <span className="val">{selectedStudent?.sdt || '_'}</span>
+                     <span className="val">{selectedCustomer?.sdt || '_'}</span>
                   </div>
                </div>
             </div>
@@ -556,8 +624,6 @@ export default function SalesPOS() {
          <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -1 }}>
             <div id="pos-print-temp" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
 
-
-
                <div style={{ position: 'relative', zIndex: 1 }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                      <div>
@@ -582,6 +648,11 @@ export default function SalesPOS() {
                         <div>Họ và tên: <b>{posPrintData?.tenhv || 'Khách vãng lai'}</b></div>
                         <div>SĐT: <b>{posPrintData?.sdt || "_"}</b></div>
                      </div>
+                     {posPrintData?.loaiKhach && posPrintData.loaiKhach !== 'Học sinh' && (
+                        <div style={{ fontSize: '11pt', color: '#475569' }}>
+                           Đối tượng: <b>{posPrintData.loaiKhach}</b>
+                        </div>
+                     )}
                   </div>
 
                   <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
