@@ -609,9 +609,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         });
 
         const autoLateFeeSurcharges = buildLateFeeSurcharges({
-           traTre1: lateCounts.traTre1,
-           traTre2: lateCounts.traTre2,
-           traTre3: lateCounts.traTre3
+          traTre1: lateCounts.traTre1,
+          traTre2: lateCounts.traTre2,
+          traTre3: lateCounts.traTre3
         }, config?.tientratre);
         const autoLateFeeSum = autoLateFeeSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
@@ -785,9 +785,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         });
 
         const autoLateFeeSurcharges = buildLateFeeSurcharges({
-           traTre1: lateCounts.traTre1,
-           traTre2: lateCounts.traTre2,
-           traTre3: lateCounts.traTre3
+          traTre1: lateCounts.traTre1,
+          traTre2: lateCounts.traTre2,
+          traTre3: lateCounts.traTre3
         }, config?.tientratre);
         const autoLateFeeSum = autoLateFeeSurcharges.reduce((sum, fee) => sum + (Number(fee.amount) || 0), 0);
 
@@ -895,19 +895,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
-        
+
         let newItem = { ...item };
-        
+
         if (field === 'phuthu_name') {
-           if (!newItem.phuthu) newItem.phuthu = [];
-           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
-           newItem.phuthu[0].name = cleanVal;
+          if (!newItem.phuthu) newItem.phuthu = [];
+          if (!newItem.phuthu[0]) newItem.phuthu[0] = { name: '', amount: 0 };
+          newItem.phuthu[0].name = cleanVal;
         } else if (field === 'phuthu_amount') {
-           if (!newItem.phuthu) newItem.phuthu = [];
-           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
-           newItem.phuthu[0].amount = cleanVal;
+          if (!newItem.phuthu) newItem.phuthu = [];
+          if (!newItem.phuthu[0]) newItem.phuthu[0] = { name: '', amount: 0 };
+          newItem.phuthu[0].amount = cleanVal;
         } else {
-           newItem[field] = cleanVal;
+          newItem[field] = cleanVal;
         }
 
         if (field === 'hocphi') {
@@ -2163,7 +2163,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
               <div className="form-group full-width" style={{ gridColumn: 'span 2' }}>
                 <label>Học phí - Định mức thu</label>
-                <textarea name="hocphi" placeholder="VD: 8 buổi - 1,000,000&#10;4 tháng - 4,400,000" value={formData.hocphi} onChange={handleChange} rows="5"></textarea>
+                <textarea name="hocphi" placeholder="VD: 1 tháng - 1,000,000" value={formData.hocphi} onChange={handleChange} rows="5"></textarea>
               </div>
 
 
@@ -2370,12 +2370,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 <span style={{ color: '#ea580c' }}>{row.diemDanhInfo?.nghiPhep || 0}</span> /
                                 <span style={{ color: '#ef4444' }}>{row.diemDanhInfo?.nghiKP || 0}</span>
                                 {(() => {
-                                   const lc = row.lateCounts || {};
-                                   const str = [];
-                                   if (lc.traTre1 > 0) str.push(`T1: ${lc.traTre1}`);
-                                   if (lc.traTre2 > 0) str.push(`T2: ${lc.traTre2}`);
-                                   if (lc.traTre3 > 0) str.push(`T3: ${lc.traTre3}`);
-                                   return str.length > 0 ? <div style={{ fontSize: '0.75rem', color: '#ea580c' }}>({str.join(', ')})</div> : null;
+                                  const lc = row.lateCounts || {};
+                                  const str = [];
+                                  if (lc.traTre1 > 0) str.push(`T1: ${lc.traTre1}`);
+                                  if (lc.traTre2 > 0) str.push(`T2: ${lc.traTre2}`);
+                                  if (lc.traTre3 > 0) str.push(`T3: ${lc.traTre3}`);
+                                  return str.length > 0 ? <div style={{ fontSize: '0.75rem', color: '#ea580c' }}>({str.join(', ')})</div> : null;
                                 })()}
                               </td>
                               <td>
@@ -2453,7 +2453,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 />
                               </td>
                               <td style={{ fontWeight: 600, color: '#b45309', textAlign: 'right' }}>
-                                 +{formatTuition(row.autoLateFeeSum || 0)}
+                                +{formatTuition(row.autoLateFeeSum || 0)}
                               </td>
                               <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
                               <td>
@@ -2563,31 +2563,31 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <>
                   <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
                   {(() => {
-                     let lateFeeSum = 0;
-                     const otherFees = [];
-                     exportingNotice.phuthu.forEach(pt => {
-                        if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
-                           lateFeeSum += Number(pt.amount) || 0;
-                        } else {
-                           otherFees.push(pt);
-                        }
-                     });
-                     return (
-                        <>
-                           {otherFees.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                 <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
-                                 <div style={{ fontWeight: 700 }}>{formatTuition(pt.amount || 0)} đ</div>
-                              </div>
-                           ))}
-                           {lateFeeSum > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                 <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                 <div style={{ fontWeight: 700 }}>{formatTuition(lateFeeSum)} đ</div>
-                              </div>
-                           )}
-                        </>
-                     );
+                    let lateFeeSum = 0;
+                    const otherFees = [];
+                    exportingNotice.phuthu.forEach(pt => {
+                      if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
+                        lateFeeSum += Number(pt.amount) || 0;
+                      } else {
+                        otherFees.push(pt);
+                      }
+                    });
+                    return (
+                      <>
+                        {otherFees.map((pt, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                            <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                            <div style={{ fontWeight: 700 }}>{formatTuition(pt.amount || 0)} đ</div>
+                          </div>
+                        ))}
+                        {lateFeeSum > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                            <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
+                            <div style={{ fontWeight: 700 }}>{formatTuition(lateFeeSum)} đ</div>
+                          </div>
+                        )}
+                      </>
+                    );
                   })()}
                 </>
               )}
@@ -2639,38 +2639,38 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
             {/* QR SECTION */}
             {(() => {
-               const qrUrl = exportingNotice.qrBase64 || exportingNotice.qrUrl;
-               if (!qrUrl) return (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
+              const qrUrl = exportingNotice.qrBase64 || exportingNotice.qrUrl;
+              if (!qrUrl) return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
+                </div>
+              );
+              return (
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: '10px', gap: '25px', padding: '15px 0', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
+                  <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" data-role="notice-qr" style={{ width: '130px', height: '130px', borderRadius: '10px', objectFit: 'contain', background: '#fff', border: '1px solid #e2e8f0', padding: '4px' }} />
+                  <div>
+                    <div style={{ fontSize: '13pt', color: '#64748b', marginBottom: '8px', fontWeight: 600 }}>Quét mã QR để thanh toán</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ fontSize: '14pt', fontWeight: 800, color: '#0f172a' }}>{walletsConfig?.[0]?.bankName || 'Ngân hàng'} - <span style={{ color: '#0369a1' }}>{walletsConfig?.[0]?.accountNumber || 'Số TK'}</span></div>
+                      <div style={{ fontSize: '13pt', color: '#334155', fontWeight: 600 }}>CTK: {walletsConfig?.[0]?.accountName || 'Tên TK'}</div>
+                      <div style={{ fontSize: '12pt', color: '#64748b', fontStyle: 'italic', marginTop: '4px' }}>Nội dung: {exportingNotice.mahv} {exportingNotice.thoiluong || "HP"}</div>
+                    </div>
                   </div>
-               );
-               return (
-                  <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: '10px', gap: '25px', padding: '15px 0', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
-                     <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" data-role="notice-qr" style={{ width: '130px', height: '130px', borderRadius: '10px', objectFit: 'contain', background: '#fff', border: '1px solid #e2e8f0', padding: '4px' }} />
-                     <div>
-                        <div style={{ fontSize: '13pt', color: '#64748b', marginBottom: '8px', fontWeight: 600 }}>Quét mã QR để thanh toán</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                           <div style={{ fontSize: '14pt', fontWeight: 800, color: '#0f172a' }}>{walletsConfig?.[0]?.bankName || 'Ngân hàng'} - <span style={{ color: '#0369a1' }}>{walletsConfig?.[0]?.accountNumber || 'Số TK'}</span></div>
-                           <div style={{ fontSize: '13pt', color: '#334155', fontWeight: 600 }}>CTK: {walletsConfig?.[0]?.accountName || 'Tên TK'}</div>
-                           <div style={{ fontSize: '12pt', color: '#64748b', fontStyle: 'italic', marginTop: '4px' }}>Nội dung: {exportingNotice.mahv} {exportingNotice.thoiluong || "HP"}</div>
-                        </div>
-                     </div>
-                  </div>
-               );
+                </div>
+              );
             })()}
 
             <div style={{ marginTop: 25, fontSize: "14pt", display: "flex", justifyContent: "space-between", color: '#4b5563' }}>
-               <div style={{ lineHeight: '1.6' }}>
-                  <b style={{ color: '#0f172a' }}>Facebook:</b> Trường Lá - E Skills School <br />
-                  <b style={{ color: '#0f172a' }}>SĐT/Zalo:</b> {config?.sdtcongty}
-               </div>
-               <div style={{ textAlign: "center" }}>
-                  <b style={{ color: '#0f172a' }}>Nhân viên phụ trách</b> <br /><br /><br />
-                  <b style={{ color: '#0369a1', fontSize: '16pt' }}>{exportingNotice.manv || cashier}</b>
-               </div>
+              <div style={{ lineHeight: '1.6' }}>
+                <b style={{ color: '#0f172a' }}>Facebook:</b> Trường Lá - E Skills School <br />
+                <b style={{ color: '#0f172a' }}>SĐT/Zalo:</b> {config?.sdtcongty}
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <b style={{ color: '#0f172a' }}>Nhân viên phụ trách</b> <br /><br /><br />
+                <b style={{ color: '#0369a1', fontSize: '16pt' }}>{exportingNotice.manv || cashier}</b>
+              </div>
             </div>
             <div style={{ marginTop: "25px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #cbd5e1', paddingTop: '15px', fontSize: '12pt', color: '#64748b' }}>
-               Cảm ơn quý phụ huynh đã đồng hành cùng E-Skills Academy!
+              Cảm ơn quý phụ huynh đã đồng hành cùng E-Skills Academy!
             </div>
           </div>
         </div>,
