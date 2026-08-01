@@ -28,15 +28,42 @@ export const setActiveSchema = (schema) => {
 export const supabaseCs1 = baseSupabase.schema(SCHEMA_CS1);
 export const supabaseCs2 = baseSupabase.schema(SCHEMA_CS2);
 
+export const SHARED_WAREHOUSE_TABLES = ['tbl_hanghoa', 'tbl_nhapkho', 'tbl_billhanghoa'];
+
 export const getSupabaseForSchema = (schemaName) => {
    const schema = schemaName || getActiveSchema();
-   return baseSupabase.schema(schema);
+   const client = baseSupabase.schema(schema);
+   return new Proxy(client, {
+      get(target, prop) {
+         if (prop === 'from') {
+            return (tableName) => {
+               if (SHARED_WAREHOUSE_TABLES.includes(tableName)) {
+                  return baseSupabase.schema(SCHEMA_CS1).from(tableName);
+               }
+               return target.from(tableName);
+            };
+         }
+         const val = target[prop];
+         if (typeof val === 'function') {
+            return val.bind(target);
+         }
+         return val;
+      }
+   });
 };
 
 export const supabase = new Proxy({}, {
    get(target, prop) {
       const activeSchema = getActiveSchema();
       const schemaClient = baseSupabase.schema(activeSchema);
+      if (prop === 'from') {
+         return (tableName) => {
+            if (SHARED_WAREHOUSE_TABLES.includes(tableName)) {
+               return baseSupabase.schema(SCHEMA_CS1).from(tableName);
+            }
+            return schemaClient.from(tableName);
+         };
+      }
       if (typeof schemaClient[prop] !== 'undefined') {
          const val = schemaClient[prop];
          if (typeof val === 'function') {
