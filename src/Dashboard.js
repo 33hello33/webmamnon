@@ -138,12 +138,17 @@ function Dashboard() {
 
     // Check phanquyenrole
     const pq = config?.phanquyenrole?.[user.role];
-    if (!pq) return filtered.filter(t => t.id === 'overview'); // Safe fallback
+    if (!pq) {
+      if (user.role === 'Nhân viên VP') return filtered.filter(t => ['overview', 'finances', 'students', 'student_list'].includes(t.id));
+      return filtered.filter(t => t.id === 'overview'); // Safe fallback
+    }
     if (pq.full) return filtered;
 
     return filtered.filter(t => {
       if (t.adminOnly) return false;
-      return (pq.tabs || []).includes(t.id);
+      const allowedTabs = pq.tabs || [];
+      if (user.role === 'Nhân viên VP' && (t.id === 'student_list' || t.id === 'students')) return true;
+      return allowedTabs.includes(t.id);
     });
   };
 
@@ -849,7 +854,7 @@ function Dashboard() {
             boxShadow: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
             border: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
-            {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
+            {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'statistics' && <Statistics />}
             {currentTab?.id === 'chat' && (
               <ChatManager

@@ -361,6 +361,7 @@ export default function EmployeeManager({ currentUser }) {
                       <>
                         <option value="Quản lý">Quản lý</option>
                         <option value="Nhân viên VP">Nhân viên VP</option>
+                        <option value="Nhân viên">Nhân viên</option>
                       </>
                     )}
                     <option value="Giáo viên">Giáo viên</option>
