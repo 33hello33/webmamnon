@@ -128,9 +128,6 @@ export default function AttendanceManager({ students, showMessage }) {
           }
         });
         setAttRecords(rMap);
-        // Load lesson content
-        const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', targetMalop).eq('ngay', attDate).maybeSingle();
-        setLessonContent(nd ? nd.noidungday : '');
       } catch (err) { console.error(err); }
       setLoading(false);
     };
@@ -170,12 +167,8 @@ export default function AttendanceManager({ students, showMessage }) {
         if (rec.id) await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
         else await supabase.from('tbl_diemdanh').insert([payload]);
       }
-      // Save lesson content
-      const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', targetMalop).eq('ngay', attDate).maybeSingle();
-      if (exists) await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-      else await supabase.from('tbl_noidungday').insert([{ malop: targetMalop, ngay: attDate, noidungday: lessonContent }]);
 
-      showMessage('success', 'Lưu điểm danh & nội dung dạy thành công!');
+      showMessage('success', 'Lưu điểm danh thành công!');
       // const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
       // insertLog(logDesc);
       // Update the report data too
@@ -719,10 +712,6 @@ export default function AttendanceManager({ students, showMessage }) {
                         }
                         return null;
                       })()}
-                      <div style={{ flex: 2, minWidth: '200px' }}>
-                        <label className="portal-att-label">Nội dung dạy buổi hôm nay</label>
-                        <textarea placeholder="Kiến thức cũ, phần mới, bài tập..." value={lessonContent} onChange={e => setLessonContent(e.target.value)} disabled={isAttendanceHoliday} rows="1" style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '8px', resize: 'vertical' }} />
-                      </div>
                     </div>
 
                     {isAttendanceHoliday && (

@@ -36,7 +36,6 @@ export default function SystemLogs() {
     'tbl_config': 'Cấu hình',
     'tbl_ghichu': 'Ghi chú',
     'tbl_nhapkho': 'Nhập kho',
-    'tbl_noidungday': 'Nội dung dạy',
     'tbl_chamconggv': 'Chấm công GV'
   };
 
