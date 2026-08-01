@@ -642,12 +642,12 @@ function ParentPortal({ parentData, setParentData }) {
          const studentId = parentData?.student?.mahv;
          if (studentId) {
             await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
-            const { error: dbError } = await supabase.from('push_subscriptions').insert({
+            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
                user_id: studentId,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            });
+            }, { onConflict: 'user_id' });
 
             if (dbError) {
                console.error('Lỗi khi lưu Subscription vào DB:', dbError);
@@ -697,12 +697,12 @@ function ParentPortal({ parentData, setParentData }) {
             });
 
             await supabase.from('push_subscriptions').delete().match({ user_id: studentId, role: 'parent' });
-            const { error: dbError } = await supabase.from('push_subscriptions').insert({
+            const { error: dbError } = await supabase.from('push_subscriptions').upsert({
                user_id: studentId,
                role: 'parent',
                subscription: subscription,
                updated_at: new Date().toISOString()
-            });
+            }, { onConflict: 'user_id' });
 
             if (dbError) {
                console.error('Lỗi khi làm mới Subscription:', dbError);

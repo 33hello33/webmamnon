@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -283,10 +283,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          });
          setAttRecords(rMap);
-
-         // Tải nội dung dạy
-         const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
-         setLessonContent(nd ? nd.noidungday : '');
       };
       if (attendanceUser) loadData();
    }, [attSelectedClass, attDate, attendanceUser]);
@@ -311,15 +307,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             else await supabase.from('tbl_diemdanh').insert([payload]);
          }
 
-         // Lưu nội dung dạy
-         const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
-         if (exists) {
-            await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-         } else {
-            await supabase.from('tbl_noidungday').insert([{ malop: attSelectedClass, ngay: attDate, noidungday: lessonContent }]);
-         }
-
-         window.alert('Lưu điểm danh & nội dung dạy thành công!');
+         window.alert('Lưu điểm danh thành công!');
       } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
       setLoading(false);
    };
