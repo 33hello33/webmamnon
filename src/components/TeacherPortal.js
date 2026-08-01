@@ -315,7 +315,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             await supabase.from('push_subscriptions').delete().in('user_id', teacherIds).eq('role', 'teacher');
             const { error: dbError } = await supabase
                .from('push_subscriptions')
-               .insert(payloads);
+               .upsert(payloads, { onConflict: 'user_id' });
 
             if (dbError) console.error('Lỗi khi làm mới subscription giáo viên:', dbError);
          } catch (err) {
@@ -534,7 +534,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          await supabase.from('push_subscriptions').delete().in('user_id', teacherIds).eq('role', 'teacher');
          const { error: dbError } = await supabase
             .from('push_subscriptions')
-            .insert(payloads);
+            .upsert(payloads, { onConflict: 'user_id' });
 
          if (dbError) throw dbError;
 
@@ -657,10 +657,6 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
          });
          setAttRecords(rMap);
-
-         // Tải nội dung dạy
-         const { data: nd } = await supabase.from('tbl_noidungday').select('noidungday').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
-         setLessonContent(nd ? nd.noidungday : '');
       };
       if (attendanceUser) loadData();
    }, [attSelectedClass, attDate, attendanceUser]);
@@ -748,15 +744,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             return next;
          });
 
-         // Lưu nội dung dạy
-         const { data: exists } = await supabase.from('tbl_noidungday').select('id').eq('malop', attSelectedClass).eq('ngay', attDate).maybeSingle();
-         if (exists) {
-            await supabase.from('tbl_noidungday').update({ noidungday: lessonContent }).eq('id', exists.id);
-         } else {
-            await supabase.from('tbl_noidungday').insert([{ malop: attSelectedClass, ngay: attDate, noidungday: lessonContent }]);
-         }
 
-         window.alert('Lưu điểm danh & nội dung dạy thành công!');
+         window.alert('Lưu điểm danh thành công!');
       } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
       setLoading(false);
    };
@@ -2163,6 +2152,21 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                                        {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('vangKP')) && (
                                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#dc2626', fontWeight: 700, fontSize: '0.95rem', background: rec.trangthai === 'Nghỉ không phép' ? '#fef2f2' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: rec.trangthai === 'Nghỉ không phép' ? '1px solid #fee2e2' : '1px solid #e2e8f0', transition: '0.2s' }}>
                                              <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'Nghỉ không phép'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'Nghỉ không phép')} /> Nghỉ KP
+                                          </label>
+                                       )}
+                                       {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('traTre1')) && (
+                                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#ca8a04', fontWeight: 700, fontSize: '0.95rem', background: (rec.trangthai === 'trả trễ 1' || rec.trangthai === 'Trả trễ 1') ? '#fefce8' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: (rec.trangthai === 'trả trễ 1' || rec.trangthai === 'Trả trễ 1') ? '1px solid #fef08a' : '1px solid #e2e8f0', transition: '0.2s' }}>
+                                             <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'trả trễ 1' || rec.trangthai === 'Trả trễ 1'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'trả trễ 1')} /> Trả trễ 1
+                                          </label>
+                                       )}
+                                       {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('traTre2')) && (
+                                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#b45309', fontWeight: 700, fontSize: '0.95rem', background: (rec.trangthai === 'trả trễ 2' || rec.trangthai === 'Trả trễ 2') ? '#fff7ed' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: (rec.trangthai === 'trả trễ 2' || rec.trangthai === 'Trả trễ 2') ? '1px solid #ffedd5' : '1px solid #e2e8f0', transition: '0.2s' }}>
+                                             <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'trả trễ 2' || rec.trangthai === 'Trả trễ 2'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'trả trễ 2')} /> Trả trễ 2
+                                          </label>
+                                       )}
+                                       {(!config?.cotdiemdanh?.selected || config.cotdiemdanh.selected.includes('traTre3')) && (
+                                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#991b1b', fontWeight: 700, fontSize: '0.95rem', background: (rec.trangthai === 'trả trễ 3' || rec.trangthai === 'Trả trễ 3') ? '#fef2f2' : 'transparent', padding: '0.4rem 0.75rem', borderRadius: '8px', border: (rec.trangthai === 'trả trễ 3' || rec.trangthai === 'Trả trễ 3') ? '1px solid #fecaca' : '1px solid #e2e8f0', transition: '0.2s' }}>
+                                             <input type="radio" name={`tt_${st.mahv}`} disabled={isAttendanceHoliday} checked={rec.trangthai === 'trả trễ 3' || rec.trangthai === 'Trả trễ 3'} onChange={() => handleUpdateRecord(st.mahv, 'trangthai', 'trả trễ 3')} /> Trả trễ 3
                                           </label>
                                        )}
                                     </div>
