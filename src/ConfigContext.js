@@ -84,7 +84,7 @@ export const ConfigProvider = ({ children }) => {
           nghilientiep: DEFAULT_CONSECUTIVE_REFUND_CONFIG,
           phanquyenrole: {
             'Quản lý': { full: true },
-            'Nhân viên VP': { full: false, tabs: ['overview', 'finances', 'students'] },
+            'Nhân viên VP': { full: false, tabs: ['overview', 'finances', 'students', 'student_list'] },
             'Giáo viên': { full: false, tabs: ['students', 'timesheet'] }
           },
           r2_enabled: false,
