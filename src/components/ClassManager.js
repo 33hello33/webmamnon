@@ -639,7 +639,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           ? `Trừ ${formatPlainCurrency(truTienDaNgoai)} tiền dã ngoại tháng ${ngoaiKhoaAdjustment.period} do không đăng ký${(ngoaiKhoaAdjustment.items || []).length > 1 ? ` ${(ngoaiKhoaAdjustment.items || []).length} chương trình` : ''}.`
           : '';
         const totalRefund = mealRefund + tuitionRefund + truTienDaNgoai;
-        const stHinhThuc = studentRaw.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
+        const rawHT = (studentRaw.hinhthucdong || '').trim();
+        const stHinhThuc = walletsConfig.some(w => w.name === rawHT) ? rawHT : '';
         const stNoCu = debtMap[currentMahv] || 0;
         const phuthu = normalizeSurcharges(studentRaw.phuthu);
         const surchargeSum = sumSurcharges(phuthu) + autoLateFeeSum;
@@ -1142,8 +1143,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 const dataUrl = await toPng(node, {
                   cacheBust: true,
                   backgroundColor: '#ffffff',
-                  width: 800,
-                  height: 1150
+                  width: 800
                 });
 
                 if (dataUrl && dataUrl.length > 2500) {
@@ -1823,7 +1823,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   {s.trangthai || 'Chưa cập nhật'}
                                 </span>
                               </td>
-                              <td>{s.hinhthucdong || '-'}</td>
+                              <td>{walletsConfig.some(w => w.name === s.hinhthucdong) ? s.hinhthucdong : ''}</td>
                               <td style={{ fontWeight: 600, color: '#0369a1' }}>{latestHd?.thoiluong || '-'}</td>
                             </tr>
                           );
@@ -1874,7 +1874,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <div className="student-info">
                             <span>STT: {idx + 1}</span>
                             <span>{selectedClass?.tenlop}</span>
-                            <span style={{ fontWeight: 600, color: '#db2777' }}>HT: {s.hinhthucdong || 'Tiền mặt'}</span>
+                            <span style={{ fontWeight: 600, color: '#db2777' }}>HT: {walletsConfig.some(w => w.name === s.hinhthucdong) ? s.hinhthucdong : ''}</span>
                           </div>
 
                           <div className="student-dates">
@@ -2452,6 +2452,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               <td>
                                 <select value={row.hinhthuc} onChange={e => handleBatchStudentChange(row.mahv, 'hinhthuc', e.target.value)} className="td-input" style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px' }}>
                                   {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                  {row.hinhthuc && !walletsConfig.some(w => w.name === row.hinhthuc) && row.hinhthuc !== 'Tiền mặt' && (
+                                    <option value={row.hinhthuc}>{row.hinhthuc}</option>
+                                  )}
                                   {walletsConfig.map(w => (
                                     <option key={w.id} value={w.name}>{w.name}</option>
                                   ))}
@@ -2575,7 +2578,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         ))}
                         {lateFeeSum > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                            <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
+                            <div style={{ fontStyle: 'italic' }}>+ Phí trả trễ:</div>
                             <div style={{ fontWeight: 700 }}>{formatTuition(lateFeeSum)} đ</div>
                           </div>
                         )}
@@ -2632,38 +2635,32 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
             {/* QR SECTION */}
             {(() => {
-              const qrUrl = exportingNotice.qrBase64 || exportingNotice.qrUrl;
+              const qrUrl = exportingNotice?.qrBase64 || exportingNotice?.qrUrl || (exportingNotice ? getQRUrl(exportingNotice, walletsConfig) : null);
               if (!qrUrl) return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
                 </div>
               );
               return (
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: '10px', gap: '25px', padding: '15px 0', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
-                  <img src={qrUrl} alt="QR Code" crossOrigin="anonymous" data-role="notice-qr" style={{ width: '130px', height: '130px', borderRadius: '10px', objectFit: 'contain', background: '#fff', border: '1px solid #e2e8f0', padding: '4px' }} />
-                  <div>
-                    <div style={{ fontSize: '13pt', color: '#64748b', marginBottom: '8px', fontWeight: 600 }}>Quét mã QR để thanh toán</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ fontSize: '14pt', fontWeight: 800, color: '#0f172a' }}>{walletsConfig?.[0]?.bankName || 'Ngân hàng'} - <span style={{ color: '#0369a1' }}>{walletsConfig?.[0]?.accountNumber || 'Số TK'}</span></div>
-                      <div style={{ fontSize: '13pt', color: '#334155', fontWeight: 600 }}>CTK: {walletsConfig?.[0]?.accountName || 'Tên TK'}</div>
-                      <div style={{ fontSize: '12pt', color: '#64748b', fontStyle: 'italic', marginTop: '4px' }}>Nội dung: {exportingNotice.mahv} {exportingNotice.thoiluong || "HP"}</div>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+                  <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{exportingNotice?.hinhthuc}</span></div>
+                  <div style={{ textAlign: 'center' }}>
+                    <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                    <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                   </div>
                 </div>
               );
             })()}
 
-            <div style={{ marginTop: 25, fontSize: "14pt", display: "flex", justifyContent: "space-between", color: '#4b5563' }}>
+            {/* FOOTER */}
+            <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
               <div style={{ lineHeight: '1.6' }}>
-                <b style={{ color: '#0f172a' }}>Facebook:</b>Trường Mầm Non Doremi<br />
-                <b style={{ color: '#0f172a' }}>SĐT/Zalo:</b> {config?.sdtcongty}
+                Facebook: Trường Mầm Non Doremi<br />
+                Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+                Nhân viên: <b style={{ fontWeight: 950 }}>{exportingNotice.manv || cashier}</b>
               </div>
-              <div style={{ textAlign: "center" }}>
-                <b style={{ color: '#0f172a' }}>Nhân viên phụ trách</b> <br /><br /><br />
-                <b style={{ color: '#0369a1', fontSize: '16pt' }}>{exportingNotice.manv || cashier}</b>
+              <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                (Xác nhận)
               </div>
-            </div>
-            <div style={{ marginTop: "25px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #cbd5e1', paddingTop: '15px', fontSize: '12pt', color: '#64748b' }}>
-              Cảm ơn quý phụ huynh đã đồng hành cùng E-Skills Academy!
             </div>
           </div>
         </div>,
