@@ -2138,12 +2138,12 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        Facebook: Trường Mầm Non Doremi <br />
+                        Facebook: Doremi Preschool <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
                         Nhân viên thu tiền <br /><br /><br />
-                        <b>{downloadingInvoice?.nhanvien}</b>
+                        <b>Doremi Preschool</b>
                      </div>
                   </div>
                   <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
@@ -2309,9 +2309,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Trường Mầm Non Doremi
+                     Facebook: Doremi Preschool
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
                   </div>
                   <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                      (Xác nhận)

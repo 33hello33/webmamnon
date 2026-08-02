@@ -3467,8 +3467,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ marginTop: '10px' }}>Ghi chú: {downloadingInvoice?.ghichu || ""}</div>
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>Facebook: Trường Mầm Non Doremi <br />SĐT/Zalo: {config?.sdtcongty}</div>
-                     <div style={{ textAlign: "center" }}>Nhân viên thu tiền <br /><br /><br /><b>{downloadingInvoice?.nhanvien}</b></div>
+                     <div>Facebook: Doremi Preschool <br />SĐT/Zalo: {config?.sdtcongty}</div>
+                     <div style={{ textAlign: "center" }}>Nhân viên thu tiền <br /><br /><br /><b>Doremi Preschool</b></div>
                   </div>
                </div>
             </div>
@@ -3630,9 +3630,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Trường Mầm Non Doremi<br />
+                     Facebook: Doremi Preschool<br />
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien || 'Thu Ngân'}</b>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
                   </div>
                   <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                      (Xác nhận)

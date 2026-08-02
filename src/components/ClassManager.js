@@ -2654,9 +2654,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             {/* FOOTER */}
             <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
               <div style={{ lineHeight: '1.6' }}>
-                Facebook: Trường Mầm Non Doremi<br />
+                Facebook: Doremi Preschool<br />
                 Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                Nhân viên: <b style={{ fontWeight: 950 }}>{exportingNotice.manv || cashier}</b>
+                Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
               </div>
               <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                 (Xác nhận)
