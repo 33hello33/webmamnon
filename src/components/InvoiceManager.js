@@ -690,8 +690,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             }
 
             // Lấy các khoản giảm trừ hoàn toàn từ chứng từ gần nhất
-            setRefundOverrides({ 
-               meal: parseCur(recentDoc.trutienan), 
+            setRefundOverrides({
+               meal: parseCur(recentDoc.trutienan),
                tuition: parseCur(recentDoc.tiennghiphep),
                ngoaiKhoa: parseCur(recentDoc.trutiendangoai)
             });
@@ -774,18 +774,18 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
             return isNegative ? -n : n;
          };
-         
+
          const recentTBDoc = validTBs.length > 0 ? validTBs.slice().sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap))[0] : null;
          const recentHDDoc = validHDs.length > 0 ? validHDs.slice().sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap))[0] : null;
 
          let foundDiscount = false;
-         
+
          if (recentTBDoc && parseCurGlobal(recentTBDoc.giamhocphi) > 0) {
             giamHocphi = parseCurGlobal(recentTBDoc.giamhocphi);
             discountPercent = 0;
             foundDiscount = true;
          }
-         
+
          if (!foundDiscount && student['giamhp%'] && parseFloat(student['giamhp%']) > 0) {
             discountPercent = parseFloat(student['giamhp%']);
             giamHocphi = Math.round((hocphi * discountPercent) / 100);
@@ -1497,19 +1497,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
-   // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
-   let tuitionRefund = 0;
-   let mealRefund = 0;
-   tuitionRefund = calculateConsecutiveTuitionRefund({
-      groups: studySummary?.consecutiveLeave || [],
-      dailyRefundAmount: trutiennghi_val,
-      config: consecutiveRefundConfig
-   });
-
-   // Hoàn trả tiền ăn: Tổng số ngày nghỉ phép >= 3 ngày
-   if (studySummary?.nghiPhep >= 3) {
-      mealRefund = studySummary.nghiPhep * trutienan_val;
-   }
+   // Logic hoàn trả tiền học & tiền ăn theo số ngày nghỉ phép:
+   // (Số ngày nghỉ phép * đơn giá cấu hình)
+   const mealRefund = (studySummary?.nghiPhep || 0) * trutienan_val;
+   const tuitionRefund = (studySummary?.nghiPhep || 0) * trutiennghi_val;
 
    // Round to nearest 1000
    const roundedMealRefund = Math.round(mealRefund / 1000) * 1000;
@@ -1708,52 +1699,56 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     )}
                                     {deductionSum > 0 && (
                                        <>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                             <span>Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
-                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
-                                          <span style={{ fontWeight: 700 }}>-</span>
-                                          <input
-                                             type="text"
-                                             value={formatCurrency(actualMealRefund)}
-                                             onChange={(e) => {
-                                                const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
-                                                setRefundOverrides(prev => ({ ...prev, meal: val }));
-                                             }}
-                                             style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
-                                          />
-                                          <span style={{ fontWeight: 700 }}>đ</span>
-                                       </div>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
-                                       <span>Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
-                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
-                                          <span style={{ fontWeight: 700 }}>-</span>
-                                          <input
-                                             type="text"
-                                             value={formatCurrency(actualTuitionRefund)}
-                                             onChange={(e) => {
-                                                const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
-                                                setRefundOverrides(prev => ({ ...prev, tuition: val }));
-                                             }}
-                                             style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
-                                          />
-                                          <span style={{ fontWeight: 700 }}>đ</span>
-                                       </div>
-                                    </div>
-                                    {ngoaiKhoaDeduction > 0 && (
-                                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
-                                          <span>Trừ tiền dã ngoại tháng trước:</span>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                             <span style={{ fontWeight: 700 }}>-</span>
-                                             <span style={{ fontWeight: 700 }}>{formatCurrency(ngoaiKhoaDeduction)}</span>
-                                             <span style={{ fontWeight: 700 }}>đ</span>
+                                          {actualMealRefund > 0 && (
+                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span>Hoàn trả tiền ăn nghỉ phép:</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
+                                                   <span style={{ fontWeight: 700 }}>-</span>
+                                                   <input
+                                                      type="text"
+                                                      value={formatCurrency(actualMealRefund)}
+                                                      onChange={(e) => {
+                                                         const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                                         setRefundOverrides(prev => ({ ...prev, meal: val }));
+                                                      }}
+                                                      style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
+                                                   />
+                                                   <span style={{ fontWeight: 700 }}>đ</span>
+                                                </div>
+                                             </div>
+                                          )}
+                                          {actualTuitionRefund > 0 && (
+                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: actualMealRefund > 0 ? '6px' : '0', alignItems: 'center' }}>
+                                                <span>Hoàn trả học phí nghỉ phép:</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
+                                                   <span style={{ fontWeight: 700 }}>-</span>
+                                                   <input
+                                                      type="text"
+                                                      value={formatCurrency(actualTuitionRefund)}
+                                                      onChange={(e) => {
+                                                         const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                                         setRefundOverrides(prev => ({ ...prev, tuition: val }));
+                                                      }}
+                                                      style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
+                                                   />
+                                                   <span style={{ fontWeight: 700 }}>đ</span>
+                                                </div>
+                                             </div>
+                                          )}
+                                          {ngoaiKhoaDeduction > 0 && (
+                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
+                                                <span>Trừ tiền dã ngoại tháng trước:</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                   <span style={{ fontWeight: 700 }}>-</span>
+                                                   <span style={{ fontWeight: 700 }}>{formatCurrency(ngoaiKhoaDeduction)}</span>
+                                                   <span style={{ fontWeight: 700 }}>đ</span>
+                                                </div>
+                                             </div>
+                                          )}
+                                          <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
+                                             Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
                                           </div>
-                                       </div>
-                                    )}
-                                    <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
-                                       Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
-                                    </div>
-                                    </>
+                                       </>
                                     )}
                                  </div>
                               )}
@@ -2143,7 +2138,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
-                        Facebook: Trường Lá - E Skills School <br />
+                        Facebook: Trường Mầm Non Doremi <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
@@ -2169,7 +2164,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   {/* CENTER: Info */}
                   <div style={{ flex: 1, textAlign: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        TRƯỜNG LÁ TAM PHƯỚC
+                        TRƯỜNG MẦM NON DOREMI
                      </h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
@@ -2314,7 +2309,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Trường Lá - Eskills School
+                     Facebook: Trường Mầm Non Doremi
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
                      Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
                   </div>

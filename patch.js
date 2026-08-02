@@ -236,7 +236,7 @@ const hiddenJSX = `
                      <div style={{ marginTop: '10px' }}>Ghi chú: {downloadingInvoice?.ghichu || ""}</div>
                   </div>
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>Facebook: Trường Lá - E Skills School <br />SĐT/Zalo: {config?.sdtcongty}</div>
+                     <div>Facebook: Doremi <br />SĐT/Zalo: {config?.sdtcongty}</div>
                      <div style={{ textAlign: "center" }}>Nhân viên thu tiền <br /><br /><br /><b>{downloadingInvoice?.nhanvien}</b></div>
                   </div>
                </div>

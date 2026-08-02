@@ -616,25 +616,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const autoLateFeeSum = autoLateFeeSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
         const groups = calculateConsecutiveLeaveGroups(uniqueDayRecords);
-        let mealRefund = 0;
-        let maxLeave = 0;
-        const mealRefundRate = getMealRefundRate(initHocPhi);
+        const trutienan_val = (getTienAnConfig?.(initHocPhi) && Number(getTienAnConfig(initHocPhi).tru_nghi) > 0)
+          ? Number(getTienAnConfig(initHocPhi).tru_nghi)
+          : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
         const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
+        let maxLeave = 0;
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
         });
 
-        let tuitionRefund = calculateConsecutiveTuitionRefund({
-          groups,
-          dailyRefundAmount: tuitionRefundRate,
-          config: consecutiveRefundConfig
-        });
-
-        if (nghiPhep >= 3) {
-          mealRefund = nghiPhep * mealRefundRate;
-        }
+        let tuitionRefund = nghiPhep * tuitionRefundRate;
+        let mealRefund = nghiPhep * trutienan_val;
 
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
@@ -793,18 +787,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
         // Tính lại hoàn tiền
         const groups = calculateConsecutiveLeaveGroups(uniqueDayRecords);
-        let mealRefund = 0, maxLeave = 0;
-        const mealRefundRate = getMealRefundRate(row.hocphi || 0);
+        let maxLeave = 0;
+        const currentHocPhi = row.hocphi || 0;
+        const trutienan_val = (getTienAnConfig?.(currentHocPhi) && Number(getTienAnConfig(currentHocPhi).tru_nghi) > 0)
+          ? Number(getTienAnConfig(currentHocPhi).tru_nghi)
+          : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
         });
-        let tuitionRefund = calculateConsecutiveTuitionRefund({
-          groups,
-          dailyRefundAmount: tuitionRefundRate,
-          config: consecutiveRefundConfig
-        });
-        if (nghiPhep >= 3) mealRefund = nghiPhep * mealRefundRate;
+        let tuitionRefund = nghiPhep * tuitionRefundRate;
+        let mealRefund = nghiPhep * trutienan_val;
 
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
@@ -2661,7 +2654,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
             <div style={{ marginTop: 25, fontSize: "14pt", display: "flex", justifyContent: "space-between", color: '#4b5563' }}>
               <div style={{ lineHeight: '1.6' }}>
-                <b style={{ color: '#0f172a' }}>Facebook:</b> Trường Lá - E Skills School <br />
+                <b style={{ color: '#0f172a' }}>Facebook:</b>Trường Mầm Non Doremi<br />
                 <b style={{ color: '#0f172a' }}>SĐT/Zalo:</b> {config?.sdtcongty}
               </div>
               <div style={{ textAlign: "center" }}>
