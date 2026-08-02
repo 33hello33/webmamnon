@@ -168,11 +168,41 @@ const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl)
 export default function FinanceManager({ activeSubTab, setActiveSubTab, currentUser }) {
    const { config } = useConfig();
 
+   const getShortStudentName = (name) => {
+      const normalized = String(name || '').trim().replace(/\s+/g, ' ');
+      if (!normalized) return '';
+      const parts = normalized.split(' ');
+      if (parts.length <= 2) return normalized;
+      return parts.slice(-2).join(' ');
+   };
+
+   const getQRUrl = (hoaDon, walletsConfig) => {
+      if (!walletsConfig || !hoaDon.hinhthuc) return null;
+      const hinhThucTrim = String(hoaDon.hinhthuc).trim();
+      const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
+      if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
+         const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
+         const mahv = hoaDon.mahv || '';
+         const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || '');
+         const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
+         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      }
+      return null;
+   };
+
    const [downloadingInvoice, setDownloadingInvoice] = useState(null);
+   const [downloadingNotice, setDownloadingNotice] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
    const configRef = React.useRef(config);
    configRef.current = config;
    const invoiceExportLockRef = React.useRef(null);
+
+   const walletsConfig = useMemo(() => (config ? [
+      { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
+      { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
+      { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
+      { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
+   ].filter(w => w.name && w.name.trim() !== '') : []), [config]);
 
    useEffect(() => {
       if (downloadingInvoice) {
@@ -229,6 +259,93 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }
    }, [downloadingInvoice]);
 
+   useEffect(() => {
+      if (downloadingNotice) {
+         const processPng = async () => {
+            try {
+               await new Promise(r => setTimeout(r, 1500));
+               const node = document.getElementById('download-notice-node');
+               if (node) {
+                  const expectedNoticeId = downloadingNotice.mahd;
+                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig);
+
+                  node.style.position = 'fixed';
+                  node.style.top = '0';
+                  node.style.left = '0';
+                  node.style.zIndex = '9999';
+                  node.style.opacity = '1';
+                  node.style.visibility = 'visible';
+
+                  for (let retry = 0; retry < 20; retry++) {
+                     const qrImg = node.querySelector('[data-role="notice-qr"]');
+                     const noticeId = node.dataset.noticeId;
+                     const qrSrc = qrImg?.getAttribute('src') || '';
+                     if (noticeId === expectedNoticeId && (!expectedQrSrc || qrSrc === expectedQrSrc)) {
+                        break;
+                     }
+                     await new Promise(r => setTimeout(r, 150));
+                  }
+
+                  const images = node.querySelectorAll('img');
+                  await Promise.all(Array.from(images).map(img => {
+                     if (img.complete) return Promise.resolve();
+                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
+                  }));
+                  const qrImg = node.querySelector('[data-role="notice-qr"]');
+                  if (qrImg?.decode) {
+                     try {
+                        await qrImg.decode();
+                     } catch (err) { }
+                  }
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(r => setTimeout(r, 600));
+
+                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+
+                  node.style.position = 'static';
+                  node.style.opacity = '0.01';
+
+                  if (window.innerWidth <= 991) {
+                     setPreviewImg(dataUrl);
+                  } else {
+                     const link = document.createElement('a');
+                     link.download = `${sanitizeFileSegment(`ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}`, 'ThongBao')}.png`;
+                     link.href = dataUrl;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                  }
+
+                  try {
+                     const fileName = `${sanitizeFileSegment(`ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}`, 'ThongBao')}.png`;
+                     const blob = dataUrlToBlob(dataUrl);
+                     const pngFile = new File([blob], fileName, { type: 'image/png' });
+                     const file = await compressImage(pngFile, 150);
+                     const storedImageKey = buildStoredImageKey(
+                        'notice-images',
+                        downloadingNotice.mahv,
+                        downloadingNotice.mahd,
+                        file.name.split('.').pop() || 'jpg'
+                     );
+
+                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
+                     await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
+
+                  } catch (autoSendErr) {
+                     console.error('Notice image save error:', autoSendErr);
+                  }
+               }
+            } catch (err) {
+               console.error('Notice capture error:', err);
+            } finally {
+               setDownloadingNotice(null);
+            }
+         };
+         processPng();
+      }
+   }, [downloadingNotice, walletsConfig]);
+
    const triggerDownloadInvoice = (r) => {
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
@@ -236,24 +353,43 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       setDownloadingInvoice({
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
-         tenhv: r.tenhv || r.mahv?.tenhv || '', sdt: r.sdt || '',
+         tenhv: r.tenhv || r.mahv?.tenhv || (hvMap[r.mahv]?.tenhv || ''), sdt: r.sdt || (hvMap[r.mahv]?.sdt || ''),
          tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
          hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
          tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
          hinhthuc: r.hinhthuc, ghichu: r.ghichu,
-         nhanvien: r.nhanvien || r.manv || 'Thu Ngân',
+         nhanvien: r.nhanvien || nvMap[r.manv] || r.manv || 'Thu Ngân',
          thoiluong: r.thoiluong, phuthu: parsedPt,
          actualMealRefund: r.trutienan, actualTuitionRefund: r.tiennghiphep, ngoaiKhoaDeduction: r.trutiendangoai,
          deductionSum: Number(r.trutienan || 0) + Number(r.tiennghiphep || 0) + Number(r.trutiendangoai || 0)
       });
    };
 
-   const walletsConfig = useMemo(() => (config ? [
-      { id: 'vi1', name: config.vi1?.name || '' },
-      { id: 'vi2', name: config.vi2?.name || '' },
-      { id: 'vi3', name: config.vi3?.name || '' },
-      { id: 'vi4', name: config.vi4?.name || '' }
-   ].filter(w => w.name.trim() !== '') : []), [config]);
+   const triggerDownloadNotice = (r) => {
+      const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
+      let parsedPt = [];
+      try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
+
+      let diemDanhInfo = null;
+      if (r.diemdanhinfo) {
+         try {
+            diemDanhInfo = typeof r.diemdanhinfo === 'string' ? JSON.parse(r.diemdanhinfo) : r.diemdanhinfo;
+         } catch (e) { }
+      }
+
+      setDownloadingNotice({
+         mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
+         tenhv: r.tenhv || r.mahv?.tenhv || (hvMap[r.mahv]?.tenhv || ''), sdt: r.sdt || (hvMap[r.mahv]?.sdt || ''),
+         tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
+         hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
+         tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
+         hinhthuc: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt'), ghichu: r.ghichu,
+         nhanvien: r.nhanvien || nvMap[r.manv] || r.manv || 'Thu Ngân',
+         thoiluong: r.thoiluong, phuthu: parsedPt,
+         actualMealRefund: fCur(r.trutienan), actualTuitionRefund: fCur(r.tiennghiphep), ngoaiKhoaDeduction: fCur(r.trutiendangoai),
+         diemDanhInfo
+      });
+   };
    const [data, setData] = useState([]);
    const [loading, setLoading] = useState(false);
    const [searchTerm, setSearchTerm] = useState('');
@@ -1613,6 +1749,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                        {!deleted ? (
                                           <>
+                                             <button title="Tải hình Thông báo" onClick={() => triggerDownloadNotice(r)} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={16} /></button>
                                              <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
                                              <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /></button>
                                           </>
@@ -1621,7 +1758,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        )}
                                     </td>
                                  </tr>
-                              )
+                              );
                            })}
                         </tbody>
                      </table>
@@ -1657,6 +1794,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-actions">
                                     {!deleted ? (
                                        <>
+                                          <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => triggerDownloadNotice(r)}><DownloadCloud size={14} /> Tải Ảnh</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
                                        </>
@@ -3334,13 +3472,192 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
                </div>
             </div>
+
+            {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
+            <div id="download-notice-node" data-notice-id={downloadingNotice?.mahd || ''} className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
+               {/* HEADER */}
+               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* LEFT: Logo */}
+                  <div style={{ width: '180px', textAlign: 'left' }}>
+                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                  </div>
+
+                  {/* CENTER: Info */}
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                        TRƯỜNG MẦM NON DOREMI
+                     </h3>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+                  </div>
+
+                  {/* RIGHT: Invoice info */}
+                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                     <div>Mã TB: <b style={{ fontWeight: 950 }}>{downloadingNotice?.mahd}</b></div>
+                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
+                  </div>
+               </div>
+
+               {/* TITLE */}
+               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                  THÔNG BÁO THU HỌC PHÍ
+               </div>
+
+               {/* INFO */}
+               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
+                     <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
+                  </div>
+
+                  {/* FEES BOX */}
+                  <div style={{
+                     background: '#f0f9ff',
+                     border: '1px solid #bae6fd',
+                     borderRadius: '16px',
+                     padding: '24px',
+                     marginTop: '15px',
+                     lineHeight: '1.6'
+                  }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 600 }}>Học phí:</div>
+                        <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
+                     </div>
+
+                     {parseInt(String(downloadingNotice?.giamhocphi).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                           <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                           <div style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</div>
+                        </div>
+                     )}
+
+                     {(() => {
+                        if (!downloadingNotice?.phuthu || downloadingNotice.phuthu.length === 0) return null;
+                        let lateFeeSum = 0;
+                        const otherFees = [];
+                        downloadingNotice.phuthu.forEach(pt => {
+                           if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
+                              lateFeeSum += Number(pt.amount) || 0;
+                           } else {
+                              otherFees.push(pt);
+                           }
+                        });
+                        return (
+                           <>
+                              <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                              {otherFees.map((pt, i) => (
+                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                    <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                                    <div style={{ fontWeight: 700 }}>{fCur(pt.amount)} đ</div>
+                                 </div>
+                              ))}
+                              {lateFeeSum > 0 && (
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                    <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
+                                    <div style={{ fontWeight: 700 }}>{fCur(lateFeeSum)} đ</div>
+                                 </div>
+                              )}
+                           </>
+                        );
+                     })()}
+
+                     {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualMealRefund} đ</div>
+                              </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund} đ</div>
+                              </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.ngoaiKhoaDeduction} đ</div>
+                              </div>
+                           )}
+                        </>
+                     )}
+
+                     <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                        <div>TỔNG CỘNG:</div>
+                        <div>{downloadingNotice?.tongcong} VNĐ</div>
+                     </div>
+                  </div>
+
+                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
+                     {downloadingNotice?.diemDanhInfo && (
+                        <div style={{ opacity: 0.9 }}>
+                           Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}):
+                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>,
+                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>,
+                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
+                        </div>
+                     )}
+                     {downloadingNotice?.ghichu && (
+                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
+                     )}
+                  </div>
+
+                  {/* QR SECTION */}
+                  {(() => {
+                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig) : null);
+                     if (!qrUrl) return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
+                        </div>
+                     );
+                     return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+                           <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
+                           <div style={{ textAlign: 'center' }}>
+                              <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                              <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                           </div>
+                        </div>
+                     );
+                  })()}
+               </div>
+
+               {/* FOOTER */}
+               <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+                  <div style={{ lineHeight: '1.6' }}>
+                     Facebook: Trường Mầm Non Doremi<br />
+                     Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien || 'Thu Ngân'}</b>
+                  </div>
+                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                     (Xác nhận)
+                  </div>
+               </div>
+            </div>
          </div>
+         {(downloadingInvoice || downloadingNotice) && createPortal(
+            <div className="sp-modal-overlay" style={{ zIndex: 9999, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
+               <div className="sp-success-modal animate-slide-up" style={{ padding: '30px', maxWidth: '100%', width: '350px', background: 'white', borderRadius: '16px', position: 'relative', textAlign: 'center' }}>
+                  <div style={{ border: '4px solid #f3f3f3', borderTop: '4px solid #3b82f6', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: '0 auto 15px auto' }} />
+                  <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.1rem', fontWeight: 700 }}>
+                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh hóa đơn...'}
+                  </h3>
+                  <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Vui lòng đợi giây lát</p>
+               </div>
+            </div>,
+            document.body
+         )}
          {previewImg && (
             <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
                <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
                   <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
-                  <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN</p>
-                  <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                  <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ THÔNG BÁO / HÓA ĐƠN</p>
+                  <img src={previewImg} alt="Preview Notice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
                   <div style={{ marginTop: '15px', textAlign: 'center' }}>
                      <button style={{ width: '100%', padding: '10px', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }} onClick={() => setPreviewImg(null)}>HOÀN TẤT</button>
                   </div>
