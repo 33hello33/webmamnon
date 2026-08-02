@@ -1046,6 +1046,14 @@ function ParentPortal({ parentData, setParentData }) {
 
          let currDateStr = fromDateStr;
          while (currDateStr <= toDateStr) {
+            // Không tính ngày Chủ Nhật vào tbl_diemdanh
+            const [cYear, cMonth, cDay] = currDateStr.split('-').map(Number);
+            const dateObj = new Date(Date.UTC(cYear, cMonth - 1, cDay));
+            if (dateObj.getUTCDay() === 0) { // 0 = Sunday
+               currDateStr = addDaysToDateString(currDateStr, 1);
+               continue;
+            }
+
             let trangthai = 'Nghỉ phép';
 
             if (currDateStr === todayStr) {
