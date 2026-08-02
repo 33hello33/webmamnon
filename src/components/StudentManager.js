@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog } from '../supabase';
+import { supabase, generateId, insertLog, getActiveSchema, SCHEMA_CS1 } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart
@@ -114,7 +114,9 @@ export default function StudentManager({ activeSubTab, currentUser }) {
 
   // Form Handlers
   const handleOpenAdd = async () => {
-    const newMaHV = await generateId('tbl_hv', 'mahv', 'HV', 4);
+    const activeSchema = getActiveSchema();
+    const prefix = (activeSchema === SCHEMA_CS1 || activeSchema === 'anchau') ? 'AC' : 'HV';
+    const newMaHV = await generateId('tbl_hv', 'mahv', prefix, 4);
     setFormData({ ...INITIAL_FORM, mahv: newMaHV });
     setIsEditMode(false);
     setIsFormOpen(true);
