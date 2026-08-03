@@ -25,7 +25,8 @@ const INITIAL_FORM = {
   ngaysinhba: toLocalISODate(),
   ngaysinhme: toLocalISODate(),
   username: '', password: '',
-  hinhthucdong: 'Tiền mặt'
+  hinhthucdong: 'Tiền mặt',
+  'giamhp%': ''
 };
 
 export default function StudentManager({ activeSubTab, currentUser }) {
@@ -251,6 +252,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
 
     try {
       const dataToSave = { ...formData };
+      dataToSave['giamhp%'] = formData['giamhp%'] !== '' && formData['giamhp%'] !== null && formData['giamhp%'] !== undefined ? parseFloat(formData['giamhp%']) || 0 : 0;
 
       // Đảm bảo các giá trị null thay vì chuỗi trống cho các trường date nếu cần
       if (!dataToSave.ngaysinh) dataToSave.ngaysinh = null;
@@ -420,6 +422,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
         'Mã Lớp': s.malop,
         'Tên Lớp': classes.find(c => c.malop === s.malop)?.tenlop || s.malop || '',
         'Trạng Thái': s.trangthai,
+        'Giảm HP (%)': s['giamhp%'] ?? 0,
         'Hình thức đóng': s.hinhthucdong || 'Tiền mặt',
         'Họ Tên Ba': s.hotenba,
         'SĐT Ba': s.sdtba,
@@ -468,6 +471,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
             'Giới Tính': 'gioitinh',
             'Mã Lớp': 'malop',
             'Trạng Thái': 'trangthai',
+            'Giảm HP (%)': 'giamhp%',
             'Hình thức đóng': 'hinhthucdong',
             'Họ Tên Ba': 'hotenba',
             'SĐT Ba': 'sdtba',
@@ -701,6 +705,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
                       <th>G.Tính</th>
                       <th>Lớp</th>
                       <th>Trạng Thái</th>
+                      <th>Giảm HP (%)</th>
                       <th>Họ tên Ba</th>
                       <th>SĐT Ba</th>
                       <th>Sinh nhật Ba</th>
@@ -750,6 +755,9 @@ export default function StudentManager({ activeSubTab, currentUser }) {
                               {s.trangthai || 'Chưa phân loại'}
                             </span>
                           </td>
+                          <td style={{ fontWeight: 'bold', color: s['giamhp%'] > 0 ? '#e11d48' : 'inherit' }}>
+                            {s['giamhp%'] ? `${s['giamhp%']}%` : '0%'}
+                          </td>
                           <td>{s.hotenba || '-'}</td>
                           <td>{s.sdtba || '-'}</td>
                           <td>{s.ngaysinhba ? new Date(s.ngaysinhba).toLocaleDateString('vi-VN') : '-'}</td>
@@ -767,7 +775,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="21" className="empty-state">
+                        <td colSpan="22" className="empty-state">
                           <div className="empty-state-content">
                             <Users size={40} />
                             <p>Không tìm thấy học sinh nào.</p>
@@ -965,6 +973,10 @@ export default function StudentManager({ activeSubTab, currentUser }) {
                       {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
                       {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
+                  </div>
+                  <div className="sm-form-group">
+                    <label style={{ fontWeight: 800, color: '#e11d48', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giảm học phí (%) cố định</label>
+                    <input type="number" min="0" max="100" name="giamhp%" value={formData['giamhp%'] ?? ''} onChange={handleChange} placeholder="VD: 10" style={{ fontWeight: 600 }} />
                   </div>
 
                 </div>
