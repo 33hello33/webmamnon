@@ -2116,11 +2116,11 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      {downloadingInvoice?.deductionSum > 0 && (
                         <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                              <span>- Hoàn trả tiền ăn:</span>
                               <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                              <span>- Hoàn trả học phí:</span>
                               <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
                            </div>
                            {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
