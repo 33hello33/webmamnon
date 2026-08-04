@@ -766,32 +766,36 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             }
          }
 
-         // --- Tính toán mức Giảm Học Phí (Ưu tiên: TB gần nhất -> % giảm của HS -> HD gần nhất) ---
+         // --- Tính toán mức Giảm Học Phí (Ưu tiên: chứng từ gần nhất -> % giảm của HS -> HD gần nhất) ---
          const parseCurGlobal = (v) => {
             const s = String(v || 0).trim();
             const isNegative = s.startsWith('-');
             const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
             return isNegative ? -n : n;
          };
-         
-         const recentTBDoc = validTBs.length > 0 ? validTBs.slice().sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap))[0] : null;
+
          const recentHDDoc = validHDs.length > 0 ? validHDs.slice().sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap))[0] : null;
 
          let foundDiscount = false;
-         
-         if (recentTBDoc && parseCurGlobal(recentTBDoc.giamhocphi) > 0) {
-            giamHocphi = parseCurGlobal(recentTBDoc.giamhocphi);
-            discountPercent = 0;
-            foundDiscount = true;
+
+         if (recentDoc) {
+            // Nếu có chứng từ gần nhất, dùng giamhocphi của nó (kể cả = 0)
+            // Không fallthrough sang HD cũ để tránh load giảm đã bị xóa
+            const docDiscount = parseCurGlobal(recentDoc.giamhocphi);
+            if (docDiscount > 0) {
+               giamHocphi = docDiscount;
+               discountPercent = 0;
+               foundDiscount = true;
+            }
          }
-         
+
          if (!foundDiscount && student['giamhp%'] && parseFloat(student['giamhp%']) > 0) {
             discountPercent = parseFloat(student['giamhp%']);
             giamHocphi = Math.round((hocphi * discountPercent) / 100);
             foundDiscount = true;
          }
 
-         if (!foundDiscount && recentHDDoc && parseCurGlobal(recentHDDoc.giamhocphi) > 0) {
+         if (!foundDiscount && !recentDoc && recentHDDoc && parseCurGlobal(recentHDDoc.giamhocphi) > 0) {
             giamHocphi = parseCurGlobal(recentHDDoc.giamhocphi);
             discountPercent = 0;
             foundDiscount = true;
