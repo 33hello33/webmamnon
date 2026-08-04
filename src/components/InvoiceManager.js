@@ -343,6 +343,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   node.style.zIndex = '9999';
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
+                  node.style.display = 'block';
 
                   for (let retry = 0; retry < 20; retry++) {
                      const invoiceId = downloadingInvoice.mahd;
@@ -2016,75 +2017,68 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-               {/* Invoice Template Content ... (remains same) */}
+            <div id="download-invoice-node" className="print-a5-receipt" style={{ display: 'block', position: 'relative', overflow: 'hidden', padding: '24px 30px', background: '#ffffff', color: '#000', width: '800px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
+               {/* Background pattern */}
                <div style={{
                   position: 'absolute',
                   inset: 0,
                   zIndex: 0,
-                  opacity: 0.2,
+                  opacity: 0.05,
                   pointerEvents: 'none',
                   backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'repeat'
                }} />
-               <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%) rotate(-30deg)',
-                  fontSize: '60pt',
-                  fontWeight: 'bold',
-                  color: 'rgba(0, 102, 204, 0.05)',
-                  zIndex: 0,
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                  textAlign: 'center',
-                  width: '150%'
-               }}>
-                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
-               </div>
+
                <div style={{ position: 'relative', zIndex: 1 }}>
-                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* HEADER */}
+                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
-                     <div style={{ width: '180px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     <div style={{ width: '160px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '140px', maxHeight: '65px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
 
                      {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                           {config?.tencongty || 'Tên Công Ty'}
+                     <div style={{ flex: 1, textAlign: 'center', padding: '0 10px' }}>
+                        <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', color: '#000' }}>
+                           {config?.tencongty || 'MẦM NON DOREMI'}
                         </h2>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', fontWeight: 600, color: '#333' }}>Địa chỉ: {config?.diachicongty}</p>
                      </div>
 
                      {/* RIGHT: Invoice info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                     <div style={{ width: '160px', textAlign: 'right', fontSize: '13px' }}>
                         <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
                         <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
                      </div>
                   </div>
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+
+                  {/* TITLE */}
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "14px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline', letterSpacing: '0.5px' }}>
                      BIÊN LAI THU HỌC PHÍ
                   </div>
-                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
+
+                  {/* DETAILS */}
+                  <div style={{ fontSize: "12pt", lineHeight: "1.7", margin: '14px 0' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '4px' }}>
+                        <div>Họ và tên: <b style={{ fontSize: '13pt' }}>{downloadingInvoice?.tenhv}</b></div>
                         <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
                      <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
                      <div>
                         Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
                      </div>
-                     <div style={{ marginTop: '5px' }}>
+                     <div style={{ marginTop: '2px' }}>
                         Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
                      </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
+
+                     <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '12px 0' }} />
+
+                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: '12pt' }}>
                         <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
                         <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
                         <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
+
                      {(() => {
                         if (!downloadingInvoice?.phuthu || downloadingInvoice.phuthu.length === 0) return null;
                         let lateFeeSum = 0;
@@ -2097,15 +2091,15 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            }
                         });
                         return (
-                           <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                           <div style={{ marginTop: '6px', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #f3f4f6' }}>
                               {otherFees.map((pt, i) => (
-                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11pt' }}>
                                     <span>+ {pt.name || 'Phụ thu'}:</span>
                                     <b>{formatCurrency(pt.amount)} đ</b>
                                  </div>
                               ))}
                               {lateFeeSum > 0 && (
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11pt' }}>
                                     <span>+ Phụ thu trả trễ:</span>
                                     <b>{formatCurrency(lateFeeSum)} đ</b>
                                  </div>
@@ -2113,16 +2107,21 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            </div>
                         );
                      })()}
+
                      {downloadingInvoice?.deductionSum > 0 && (
-                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>- Hoàn trả tiền ăn:</span>
-                              <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                              <span>- Hoàn trả học phí:</span>
-                              <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
-                           </div>
+                        <div style={{ marginTop: '6px', padding: '6px 10px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #d1fae5', color: '#065f46', fontSize: '11pt' }}>
+                           {(Number(downloadingInvoice?.actualMealRefund) || 0) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                 <span>- Hoàn trả tiền ăn:</span>
+                                 <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                              </div>
+                           )}
+                           {(Number(downloadingInvoice?.actualTuitionRefund) || 0) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                 <span>- Hoàn trả học phí:</span>
+                                 <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                              </div>
+                           )}
                            {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
                                  <span>- Trừ tiền dã ngoại tháng trước:</span>
@@ -2131,26 +2130,32 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                            )}
                         </div>
                      )}
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '10px', fontSize: '12pt' }}>
                         <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
                         <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
                         <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
                      </div>
-                     <div style={{ marginTop: '10px' }}>
+
+                     <div style={{ marginTop: '8px', fontSize: '11pt' }}>
                         Ghi chú: {downloadingInvoice?.ghichu || ""}
                      </div>
                   </div>
-                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+
+                  {/* SIGNATURE SECTION */}
+                  <div style={{ marginTop: '20px', fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
                      <div>
                         Facebook: Doremi Preschool <br />
                         SĐT/Zalo: {config?.sdtcongty}
                      </div>
                      <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br /><br />
-                        <b>Doremi Preschool</b>
+                        Nhân viên thu tiền <br /><br />
+                        <b style={{ fontSize: '12pt' }}>Doremi Preschool</b>
                      </div>
                   </div>
-                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+
+                  {/* FOOTER NOTE */}
+                  <div style={{ marginTop: "16px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '8px', fontSize: '9.5pt', color: '#4b5563' }}>
                      Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
                   </div>
                </div>
