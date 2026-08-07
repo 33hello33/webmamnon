@@ -337,18 +337,20 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    }, [downloadingInvoice]);
 
    const triggerDownloadInvoice = (r) => {
+      const studentName = hvMap[r.mahv]?.tenhv || (typeof r.mahv === 'object' ? r.mahv?.tenhv : '') || r.tenhv || '';
+      const phone = hvMap[r.mahv]?.sdt || (typeof r.mahv === 'object' ? r.mahv?.sdt : '') || r.sdt || '';
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
       try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
       
       setDownloadingInvoice({
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
-         tenhv: r.tenhv || r.mahv?.tenhv || '', sdt: r.sdt || '',
+         tenhv: studentName, sdt: phone,
          tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
          hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
          tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
          hinhthuc: r.hinhthuc, ghichu: r.ghichu,
-         nhanvien: r.nhanvien || r.manv || 'Thu Ngân',
+         nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
          thoiluong: r.thoiluong, phuthu: parsedPt,
          actualMealRefund: r.trutienan, actualTuitionRefund: r.tiennghiphep, ngoaiKhoaDeduction: r.trutiendangoai,
          deductionSum: Number(r.trutienan||0) + Number(r.tiennghiphep||0) + Number(r.trutiendangoai||0)
@@ -1248,7 +1250,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          insertLog(`[XÁC NHẬN THÔNG BÁO] Mã TB: ${r.mahd} -> Hóa đơn: ${newMaHD}`);
          alert('Tạo hóa đơn thành công! Hệ thống đang xuất ảnh...');
-         triggerDownloadInvoice({ ...insertData, mahv: r.mahv, dadong: r.tongcong, conno: '0' });
+         triggerDownloadInvoice({ ...insertData, mahv: r.mahv, tenhv: hvMap[r.mahv]?.tenhv || r.tenhv, sdt: hvMap[r.mahv]?.sdt || r.sdt, dadong: r.tongcong, conno: '0' });
          fetchData();
          fetchBalances();
       } catch (err) {
