@@ -1365,14 +1365,22 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             if (type === 'image') { try { file = await compressImage(fileInput, 150); } catch (err) { } }
 
             let finalUrl = '';
-            if (config.r2_enabled) {
-               finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-            } else {
+            let r2Success = false;
+            if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+               try {
+                  finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                  if (finalUrl) r2Success = true;
+               } catch (err) {
+                  console.warn('R2 upload failed, falling back to Supabase Storage:', err);
+               }
+            }
+            if (!r2Success) {
                const fileName = `${attChatSelectedStudent.mahv}_${Date.now()}_${file.name}`;
                const folder = type === 'image' ? 'chat-images' : 'chat-files';
-               const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+               const storagePath = `${SUPABASE_SCHEMA}/${folder}/${fileName}`;
+               const { error } = await supabase.storage.from('assets').upload(storagePath, file);
                if (error) throw error;
-               const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+               const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
                finalUrl = publicUrl;
             }
 
@@ -1589,14 +1597,21 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   } catch (err) { }
                }
 
-               if (config.r2_enabled) {
-                  uploadedMediaUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-               } else {
+               let r2Success = false;
+               if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+                  try {
+                     uploadedMediaUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                     if (uploadedMediaUrl) r2Success = true;
+                  } catch (err) {
+                     console.warn('R2 upload failed, falling back to Supabase Storage:', err);
+                  }
+               }
+               if (!r2Success) {
                   const fileName = `${classBroadcastClassId || 'class'}_${Date.now()}_${file.name}`;
                   const folder = uploadedMediaIsImage ? 'chat-images' : 'chat-files';
-                  const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+                  const { error } = await supabase.storage.from('assets').upload(`${SUPABASE_SCHEMA}/${folder}/${fileName}`, file);
                   if (error) throw error;
-                  const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+                  const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${SUPABASE_SCHEMA}/${folder}/${fileName}`);
                   uploadedMediaUrl = publicUrl;
                }
 
