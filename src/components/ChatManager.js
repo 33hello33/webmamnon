@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { uploadToGDrive } from '../utils/googleDrive';
 import {
   MessageSquare,
   Send,
@@ -265,18 +264,12 @@ const ChatManager = ({ currentUser }) => {
 
     setUploading(true);
     try {
-      let finalUrl = '';
-      if (config.gdrive_enabled) {
-        const gResult = await uploadToGDrive(file, config.gdrive_folder_id, config.gdrive_client_id, config.gdrive_api_key, config.gdrive_auth_type, config.gdrive_service_json);
-        finalUrl = type === 'image' ? `https://drive.google.com/uc?export=view&id=${gResult.id}` : (gResult.webViewLink || gResult.webContentLink);
-      } else {
-        const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
-        const folder = type === 'image' ? 'chat-images' : 'chat-files';
-        const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
-        if (error) throw error;
-        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
-        finalUrl = publicUrl;
-      }
+      const fileName = `${selectedStudent.mahv}_${Date.now()}_${file.name}`;
+      const folder = type === 'image' ? 'chat-images' : 'chat-files';
+      const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
+      const finalUrl = publicUrl;
 
       const msgPayload = {
         mahv: selectedStudent.mahv,
