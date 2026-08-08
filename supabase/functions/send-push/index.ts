@@ -16,6 +16,7 @@ const corsHeaders = {
 };
 
 type WebhookPayload = {
+  schema?: string;
   table?: string;
   record?: Record<string, unknown>;
   new?: Record<string, unknown>;
@@ -272,7 +273,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const schemaName = payload.schema || Deno.env.get("SUPABASE_SCHEMA") || "public";
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      db: { schema: schemaName },
+    });
 
     const context = await buildPushContext(supabase, payload);
     if (!context || context.targets.length === 0) {

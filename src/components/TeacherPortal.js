@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_SCHEMA } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
@@ -1055,7 +1055,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       fetchAttSummaries();
 
       const channel = supabase.channel(`teacher_chat_monitor_${teacherId}`)
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+         .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, (payload) => {
             const currentStudents = attAllStudentsRef.current;
             const isPH = payload.new.description === 'PH' || (!payload.new.manv);
             const belongsToTeacher = currentStudents.some(s => s.mahv === payload.new.mahv);
@@ -1079,13 +1079,13 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             }
             fetchAttUnreads();
          })
-         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, (payload) => {
+         .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, (payload) => {
             if (attAllStudentsRef.current.some(s => s.mahv === payload.new.mahv)) {
                setAttLatestMessages((prev) => mergeTeacherSummaryMessages(prev.filter((message) => message.id !== payload.new.id), [payload.new]));
             }
             fetchAttUnreads();
          })
-         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, (payload) => {
+         .on('postgres_changes', { event: 'DELETE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, (payload) => {
             const studentId = payload.old?.mahv;
             const deletedId = payload.old?.id;
             if (studentId && attAllStudentsRef.current.some(s => s.mahv === studentId)) {
@@ -1203,7 +1203,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          fetchDocs();
 
          const threadChannel = supabase.channel(`att_thread_${attChatSelectedStudent.mahv}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
+            .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
                setAttChatMessages(prev => {
                   if (prev.some(m => m.id === payload.new.id)) return prev;
                   return mergeTeacherThreadMessages(prev, [payload.new]);
@@ -1214,7 +1214,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                }
                scrollTeacherChatToBottom();
             })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
+            .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'hv_messages', filter: `mahv=eq.${attChatSelectedStudent.mahv}` }, (payload) => {
                setAttChatMessages(prev => mergeTeacherThreadMessages(prev.filter(m => m.id !== payload.new.id), [payload.new]));
             }).subscribe();
 
