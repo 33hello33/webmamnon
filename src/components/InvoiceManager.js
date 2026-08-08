@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_SCHEMA } from '../supabase';
 import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, List, Edit2, Trash2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';

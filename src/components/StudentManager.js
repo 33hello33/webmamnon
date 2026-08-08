@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog, getActiveSchema, SCHEMA_CS1 } from '../supabase';
+import { supabase, generateId, insertLog, getActiveSchema, SCHEMA_CS1, SUPABASE_SCHEMA } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart

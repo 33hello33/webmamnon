@@ -19,6 +19,7 @@ type WebhookPayload = {
   table?: string;
   record?: Record<string, unknown>;
   new?: Record<string, unknown>;
+  schema?: string;
 };
 
 type PushTarget = {
@@ -272,7 +273,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const schema = payload.schema || "public";
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      db: { schema }
+    });
 
     const context = await buildPushContext(supabase, payload);
     if (!context || context.targets.length === 0) {

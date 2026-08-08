@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../supabase';
+import { supabase, getActiveSchema } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { deleteFromR2 } from '../utils/cloudflareR2';
 import { triggerPushNotification } from '../utils/pushNotifications';
@@ -602,30 +602,30 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const badgeChannel = supabase.channel(`chat_manager_badger_${dateFilter}_${customRange.start}_${customRange.end}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'hv_messages' }, (payload) => {
         fetchUnreads();
         if (isDateInDashboardRange(payload.new?.created_at)) {
           setLatestMessages(prev => mergeSummaryMessages(prev, [payload.new]));
         }
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: getActiveSchema(), table: 'hv_messages' }, (payload) => {
         fetchUnreads();
         refreshSummaryForStudent(payload.new?.mahv);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, (payload) => {
+      .on('postgres_changes', { event: 'DELETE', schema: getActiveSchema(), table: 'hv_messages' }, (payload) => {
         fetchUnreads();
         refreshSummaryForStudent(payload.old?.mahv);
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'documents' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'documents' }, (payload) => {
         if (payload.new?.category !== tuitionTransferProofCategory) return;
         if (!isDateInDashboardRange(payload.new?.created_at)) return;
         setPaymentProofDocs(prev => mergePaymentProofEntries(prev, [payload.new]));
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'documents' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: getActiveSchema(), table: 'documents' }, (payload) => {
         const studentId = payload.new?.mahv || payload.old?.mahv;
         refreshPaymentProofForStudent(studentId);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'documents' }, (payload) => {
+      .on('postgres_changes', { event: 'DELETE', schema: getActiveSchema(), table: 'documents' }, (payload) => {
         refreshPaymentProofForStudent(payload.old?.mahv);
       })
       .subscribe();
@@ -972,7 +972,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       .channel(`chat_${selectedStudent.mahv}`)
       .on('postgres_changes', {
         event: 'INSERT',
-        schema: 'public',
+        schema: getActiveSchema(),
         table: 'hv_messages',
         filter: `mahv=eq.${selectedStudent.mahv}`
       }, (payload) => {
@@ -985,7 +985,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       })
       .on('postgres_changes', {
         event: 'UPDATE',
-        schema: 'public',
+        schema: getActiveSchema(),
         table: 'hv_messages',
         filter: `mahv=eq.${selectedStudent.mahv}`
       }, (payload) => {
@@ -993,7 +993,7 @@ const ChatManager = ({ currentUser, onOpenInvoiceForStudent }) => {
       })
       .on('postgres_changes', {
         event: 'DELETE',
-        schema: 'public',
+        schema: getActiveSchema(),
         table: 'hv_messages'
       }, (payload) => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));

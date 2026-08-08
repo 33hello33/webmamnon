@@ -374,9 +374,9 @@ function Dashboard() {
     fetchPendingApprovals();
 
     const channel = supabase.channel('pending_approvals_dashboard')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_announcements' }, () => fetchPendingApprovals())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'class_announcements' }, () => fetchPendingApprovals())
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'UPDATE', schema: getActiveSchema(), table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'DELETE', schema: getActiveSchema(), table: 'class_announcements' }, () => fetchPendingApprovals())
       .subscribe();
 
     return () => {
@@ -430,7 +430,7 @@ function Dashboard() {
 
       // Listen to global changes across devices
       channel = supabase.channel('realtime_logs')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_log' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'tbl_log' }, (payload) => {
           const mota = payload.new?.mota || '';
           if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
 
@@ -508,7 +508,7 @@ function Dashboard() {
       fetchUnreadChatCount();
 
       const chatChannel = supabase.channel('global_chat_unread')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'hv_messages' }, (payload) => {
           const isPH = payload.new.description === 'PH' || (!payload.new.manv);
           if (isPH) {
             if (Notification.permission === 'granted') {
@@ -525,8 +525,8 @@ function Dashboard() {
           }
           fetchUnreadChatCount();
         })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages' }, () => fetchUnreadChatCount())
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .on('postgres_changes', { event: 'UPDATE', schema: getActiveSchema(), table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .on('postgres_changes', { event: 'DELETE', schema: getActiveSchema(), table: 'hv_messages' }, () => fetchUnreadChatCount())
         .subscribe();
 
       return () => {

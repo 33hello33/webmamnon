@@ -10,6 +10,7 @@ export const baseSupabase = createClient(
 
 export const SCHEMA_CS1 = process.env.REACT_APP_SUPABASE_SCHEMA_CS1 || 'anchau';
 export const SCHEMA_CS2 = process.env.REACT_APP_SUPABASE_SCHEMA_CS2 || 'golden';
+export const SUPABASE_SCHEMA = process.env.REACT_APP_SUPABASE_SCHEMA || SCHEMA_CS1;
 
 export const getActiveSchema = () => {
    return localStorage.getItem('selected_schema') || SCHEMA_CS1;
