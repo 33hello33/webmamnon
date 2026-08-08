@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_SCHEMA } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
@@ -2046,13 +2046,13 @@ function ParentPortal({ parentData, setParentData }) {
       const malop = parentData.student.malop;
 
       const unreadChan = supabase.channel(`parent_unread_${mahv}`)
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${mahv}` }, () => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'hv_messages', filter: `mahv=eq.${mahv}` }, () => {
             fetchUnreads();
          })
          .subscribe();
 
       const chatChan = supabase.channel(`parent_chat_${mahv}`)
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${mahv}` }, (payload) => {
+         .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'hv_messages', filter: `mahv=eq.${mahv}` }, (payload) => {
             const isMe = payload.new.description === 'PH';
             if (!isMe) {
                showNotification('Tin nhắn mới từ nhà trường', payload.new.content || 'Bạn có một tệp đính kèm mới');
@@ -2064,13 +2064,13 @@ function ParentPortal({ parentData, setParentData }) {
             });
             fetchUnreads();
          })
-         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hv_messages', filter: `mahv=eq.${mahv}` }, (payload) => {
+         .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'hv_messages', filter: `mahv=eq.${mahv}` }, (payload) => {
             setChatMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
          })
          .subscribe();
 
       const noticeChan = supabase.channel(`parent_notices_${mahv}`)
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_thongbao', filter: `mahv=eq.${mahv}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'tbl_thongbao', filter: `mahv=eq.${mahv}` }, async (payload) => {
             await refreshLatestFeeData();
             await fetchUnreads();
             await fetchParentNotices();
@@ -2078,11 +2078,11 @@ function ParentPortal({ parentData, setParentData }) {
             const isTuition = payload.new.tieude?.toLowerCase().includes('học phí');
             showNotification(isTuition ? 'Thông báo học phí' : 'Thông báo mới từ nhà trường', payload.new.tieude || 'Bạn có một thông báo mới');
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hd', filter: `mahv=eq.${mahv}` }, async () => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'tbl_hd', filter: `mahv=eq.${mahv}` }, async () => {
             await refreshLatestFeeData();
             await fetchUnreads();
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'class_announcements', filter: `malop=eq.${malop}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'class_announcements', filter: `malop=eq.${malop}` }, async (payload) => {
             await fetchUnreads();
             await fetchParentNotices();
             const approvedNow = payload.new?.approved !== false;
@@ -2093,17 +2093,17 @@ function ParentPortal({ parentData, setParentData }) {
             const title = payload.new.title === 'THỰC ĐƠN' ? 'Thực đơn mới' : (payload.new.title === 'NGOẠI KHÓA' ? 'Hoạt động ngoại khóa mới' : (payload.new.title === 'CHƯƠNG TRÌNH HỌC' ? 'Chương trình học mới' : 'Bảng tin lớp mới'));
             showNotification(title, payload.new.content || 'Xem chi tiết trong ứng dụng');
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'suckhoedinhky', filter: `mahv=eq.${mahv}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'suckhoedinhky', filter: `mahv=eq.${mahv}` }, async (payload) => {
             await fetchUnreads();
             if (payload.eventType === 'INSERT') showNotification('Cập nhật sức khỏe', 'Bé vừa có thông tin sức khỏe mới');
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'tbl_hv', filter: `mahv=eq.${mahv}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'tbl_hv', filter: `mahv=eq.${mahv}` }, async (payload) => {
             setParentData(prev => {
                if (!prev?.student) return prev;
                return { ...prev, student: { ...prev.student, ...payload.new } };
             });
          })
-         .on('postgres_changes', { event: '*', schema: 'public', table: 'dangkyngoaikhoa', filter: `mahv=eq.${mahv}` }, async (payload) => {
+         .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'dangkyngoaikhoa', filter: `mahv=eq.${mahv}` }, async (payload) => {
             if (payload.eventType === 'INSERT' && payload.new?.codangky !== undefined) {
                showNotification('Ngoại khóa', payload.new.codangky ? 'Đăng ký ngoại khóa đã được ghi nhận' : 'Phản hồi không tham gia ngoại khóa đã được ghi nhận');
             }

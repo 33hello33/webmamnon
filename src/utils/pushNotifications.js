@@ -4,6 +4,7 @@ export async function triggerPushNotification(supabase, table, record) {
   try {
     const { error } = await supabase.functions.invoke('send-push', {
       body: {
+        schema: process.env.REACT_APP_SUPABASE_SCHEMA || 'public',
         table,
         record
       }
