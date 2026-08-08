@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, insertLog } from '../supabase';
+import { supabase, insertLog, SUPABASE_SCHEMA } from '../supabase';
+import { uploadToR2 } from '../utils/cloudflareR2';
 import { createPortal } from 'react-dom';
 import { useConfig } from '../ConfigContext';
 import { DEFAULT_CONSECUTIVE_REFUND_CONFIG, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
@@ -135,24 +136,45 @@ const ConfigManager = () => {
     }
 
     try {
-      // 1. Upload to assets bucket (might need policy)
-      const fileName = `logo_${Date.now()}.png`;
-      const { error } = await supabase.storage.from('assets').upload(fileName, file);
+      const fileName = `${SUPABASE_SCHEMA}/config/logo_${Date.now()}.png`;
+      let logoUrl = '';
+      let r2Success = false;
 
-      if (error) {
-        // Alt: base64 if no bucket
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = async () => {
-          setFormData({ ...formData, logo: reader.result, appleicon: reader.result });
-          setMsg({ type: 'success', text: 'Đã cập nhật Logo (Local Base64).' });
-        };
-        return;
+      if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+        try {
+          logoUrl = await uploadToR2(
+            file,
+            config.r2_endpoint,
+            config.r2_access_key_id,
+            config.r2_secret_access_key,
+            config.r2_bucket_name,
+            config.r2_public_url,
+            { key: fileName }
+          );
+          if (logoUrl) r2Success = true;
+        } catch (r2Err) {
+          console.warn('R2 logo upload failed, falling back to Supabase Storage:', r2Err);
+        }
       }
 
-      // 2. Get Public URL
-      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(fileName);
-      setFormData({ ...formData, logo: publicUrl, appleicon: publicUrl });
+      if (!r2Success) {
+        const { error } = await supabase.storage.from('assets').upload(fileName, file);
+
+        if (error) {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = async () => {
+            setFormData({ ...formData, logo: reader.result, appleicon: reader.result });
+            setMsg({ type: 'success', text: 'Đã cập nhật Logo (Local Base64).' });
+          };
+          return;
+        }
+
+        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(fileName);
+        logoUrl = publicUrl;
+      }
+
+      setFormData({ ...formData, logo: logoUrl, appleicon: logoUrl });
       setMsg({ type: 'success', text: 'Đã tải lên logo mới thành công!' });
     } catch (err) {
       console.error(err);

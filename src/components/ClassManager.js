@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog } from '../supabase';
+import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
   Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
@@ -1131,7 +1131,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                     let imageUrl = '';
                     let r2Failed = false;
-                    if (config?.r2_enabled) {
+                    if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
                       try {
                         imageUrl = await uploadToR2(
                           file,
@@ -1148,7 +1148,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                       }
                     }
                     if (!config?.r2_enabled || r2Failed) {
-                      const path = `notice-images/${notice.mahv}/${cleanFileName}`;
+                      const path = `${SUPABASE_SCHEMA}/notice-images/${notice.mahv}/${cleanFileName}`;
                       const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
                       if (upErr) throw upErr;
                       const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
@@ -1186,7 +1186,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
                       let imageUrl = '';
                       let r2Failed = false;
-                      if (config?.r2_enabled) {
+                      if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
                         try {
                           imageUrl = await uploadToR2(
                             file,
@@ -1203,7 +1203,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         }
                       }
                       if (!config?.r2_enabled || r2Failed) {
-                        const path = `notice-images/${notice.mahv}/${cleanFileName}`;
+                        const path = `${SUPABASE_SCHEMA}/notice-images/${notice.mahv}/${cleanFileName}`;
                         const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
                         if (upErr) throw upErr;
                         const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
