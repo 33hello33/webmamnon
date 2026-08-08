@@ -3,9 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
+const supabaseSchema = process.env.REACT_APP_SUPABASE_SCHEMA;
+
 export const supabase = createClient(
    supabaseUrl || 'https://placeholder.supabase.co',
-   supabaseKey || 'placeholder-key'
+   supabaseKey || 'placeholder-key',
+   supabaseSchema ? { db: { schema: supabaseSchema } } : undefined
 );
 
 const getManv = () => {
