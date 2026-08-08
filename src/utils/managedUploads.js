@@ -1,5 +1,6 @@
 import { uploadToR2 } from './cloudflareR2';
 import { compressImage } from './imageUtils';
+import { SUPABASE_SCHEMA } from '../supabase';
 
 export const toFileArray = (files) => Array.from(files || []).filter(Boolean);
 
@@ -55,19 +56,27 @@ export const uploadManagedFile = async ({
   }
 
   let url = '';
-  if (config?.r2_enabled) {
-    url = await uploadToR2(
-      fileToUpload,
-      config.r2_endpoint,
-      config.r2_access_key_id,
-      config.r2_secret_access_key,
-      config.r2_bucket_name,
-      config.r2_public_url
-    );
-  } else {
+  let r2Success = false;
+  if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+    try {
+      url = await uploadToR2(
+        fileToUpload,
+        config.r2_endpoint,
+        config.r2_access_key_id,
+        config.r2_secret_access_key,
+        config.r2_bucket_name,
+        config.r2_public_url
+      );
+      if (url) r2Success = true;
+    } catch (r2Err) {
+      console.warn('R2 upload failed, falling back to Supabase Storage:', r2Err);
+    }
+  }
+
+  if (!r2Success) {
     const folder = image ? imageFolder : fileFolder;
     const safeName = `${prefix}_${Date.now()}_${fileToUpload.name}`;
-    const storagePath = `${folder}/${safeName}`;
+    const storagePath = `${SUPABASE_SCHEMA}/${folder}/${safeName}`;
     const { error } = await supabase.storage.from('assets').upload(storagePath, fileToUpload);
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);

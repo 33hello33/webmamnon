@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog } from '../supabase';
+import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
@@ -135,27 +135,22 @@ const buildStoredImageKey = (folder, studentId, recordId, extension = 'jpg') => 
    const safeStudentId = sanitizeFileSegment(studentId, 'student');
    const safeRecordId = sanitizeFileSegment(recordId, 'record');
    const safeExtension = sanitizeFileSegment(extension, 'jpg').replace(/^\.+/, '') || 'jpg';
-   return `${safeFolder}/${safeStudentId}/${Date.now()}_${safeRecordId}.${safeExtension}`;
+   return `${SUPABASE_SCHEMA}/${safeFolder}/${safeStudentId}/${Date.now()}_${safeRecordId}.${safeExtension}`;
 };
 const uploadGeneratedImage = async (file, storedImageKey, currentConfig) => {
-   let r2Failed = false;
-   if (currentConfig?.r2_enabled) {
+   if (currentConfig?.r2_endpoint && currentConfig?.r2_access_key_id && currentConfig?.r2_secret_access_key && currentConfig?.r2_bucket_name) {
       try {
          const uploadedUrl = await uploadToR2(file, currentConfig.r2_endpoint, currentConfig.r2_access_key_id, currentConfig.r2_secret_access_key, currentConfig.r2_bucket_name, currentConfig.r2_public_url, { key: storedImageKey });
          if (uploadedUrl) return uploadedUrl;
-         r2Failed = true;
       } catch (err) {
-         console.warn('R2 upload failed, falling back to Supabase', err);
-         r2Failed = true;
+         console.warn('R2 upload failed, falling back to Supabase Storage:', err);
       }
    }
-   if (!currentConfig?.r2_enabled || r2Failed) {
-      const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file, { upsert: true, contentType: file.type || 'image/jpeg', cacheControl: '3600' });
-      if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
-      if (!publicUrl) throw new Error('Lỗi Supabase Storage.');
-      return publicUrl;
-   }
+   const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file, { upsert: true, contentType: file.type || 'image/jpeg', cacheControl: '3600' });
+   if (upErr) throw upErr;
+   const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
+   if (!publicUrl) throw new Error('Lỗi Supabase Storage.');
+   return publicUrl;
 };
 const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl) => {
    for (let attempt = 0; attempt < 3; attempt++) {

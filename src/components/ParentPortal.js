@@ -2321,17 +2321,25 @@ function ParentPortal({ parentData, setParentData }) {
             try { file = await compressImage(fileInput, 150); } catch (err) { console.error('Compression failed:', err); }
          }
 
-         let finalUrl = '';
-         if (config.r2_enabled) {
-            finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
-         } else {
-            const fileName = `${parentData.student.mahv}_${Date.now()}_${file.name}`;
-            const folder = isImageUpload ? 'chat-images' : 'chat-files';
-            const { error } = await supabase.storage.from('assets').upload(`${folder}/${fileName}`, file);
-            if (error) throw error;
-            const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(`${folder}/${fileName}`);
-            finalUrl = publicUrl;
-         }
+          let finalUrl = '';
+          let r2Success = false;
+          if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+             try {
+                finalUrl = await uploadToR2(file, config.r2_endpoint, config.r2_access_key_id, config.r2_secret_access_key, config.r2_bucket_name, config.r2_public_url);
+                if (finalUrl) r2Success = true;
+             } catch (err) {
+                console.warn('R2 upload failed, falling back to Supabase Storage:', err);
+             }
+          }
+          if (!r2Success) {
+             const fileName = `${parentData.student.mahv}_${Date.now()}_${file.name}`;
+             const folder = isImageUpload ? 'chat-images' : 'chat-files';
+             const storagePath = `${SUPABASE_SCHEMA}/${folder}/${fileName}`;
+             const { error } = await supabase.storage.from('assets').upload(storagePath, file);
+             if (error) throw error;
+             const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
+             finalUrl = publicUrl;
+          }
 
          const newDoc = {
             mahv: parentData.student.mahv,

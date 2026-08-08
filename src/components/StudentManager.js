@@ -14,6 +14,7 @@ import './StudentManager.css';
 import { compressImage } from '../utils/imageUtils';
 import { toLocalISODate } from '../utils/localDate';
 import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
 
 const INITIAL_FORM = {
   mahv: '', tenhv: '', sdtba: '', sdtme: '', ghichu: '',
@@ -220,19 +221,40 @@ export default function StudentManager({ activeSubTab, currentUser }) {
       setLoading(true);
       const uploadFile = await compressImage(file, 200);
       const fileExt = uploadFile.name.split('.').pop() || file.name.split('.').pop() || 'jpg';
-      const avatarKey = `students/${mahv}.${String(fileExt).toLowerCase()}`;
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(avatarKey, uploadFile, {
-          upsert: true,
-          contentType: uploadFile.type,
-          cacheControl: '0'
-        });
+      const avatarKey = `${SUPABASE_SCHEMA}/students/${mahv}.${String(fileExt).toLowerCase()}`;
+      let publicUrl = '';
+      let r2Success = false;
+      if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+        try {
+          publicUrl = await uploadToR2(
+            uploadFile,
+            config.r2_endpoint,
+            config.r2_access_key_id,
+            config.r2_secret_access_key,
+            config.r2_bucket_name,
+            config.r2_public_url,
+            { key: avatarKey }
+          );
+          if (publicUrl) r2Success = true;
+        } catch (r2Err) {
+          console.warn('R2 avatar upload failed, falling back to Supabase Storage:', r2Err);
+        }
+      }
 
-      if (uploadError) throw uploadError;
+      if (!r2Success) {
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(avatarKey, uploadFile, {
+            upsert: true,
+            contentType: uploadFile.type,
+            cacheControl: '0'
+          });
 
-      const { data } = supabase.storage.from('avatars').getPublicUrl(avatarKey);
-      const publicUrl = data?.publicUrl || '';
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from('avatars').getPublicUrl(avatarKey);
+        publicUrl = data?.publicUrl || '';
+      }
 
       const nextImgPath = appendCacheBuster(publicUrl);
       setFormData(prev => ({ ...prev, imgpath: nextImgPath }));
