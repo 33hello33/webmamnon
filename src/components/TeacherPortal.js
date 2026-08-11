@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase, SUPABASE_SCHEMA } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
@@ -374,6 +375,18 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [teacherAnnouncements, setTeacherAnnouncements] = useState([]);
    const [teacherAnnouncementsLoading, setTeacherAnnouncementsLoading] = useState(false);
    const [teacherChatDropActive, setTeacherChatDropActive] = useState(false);
+   
+   // Extracurricular registration report states
+   const [ngoaiKhoaReportData, setNgoaiKhoaReportData] = useState(null); // { activeAnnouncement, studentsData: [] }
+   const [ngoaiKhoaLoading, setNgoaiKhoaLoading] = useState(false);
+   const [ngoaiKhoaClassFilter, setNgoaiKhoaClassFilter] = useState('');
+   const [ngoaiKhoaStatusFilter, setNgoaiKhoaStatusFilter] = useState('ALL');
+   const [ngoaiKhoaSearchTerm, setNgoaiKhoaSearchTerm] = useState('');
+
+   // Reminder modal states
+   const [reminderStudent, setReminderStudent] = useState(null);
+   const [reminderText, setReminderText] = useState('');
+   const [sendingReminder, setSendingReminder] = useState(false);
    const mobileChatPanelHeight = '90dvh';
    const attChatInputRef = React.useRef(null);
    const attChatStudentIdRef = React.useRef('');
@@ -1018,6 +1031,119 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       }
    };
 
+   const fetchNgoaiKhoaReport = async () => {
+      const classIds = (attClasses || []).map(cls => cls.malop).filter(Boolean);
+      if (classIds.length === 0) {
+         setNgoaiKhoaReportData({ activeAnnouncement: null, studentsData: [] });
+         return;
+      }
+
+      setNgoaiKhoaLoading(true);
+      try {
+         const { data: ngoaiKhoaAnnouncements } = await supabase
+            .from('class_announcements')
+            .select('*')
+            .eq('title', 'NGOẠI KHÓA')
+            .eq('approved', true)
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+         const activeAnnouncements = getActiveNgoaiKhoaAnnouncements(ngoaiKhoaAnnouncements || []);
+         const latestActiveAnnouncement = activeAnnouncements[0] || null;
+
+         if (!latestActiveAnnouncement) {
+            setNgoaiKhoaReportData({ activeAnnouncement: null, studentsData: [] });
+            return;
+         }
+
+         const announceDate = new Date(latestActiveAnnouncement.created_at);
+
+         const { data: stData } = await supabase
+            .from('tbl_hv')
+            .select('mahv, tenhv, malop, trangthai')
+            .in('malop', classIds);
+
+         const activeStudents = (stData || []).filter(
+            (student) => String(student.trangthai || '').trim().toLowerCase() !== 'đã nghỉ'
+         );
+
+         const { data: regData } = await supabase
+            .from('dangkyngoaikhoa')
+            .select('*')
+            .gt('ngaydangky', announceDate.toISOString())
+            .order('ngaydangky', { ascending: false });
+
+         const registrations = regData || [];
+
+         const studentsData = activeStudents.map((student) => {
+            const studentMaHV = String(student.mahv || '').trim().toUpperCase();
+            const reg = registrations.find((item) => String(item.mahv || '').trim().toUpperCase() === studentMaHV);
+            const className = getClassDisplayName(student.malop);
+
+            return {
+               ...student,
+               className,
+               hasResponded: Boolean(reg),
+               codangky: reg ? reg.codangky : null,
+               lydo: reg ? reg.lydo : '',
+               ngaydangky: reg ? reg.ngaydangky : null
+            };
+         });
+
+         setNgoaiKhoaReportData({
+            activeAnnouncement: latestActiveAnnouncement,
+            studentsData
+         });
+      } catch (error) {
+         console.error('Error fetching extracurricular report:', error);
+         setNgoaiKhoaReportData({ activeAnnouncement: null, studentsData: [] });
+      } finally {
+         setNgoaiKhoaLoading(false);
+      }
+   };
+
+   const openReminderModal = (student) => {
+      setReminderStudent(student);
+      const programTitle = ngoaiKhoaReportData?.activeAnnouncement?.title || 'dã ngoại';
+      setReminderText(`Kính gửi phụ huynh bé ${student.tenhv}, nhờ phụ huynh kiểm tra và đăng ký tham gia chương trình ${programTitle} cho bé giúp nhà trường ạ.`);
+   };
+
+   const closeReminderModal = () => {
+      setReminderStudent(null);
+      setReminderText('');
+      setSendingReminder(false);
+   };
+
+   const handleSendReminder = async (e) => {
+      e?.preventDefault();
+      if (!reminderText.trim() || !reminderStudent || !attendanceUser) return;
+
+      setSendingReminder(true);
+      try {
+         const newMessage = {
+            mahv: reminderStudent.mahv,
+            manv: attendanceUser.manv || attendanceUser.username,
+            content: reminderText.trim(),
+            is_read: false
+         };
+
+         const { data, error } = await supabase.from('hv_messages').insert([newMessage]).select();
+         if (error) throw error;
+
+         if (data && data[0]) {
+            await triggerPushNotification(supabase, 'hv_messages', data[0]);
+         }
+
+         alert(`Đã gửi tin nhắn nhắc nhở đến phụ huynh bé ${reminderStudent.tenhv}!`);
+         closeReminderModal();
+      } catch (err) {
+         console.error('Lỗi khi gửi tin nhắn nhắc nhở:', err);
+         alert('Không thể gửi tin nhắn nhắc nhở: ' + err.message);
+      } finally {
+         setSendingReminder(false);
+      }
+   };
+
    // eslint-disable-next-line react-hooks/exhaustive-deps
    useEffect(() => {
       const fetchAllStudentsData = async () => {
@@ -1232,6 +1358,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          fetchTeacherAnnouncements('curriculum');
       } else if (attTab === 'ngoaikhoa') {
          fetchTeacherAnnouncements('ngoaikhoa');
+         fetchNgoaiKhoaReport();
       } else {
          setTeacherAnnouncements([]);
       }
@@ -2267,7 +2394,189 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {(attTab === 'notices' || attTab === 'curriculum' || attTab === 'ngoaikhoa') && (
+         {attTab === 'ngoaikhoa' && (
+            <div style={{ animation: 'fadeIn 0.3s ease' }}>
+               {attClasses.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
+                     Chưa có lớp phân công để xem báo cáo ngoại khóa.
+                  </div>
+               ) : ngoaiKhoaLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+                     <Loader2 size={28} className="spinner" style={{ color: '#d97706' }} />
+                  </div>
+               ) : !ngoaiKhoaReportData?.activeAnnouncement ? (
+                  <div style={{ textAlign: 'center', padding: '3rem 1.5rem', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #cbd5e1' }}>
+                     <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>
+                        Hiện không có chương trình ngoại khóa nào đang mở
+                     </div>
+                     <p style={{ color: '#64748b', margin: 0, fontSize: '0.9rem' }}>
+                        Báo cáo chỉ hiển thị khi có đợt ngoại khóa đang diễn ra. Khi chương trình đã kết thúc, danh sách sẽ tự động ẩn.
+                     </p>
+                  </div>
+               ) : (() => {
+                  const students = ngoaiKhoaReportData.studentsData || [];
+                  const activeAnnounce = ngoaiKhoaReportData.activeAnnouncement;
+
+                  const filteredStudents = students.filter((item) => {
+                     const matchClass = ngoaiKhoaClassFilter ? item.malop === ngoaiKhoaClassFilter : true;
+                     const matchSearch = String(item.tenhv || '').toLowerCase().includes(ngoaiKhoaSearchTerm.toLowerCase()) ||
+                        String(item.mahv || '').toLowerCase().includes(ngoaiKhoaSearchTerm.toLowerCase());
+
+                     let matchStatus = true;
+                     if (ngoaiKhoaStatusFilter === 'REGISTERED') matchStatus = item.codangky === true;
+                     else if (ngoaiKhoaStatusFilter === 'NOT_REGISTERED') matchStatus = item.codangky === false;
+                     else if (ngoaiKhoaStatusFilter === 'NO_RESPONSE') matchStatus = !item.hasResponded;
+
+                     return matchClass && matchSearch && matchStatus;
+                  });
+
+                  const countTotal = students.length;
+                  const countRegistered = students.filter(s => s.codangky === true).length;
+                  const countNotRegistered = students.filter(s => s.codangky === false).length;
+                  const countNoResponse = students.filter(s => !s.hasResponded).length;
+
+                  return (
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {/* Active Program Card */}
+                        <div style={{ background: '#fffbe3', border: '1px solid #fef3c7', borderRadius: '16px', padding: '1.2rem', boxShadow: '0 4px 6px -1px rgba(217, 119, 6, 0.05)' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                              <div>
+                                 <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '3px 10px', borderRadius: '999px', textTransform: 'uppercase' }}>
+                                    Đang mở đăng ký
+                                 </span>
+                                 <h3 style={{ margin: '0.4rem 0 0.2rem 0', color: '#78350f', fontSize: '1.15rem', fontWeight: 800 }}>
+                                    {activeAnnounce.title || 'Chương trình Ngoại khóa'}
+                                 </h3>
+                                 <div style={{ fontSize: '0.8rem', color: '#b45309' }}>
+                                    Đăng lúc: {new Date(activeAnnounce.created_at).toLocaleString('vi-VN')}
+                                 </div>
+                              </div>
+                           </div>
+                           {activeAnnounce.content && (
+                              <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#451a03', whiteSpace: 'pre-wrap', background: 'rgba(255, 255, 255, 0.7)', padding: '0.75rem', borderRadius: '10px', border: '1px solid #fef08a' }}>
+                                 {activeAnnounce.content}
+                              </div>
+                           )}
+                        </div>
+
+                        {/* Summary Metrics */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                           <div onClick={() => setNgoaiKhoaStatusFilter('ALL')} style={{ background: ngoaiKhoaStatusFilter === 'ALL' ? '#f1f5f9' : 'white', border: ngoaiKhoaStatusFilter === 'ALL' ? '2px solid #64748b' : '1px solid #e2e8f0', borderRadius: '14px', padding: '0.85rem', cursor: 'pointer', textAlign: 'center' }}>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#334155' }}>{countTotal}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>Tất cả học sinh</div>
+                           </div>
+                           <div onClick={() => setNgoaiKhoaStatusFilter('REGISTERED')} style={{ background: ngoaiKhoaStatusFilter === 'REGISTERED' ? '#ecfdf5' : 'white', border: ngoaiKhoaStatusFilter === 'REGISTERED' ? '2px solid #10b981' : '1px solid #e2e8f0', borderRadius: '14px', padding: '0.85rem', cursor: 'pointer', textAlign: 'center' }}>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#047857' }}>{countRegistered}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600 }}>Đã đăng ký</div>
+                           </div>
+                           <div onClick={() => setNgoaiKhoaStatusFilter('NOT_REGISTERED')} style={{ background: ngoaiKhoaStatusFilter === 'NOT_REGISTERED' ? '#fef2f2' : 'white', border: ngoaiKhoaStatusFilter === 'NOT_REGISTERED' ? '2px solid #ef4444' : '1px solid #e2e8f0', borderRadius: '14px', padding: '0.85rem', cursor: 'pointer', textAlign: 'center' }}>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b91c1c' }}>{countNotRegistered}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: 600 }}>Không tham gia</div>
+                           </div>
+                           <div onClick={() => setNgoaiKhoaStatusFilter('NO_RESPONSE')} style={{ background: ngoaiKhoaStatusFilter === 'NO_RESPONSE' ? '#fffbeb' : 'white', border: ngoaiKhoaStatusFilter === 'NO_RESPONSE' ? '2px solid #f59e0b' : '1px solid #e2e8f0', borderRadius: '14px', padding: '0.85rem', cursor: 'pointer', textAlign: 'center' }}>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b45309' }}>{countNoResponse}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#d97706', fontWeight: 600 }}>Chưa phản hồi</div>
+                           </div>
+                        </div>
+
+                        {/* Filters */}
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                           <div style={{ flex: 1, minWidth: '160px' }}>
+                              <select
+                                 value={ngoaiKhoaClassFilter}
+                                 onChange={(e) => setNgoaiKhoaClassFilter(e.target.value)}
+                                 style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none' }}
+                              >
+                                 <option value="">Tất cả các lớp phân công</option>
+                                 {attClasses.map((cls) => (
+                                    <option key={cls.malop} value={cls.malop}>
+                                       {cls.tenlop || cls.malop}
+                                    </option>
+                                 ))}
+                              </select>
+                           </div>
+                           <div style={{ flex: 2, minWidth: '200px', position: 'relative' }}>
+                              <input
+                                 type="text"
+                                 placeholder="Tìm tên hoặc mã học sinh..."
+                                 value={ngoaiKhoaSearchTerm}
+                                 onChange={(e) => setNgoaiKhoaSearchTerm(e.target.value)}
+                                 style={{ width: '100%', padding: '0.65rem 0.85rem 0.65rem 2.2rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none' }}
+                              />
+                              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                           </div>
+                        </div>
+
+                        {/* Student List */}
+                        {filteredStudents.length > 0 ? (
+                           <div style={{ display: 'grid', gap: '10px' }}>
+                              {filteredStudents.map((st) => {
+                                 let badgeBg = '#fffbeb';
+                                 let badgeColor = '#b45309';
+                                 let statusText = 'Chưa phản hồi';
+
+                                 if (st.codangky === true) {
+                                    badgeBg = '#ecfdf5';
+                                    badgeColor = '#047857';
+                                    statusText = 'Đã đăng ký';
+                                 } else if (st.codangky === false) {
+                                    badgeBg = '#fef2f2';
+                                    badgeColor = '#b91c1c';
+                                    statusText = 'Không tham gia';
+                                 }
+
+                                 return (
+                                    <div key={st.mahv} style={{ background: 'white', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                       <div>
+                                          <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>{st.tenhv}</div>
+                                          <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
+                                             {st.mahv} • Lớp: <strong>{st.className}</strong>
+                                          </div>
+                                          {st.lydo && (
+                                             <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '6px', fontStyle: 'italic', background: '#f8fafc', padding: '4px 8px', borderRadius: '6px', border: '1px solid #f1f5f9' }}>
+                                                Ghi chú: {st.lydo}
+                                             </div>
+                                          )}
+                                       </div>
+                                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                             <span style={{ fontSize: '0.8rem', fontWeight: 700, padding: '4px 12px', borderRadius: '999px', background: badgeBg, color: badgeColor }}>
+                                                {statusText}
+                                             </span>
+                                             {!st.hasResponded && (
+                                                <button
+                                                   type="button"
+                                                   onClick={() => openReminderModal(st)}
+                                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '8px', border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', transition: '0.2s' }}
+                                                   title={`Gửi tin nhắn nhắc nhở cho bé ${st.tenhv}`}
+                                                >
+                                                   <Bell size={13} />
+                                                   <span>Nhắc nhở</span>
+                                                </button>
+                                             )}
+                                          </div>
+                                          {st.ngaydangky && (
+                                             <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                                {new Date(st.ngaydangky).toLocaleDateString('vi-VN')}
+                                             </span>
+                                          )}
+                                       </div>
+                                    </div>
+                                 );
+                              })}
+                           </div>
+                        ) : (
+                           <div style={{ textAlign: 'center', padding: '2.5rem 1rem', background: '#f8fafc', borderRadius: '14px', border: '2px dashed #e2e8f0', color: '#64748b' }}>
+                              Không tìm thấy học sinh phù hợp với bộ lọc.
+                           </div>
+                        )}
+                     </div>
+                  );
+               })()}
+            </div>
+         )}
+
+         {(attTab === 'notices' || attTab === 'curriculum') && (
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
                {attClasses.length > 0 && attTab === 'curriculum' && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
@@ -2357,8 +2666,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {isClassBroadcastOpen && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+         {isClassBroadcastOpen && createPortal(
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
                <div style={{ width: '100%', maxWidth: '520px', background: 'white', borderRadius: '20px', boxShadow: '0 25px 50px rgba(15, 23, 42, 0.25)', overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
                      <div>
@@ -2432,11 +2741,62 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </div>
                   </form>
                </div>
-            </div>
+            </div>,
+            document.body
          )}
 
-         {previewImage && (
-            <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
+         {reminderStudent && createPortal(
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
+               <div style={{ width: '100%', maxWidth: '480px', background: 'white', borderRadius: '20px', boxShadow: '0 25px 50px rgba(15, 23, 42, 0.25)', overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', background: '#fffbeb' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Bell size={20} style={{ color: '#b45309' }} />
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#78350f' }}>Nhắc Nhở Đăng Ký Ngoại Khóa</h3>
+                     </div>
+                     <button type="button" onClick={closeReminderModal} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.8)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <X size={18} />
+                     </button>
+                  </div>
+
+                  <form onSubmit={handleSendReminder} style={{ padding: '1.25rem', display: 'grid', gap: '1rem' }}>
+                     <div style={{ fontSize: '0.9rem', color: '#334155' }}>
+                        Gửi tin nhắn nhắc nhở trực tiếp tới phụ huynh học sinh: <strong style={{ color: '#0f172a' }}>{reminderStudent.tenhv}</strong> ({reminderStudent.mahv} - Lớp {reminderStudent.className})
+                     </div>
+
+                     <textarea
+                        value={reminderText}
+                        onChange={(e) => setReminderText(e.target.value)}
+                        placeholder="Nhập nội dung tin nhắn nhắc nhở..."
+                        rows={4}
+                        style={{ width: '100%', resize: 'vertical', minHeight: '100px', padding: '0.85rem 1rem', borderRadius: '14px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', lineHeight: 1.5, fontFamily: 'inherit' }}
+                     />
+
+                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                        <button
+                           type="button"
+                           onClick={closeReminderModal}
+                           disabled={sendingReminder}
+                           style={{ padding: '0.75rem 1.25rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                           Hủy
+                        </button>
+                        <button
+                           type="submit"
+                           disabled={sendingReminder || !reminderText.trim()}
+                           style={{ padding: '0.75rem 1.25rem', borderRadius: '12px', border: 'none', background: '#d97706', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.55rem', opacity: sendingReminder || !reminderText.trim() ? 0.65 : 1, boxShadow: '0 4px 12px rgba(217, 119, 6, 0.25)' }}
+                        >
+                           {sendingReminder ? <Loader2 size={18} className="spinner" /> : <Send size={18} />}
+                           <span>Gửi</span>
+                        </button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {previewImage && createPortal(
+            <div className="image-preview-overlay" style={{ zIndex: 10000 }} onClick={() => setPreviewImage(null)}>
                <div className="preview-container" onClick={e => e.stopPropagation()}>
                   <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '10px', zIndex: 2 }}>
                      <button
@@ -2450,7 +2810,8 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   </div>
                   <img src={previewImage} alt="Preview" referrerPolicy="no-referrer" />
                </div>
-            </div>
+            </div>,
+            document.body
          )}
       </div>
    );
