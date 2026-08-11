@@ -918,7 +918,9 @@ function ParentPortal({ parentData, setParentData }) {
 
    const fetchNgoaiKhoaAnnouncements = async () => {
       const data = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 20);
-      setNgoaiKhoaAnnouncements(getActiveNgoaiKhoaAnnouncements(data).slice(0, 10));
+      const active = getActiveNgoaiKhoaAnnouncements(data).slice(0, 10);
+      setNgoaiKhoaAnnouncements(active);
+      return active;
    };
 
    const fetchChatMessages = async (isLoadMore = false) => {
@@ -1815,10 +1817,26 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
-   const fetchNgoaiKhoaRegistration = async () => {
+   const fetchNgoaiKhoaRegistration = async (activeAnnouncements = null) => {
       if (!parentData) return;
       setNgoaiKhoaLoading(true);
       try {
+         let announcements = activeAnnouncements;
+         if (!announcements) {
+            const rawAnnouncements = await fetchClassAnnouncementsByTitle('NGOẠI KHÓA', 20);
+            announcements = getActiveNgoaiKhoaAnnouncements(rawAnnouncements);
+         }
+
+         const activeAnnouncement = announcements?.[0];
+         if (!activeAnnouncement) {
+            setNgoaiKhoaReg(null);
+            setNgoaiKhoaReason('');
+            setShowDeclineReason(false);
+            return;
+         }
+
+         const announceTime = new Date(activeAnnouncement.created_at || activeAnnouncement.date).getTime() - 60000;
+
          const { data, error } = await supabase
             .from('dangkyngoaikhoa')
             .select('*')
@@ -1827,11 +1845,20 @@ function ParentPortal({ parentData, setParentData }) {
             .limit(1);
          if (error) throw error;
          if (data && data.length > 0) {
-            setNgoaiKhoaReg(data[0]);
-            setNgoaiKhoaReason(data[0].lydo || '');
-            setShowDeclineReason(!data[0].codangky);
+            const regTime = new Date(data[0].ngaydangky).getTime();
+            if (regTime >= announceTime) {
+               setNgoaiKhoaReg(data[0]);
+               setNgoaiKhoaReason(data[0].lydo || '');
+               setShowDeclineReason(!data[0].codangky);
+            } else {
+               setNgoaiKhoaReg(null);
+               setNgoaiKhoaReason('');
+               setShowDeclineReason(false);
+            }
          } else {
             setNgoaiKhoaReg(null);
+            setNgoaiKhoaReason('');
+            setShowDeclineReason(false);
          }
       } catch (err) {
          console.error('Error fetching registration:', err);
@@ -2158,8 +2185,9 @@ function ParentPortal({ parentData, setParentData }) {
       if (parentTab === 'attendance-tab') fetchMonthlyAttendance();
       if (parentTab === 'health-tab') fetchHealthHistory();
       if (parentTab === 'ngoaikhoa-tab') {
-         fetchNgoaiKhoaAnnouncements();
-         fetchNgoaiKhoaRegistration();
+         fetchNgoaiKhoaAnnouncements().then((active) => {
+            fetchNgoaiKhoaRegistration(active);
+         });
       }
    }, [parentData?.student?.mahv, parentTab, calendarDate]);
 
