@@ -659,6 +659,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          }
          setAttStudents(studentsFound);
 
+         const isSat = (() => {
+            if (!attDate) return false;
+            const [y, m, d] = attDate.split('-').map(Number);
+            return new Date(y, m - 1, d).getDay() === 6;
+         })();
+
          const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', attSelectedClass).eq('ngay', attDate);
          const rMap = {};
          studentsFound.forEach(student => {
@@ -666,7 +672,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             if (existing) {
                rMap[student.mahv] = { trangthai: existing.trangthai, ghichu: existing.ghichu, id: existing.id };
             } else {
-               rMap[student.mahv] = { trangthai: 'Có mặt', ghichu: '' };
+               rMap[student.mahv] = { trangthai: isSat ? '' : 'Có mặt', ghichu: '' };
             }
          });
          setAttRecords(rMap);

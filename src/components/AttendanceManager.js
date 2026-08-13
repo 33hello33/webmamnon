@@ -117,6 +117,12 @@ export default function AttendanceManager({ students, showMessage }) {
         }
         setAttStudents(cluster);
 
+        const isSat = (() => {
+          if (!attDate) return false;
+          const [y, m, d] = attDate.split('-').map(Number);
+          return new Date(y, m - 1, d).getDay() === 6;
+        })();
+
         const { data: rec } = await supabase.from('tbl_diemdanh').select('*').eq('malop', targetMalop).eq('ngay', attDate);
         const rMap = {};
         cluster.forEach(student => {
@@ -124,7 +130,7 @@ export default function AttendanceManager({ students, showMessage }) {
           if (existing) {
             rMap[student.mahv] = { trangthai: existing.trangthai, ghichu: existing.ghichu, id: existing.id };
           } else {
-            rMap[student.mahv] = { trangthai: 'Có mặt', ghichu: '' };
+            rMap[student.mahv] = { trangthai: isSat ? '' : 'Có mặt', ghichu: '' };
           }
         });
         setAttRecords(rMap);
