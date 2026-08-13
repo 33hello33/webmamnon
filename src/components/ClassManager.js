@@ -617,9 +617,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
            const refundRules = Object.entries(consecutiveRefundConfig)
               .map(([k, v]) => ({ minDays: parseInt(k, 10), tiengiam: Number(v?.tiengiam || 0) }))
               .filter(r => r.minDays > 0 && r.tiengiam > 0)
-              .sort((a, b) => b.minDays - a.minDays);
-           const matched = refundRules.find(r => nghiPhep >= r.minDays);
-           if (matched) tuitionRefund = nghiPhep * matched.tiengiam;
+              .sort((a, b) => a.minDays - b.minDays);
+
+           if (refundRules.length > 0) {
+              for (let i = 0; i < refundRules.length; i++) {
+                 const currentTier = refundRules[i];
+                 const nextTier = refundRules[i + 1];
+
+                 if (i === 0 && nghiPhep < currentTier.minDays) break;
+
+                 const startDay = currentTier.minDays;
+                 const endDay = nextTier ? Math.min(nghiPhep, nextTier.minDays - 1) : nghiPhep;
+
+                 if (nghiPhep >= startDay) {
+                    const daysInThisTier = Math.max(0, endDay - startDay + 1);
+                    tuitionRefund += daysInThisTier * currentTier.tiengiam;
+                 }
+              }
+           }
         }
 
         const mealRefund = 0; // Bỏ hoàn tiền ăn

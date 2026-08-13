@@ -131,12 +131,29 @@ export const calculateConsecutiveTuitionRefund = ({ groups = [], dailyRefundAmou
 
   const rules = getConsecutiveRefundRules(config)
     .filter((rule) => Number(rule.tiengiam) > 0)
-    .sort((left, right) => right.minDays - left.minDays);
+    .sort((left, right) => left.minDays - right.minDays);
+
+  if (rules.length === 0) return 0;
 
   return groups.reduce((total, group) => {
     const leaveDays = Number(group?.so_ngay_nghi_lien_tuc) || 0;
-    const matchedRule = rules.find((rule) => leaveDays >= rule.minDays);
-    if (!matchedRule) return total;
-    return total + (leaveDays * (Number(matchedRule.tiengiam) || 0));
+    if (leaveDays <= 0) return total;
+
+    let groupRefund = 0;
+    for (let i = 0; i < rules.length; i++) {
+      const currentTier = rules[i];
+      const nextTier = rules[i + 1];
+
+      if (i === 0 && leaveDays < currentTier.minDays) break;
+
+      const startDay = currentTier.minDays;
+      const endDay = nextTier ? Math.min(leaveDays, nextTier.minDays - 1) : leaveDays;
+
+      if (leaveDays >= startDay) {
+        const daysInThisTier = Math.max(0, endDay - startDay + 1);
+        groupRefund += daysInThisTier * currentTier.tiengiam;
+      }
+    }
+    return total + groupRefund;
   }, 0);
 };

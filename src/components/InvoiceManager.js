@@ -645,8 +645,17 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             return 0;
          };
 
+         const getDocIdNum = (mahd) => {
+            const num = parseInt(String(mahd || '').replace(/[^\d]/g, ''), 10);
+            return Number.isFinite(num) ? num : 0;
+         };
+
          let allDocs = [...validHDs, ...validTBs];
-         allDocs.sort((a, b) => safeTime(b.ngaylap) - safeTime(a.ngaylap));
+         allDocs.sort((a, b) => {
+            const timeDiff = safeTime(b.ngaylap) - safeTime(a.ngaylap);
+            if (timeDiff !== 0) return timeDiff;
+            return getDocIdNum(b.mahd) - getDocIdNum(a.mahd);
+         });
          recentDoc = allDocs.length > 0 ? allDocs[0] : null;
 
          validHDs.sort((a, b) => safeTime(b.ngayketthuc || b.ngaylap) - safeTime(a.ngayketthuc || a.ngaylap));
@@ -1243,11 +1252,15 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             }
          }
 
-         const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
+         const { data: allHDsData } = await supabase.from('tbl_hd').select('mahd');
          let nextNum = 1;
-         if (recentHD && recentHD.length > 0 && recentHD[0].mahd) {
-            const numPart = recentHD[0].mahd.replace(/\D/g, '');
-            if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
+         if (allHDsData && allHDsData.length > 0) {
+            const maxNum = allHDsData.reduce((max, row) => {
+               const val = String(row?.mahd || '').trim();
+               const numPart = parseInt(val.replace(/[^\d]/g, ''), 10);
+               return Number.isFinite(numPart) ? Math.max(max, numPart) : max;
+            }, 0);
+            nextNum = maxNum + 1;
          }
          const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
 
@@ -1491,16 +1504,36 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const tienhoct7_val = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
    const extraSaturdayFee = (studySummary?.t7DaHoc || 0) * tienhoct7_val;
 
-   // Hoàn học phí: lấy tổng ngày nghỉ phép, tìm mức cao nhất phù hợp trong config, nhân trực tiếp
+   // Hoàn học phí tính lũy tiến động theo đúng các mốc cấu hình (minDays & tiengiam)
    let tuitionRefund = 0;
    const nghiPhepTotal = studySummary?.nghiPhep || 0;
    if (nghiPhepTotal > 0) {
       const refundRules = Object.entries(consecutiveRefundConfig)
          .map(([k, v]) => ({ minDays: parseInt(k, 10), tiengiam: Number(v?.tiengiam || 0) }))
          .filter(r => r.minDays > 0 && r.tiengiam > 0)
-         .sort((a, b) => b.minDays - a.minDays);
-      const matched = refundRules.find(r => nghiPhepTotal >= r.minDays);
-      if (matched) tuitionRefund = nghiPhepTotal * matched.tiengiam;
+         .sort((a, b) => a.minDays - b.minDays); // Sắp xếp tăng dần: ví dụ [1 ngày: 40k, 4 ngày: 100k, ...]
+
+      if (refundRules.length > 0) {
+         for (let i = 0; i < refundRules.length; i++) {
+            const currentTier = refundRules[i];
+            const nextTier = refundRules[i + 1];
+
+            // Nếu tổng số ngày nghỉ nhỏ hơn mốc bắt đầu của bậc đầu tiên
+            if (i === 0 && nghiPhepTotal < currentTier.minDays) {
+               break;
+            }
+
+            // Mốc bắt đầu của bậc hiện tại (chuyển về index 1-based, ví dụ minDays=1 -> ngày thứ 1, minDays=4 -> ngày thứ 4)
+            const startDay = currentTier.minDays;
+            // Mốc kết thúc của bậc hiện tại (ngày ngay trước mốc của bậc tiếp theo, hoặc nghỉ bao nhiêu ngày thì tới đó)
+            const endDay = nextTier ? Math.min(nghiPhepTotal, nextTier.minDays - 1) : nghiPhepTotal;
+
+            if (nghiPhepTotal >= startDay) {
+               const daysInThisTier = Math.max(0, endDay - startDay + 1);
+               tuitionRefund += daysInThisTier * currentTier.tiengiam;
+            }
+         }
+      }
    }
 
    const roundedTuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
