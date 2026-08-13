@@ -2052,7 +2052,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
                         <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
-                     <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
+                     <div>Lớp: <b>{downloadingInvoice?.tenlop}</b></div>
                      <div>
                         Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
                      </div>
@@ -2224,7 +2224,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   </div>
 
                   <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
-                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Lớp: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
                      <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
                      {downloadingNotice?.diemDanhInfo && (
                         <div style={{ opacity: 0.9 }}>
