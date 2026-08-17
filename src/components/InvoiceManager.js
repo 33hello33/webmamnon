@@ -248,7 +248,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
    const [isSaving, setIsSaving] = useState(false);
    const [message, setMessage] = useState({ type: '', text: '' });
-   const [warningModal, setWarningModal] = useState({ isOpen: false, title: '', message: '' });
+   const [warningModal, setWarningModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
    const [successModal, setSuccessModal] = useState({ isOpen: false, title: '', message: '' });
    const [downloadingInvoice, setDownloadingInvoice] = useState(null);
    const [downloadingNotice, setDownloadingNotice] = useState(null);
@@ -1351,12 +1351,13 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       await loadAttendanceForMonth(newStart);
    };
 
-   const handleSaveInvoice = async () => {
+   const handleSaveInvoice = async (bypassDuplicateCheck = false) => {
+      const isBypass = bypassDuplicateCheck === true;
       setIsSaving(true);
       try {
          const currentTimePeriod = calculateThoiluong(invoiceData);
 
-         if (currentTimePeriod) {
+         if (!isBypass && currentTimePeriod) {
             const { data: allDocs, error: dupErr } = await supabase.from('tbl_hd')
                .select('mahd, daxoa, thoiluong')
                .eq('mahv', selectedStudent.mahv)
@@ -1372,7 +1373,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                setWarningModal({
                   isOpen: true,
                   title: 'Cảnh Báo Đóng Trùng Học Phí',
-                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
+                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Bạn có chắc chắn vẫn muốn tiếp tục xuất hóa đơn?`,
+                  onConfirm: () => handleSaveInvoice(true)
                });
                setIsSaving(false);
                return;
@@ -2273,7 +2275,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          {warningModal.isOpen && (
             <div className="im-modal-overlay">
                <div className="im-warning-modal animate-slide-up">
-                  <button className="im-close-btn" onClick={() => setWarningModal({ ...warningModal, isOpen: false })}>
+                  <button className="im-close-btn" onClick={() => setWarningModal({ isOpen: false, title: '', message: '', onConfirm: null })}>
                      <X size={20} />
                   </button>
                   <div className="im-warning-icon">
@@ -2282,8 +2284,21 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   <h3>{warningModal.title}</h3>
                   <p>{warningModal.message}</p>
                   <div className="im-warning-actions">
-                     <button className="im-btn-warn-ok" onClick={() => setWarningModal({ ...warningModal, isOpen: false })}>
-                        Đã Hiểu & Kiểm Tra Lại
+                     <button
+                        className="im-btn-warn-confirm"
+                        onClick={() => {
+                           const cb = warningModal.onConfirm;
+                           setWarningModal({ isOpen: false, title: '', message: '', onConfirm: null });
+                           if (cb) cb();
+                        }}
+                     >
+                        Xác Nhận Xuất
+                     </button>
+                     <button
+                        className="im-btn-warn-cancel"
+                        onClick={() => setWarningModal({ isOpen: false, title: '', message: '', onConfirm: null })}
+                     >
+                        Không Xuất
                      </button>
                   </div>
                </div>
