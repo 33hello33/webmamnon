@@ -1,14 +1,72 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { supabase } from '../supabase';
-import { UserX, AlertTriangle, CalendarX, Calendar } from 'lucide-react';
+import { useConfig } from '../ConfigContext';
+import { UserX, AlertTriangle, CalendarX, Calendar, Send, Loader2 } from 'lucide-react';
 import StudentAttendanceCalendar from './StudentAttendanceCalendar';
 import './LeaveManager.css';
 
+const BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
+
 export default function LeaveManager({ students }) {
+  const { config } = useConfig();
   const [classes, setClasses] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewCalendarStudent, setViewCalendarStudent] = useState(null);
+  const [sendingZaloId, setSendingZaloId] = useState(null);
+
+  const handleSendZaloNotice = async (item) => {
+    const studentDetail = students.find(s => s.mahv === item.mahv) || {};
+    const sdt = studentDetail.sdtme || studentDetail.sdtba || studentDetail.sdt || (item.sdt !== 'Chưa cập nhật' ? item.sdt : '');
+
+    if (!sdt) {
+      alert(`Học sinh ${item.tenhv} chưa có Số điện thoại Mẹ/Phụ huynh trong hồ sơ!`);
+      return;
+    }
+
+    setSendingZaloId(item.mahv);
+
+    try {
+      // 1. Tìm Zalo User ID theo SĐT
+      const searchRes = await axios.get(`${BACKEND_URL}/api/zalo/search-phone?phone=${encodeURIComponent(sdt)}`);
+      if (!searchRes.data || !searchRes.data.success || !searchRes.data.found) {
+        alert(`Không tìm thấy tài khoản Zalo liên kết với SĐT: ${sdt}`);
+        setSendingZaloId(null);
+        return;
+      }
+
+      const targetZaloId = searchRes.data.contact.userId;
+
+      // 2. Mẫu tin nhắn Zalo Nhắc Nghỉ Học
+      let msgTemplate = config?.zalonhacnghiphep || 'Cảnh báo học tập: Học viên [tenhv] (Mã: [mahv]), Lớp [lop] đã nghỉ không phép 2 buổi liên tiếp. Lịch học: [lichhoc], Giờ học: [giohoc]. Kính mong phụ huynh kiểm tra và liên hệ với nhà trường.';
+
+      const finalMsg = msgTemplate
+        .replace(/\[tenhv\]/g, item.tenhv || '')
+        .replace(/\[mahv\]/g, item.mahv || '')
+        .replace(/\[lop\]/g, item.tenlop || '')
+        .replace(/\[lichhoc\]/g, item.ghichu || (item.songayvang ? `Vắng ${item.songayvang} buổi liên tiếp` : 'Thường nhật'))
+        .replace(/\[giohoc\]/g, 'Buổi học hôm nay');
+
+      // 3. Gửi tin nhắn
+      const sendRes = await axios.post(`${BACKEND_URL}/api/zalo/send-message`, {
+        threadId: targetZaloId,
+        message: finalMsg,
+        threadType: 'user'
+      });
+
+      if (sendRes.data && sendRes.data.success) {
+        alert(`Đã gửi tin nhắn Zalo nhắc nghỉ học thành công tới Phụ huynh ${item.tenhv} (${sdt})!`);
+      } else {
+        alert(`Gửi tin nhắn Zalo thất bại: ${sendRes.data?.error || 'Lỗi không xác định'}`);
+      }
+    } catch (err) {
+      console.error('Lỗi khi gửi Zalo:', err);
+      alert('Không thể gửi tin nhắn Zalo: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingZaloId(null);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -168,6 +226,7 @@ export default function LeaveManager({ students }) {
                     <th>Trạng Thái</th>
                     <th>Ghi Chú</th>
                     <th>SĐT Liên Hệ</th>
+                    <th className="text-center">Hành Động Zalo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -189,11 +248,22 @@ export default function LeaveManager({ students }) {
                         </td>
                         <td className="text-muted">{s.ghichu}</td>
                         <td className="font-medium text-primary">{s.sdt}</td>
+                        <td className="text-center">
+                          <button
+                            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="Gửi tin nhắn Zalo Nhắc Nghỉ Học cho Phụ huynh"
+                            disabled={sendingZaloId === s.mahv}
+                            onClick={() => handleSendZaloNotice(s)}
+                          >
+                            {sendingZaloId === s.mahv ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                            Zalo Nhắc Nghỉ
+                          </button>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="empty-state">Tuyệt vời! Hôm nay chưa ghi nhận học sinh nào nghỉ học.</td>
+                      <td colSpan="8" className="empty-state">Tuyệt vời! Hôm nay chưa ghi nhận học sinh nào nghỉ học.</td>
                     </tr>
                   )}
                 </tbody>
@@ -220,8 +290,16 @@ export default function LeaveManager({ students }) {
                         {s.trangthai}
                       </span>
                     </div>
-                    <div className="card-row">
+                    <div className="card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span><strong>SĐT:</strong> {s.sdt}</span>
+                      <button
+                        style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        disabled={sendingZaloId === s.mahv}
+                        onClick={() => handleSendZaloNotice(s)}
+                      >
+                        {sendingZaloId === s.mahv ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                        Zalo
+                      </button>
                     </div>
                     {s.ghichu && s.ghichu !== '-' && (
                       <div className="card-row note">
@@ -257,6 +335,7 @@ export default function LeaveManager({ students }) {
                     <th>Tên Lớp</th>
                     <th className="text-center">Số Ngày Vắng Liên Tiếp</th>
                     <th>SĐT Liên Hệ</th>
+                    <th className="text-center">Hành Động Zalo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -282,12 +361,23 @@ export default function LeaveManager({ students }) {
                             </div>
                           </td>
                           <td className="font-medium text-primary">{s.sdt}</td>
+                          <td className="text-center">
+                            <button
+                              style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Gửi tin nhắn Zalo Cảnh báo Vắng Liên Tiếp cho Phụ huynh"
+                              disabled={sendingZaloId === s.mahv}
+                              onClick={() => handleSendZaloNotice(s)}
+                            >
+                              {sendingZaloId === s.mahv ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                              Zalo Cảnh Báo
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan="6" className="empty-state">Tuyệt vời! Không có học sinh nào vắng liên tiếp kéo dài.</td>
+                      <td colSpan="7" className="empty-state">Tuyệt vời! Không có học sinh nào vắng liên tiếp kéo dài.</td>
                     </tr>
                   )}
                 </tbody>
@@ -315,8 +405,16 @@ export default function LeaveManager({ students }) {
                     <div className="card-row">
                       <span><strong>Giai đoạn:</strong> {new Date(s.ngaybatdau).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })} - {new Date(s.ngayketthuc).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
                     </div>
-                    <div className="card-row">
+                    <div className="card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span><strong>SĐT:</strong> {s.sdt}</span>
+                      <button
+                        style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        disabled={sendingZaloId === s.mahv}
+                        onClick={() => handleSendZaloNotice(s)}
+                      >
+                        {sendingZaloId === s.mahv ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                        Zalo
+                      </button>
                     </div>
                   </div>
                 ))

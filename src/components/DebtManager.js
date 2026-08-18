@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import axios from 'axios';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { BadgeDollarSign, Clock, CheckCircle, X } from 'lucide-react';
+import { BadgeDollarSign, Clock, CheckCircle, X, Send, Loader2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './DebtManager.css';
 
+const BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
+
 export default function DebtManager() {
   const { config } = useConfig();
+  const [sendingZaloId, setSendingZaloId] = useState(null);
   const walletsConfig = (config ? [
     { id: 'vi1', name: config.vi1?.name || '' },
     { id: 'vi2', name: config.vi2?.name || '' },
@@ -43,6 +47,67 @@ export default function DebtManager() {
     const absNum = Math.abs(num);
     const formatted = absNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return (isNeg ? '-' : '') + formatted;
+  };
+
+  const handleSendZaloNotice = async (item, type) => {
+    const sdt = item.sdtme || item.sdt;
+    if (!sdt) {
+      alert(`Học sinh ${item.tenhv} chưa có SĐT Mẹ/Phụ huynh trong hồ sơ!`);
+      return;
+    }
+
+    const itemKey = `${item.mahv}_${type}`;
+    setSendingZaloId(itemKey);
+
+    try {
+      // 1. Tìm Zalo User qua SĐT
+      const searchRes = await axios.get(`${BACKEND_URL}/api/zalo/search-phone?phone=${encodeURIComponent(sdt)}`);
+      if (!searchRes.data || !searchRes.data.success || !searchRes.data.found) {
+        alert(`Không tìm thấy tài khoản Zalo liên kết với SĐT: ${sdt}`);
+        setSendingZaloId(null);
+        return;
+      }
+
+      const targetZaloId = searchRes.data.contact.userId;
+
+      // 2. Tạo nội dung tin nhắn dựa trên template cấu hình
+      let msgTemplate = '';
+      if (type === 'dong_tre') {
+        msgTemplate = config?.zalodongtre || 'Kính gửi Phụ huynh/Học viên [tenhv] (Mã: [mahv]), Lớp [lop]. Khóa học/học phí của học viên đã kết thúc vào ngày [ngayketthuc]. Xin vui lòng liên hệ trung tâm để đóng học phí gia hạn.';
+      } else {
+        msgTemplate = config?.zalonhacno || 'Kính gửi Phụ huynh/Học viên [tenhv] (Mã: [mahv]), Lớp [lop]. Ngày đóng gần nhất là [ngaydonggannhat]. Hiện tại học viên còn nợ học phí là [sotiencanno] VNĐ. Rất mong Phụ huynh/Học viên hoàn tất học phí sớm.';
+      }
+
+      const formattedKetThuc = item.ngayketthuc ? new Date(item.ngayketthuc).toLocaleDateString('vi-VN') : '';
+      const formattedNgayDong = item.ngaylap ? new Date(item.ngaylap).toLocaleDateString('vi-VN') : (item.ngaydonggannhat || '');
+      const formattedConNo = formatCurrency(item.conno || 0);
+
+      const finalMsg = msgTemplate
+        .replace(/\[tenhv\]/g, item.tenhv || '')
+        .replace(/\[mahv\]/g, item.mahv || '')
+        .replace(/\[lop\]/g, item.tenlop || '')
+        .replace(/\[ngayketthuc\]/g, formattedKetThuc)
+        .replace(/\[ngaydonggannhat\]/g, formattedNgayDong)
+        .replace(/\[sotiencanno\]/g, formattedConNo);
+
+      // 3. Gửi tin nhắn qua Zalo API
+      const sendRes = await axios.post(`${BACKEND_URL}/api/zalo/send-message`, {
+        threadId: targetZaloId,
+        message: finalMsg,
+        threadType: 'user'
+      });
+
+      if (sendRes.data && sendRes.data.success) {
+        alert(`Đã gửi Zalo thành công cho Phụ huynh học sinh ${item.tenhv} (${sdt})!`);
+      } else {
+        alert(`Gửi tin nhắn Zalo thất bại: ${sendRes.data?.error || 'Lỗi không xác định'}`);
+      }
+    } catch (err) {
+      console.error('Lỗi khi gửi tin nhắn Zalo:', err);
+      alert('Không thể gửi tin nhắn Zalo: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingZaloId(null);
+    }
   };
 
   const openPaymentModal = (debtItem) => {
@@ -220,7 +285,7 @@ export default function DebtManager() {
         const cMap = classData || [];
         setClasses(cMap);
 
-        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, trangthai, malop');
+        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtme, sdt, trangthai, malop');
         const students = (stdRaw || []).map(s => ({
           ...s,
           malop_list: s.malop ? [s.malop] : []
@@ -248,10 +313,12 @@ export default function DebtManager() {
             mergedTemp.push({
               mahv: hd.mahv,
               tenhv: std.tenhv || 'Không rõ',
+              sdtme: std.sdtme || std.sdt || '',
               conno: hd.conno,
               tenlop: hd.tenlop || '',
               loai: 'Hóa Đơn',
-              mahd: hd.mahd
+              mahd: hd.mahd,
+              ngaylap: hd.ngaylap
             });
           }
         });
@@ -264,6 +331,7 @@ export default function DebtManager() {
             mergedTemp.push({
               mahv: bill.mahv,
               tenhv: std.tenhv || 'Không rõ',
+              sdtme: std.sdtme || std.sdt || '',
               conno: bill.conno,
               tenlop: stClass ? stClass.tenlop : '',
               loai: 'Bill Hàng',
@@ -311,6 +379,7 @@ export default function DebtManager() {
             overdueTemp.push({
               mahv: std.mahv,
               tenhv: std.tenhv || 'Không rõ',
+              sdtme: std.sdtme || std.sdt || '',
               ngayketthuc: latestHd.ngayketthuc,
               ngaylap: latestHd.ngaylap,
               tenlop: latestHd.tenlop
@@ -412,12 +481,21 @@ export default function DebtManager() {
                           {formatCurrency(d.conno)}
                           {parseInt(String(d.conno).replace(/,/g, '')) < 0 && <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>(Tiền dư)</span>}
                         </td>
-                        <td className="text-center">
+                        <td className="text-center" style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                           <button
                             style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500 }}
                             onClick={() => openPaymentModal(d)}
                           >
                             Trả nợ
+                          </button>
+                          <button
+                            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="Gửi tin nhắn Zalo Nhắc Nợ Học Phí qua SĐT"
+                            disabled={sendingZaloId === `${d.mahv}_nhac_no`}
+                            onClick={() => handleSendZaloNotice(d, 'nhac_no')}
+                          >
+                            {sendingZaloId === `${d.mahv}_nhac_no` ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                            Zalo Nhắc Nợ
                           </button>
                         </td>
                       </tr>
@@ -452,7 +530,17 @@ export default function DebtManager() {
                       </div>
                       <div className="info-line amount-row">
                         <span className="debt-amount">{d.conno.toLocaleString()} ₫</span>
-                        <button className="btn-pay" onClick={() => openPaymentModal(d)}>Trả nợ</button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn-pay" onClick={() => openPaymentModal(d)}>Trả nợ</button>
+                          <button
+                            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            disabled={sendingZaloId === `${d.mahv}_nhac_no`}
+                            onClick={() => handleSendZaloNotice(d, 'nhac_no')}
+                          >
+                            {sendingZaloId === `${d.mahv}_nhac_no` ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                            Zalo
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -483,6 +571,7 @@ export default function DebtManager() {
                     <th>Tên Lớp</th>
                     <th>Ngày Lập HĐ</th>
                     <th className="text-danger">Ngày Kết Thúc (Deadline)</th>
+                    <th className="text-center">Hành động Zalo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -497,12 +586,23 @@ export default function DebtManager() {
                           <td>{d.tenlop}</td>
                           <td className="text-muted">{formattedLap}</td>
                           <td className="font-bold text-danger text-lg">{formattedKetThuc}</td>
+                          <td className="text-center">
+                            <button
+                              style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Gửi tin nhắn Zalo Nhắc Đóng Trễ Học Phí qua SĐT"
+                              disabled={sendingZaloId === `${d.mahv}_dong_tre`}
+                              onClick={() => handleSendZaloNotice(d, 'dong_tre')}
+                            >
+                              {sendingZaloId === `${d.mahv}_dong_tre` ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                              Zalo Nhắc Đóng Trễ
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan="5" className="empty-state">Rất tốt! Không có học sinh nào đang học vượt khung thời gian đóng phí.</td>
+                      <td colSpan="6" className="empty-state">Rất tốt! Không có học sinh nào đang học vượt khung thời gian đóng phí.</td>
                     </tr>
                   )}
                 </tbody>
@@ -527,9 +627,19 @@ export default function DebtManager() {
                       <div className="info-line">
                         <span><strong>Ngày lập HĐ:</strong> {new Date(d.ngaylap).toLocaleDateString('vi-VN')}</span>
                       </div>
-                      <div className="info-line deadline-row">
-                        <span className="deadline-label">Hạn kết thúc:</span>
-                        <span className="deadline-date">{new Date(d.ngayketthuc).toLocaleDateString('vi-VN')}</span>
+                      <div className="info-line deadline-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span className="deadline-label">Hạn kết thúc:</span>
+                          <span className="deadline-date" style={{ marginLeft: '4px' }}>{new Date(d.ngayketthuc).toLocaleDateString('vi-VN')}</span>
+                        </div>
+                        <button
+                          style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0068ff', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          disabled={sendingZaloId === `${d.mahv}_dong_tre`}
+                          onClick={() => handleSendZaloNotice(d, 'dong_tre')}
+                        >
+                          {sendingZaloId === `${d.mahv}_dong_tre` ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
+                          Zalo
+                        </button>
                       </div>
                     </div>
                   </div>

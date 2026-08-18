@@ -79,7 +79,10 @@ const ConfigManager = () => {
           songaynghilientiep: 7,
           phantramgiam: 50
         }),
-        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan
+        trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
+        zalodongtre: config.zalodongtre || 'Kính gửi Phụ huynh/Học viên [tenhv] (Mã: [mahv]), Lớp [lop]. Khóa học/học phí của học viên đã kết thúc vào ngày [ngayketthuc]. Xin vui lòng liên hệ trung tâm để đóng học phí gia hạn.',
+        zalonhacno: config.zalonhacno || 'Kính gửi Phụ huynh/Học viên [tenhv] (Mã: [mahv]), Lớp [lop]. Ngày đóng gần nhất là [ngaydonggannhat]. Hiện tại học viên còn nợ học phí là [sotiencanno] VNĐ. Rất mong Phụ huynh/Học viên hoàn tất học phí sớm.',
+        zalonhacnghiphep: config.zalonhacnghiphep || 'Cảnh báo học tập: Học viên [tenhv] (Mã: [mahv]), Lớp [lop] đã nghỉ không phép 2 buổi liên tiếp. Lịch học: [lichhoc], Giờ học: [giohoc]. Kính mong phụ huynh kiểm tra và liên hệ với nhà trường.'
       });
     }
   }, [config]);
@@ -446,6 +449,52 @@ const ConfigManager = () => {
             </div>
           </section>
         )}
+
+        {/* Zalo Templates Section */}
+        <section className="config-section">
+          <div className="section-title">
+            <MessageSquare size={20} />
+            <h3>Cấu hình Mẫu Tin nhắn Zalo Tự động</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="form-group">
+              <label style={{ fontWeight: 600, color: '#0f172a' }}>Mẫu Zalo Đóng Trễ (Hết hạn học phí)</label>
+              <textarea
+                rows="3"
+                value={formData.zalodongtre || ''}
+                onChange={e => setFormData({ ...formData, zalodongtre: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn Zalo đóng trễ..."
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+              />
+              <p className="hint" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>Các biến khả dụng: <code>[tenhv]</code>, <code>[mahv]</code>, <code>[lop]</code>, <code>[ngayketthuc]</code></p>
+            </div>
+
+            <div className="form-group">
+              <label style={{ fontWeight: 600, color: '#0f172a' }}>Mẫu Zalo Nhắc Nợ Học Phí</label>
+              <textarea
+                rows="3"
+                value={formData.zalonhacno || ''}
+                onChange={e => setFormData({ ...formData, zalonhacno: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn Zalo nhắc nợ..."
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+              />
+              <p className="hint" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>Các biến khả dụng: <code>[tenhv]</code>, <code>[mahv]</code>, <code>[lop]</code>, <code>[ngaydonggannhat]</code>, <code>[sotiencanno]</code></p>
+            </div>
+
+            <div className="form-group">
+              <label style={{ fontWeight: 600, color: '#0f172a' }}>Mẫu Zalo Nhắc Nghỉ Không Phép</label>
+              <textarea
+                rows="3"
+                value={formData.zalonhacnghiphep || ''}
+                onChange={e => setFormData({ ...formData, zalonhacnghiphep: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn Zalo nhắc nghỉ học..."
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+              />
+              <p className="hint" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>Các biến khả dụng: <code>[tenhv]</code>, <code>[mahv]</code>, <code>[lop]</code>, <code>[lichhoc]</code>, <code>[giohoc]</code></p>
+            </div>
+          </div>
+        </section>
+
 
         {/* Row 4: Categories & Tuition Config */}
         <section className="config-section categories-row">

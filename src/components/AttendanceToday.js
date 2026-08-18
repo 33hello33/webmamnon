@@ -1,11 +1,69 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import { supabase } from '../supabase';
-import { Users, Loader2, Search, Calendar, MessageCircle } from 'lucide-react';
+import { useConfig } from '../ConfigContext';
+import { Users, Loader2, Search, Calendar, MessageCircle, Send } from 'lucide-react';
+
+const BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
 export default function AttendanceToday({ students, classes: allAvailableClasses }) {
+  const { config } = useConfig();
   const [loading, setLoading] = useState(false);
   const [todayAttendance, setTodayAttendance] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sendingZaloId, setSendingZaloId] = useState(null);
+
+  const handleSendZaloNotice = async (student, className) => {
+    const studentDetail = students.find(s => s.mahv === student.mahv) || {};
+    const sdt = studentDetail.sdtme || studentDetail.sdtba || studentDetail.sdt || student.sdt;
+
+    if (!sdt) {
+      alert(`Học sinh ${student.tenhv} chưa có Số điện thoại Phụ huynh/Mẹ trong hồ sơ!`);
+      return;
+    }
+
+    setSendingZaloId(student.mahv);
+
+    try {
+      // 1. Tìm Zalo ID qua SĐT
+      const searchRes = await axios.get(`${BACKEND_URL}/api/zalo/search-phone?phone=${encodeURIComponent(sdt)}`);
+      if (!searchRes.data || !searchRes.data.success || !searchRes.data.found) {
+        alert(`Không tìm thấy tài khoản Zalo liên kết với SĐT: ${sdt}`);
+        setSendingZaloId(null);
+        return;
+      }
+
+      const targetZaloId = searchRes.data.contact.userId;
+
+      // 2. Mẫu tin nhắn Zalo
+      let msgTemplate = config?.zalonhacnghiphep || 'Cảnh báo học tập: Học viên [tenhv] (Mã: [mahv]), Lớp [lop] đã nghỉ không phép 2 buổi liên tiếp. Lịch học: [lichhoc], Giờ học: [giohoc]. Kính mong phụ huynh kiểm tra và liên hệ với nhà trường.';
+
+      const finalMsg = msgTemplate
+        .replace(/\[tenhv\]/g, student.tenhv || '')
+        .replace(/\[mahv\]/g, student.mahv || '')
+        .replace(/\[lop\]/g, className || '')
+        .replace(/\[lichhoc\]/g, student.ghichu || 'Thường nhật')
+        .replace(/\[giohoc\]/g, 'Hôm nay');
+
+      // 3. Gửi tin nhắn
+      const sendRes = await axios.post(`${BACKEND_URL}/api/zalo/send-message`, {
+        threadId: targetZaloId,
+        message: finalMsg,
+        threadType: 'user'
+      });
+
+      if (sendRes.data && sendRes.data.success) {
+        alert(`Đã gửi tin nhắn Zalo thành công cho Phụ huynh học sinh ${student.tenhv} (${sdt})!`);
+      } else {
+        alert(`Gửi tin nhắn Zalo thất bại: ${sendRes.data?.error || 'Lỗi không xác định'}`);
+      }
+    } catch (err) {
+      console.error('Lỗi khi gửi Zalo:', err);
+      alert('Không thể gửi tin nhắn Zalo: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingZaloId(null);
+    }
+  };
 
   const todayStr = useMemo(() => {
     const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];

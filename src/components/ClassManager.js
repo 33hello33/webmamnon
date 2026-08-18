@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import axios from 'axios';
 import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText, Plus
+  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText, Plus, Send, Loader2
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
 import { useConfig } from '../ConfigContext';
 import './ClassManager.css';
+
+const BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
 const INITIAL_FORM = {
   malop: '', tenlop: '', hocphi: '', manv: '', daxoa: 'Đang Học'
@@ -159,6 +162,54 @@ const calculateConsecutiveLeave = (attendance) => {
 
 export default function ClassManager({ students, showMessage, fetchStudents }) {
   const { config, getTruTienAn, getTienAnConfig } = useConfig();
+  const [autoSendBatchZalo, setAutoSendBatchZalo] = useState(true);
+
+  const sendBatchZaloReceipt = async (studentInfo, docId, totalAmount, periodText, dataUrl = null) => {
+    const sdt = studentInfo?.sdtme || studentInfo?.sdtba || studentInfo?.sdt;
+    if (!sdt) return;
+
+    try {
+      // 1. Tìm Zalo User ID qua SĐT
+      const searchRes = await axios.get(`${BACKEND_URL}/api/zalo/search-phone?phone=${encodeURIComponent(sdt)}`);
+      if (!searchRes.data || !searchRes.data.success || !searchRes.data.found) {
+        console.warn('[Zalo Batch] Không tìm thấy Zalo cho SĐT:', sdt);
+        return;
+      }
+
+      const targetZaloId = searchRes.data.contact.userId;
+      const messageText = `Kính gửi Phụ huynh học viên ${studentInfo.tenhv} (${studentInfo.mahv || ''}), nhà trường gửi Thông báo học phí mã ${docId} cho kỳ ${periodText || ''}. Tổng cộng: ${totalAmount} VNĐ. Trân trọng!`;
+
+      // 2. Gửi văn bản
+      await axios.post(`${BACKEND_URL}/api/zalo/send-message`, {
+        threadId: targetZaloId,
+        message: messageText,
+        threadType: 'user'
+      });
+
+      // 3. Gửi ảnh biên lai qua Zalo nếu có dataUrl
+      if (dataUrl) {
+        try {
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const file = new File([blob], `${docId}_${studentInfo.tenhv || 'ThongBao'}.png`, { type: 'image/png' });
+
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('threadId', targetZaloId);
+          formData.append('caption', `Ảnh Thông báo học phí ${docId}`);
+
+          await axios.post(`${BACKEND_URL}/api/zalo/send-image`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          console.log('[Zalo Batch] Đã gửi ảnh thông báo học phí Zalo thành công!');
+        } catch (imgErr) {
+          console.error('[Zalo Batch] Lỗi gửi ảnh thông báo Zalo:', imgErr);
+        }
+      }
+    } catch (err) {
+      console.error('[Zalo Batch] Lỗi tự động gửi Zalo:', err.message);
+    }
+  };
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
     { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -1006,6 +1057,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 });
 
                 if (dataUrl && dataUrl.length > 2500) {
+                  // Tự động gửi tin nhắn + ảnh Thông Báo Zalo nếu được bật
+                  if (autoSendBatchZalo) {
+                    const stObj = students.find(s => s.mahv === noticesToPrint[i].mahv) || noticesToPrint[i];
+                    sendBatchZaloReceipt(stObj, noticesToPrint[i].mahd, noticesToPrint[i].tongcong, noticesToPrint[i].sobuoihoc, dataUrl);
+                  }
+
                   if (batchMode === 'print') {
                     collectedUrls.push(dataUrl);
                   } else {
@@ -2141,30 +2198,42 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '15px 25px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
-               <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
-               <button
-                 className="btn btn-primary"
-                 onClick={() => handleConfirmBatchExport('print')}
-                 disabled={isGenerating}
-                 style={{
-                   padding: '0 30px', height: '40px', fontWeight: 800, background: 'white', color: '#2563eb', borderColor: '#2563eb',
-                   boxShadow: '0 4px 12px rgba(37, 99, 235, 0.1)'
-                 }}
-               >
-                 {isGenerating ? 'Đang xử lý...' : 'In Tất Cả'}
-               </button>
-               <button
-                 className="btn btn-success"
-                 onClick={() => handleConfirmBatchExport('export')}
-                 disabled={isGenerating}
-                 style={{
-                   padding: '0 30px', height: '40px', fontWeight: 800, background: '#2563eb', borderColor: '#2563eb',
-                   boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
-                 }}
-               >
-                 {isGenerating ? 'Đang xử lý...' : 'Xuất File Hình Tất Cả'}
-               </button>
+            <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: '#1e3a8a', fontSize: '0.85rem' }}>
+                  <input
+                     type="checkbox"
+                     checked={autoSendBatchZalo}
+                     onChange={e => setAutoSendBatchZalo(e.target.checked)}
+                     style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#0068ff' }}
+                  />
+                  <Send size={15} color="#0068ff" />
+                  Tự động gửi Zalo kèm ảnh Thông Báo cho cả lớp
+               </label>
+               <div style={{ display: 'flex', gap: '12px' }}>
+                  <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleConfirmBatchExport('print')}
+                    disabled={isGenerating}
+                    style={{
+                      padding: '0 30px', height: '40px', fontWeight: 800, background: 'white', color: '#2563eb', borderColor: '#2563eb',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.1)'
+                    }}
+                  >
+                    {isGenerating ? 'Đang xử lý...' : 'In Tất Cả'}
+                  </button>
+                  <button
+                    className="btn btn-success"
+                    onClick={() => handleConfirmBatchExport('export')}
+                    disabled={isGenerating}
+                    style={{
+                      padding: '0 30px', height: '40px', fontWeight: 800, background: '#2563eb', borderColor: '#2563eb',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+                    }}
+                  >
+                    {isGenerating ? 'Đang xử lý...' : 'Xuất File Hình Tất Cả'}
+                  </button>
+               </div>
             </div>
           </div>
         </div>,
