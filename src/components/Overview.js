@@ -181,8 +181,30 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
         validHD.reduce((a, b) => a + parseCurrency(b.dadong), 0) +
         validBill.reduce((a, b) => a + parseCurrency(b.dadong), 0);
 
-      const noHD = validHD.reduce((a, b) => a + parseCurrency(b.conno), 0);
-      const noBill = validBill.reduce((a, b) => a + parseCurrency(b.conno), 0);
+      // Tổng nợ chưa thu: dùng pagination để tránh giới hạn 1000 dòng của Supabase
+      const fetchConnoPages = async (table, dateCol) => {
+        let total = 0;
+        let page = 0;
+        const PAGE = 1000;
+        while (true) {
+          const { data: chunk } = await supabase.from(table)
+            .select('conno, daxoa')
+            .or('daxoa.neq."Đã Xóa",daxoa.is.null')
+            .gte(dateCol, startD)
+            .lte(dateCol, endD)
+            .neq('conno', '0')
+            .neq('conno', '')
+            .not('conno', 'is', null)
+            .range(page * PAGE, page * PAGE + PAGE - 1);
+          if (!chunk || chunk.length === 0) break;
+          chunk.filter(isNotDeleted).forEach(r => { total += parseCurrency(r.conno); });
+          if (chunk.length < PAGE) break;
+          page++;
+        }
+        return total;
+      };
+      const noHD = await fetchConnoPages('tbl_hd', 'ngaylap');
+      const noBill = await fetchConnoPages('tbl_billhanghoa', 'ngaylap');
       const tongNo = noHD + noBill;
 
       const tongChi = validPC.filter(p => (p.loaiphieu || '').trim() === 'Chi').reduce((a, b) => a + parseCurrency(b.chiphi), 0) +

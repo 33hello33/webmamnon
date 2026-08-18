@@ -285,36 +285,51 @@ export default function DebtManager() {
         const cMap = classData || [];
         setClasses(cMap);
 
-        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtme, sdt, trangthai, malop');
+        const { data: stdRaw, error: stdErr } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtme, trangthai, malop');
+        if (stdErr) console.error('[DebtManager] Lỗi query tbl_hv:', stdErr);
+        console.log('[DebtManager] Số học sinh load được:', (stdRaw || []).length, 'records');
         const students = (stdRaw || []).map(s => ({
           ...s,
+          mahv: String(s.mahv),
           malop_list: s.malop ? [s.malop] : []
         }));
 
-        // Fetch Hợp Đồng (HD)
-        const { data: hdData } = await supabase.from('tbl_hd')
-          .select('mahd, mahv, conno, tenlop, daxoa, ngaylap, ngayketthuc');
+        // Fetch tbl_hd: chỉ lấy các dòng có conno thực sự > 0, lọc ngay trên Supabase
+        const { data: hdData, error: hdErr } = await supabase.from('tbl_hd')
+          .select('mahd, mahv, conno, tenlop, daxoa, ngaylap, ngayketthuc')
+          .neq('conno', '0')
+          .neq('conno', '')
+          .not('conno', 'is', null);
+        if (hdErr) console.error('[DebtManager] Lỗi query tbl_hd:', hdErr);
+        console.log('[DebtManager] HD có conno != 0 tải về:', (hdData || []).length);
 
-        // Fetch Bill Hàng Hóa (Cho dù bảng chưa tạo cũng sẽ không crash hệ thống)
+        // Fetch tbl_billhanghoa: lọc conno > 0 trên Supabase
         let billData = [];
         const { data: bData, error } = await supabase.from('tbl_billhanghoa')
-          .select('mabill, mahv, conno, daxoa');
+          .select('mabill, mahv, conno, daxoa, daxacnhan')
+          .neq('conno', '0')
+          .neq('conno', '')
+          .not('conno', 'is', null);
         if (!error && bData) billData = bData;
 
-        // Remove 'Đã Xóa' as requested
+        // Remove 'Đã Xóa'
         const validHd = (hdData || []).filter(h => (h.daxoa || '').toLowerCase() !== 'đã xóa');
-        const validBill = billData.filter(b => (b.daxoa || '').toLowerCase() !== 'đã xóa');
+        const parseCur = (v) => parseInt(String(v).replace(/,/g, ''), 10) || 0;
+        // Bill: chưa xóa và chưa xác nhận gộp vào HD
+        const validBill = billData.filter(b => (b.daxoa || '').toLowerCase() !== 'đã xóa' && (b.daxacnhan === false || b.daxacnhan === null || parseCur(b.conno) > 0));
 
         // BẢNG 1: Tổng Hợp Danh Sách Còn Nợ
         const mergedTemp = [];
+        console.log('[DebtManager] Số HD có conno != 0:', validHd.filter(h => parseCur(h.conno) !== 0).length);
         validHd.forEach(hd => {
-          if (hd.conno && hd.conno !== '0' && hd.conno !== 0) {
-            const std = students.find(s => s.mahv === hd.mahv) || {};
+          const connoVal = parseCur(hd.conno);
+          if (connoVal !== 0) {
+            const std = students.find(s => s.mahv === String(hd.mahv)) || {};
             mergedTemp.push({
               mahv: hd.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              sdtme: std.sdtme || std.sdt || '',
-              conno: hd.conno,
+              sdtme: std.sdtme || '',
+              conno: connoVal,
               tenlop: hd.tenlop || '',
               loai: 'Hóa Đơn',
               mahd: hd.mahd,
@@ -324,15 +339,16 @@ export default function DebtManager() {
         });
 
         validBill.forEach(bill => {
-          if (bill.conno && bill.conno !== '0' && bill.conno !== 0) {
-            const std = students.find(s => s.mahv === bill.mahv) || {};
+          const billConno = parseCur(bill.conno);
+          if (billConno > 0) {
+            const std = students.find(s => s.mahv === String(bill.mahv)) || {};
             const firstMalop = std.malop_list && std.malop_list.length > 0 ? std.malop_list[0] : null;
             const stClass = cMap.find(c => c.malop === firstMalop);
             mergedTemp.push({
               mahv: bill.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              sdtme: std.sdtme || std.sdt || '',
-              conno: bill.conno,
+              sdtme: std.sdtme || '',
+              conno: billConno,
               tenlop: stClass ? stClass.tenlop : '',
               loai: 'Bill Hàng',
               mahd: bill.mabill
@@ -343,6 +359,11 @@ export default function DebtManager() {
         setDebtList(mergedTemp);
 
         // BẢNG 2: Danh Sách Quá Hạn Đóng Tiền
+        // Cần fetch riêng tbl_hd không lọc conno, chỉ cần ngayketthuc
+        const { data: hdAllData } = await supabase.from('tbl_hd')
+          .select('mahv, ngaylap, ngayketthuc, tenlop, daxoa, mahd');
+        const validHdAll = (hdAllData || []).filter(h => (h.daxoa || '').toLowerCase() !== 'đã xóa');
+
         const overdueTemp = [];
         // Lọc các học sinh không phải 'Đã Nghỉ'
         const activeStudents = students.filter(s => (s.trangthai || '') !== 'Đã Nghỉ');
@@ -353,7 +374,7 @@ export default function DebtManager() {
 
         activeStudents.forEach(std => {
           // SELECT DISTINCT ON (hd.MaHV) ... ORDER BY hd.MaHV, hd.NgayLap DESC, hd.MaHD DESC
-          const stHds = validHd.filter(h => h.mahv === std.mahv);
+          const stHds = validHdAll.filter(h => String(h.mahv) === std.mahv);
           if (stHds.length === 0) return;
 
           stHds.sort((a, b) => {
@@ -379,7 +400,7 @@ export default function DebtManager() {
             overdueTemp.push({
               mahv: std.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              sdtme: std.sdtme || std.sdt || '',
+              sdtme: std.sdtme || '',
               ngayketthuc: latestHd.ngayketthuc,
               ngaylap: latestHd.ngaylap,
               tenlop: latestHd.tenlop
