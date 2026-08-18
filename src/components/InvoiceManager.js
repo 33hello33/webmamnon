@@ -1538,7 +1538,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             trutienan: formatCurrency(Math.round(actualMealRefund)),
             trutiendangoai: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
             sobuoinghiphep: studySummary?.nghiPhep || 0,
-            nhanvien: cashier
+            nhanvien: cashier,
+            phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null
          };
 
          const res = await supabase.from('tbl_thongbao').insert([insertData]);
