@@ -338,6 +338,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       let parsedPt = [];
       try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
       
+      const mealRefund = pCur(r.trutienan);
+      const tuitionRefund = pCur(r.tiennghiphep);
+      const ngoaiKhoaRefund = pCur(r.trutiendangoai);
+      const hasDeduction = mealRefund > 0 || tuitionRefund > 0 || ngoaiKhoaRefund > 0;
+
       setDownloadingInvoice({
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
          tenhv: studentName, sdt: phone,
@@ -347,8 +352,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          hinhthuc: r.hinhthuc, ghichu: r.ghichu,
          nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
          thoiluong: r.thoiluong, phuthu: parsedPt,
-         actualMealRefund: r.trutienan, actualTuitionRefund: r.tiennghiphep, ngoaiKhoaDeduction: r.trutiendangoai,
-         deductionSum: Number(r.trutienan||0) + Number(r.tiennghiphep||0) + Number(r.trutiendangoai||0)
+         actualMealRefund: mealRefund,
+         actualTuitionRefund: tuitionRefund,
+         ngoaiKhoaDeduction: ngoaiKhoaRefund,
+         deductionSum: mealRefund + tuitionRefund + ngoaiKhoaRefund,
+         hasDeduction: hasDeduction
       });
    };
 
@@ -3362,6 +3370,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                      <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
                      <div>Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b></div>
+                     
                      <div style={{ marginTop: '5px' }}>Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b></div>
                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
