@@ -989,6 +989,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       if (recordsToInsert.length > 0) {
         const { error } = await supabase.from('tbl_thongbao').insert(recordsToInsert);
         if (error) throw error;
+        insertLog(`[THÔNG BÁO HỌC PHÍ] Bảng: tbl_thongbao | Chi tiết: Tạo ${recordsToInsert.length} thông báo học phí cho lớp ${selectedClass?.tenlop || ''}`);
       }
 
       const excelData = finalNotices.map((n, idx) => ({
@@ -1300,6 +1301,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       }
 
       showMessage('success', isEditMode ? 'Cập nhật thông tin lớp thành công!' : 'Thêm lớp học thành công!');
+      const actionText = isEditMode ? 'Cập nhật' : 'Thêm mới';
+      insertLog(`[${isEditMode ? 'SỬA LỚP' : 'THÊM LỚP'}] Bảng: tbl_lop | Chi tiết: ${actionText} lớp ${formData.tenlop} (${formData.malop}) - Học phí: ${formData.hocphi || '0'}đ`);
       setIsFormOpen(false);
       fetchClasses();
     } catch (err) {
@@ -1311,15 +1314,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   };
 
   const handleDelete = () => {
-    console.log("handleDelete called, selectedClass:", selectedClass);
     if (!selectedClass) return;
     if (classStudents && classStudents.length > 0) {
-      console.log("Class has students, showing error...");
       return showMessage('error', 'Không thể xóa lớp đang có học sinh. Vui lòng chuyển lớp cho học sinh trước.');
     }
     setDeletePassword('');
     setIsDeleteOpen(true);
-    console.log("isDeleteOpen set to true");
   };
 
   const confirmDelete = async () => {
@@ -1335,29 +1335,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const { error } = await supabase.from('tbl_lop').update({ daxoa: 'Đã Xóa' }).eq('malop', selectedClass.malop);
       if (error) throw error;
 
-      showMessage('success', `Đã xóa lớp ${selectedClass.tenlop} thành công`);
-      setIsDeleteOpen(false);
-      setSelectedClassId(null);
-      fetchClasses();
-    } catch (err) {
-      console.error(err);
-      showMessage('error', 'Lỗi khi xóa lớp');
-    }
-  };
-
-  const handleOpenViewStudent = (student) => {
-    setViewStudentData(student);
-    setIsViewStudentOpen(true);
-  };
-
-  const handleOpenTransfer = (student) => {
-    setTransferMode('single');
-    setTransferringStudent(student);
-    setTransferTargetClassId('');
-    setIsTransferModalOpen(true);
-  };
-
-  const handleOpenBulkTransfer = () => {
+      showMessage  const handleOpenBulkTransfer = () => {
     if (selectedStudents.length === 0) {
       return openSelectionAlert('Chưa chọn học sinh', 'Vui lòng tick học sinh trước khi chuyển lớp hàng loạt.');
     }
@@ -1386,12 +1364,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       const targetClassName = classes.find(c => c.malop === transferTargetClassId)?.tenlop || transferTargetClassId;
       if (transferMode === 'bulk') {
-        showMessage('success', `ÄÃ£ chuyá»ƒn ${transferStudentIds.length} há»c sinh sang lá»›p má»›i thÃ nh cÃ´ng!`);
-        insertLog(`[CHUYá»‚N Lá»šP HÃ€NG LOáº T] SÄ© sá»‘: ${transferStudentIds.length} | Tá»« ${selectedClass?.tenlop || selectedClassId} sang ${targetClassName}`);
+        showMessage('success', `Đã chuyển ${transferStudentIds.length} học sinh sang lớp mới thành công!`);
+        insertLog(`[CHUYỂN LỚP HÀNG LOẠT] Bảng: tbl_hv | Chi tiết: Chuyển ${transferStudentIds.length} học sinh từ ${selectedClass?.tenlop || selectedClassId} sang lớp ${targetClassName}`);
         setSelectedStudentIds([]);
       } else {
-        showMessage('success', `ÄÃ£ chuyá»ƒn ${transferringStudent.tenhv} sang lá»›p má»›i thÃ nh cÃ´ng!`);
-        insertLog(`[CHUYá»‚N Lá»šP] HS: ${transferringStudent.tenhv} | Tá»« ${selectedClass.tenlop} sang ${targetClassName}`);
+        showMessage('success', `Đã chuyển ${transferringStudent?.tenhv || ''} sang lớp mới thành công!`);
+        insertLog(`[CHUYỂN LỚP] Bảng: tbl_hv | Chi tiết: Chuyển học sinh ${transferringStudent?.tenhv || ''} (${transferringStudent?.mahv || ''}) từ lớp ${selectedClass?.tenlop || selectedClassId} sang lớp ${targetClassName}`);
       }
       setIsTransferModalOpen(false);
       setTransferringStudent(null);
@@ -1402,7 +1380,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       console.error(err);
       showMessage('error', 'Lỗi chuyển lớp: ' + (err.message || ''));
     }
-  };
 
   // Export Excel
   const handleExportStudents = () => {
