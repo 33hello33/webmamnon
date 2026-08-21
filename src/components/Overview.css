@@ -31,20 +31,21 @@
 /* TOP CARDS GRID */
 .top-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.85rem;
 }
 
 .o-card {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.75rem;
   background: white;
-  padding: 1.25rem;
-  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.03);
   border: 1px solid #f1f5f9;
   transition: transform 0.2s, box-shadow 0.2s;
+  min-width: 0;
 }
 
 .o-card:hover {
@@ -53,13 +54,14 @@
 }
 
 .o-icon {
-  width: 54px;
-  height: 54px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
+  flex-shrink: 0;
 }
 
 .o-data {
@@ -106,16 +108,17 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.sh-massive-title {
-  font-size: 1.6rem;
-  font-weight: 800;
-}
-
+.sh-massive-title,
 .sh-standard-title {
   font-size: 1.35rem;
-  font-weight: 700;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.3;
 }
 
 .finance-filters {
@@ -403,9 +406,7 @@
 
 /* --- Kindergarten Theme Overrides --- */
 [data-theme="kindergarten"] .o-card, 
-[data-theme="kindergarten"] .f-card, 
-[data-theme="kindergarten"] .wallet-col, 
-[data-theme="kindergarten"] .w-card {
+[data-theme="kindergarten"] .f-card {
   border: 1px solid #e2e8f0 !important;
   border-radius: 24px !important;
   background: #ffffff !important;

@@ -884,7 +884,9 @@ export default function StudentManager({ activeSubTab, currentUser }) {
       )}
       <div className="subtab-content">
         {activeSubTab === 'students' && renderStudentsTab()}
-        {activeSubTab === 'classes' && <ClassManager students={students} showMessage={showMessage} fetchStudents={fetchStudents} />}
+        {(activeSubTab === 'classes' || (!['students', 'attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg'].includes(activeSubTab))) && (
+          <ClassManager students={students} showMessage={showMessage} fetchStudents={fetchStudents} />
+        )}
         {activeSubTab === 'attendance_today' && <AttendanceToday students={students} classes={classes} />}
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}

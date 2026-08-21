@@ -5,7 +5,7 @@ import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2
+   Printer, History, Clock, Edit2, Calendar
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
@@ -2060,20 +2060,24 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
             {config?.hienvithuchi && (
                <div className="fm-stats-toprow">
-                  <div className="fm-dau-ky-info" style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', flex: 1 }}>
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <span className="text-muted" style={{ fontSize: '0.9rem', fontWeight: 500 }}>
-                           Ngày mốc: <strong style={{ color: '#334155' }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
+                  <div className="fm-dau-ky-info">
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        <span className="text-muted" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>
+                           Ngày mốc: <strong style={{ color: '#0f172a', fontWeight: 800 }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
                         </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'nowrap' }}>
                            {!initialBalances.id && (
                               <button className="fm-btn-add-dauky" onClick={() => {
                                  setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
                                  setBalanceModal(true);
-                              }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
+                              }}><Plus size={14} /> Đầu Kỳ</button>
                            )}
-                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
-                           <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6', whiteSpace: 'nowrap', padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={handleOpenCanDoi}>
+                              <Activity size={14} /> Cân Đối Dòng Tiền
+                           </button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', whiteSpace: 'nowrap', padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ">
+                              <Clock size={14} color="#64748b" /> Lịch sử
+                           </button>
                         </div>
                      </div>
                   </div>
@@ -2081,8 +2085,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-top-right">
                      {walletsConfig.map(w => (
                         <div className="fm-wallet-card" key={w.id}>
-                           <div className="fm-wc-row" style={{ marginBottom: '0.4rem' }}><span>{w.name}:</span> <strong style={{ color: '#0ea5e9', fontSize: '1.15rem' }}>{fCur(initialBalances[w.id])}</strong></div>
-                           <div className="fm-wc-row"><span>Hiện tại:</span> <strong style={{ fontSize: '1.15rem', color: '#1e293b' }}>{fCur(currentBalances[w.id])}</strong></div>
+                           <div className="fm-wc-row" style={{ marginBottom: '0.3rem' }}>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}>{w.name}:</span>
+                              <strong style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 800 }}>{fCur(initialBalances[w.id])}</strong>
+                           </div>
+                           <div className="fm-wc-row">
+                              <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>HIỆN TẠI:</span>
+                              <strong style={{ fontSize: '1.05rem', color: '#0f172a', fontWeight: 800 }}>{fCur(currentBalances[w.id])}</strong>
+                           </div>
                         </div>
                      ))}
                   </div>

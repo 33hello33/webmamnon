@@ -1335,7 +1335,29 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const { error } = await supabase.from('tbl_lop').update({ daxoa: 'Đã Xóa' }).eq('malop', selectedClass.malop);
       if (error) throw error;
 
-      showMessage  const handleOpenBulkTransfer = () => {
+      showMessage('success', 'Đã xóa lớp thành công!');
+      setIsDeleteOpen(false);
+      setSelectedClassId(null);
+      fetchClasses();
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'Lỗi khi xóa lớp!');
+    }
+  };
+
+  const handleOpenViewStudent = (student) => {
+    setViewStudentData(student);
+    setIsViewStudentOpen(true);
+  };
+
+  const handleOpenTransfer = (student) => {
+    setTransferMode('single');
+    setTransferringStudent(student);
+    setTransferTargetClassId('');
+    setIsTransferModalOpen(true);
+  };
+
+  const handleOpenBulkTransfer = () => {
     if (selectedStudents.length === 0) {
       return openSelectionAlert('Chưa chọn học sinh', 'Vui lòng tick học sinh trước khi chuyển lớp hàng loạt.');
     }
@@ -1380,6 +1402,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       console.error(err);
       showMessage('error', 'Lỗi chuyển lớp: ' + (err.message || ''));
     }
+  };
 
   // Export Excel
   const handleExportStudents = () => {

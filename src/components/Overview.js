@@ -364,7 +364,9 @@ export default function Overview({ setActiveTab, setActiveSubTab, currentUser })
           {/* ================= 1. BÁO CÁO TỔNG THỂ ================= */}
           <div className="financial-header">
             <div className="sh-title-group">
-              <h2 className="sh-massive-title margin-0 text-slate-800">Báo cáo tài chính tổng hợp</h2>
+              <h2 className="sh-standard-title margin-0 text-slate-800 flex-center">
+                <TrendingUp size={22} className="text-emerald-600" /> Báo cáo tài chính tổng hợp
+              </h2>
               <div className="filter-group">
                 <Calendar size={18} className="text-muted" />
                 <select value={totalsDateFilter} onChange={handleTotalsFilterChange}>
@@ -426,7 +428,9 @@ export default function Overview({ setActiveTab, setActiveSubTab, currentUser })
               {/* ================= 2. BÁO CÁO VÍ THU/CHI ================= */}
               <div className="financial-header">
                 <div className="sh-title-group">
-                  <h2 className="sh-standard-title margin-0 text-slate-800">Thống Kê Chi Tiết Ví</h2>
+                  <h2 className="sh-standard-title margin-0 text-slate-800 flex-center">
+                    <Wallet size={22} className="text-blue-600" /> Thống Kê Chi Tiết Ví
+                  </h2>
                   <div className="filter-group">
                     <CreditCard size={18} className="text-muted" />
                     <select value={walletsDateFilter} onChange={handleWalletsFilterChange}>
