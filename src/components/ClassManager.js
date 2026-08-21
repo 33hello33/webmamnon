@@ -1568,25 +1568,23 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   return (
     <div className="class-manager animate-fade-in">
-      {/* Search and Action Bar */}
-      <div className="class-toolbar">
-        <div className="search-box">
-          <Search size={18} className="search-icon" />
-          <input
-            type="text"
-            placeholder="Tìm kiếm lớp học..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="action-buttons">
-          <button className="btn btn-primary" onClick={handleOpenAdd}><PlusCircle size={16} /> Thêm Lớp</button>
-        </div>
-      </div>
-
       <div className="class-layout">
         {/* Left Pane - List of classes */}
         <div className="class-list-pane">
+          <div className="class-pane-header">
+            <div className="class-search-box">
+              <Search size={18} className="class-search-icon" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm lớp học..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button className="btn btn-primary btn-add-class" onClick={handleOpenAdd} title="Thêm Lớp">
+              <PlusCircle size={16} /> <span>Thêm Lớp</span>
+            </button>
+          </div>
           <h3 className="pane-title">Danh sách lớp học ({filteredClasses.length})</h3>
           {loading ? (
             <div className="loading-state">Đang tải...</div>
@@ -1699,7 +1697,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           );
                         })()}
 
-                        <div className="info-chip full-span">
+                        <div className="info-chip">
                           <DollarSign size={16} />
                           <div className="chip-content">
                             <label>Học phí</label>
