@@ -175,8 +175,7 @@ export default function AttendanceManager({ students, showMessage }) {
       }
 
       showMessage('success', 'Lưu điểm danh thành công!');
-      // const logDesc = `[ĐIỂM DANH] Lớp: ${className} | Ngày: ${attDate} | ${attStudents.length} học sinh`;
-      // insertLog(logDesc);
+      insertLog(`[ĐIỂM DANH] Bảng: tbl_diemdanh | Chi tiết: Điểm danh ngày ${attDate} cho lớp ${targetMalop} (${attStudents.length} học sinh)`);
       // Update the report data too
       const { data: fresh } = await supabase.from('tbl_diemdanh').select('*').eq('malop', targetMalop).gte('ngay', attDate).lte('ngay', attDate);
       if (fresh) {

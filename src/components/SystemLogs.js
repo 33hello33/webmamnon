@@ -58,7 +58,8 @@ export default function SystemLogs() {
         .not('mota', 'ilike', '%tbl_diemdanh%')
         .not('mota', 'ilike', '%ĐIỂM DANH%')
         .not('mota', 'ilike', '%hv_messages%')
-        .not('mota', 'ilike', '%documents%');
+        .not('mota', 'ilike', '%documents%')
+        .not('mota', 'ilike', '%push_subscriptions%');
 
       if (userFilter) {
         query = query.eq('manv', userFilter);

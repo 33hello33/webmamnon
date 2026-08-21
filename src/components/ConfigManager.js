@@ -119,7 +119,7 @@ const ConfigManager = () => {
 
 
       setMsg({ type: 'success', text: 'Đã lưu cấu hình hệ thống thành công!' });
-      insertLog(`[CẤU HÌNH] Cập nhật tham số hệ thống`);
+      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tentruong || '_'}, SĐT: ${formData.sdt || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'})`);
       refreshConfig();
     } catch (err) {
       console.error(err);
@@ -176,6 +176,7 @@ const ConfigManager = () => {
 
       setFormData({ ...formData, logo: logoUrl, appleicon: logoUrl });
       setMsg({ type: 'success', text: 'Đã tải lên logo mới thành công!' });
+      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Tải lên logo trường mới`);
     } catch (err) {
       console.error(err);
       setMsg({ type: 'error', text: 'Lỗi upload: ' + err.message });
