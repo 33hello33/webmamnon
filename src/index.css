@@ -193,7 +193,7 @@ code {
 }
 
 [data-theme="kindergarten"] .nav-btn.active .nav-icon {
-  color: var(--k-pink) !important;
+  color: #ffffff !important;
 }
 
 [data-theme="kindergarten"] .content-header h2 {

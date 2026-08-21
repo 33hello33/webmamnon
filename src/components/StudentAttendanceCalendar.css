@@ -122,27 +122,6 @@
 .calendar-cell.present .cell-date        { color: #16a34a; }
 .calendar-cell.present .cell-content strong { color: #16a34a; }
 
-.calendar-cell.late-1 {
-  background-color: #dcfce7;
-  border-color: #bbf7d0;
-}
-.calendar-cell.late-1 .cell-date        { color: #15803d; }
-.calendar-cell.late-1 .cell-content strong { color: #15803d; }
-
-.calendar-cell.late-2 {
-  background-color: #bbf7d0;
-  border-color: #86efac;
-}
-.calendar-cell.late-2 .cell-date        { color: #166534; }
-.calendar-cell.late-2 .cell-content strong { color: #166534; }
-
-.calendar-cell.late-3 {
-  background-color: #86efac;
-  border-color: #4ade80;
-}
-.calendar-cell.late-3 .cell-date        { color: #14532d; }
-.calendar-cell.late-3 .cell-content strong { color: #14532d; }
-
 .calendar-cell.excused {
   background-color: #fffbeb;
   border-color: #fef3c7;

@@ -22,9 +22,10 @@ import {
   Activity,
   Check,
   Trash2,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
-import { supabase, getActiveSchema, setActiveSchema } from './supabase';
+import { supabase, SUPABASE_SCHEMA } from './supabase';
 import { useConfig } from './ConfigContext';
 import { deleteFromR2 } from './utils/cloudflareR2';
 import { triggerPushNotification } from './utils/pushNotifications';
@@ -44,54 +45,60 @@ import ChatManager from './components/ChatManager';
 import SystemLogs from './components/SystemLogs';
 
 const ALL_TABS = [
-  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
+  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard, color: '#6366f1', bg: '#e0e7ff' },
   {
     id: 'finances',
     label: 'Quản lý thu chi',
     icon: Wallet,
+    color: '#10b981',
+    bg: '#d1fae5',
     subTabs: [
-      { id: 'hoadon', label: 'QL phiếu thu HP' },
-      { id: 'doanhthudukien', label: 'Doanh thu dự kiến' },
-      { id: 'phieuchi', label: 'QL phiếu thu/chi' },
-      { id: 'nhapkho', label: 'QL Nhập kho' },
-      { id: 'billhang', label: 'QL bill hàng' }
+      { id: 'hoadon', label: 'QL phiếu thu HP', dotColor: '#3b82f6' },
+      { id: 'doanhthudukien', label: 'Doanh thu dự kiến', dotColor: '#06b6d4' },
+      { id: 'phieuchi', label: 'QL phiếu thu/chi', dotColor: '#ef4444' },
+      { id: 'nhapkho', label: 'QL Nhập kho', dotColor: '#f59e0b' },
+      { id: 'billhang', label: 'QL bill hàng', dotColor: '#8b5cf6' }
     ]
   },
-  { id: 'student_list', label: 'Học sinh', icon: GraduationCap },
+  { id: 'student_list', label: 'Học sinh', icon: GraduationCap, color: '#0284c7', bg: '#e0f2fe' },
   {
     id: 'students',
     label: 'Quản lý lớp học',
     icon: BookOpen,
+    color: '#8b5cf6',
+    bg: '#ede9fe',
     subTabs: [
-      { id: 'classes', label: 'Lớp' },
-      { id: 'attendance_today', label: 'Danh sách đi học' },
-      { id: 'attendance', label: 'Điểm danh' },
-      { id: 'leave_list', label: 'Danh sách nghỉ' },
-      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa' }
+      { id: 'classes', label: 'Lớp', dotColor: '#6366f1' },
+      { id: 'attendance_today', label: 'Danh sách đi học', dotColor: '#3b82f6' },
+      { id: 'attendance', label: 'Điểm danh', dotColor: '#10b981' },
+      { id: 'leave_list', label: 'Danh sách nghỉ', dotColor: '#ef4444' },
+      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa', dotColor: '#f59e0b' }
     ]
   },
-  { id: 'invoices', label: 'Thu học phí', icon: Receipt },
+  { id: 'invoices', label: 'Thu học phí', icon: Receipt, color: '#ec4899', bg: '#fce7f3' },
   {
     id: 'sales',
     label: 'Bán hàng',
     icon: ShoppingCart,
+    color: '#06b6d4',
+    bg: '#cffafe',
     subTabs: [
-      { id: 'pos', label: 'Bán hàng' },
-      { id: 'products', label: 'Quản lý kho hàng' }
+      { id: 'pos', label: 'Bán hàng', dotColor: '#06b6d4' },
+      { id: 'products', label: 'Quản lý kho hàng', dotColor: '#10b981' }
     ]
   },
-  { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
-  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare },
-  { id: 'employees', label: 'Nhân viên', icon: Users },
-  { id: 'tasks', label: 'Công việc', icon: Briefcase },
-  { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
-  { id: 'system_logs', label: 'Lịch sử', icon: Activity, adminOnly: true },
-  { id: 'config', label: 'Cấu hình', icon: Settings }
+  { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2' },
+  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare, color: '#0068ff', bg: '#e6f0ff' },
+  { id: 'employees', label: 'Nhân viên', icon: Users, color: '#14b8a6', bg: '#ccfbf1' },
+  { id: 'tasks', label: 'Công việc', icon: Briefcase, color: '#f97316', bg: '#ffedd5' },
+  { id: 'statistics', label: 'Thống kê', icon: BarChart3, color: '#3b82f6', bg: '#dbeafe' },
+  { id: 'system_logs', label: 'Lịch sử', icon: Activity, adminOnly: true, color: '#a855f7', bg: '#f3e8ff' },
+  { id: 'config', label: 'Cấu hình', icon: Settings, color: '#64748b', bg: '#f1f5f9' }
 ];
 
 function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [activeSubTab, setActiveSubTab] = useState('students');
+  const [activeSubTab, setActiveSubTab] = useState('classes');
   const [invoiceFocusStudentId, setInvoiceFocusStudentId] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -153,6 +160,17 @@ function Dashboard() {
   };
 
   const visibleTabs = getVisibleTabs();
+
+  // Auto-sync subTab if activeTab changes and current activeSubTab is not valid for activeTab
+  useEffect(() => {
+    const currentTabObj = ALL_TABS.find(t => t.id === activeTab);
+    if (currentTabObj && currentTabObj.subTabs && currentTabObj.subTabs.length > 0) {
+      const isValidSubTab = currentTabObj.subTabs.some(st => st.id === activeSubTab);
+      if (!isValidSubTab) {
+        setActiveSubTab(currentTabObj.subTabs[0].id);
+      }
+    }
+  }, [activeTab, activeSubTab]);
 
   useEffect(() => {
     document.body.setAttribute('data-theme', theme);
@@ -374,9 +392,9 @@ function Dashboard() {
     fetchPendingApprovals();
 
     const channel = supabase.channel('pending_approvals_dashboard')
-      .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'class_announcements' }, () => fetchPendingApprovals())
-      .on('postgres_changes', { event: 'UPDATE', schema: getActiveSchema(), table: 'class_announcements' }, () => fetchPendingApprovals())
-      .on('postgres_changes', { event: 'DELETE', schema: getActiveSchema(), table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'DELETE', schema: SUPABASE_SCHEMA, table: 'class_announcements' }, () => fetchPendingApprovals())
       .subscribe();
 
     return () => {
@@ -430,7 +448,7 @@ function Dashboard() {
 
       // Listen to global changes across devices
       channel = supabase.channel('realtime_logs')
-        .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'tbl_log' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'tbl_log' }, (payload) => {
           const mota = payload.new?.mota || '';
           if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
 
@@ -508,7 +526,7 @@ function Dashboard() {
       fetchUnreadChatCount();
 
       const chatChannel = supabase.channel('global_chat_unread')
-        .on('postgres_changes', { event: 'INSERT', schema: getActiveSchema(), table: 'hv_messages' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, (payload) => {
           const isPH = payload.new.description === 'PH' || (!payload.new.manv);
           if (isPH) {
             if (Notification.permission === 'granted') {
@@ -525,8 +543,8 @@ function Dashboard() {
           }
           fetchUnreadChatCount();
         })
-        .on('postgres_changes', { event: 'UPDATE', schema: getActiveSchema(), table: 'hv_messages' }, () => fetchUnreadChatCount())
-        .on('postgres_changes', { event: 'DELETE', schema: getActiveSchema(), table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .on('postgres_changes', { event: 'DELETE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, () => fetchUnreadChatCount())
         .subscribe();
 
       return () => {
@@ -566,9 +584,6 @@ function Dashboard() {
       } else if (session.loginType === 'attendance' || session.user?.role === 'Giáo viên') {
         navigate('/login');
       } else {
-        if (session.schema) {
-          setActiveSchema(session.schema);
-        }
         setUser(session.user);
       }
     } catch (e) {
@@ -601,42 +616,6 @@ function Dashboard() {
             <h2>{currentTab?.label || 'Đang tải...'}</h2>
           </div>
           <div className="top-actions" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-            {String(user?.role || '').trim().toLowerCase() === 'quản lý' && (
-              <div className="schema-selector">
-                <select
-                  value={getActiveSchema()}
-                  onChange={(e) => {
-                    const newSchema = e.target.value;
-                    setActiveSchema(newSchema);
-                    const sessionStr = localStorage.getItem('auth_session');
-                    if (sessionStr) {
-                      try {
-                        const sess = JSON.parse(sessionStr);
-                        sess.schema = newSchema;
-                        localStorage.setItem('auth_session', JSON.stringify(sess));
-                      } catch (err) { }
-                    }
-                    window.location.reload();
-                  }}
-                  className="schema-select"
-                  style={{
-                    padding: '0.45rem 1rem',
-                    borderRadius: '12px',
-                    border: '1px solid #3b82f6',
-                    outline: 'none',
-                    background: '#eff6ff',
-                    color: '#1d4ed8',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-                  }}
-                >
-                  <option value="anchau">🏢 Cơ Sở An Châu</option>
-                  <option value="golden">🏢 Cơ Sở Golden</option>
-                </select>
-              </div>
-            )}
-
             <div className="theme-selector">
               <select
                 value={theme}
@@ -876,7 +855,9 @@ function Dashboard() {
             {currentTab?.id === 'sales' && activeSubTab === 'products' && <ProductManager currentUser={user} />}
             {currentTab?.id === 'tasks' && <TaskManager />}
             {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" currentUser={user} />}
-            {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
+            {currentTab?.id === 'students_list' && <StudentManager activeSubTab="students" currentUser={user} />}
+            {currentTab?.id === 'students' && <StudentManager activeSubTab={['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg'].includes(activeSubTab) ? activeSubTab : 'classes'} currentUser={user} />}
+            {currentTab?.id === 'attendance_menu' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
             {currentTab?.id === 'system_logs' && <SystemLogs />}
@@ -979,6 +960,10 @@ function Dashboard() {
                 <li key={tab.id} className="nav-item-wrapper">
                   <button
                     className={`nav-btn ${isActive ? 'active' : ''}`}
+                    style={{
+                      '--tab-color': tab.color,
+                      '--tab-bg': tab.bg
+                    }}
                     onClick={() => {
                       setActiveTab(tab.id);
                       if (tab.subTabs && tab.subTabs.length > 0) {
@@ -989,7 +974,16 @@ function Dashboard() {
                       }
                     }}
                   >
-                    <Icon size={20} className="nav-icon" />
+                    <div
+                      className="nav-icon-badge"
+                      style={{
+                        backgroundColor: isActive ? tab.color : (tab.bg || '#f1f5f9'),
+                        color: isActive ? '#ffffff' : tab.color,
+                        boxShadow: isActive ? `0 4px 12px ${tab.color}45` : 'none'
+                      }}
+                    >
+                      <Icon size={18} className="nav-icon" style={{ color: isActive ? '#ffffff' : tab.color }} />
+                    </div>
                     {!collapsed && <span className="nav-label">{tab.label}</span>}
                     {!collapsed && tab.id === 'chat' && unreadChatCount > 0 && (
                       <div style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
@@ -1005,12 +999,21 @@ function Dashboard() {
                         <button
                           key={subTab.id}
                           className={`sidebar-subtab-btn ${activeSubTab === subTab.id ? 'active' : ''}`}
+                          style={{
+                            '--subtab-color': subTab.dotColor || tab.color
+                          }}
                           onClick={() => {
                             setActiveSubTab(subTab.id);
                             setMobileOpen(false);
                           }}
                         >
-                          <div className="subtab-dot"></div>
+                          <div
+                            className="subtab-dot"
+                            style={{
+                              backgroundColor: subTab.dotColor || tab.color,
+                              boxShadow: activeSubTab === subTab.id ? `0 0 0 3px ${(subTab.dotColor || tab.color)}33` : 'none'
+                            }}
+                          ></div>
                           <span>{subTab.label}</span>
                         </button>
                       ))}
@@ -1019,6 +1022,54 @@ function Dashboard() {
                 </li>
               );
             })}
+
+            {/* Disabled / Advance Tabs */}
+            {(() => {
+              const disabledTabs = [];
+              if (config?.hientabthongke === false) {
+                disabledTabs.push({ id: 'disabled_statistics', label: 'Thống kê', icon: BarChart3 });
+              }
+              if (config?.hientabphuhuynh === false) {
+                disabledTabs.push({ id: 'disabled_phuhuynh', label: 'Truy cập Phụ huynh', icon: Users });
+              }
+              if (config?.hientabchamcong === false) {
+                disabledTabs.push({ id: 'disabled_chamcong', label: 'Chấm công', icon: Clock });
+              }
+              if (config?.hienmaqr === false) {
+                disabledTabs.push({ id: 'disabled_maqr', label: 'Mã QR thanh toán', icon: Wallet });
+              }
+
+              if (disabledTabs.length === 0) return null;
+
+              return (
+                <>
+                  <li style={{ marginTop: '1.5rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px', padding: '0 15px', opacity: 0.7 }}>
+                    <div style={{ flex: 1, height: '1px', background: '#cbd5e1' }}></div>
+                    {!collapsed && <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', letterSpacing: '1px' }}>ADVANCE</span>}
+                    <div style={{ flex: 1, height: '1px', background: '#cbd5e1' }}></div>
+                  </li>
+                  {disabledTabs.map(tab => {
+                    const Icon = tab.icon;
+                    return (
+                      <li key={tab.id} className="nav-item-wrapper" style={{ opacity: 0.5, filter: 'grayscale(100%)' }}>
+                        <button
+                          className="nav-btn"
+                          style={{ cursor: 'not-allowed' }}
+                          onClick={() => {
+                            window.alert("Tính năng đã bị khoá. Vui lòng nâng cấp lên bản Advance để mở khoá tính năng này!");
+                          }}
+                        >
+                          <div className="nav-icon-badge" style={{ backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                            <Icon size={18} className="nav-icon" />
+                          </div>
+                          {!collapsed && <span className="nav-label">{tab.label}</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </ul>
         </div>
 

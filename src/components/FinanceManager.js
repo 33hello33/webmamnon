@@ -5,7 +5,7 @@ import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2
+   Printer, History, Clock, Edit2, Calendar
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
@@ -163,41 +163,118 @@ const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl)
 export default function FinanceManager({ activeSubTab, setActiveSubTab, currentUser }) {
    const { config } = useConfig();
 
-   const getShortStudentName = (name) => {
-      const normalized = String(name || '').trim().replace(/\s+/g, ' ');
-      if (!normalized) return '';
-      const parts = normalized.split(' ');
-      if (parts.length <= 2) return normalized;
-      return parts.slice(-2).join(' ');
-   };
-
-   const getQRUrl = (hoaDon, walletsConfig) => {
-      if (!walletsConfig || !hoaDon.hinhthuc) return null;
-      const hinhThucTrim = String(hoaDon.hinhthuc).trim();
-      const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
-      if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-         const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-         const mahv = hoaDon.mahv || '';
-         const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || '');
-         const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
-         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
-      }
-      return null;
-   };
-
    const [downloadingInvoice, setDownloadingInvoice] = useState(null);
    const [downloadingNotice, setDownloadingNotice] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
    const configRef = React.useRef(config);
    configRef.current = config;
    const invoiceExportLockRef = React.useRef(null);
+   const noticeExportLockRef = React.useRef(null);
 
-   const walletsConfig = useMemo(() => (config ? [
-      { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
-      { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
-      { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
-      { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
-   ].filter(w => w.name && w.name.trim() !== '') : []), [config]);
+   const walletsConfigForQR = useMemo(() => (config ? [
+      { name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
+      { name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
+      { name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
+      { name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
+   ].filter(w => w.name.trim() !== '') : []), [config]);
+
+   const getNoticeQRUrl = (notice) => {
+      if (!walletsConfigForQR || !notice.hinhthuc) return null;
+      const hinhThucTrim = String(notice.hinhthuc).trim();
+      const matchedWallet = walletsConfigForQR.find(w => String(w.name).trim() === hinhThucTrim);
+      if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
+         const amountStr = (notice.tongcong || "0").toString().replace(/\D/g, "");
+         const mahv = notice.mahv || '';
+         const rawName = String(notice.tenhv || '').trim().replace(/\s+/g, ' ');
+         const nameParts = rawName ? rawName.split(' ') : [];
+         const shortName = nameParts.length <= 2 ? rawName : nameParts.slice(-2).join(' ');
+         const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
+         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      }
+      return null;
+   };
+
+   useEffect(() => {
+      if (downloadingNotice) {
+         if (noticeExportLockRef.current === downloadingNotice.mahd) return;
+         noticeExportLockRef.current = downloadingNotice.mahd;
+         const processPng = async () => {
+            try {
+               await new Promise(r => setTimeout(r, 1500));
+               const node = document.getElementById('download-notice-node-fm');
+               if (node) {
+                  node.style.position = 'fixed';
+                  node.style.top = '0';
+                  node.style.left = '0';
+                  node.style.zIndex = '9999';
+                  node.style.opacity = '1';
+                  node.style.visibility = 'visible';
+
+                  const qrImg = node.querySelector('img[data-role="notice-qr"]');
+                  if (qrImg && downloadingNotice.qrUrl) {
+                     qrImg.src = downloadingNotice.qrUrl;
+                  }
+
+                  const images = node.querySelectorAll('img');
+                  await Promise.all(Array.from(images).map(img => {
+                     if (img.complete) return Promise.resolve();
+                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 3000); });
+                  }));
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(r => setTimeout(r, 500));
+                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  node.style.position = 'static';
+                  node.style.opacity = '0.01';
+                  if (window.innerWidth <= 991) {
+                     setPreviewImg(dataUrl);
+                  } else {
+                     const link = document.createElement('a');
+                     link.download = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
+                     link.href = dataUrl;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                  }
+                  try {
+                     const fileName = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
+                     const blob = dataUrlToBlob(dataUrl);
+                     const pngFile = new File([blob], fileName, { type: 'image/png' });
+                     const file = await compressImage(pngFile, 150);
+                     const storedImageKey = buildStoredImageKey('notice-images', downloadingNotice.mahv, downloadingNotice.mahd, file.name.split('.').pop() || 'jpg');
+                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
+                     await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
+                  } catch (err) { console.error('Lỗi upload PNG thông báo:', err); }
+               }
+            } catch (err) { console.error('Lỗi xuất PNG thông báo:', err); }
+            finally {
+               if (noticeExportLockRef.current === downloadingNotice.mahd) noticeExportLockRef.current = null;
+               setDownloadingNotice(null);
+            }
+         };
+         processPng();
+      }
+   }, [downloadingNotice]);
+
+   const triggerDownloadNotice = (r) => {
+      const studentName = hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || r.tenhv || '';
+      const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
+      let parsedPt = [];
+      try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
+
+      const noticeObj = {
+         mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
+         tenhv: studentName, sdt: hvMap[r.mahv]?.sdt || r.sdt || '',
+         tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
+         hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
+         tongcong: fCur(r.tongcong), conno: fCur(r.conno || r.tongcong), nocu: fCur(r.nocu || 0),
+         hinhthuc: r.hinhthuc, ghichu: r.ghichu,
+         nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
+         thoiluong: r.thoiluong, phuthu: parsedPt,
+         actualMealRefund: fCur(r.trutienan || 0), actualTuitionRefund: fCur(r.tiennghiphep || 0), ngoaiKhoaDeduction: fCur(r.trutiendangoai || 0),
+      };
+      noticeObj.qrUrl = getNoticeQRUrl(noticeObj);
+      setDownloadingNotice(noticeObj);
+   };
 
    useEffect(() => {
       if (downloadingInvoice) {
@@ -214,7 +291,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   node.style.zIndex = '9999';
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
-                  node.style.display = 'block';
                   const images = node.querySelectorAll('img');
                   await Promise.all(Array.from(images).map(img => {
                      if (img.complete) return Promise.resolve();
@@ -255,98 +331,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }
    }, [downloadingInvoice]);
 
-   useEffect(() => {
-      if (downloadingNotice) {
-         const processPng = async () => {
-            try {
-               await new Promise(r => setTimeout(r, 1500));
-               const node = document.getElementById('download-notice-node');
-               if (node) {
-                  const expectedNoticeId = downloadingNotice.mahd;
-                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig);
-
-                  node.style.position = 'fixed';
-                  node.style.top = '0';
-                  node.style.left = '0';
-                  node.style.zIndex = '9999';
-                  node.style.opacity = '1';
-                  node.style.visibility = 'visible';
-
-                  for (let retry = 0; retry < 20; retry++) {
-                     const qrImg = node.querySelector('[data-role="notice-qr"]');
-                     const noticeId = node.dataset.noticeId;
-                     const qrSrc = qrImg?.getAttribute('src') || '';
-                     if (noticeId === expectedNoticeId && (!expectedQrSrc || qrSrc === expectedQrSrc)) {
-                        break;
-                     }
-                     await new Promise(r => setTimeout(r, 150));
-                  }
-
-                  const images = node.querySelectorAll('img');
-                  await Promise.all(Array.from(images).map(img => {
-                     if (img.complete) return Promise.resolve();
-                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
-                  }));
-                  const qrImg = node.querySelector('[data-role="notice-qr"]');
-                  if (qrImg?.decode) {
-                     try {
-                        await qrImg.decode();
-                     } catch (err) { }
-                  }
-                  await new Promise(requestAnimationFrame);
-                  await new Promise(requestAnimationFrame);
-                  await new Promise(r => setTimeout(r, 600));
-
-                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
-
-                  node.style.position = 'static';
-                  node.style.opacity = '0.01';
-
-                  if (window.innerWidth <= 991) {
-                     setPreviewImg(dataUrl);
-                  } else {
-                     const link = document.createElement('a');
-                     link.download = `${sanitizeFileSegment(`ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}`, 'ThongBao')}.png`;
-                     link.href = dataUrl;
-                     document.body.appendChild(link);
-                     link.click();
-                     document.body.removeChild(link);
-                  }
-
-                  try {
-                     const fileName = `${sanitizeFileSegment(`ThongBao_${downloadingNotice.tenhv}_${downloadingNotice.mahd}`, 'ThongBao')}.png`;
-                     const blob = dataUrlToBlob(dataUrl);
-                     const pngFile = new File([blob], fileName, { type: 'image/png' });
-                     const file = await compressImage(pngFile, 150);
-                     const storedImageKey = buildStoredImageKey(
-                        'notice-images',
-                        downloadingNotice.mahv,
-                        downloadingNotice.mahd,
-                        file.name.split('.').pop() || 'jpg'
-                     );
-
-                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
-                     await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
-
-                  } catch (autoSendErr) {
-                     console.error('Notice image save error:', autoSendErr);
-                  }
-               }
-            } catch (err) {
-               console.error('Notice capture error:', err);
-            } finally {
-               setDownloadingNotice(null);
-            }
-         };
-         processPng();
-      }
-   }, [downloadingNotice, walletsConfig]);
-
    const triggerDownloadInvoice = (r) => {
+      const studentName = hvMap[r.mahv]?.tenhv || (typeof r.mahv === 'object' ? r.mahv?.tenhv : '') || r.tenhv || '';
+      const phone = hvMap[r.mahv]?.sdt || (typeof r.mahv === 'object' ? r.mahv?.sdt : '') || r.sdt || '';
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
       try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
-
+      
       const mealRefund = pCur(r.trutienan);
       const tuitionRefund = pCur(r.tiennghiphep);
       const ngoaiKhoaRefund = pCur(r.trutiendangoai);
@@ -354,12 +345,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       setDownloadingInvoice({
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
-         tenhv: r.tenhv || r.mahv?.tenhv || (hvMap[r.mahv]?.tenhv || ''), sdt: r.sdt || (hvMap[r.mahv]?.sdt || ''),
+         tenhv: studentName, sdt: phone,
          tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
          hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
          tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
          hinhthuc: r.hinhthuc, ghichu: r.ghichu,
-         nhanvien: r.nhanvien || nvMap[r.manv] || r.manv || 'Thu Ngân',
+         nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
          thoiluong: r.thoiluong, phuthu: parsedPt,
          actualMealRefund: mealRefund,
          actualTuitionRefund: tuitionRefund,
@@ -369,31 +360,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const triggerDownloadNotice = (r) => {
-      const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
-      let parsedPt = [];
-      try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
-
-      let diemDanhInfo = null;
-      if (r.diemdanhinfo) {
-         try {
-            diemDanhInfo = typeof r.diemdanhinfo === 'string' ? JSON.parse(r.diemdanhinfo) : r.diemdanhinfo;
-         } catch (e) { }
-      }
-
-      setDownloadingNotice({
-         mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
-         tenhv: r.tenhv || r.mahv?.tenhv || (hvMap[r.mahv]?.tenhv || ''), sdt: r.sdt || (hvMap[r.mahv]?.sdt || ''),
-         tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
-         hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
-         tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
-         hinhthuc: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt'), ghichu: r.ghichu,
-         nhanvien: r.nhanvien || nvMap[r.manv] || r.manv || 'Thu Ngân',
-         thoiluong: r.thoiluong, phuthu: parsedPt,
-         actualMealRefund: fCur(r.trutienan), actualTuitionRefund: fCur(r.tiennghiphep), ngoaiKhoaDeduction: fCur(r.trutiendangoai),
-         diemDanhInfo
-      });
-   };
+   const walletsConfig = useMemo(() => (config ? [
+      { id: 'vi1', name: config.vi1?.name || '' },
+      { id: 'vi2', name: config.vi2?.name || '' },
+      { id: 'vi3', name: config.vi3?.name || '' },
+      { id: 'vi4', name: config.vi4?.name || '' }
+   ].filter(w => w.name.trim() !== '') : []), [config]);
    const [data, setData] = useState([]);
    const [loading, setLoading] = useState(false);
    const [searchTerm, setSearchTerm] = useState('');
@@ -1232,7 +1204,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleConfirmThongBao = async (r) => {
       if (!window.confirm(`Bạn có chắc chắn muốn chuyển thông báo ${r.mahd} thành hóa đơn chính thức không?`)) return;
-
+      
       try {
          const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
          let nextNum = 1;
@@ -1241,7 +1213,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
          }
          const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
-
+         
          const localNow = createLocalDateTime();
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          const cashier = auth.user?.username || auth.user?.tennv || 'Thu Ngân';
@@ -1258,7 +1230,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             giamhocphi: r.giamhocphi,
             tongcong: r.tongcong,
             dadong: r.tongcong,
-            conno: '0',
+            conno: '0', 
             hinhthuc: r.hinhthuc,
             ghichu: r.ghichu,
             phuthu: r.phuthu,
@@ -1281,7 +1253,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          insertLog(`[XÁC NHẬN THÔNG BÁO] Mã TB: ${r.mahd} -> Hóa đơn: ${newMaHD}`);
          alert('Tạo hóa đơn thành công! Hệ thống đang xuất ảnh...');
-         triggerDownloadInvoice({ ...insertData, mahv: r.mahv, dadong: r.tongcong, conno: '0' });
+         triggerDownloadInvoice({ ...insertData, mahv: r.mahv, tenhv: hvMap[r.mahv]?.tenhv || r.tenhv, sdt: hvMap[r.mahv]?.sdt || r.sdt, dadong: r.tongcong, conno: '0' });
          fetchData();
          fetchBalances();
       } catch (err) {
@@ -1739,31 +1711,30 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            {filteredData.map(r => {
                               const deleted = isDeleted(r);
                               return (
-                                 <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
-                                    <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
-                                    <td>{formatDate(r.ngaylap)}</td>
-                                    <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
-                                    <td>{r.tenlop}</td>
-                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
-                                    <td>{r.thoiluong || '_'}</td>
-                                    <td>{r.hinhthuc}</td>
-                                    <td className="text-right">{fCur(r.tongcong)}</td>
-                                    <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
-                                    <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
-                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                       {!deleted ? (
-                                          <>
-                                             <button title="Tải hình Thông báo" onClick={() => triggerDownloadNotice(r)} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={16} /></button>
-                                             <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
-                                             <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /></button>
-                                          </>
-                                       ) : (
-                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
-                                       )}
-                                    </td>
-                                 </tr>
-                              );
-                           })}
+                              <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                 <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
+                                 <td>{formatDate(r.ngaylap)}</td>
+                                 <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                 <td>{r.tenlop}</td>
+                                 <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                 <td>{r.thoiluong || '_'}</td>
+                                 <td>{r.hinhthuc}</td>
+                                 <td className="text-right">{fCur(r.tongcong)}</td>
+                                 <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                 <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
+                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {!deleted ? (
+                                       <>
+                                          <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
+                                          <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
+                                          <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </td>
+                              </tr>
+                              )})}
                         </tbody>
                      </table>
                   </div>
@@ -1772,44 +1743,43 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      {filteredData.map(r => {
                         const deleted = isDeleted(r);
                         return (
-                           <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
-                              <div className="fm-card-header">
-                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
-                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                        <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
+                           <div className="fm-card-header">
+                              <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
+                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                           </div>
+                           <div className="fm-card-body">
+                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
+                              <div className="fm-card-row">
+                                 <span>Tổng cộng:</span>
+                                 <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
                               </div>
-                              <div className="fm-card-body">
-                                 <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
-                                 <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
-                                 <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
+                              {pCur(r.giamhocphi) > 0 && (
                                  <div className="fm-card-row">
-                                    <span>Tổng cộng:</span>
-                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                                    <span>Giảm học phí:</span>
+                                    <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
                                  </div>
-                                 {pCur(r.giamhocphi) > 0 && (
-                                    <div className="fm-card-row">
-                                       <span>Giảm học phí:</span>
-                                       <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
-                                    </div>
+                              )}
+                              <div className="fm-card-row price-row">
+                                 <span>Còn dự kiến:</span>
+                                 <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
+                              </div>
+                              <div className="fm-card-actions">
+                                 {!deleted ? (
+                                    <>
+                                       <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
+                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
+                                       <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
+                                    </>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
                                  )}
-                                 <div className="fm-card-row price-row">
-                                    <span>Còn dự kiến:</span>
-                                    <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
-                                 </div>
-                                 <div className="fm-card-actions">
-                                    {!deleted ? (
-                                       <>
-                                          <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => triggerDownloadNotice(r)}><DownloadCloud size={14} /> Tải Ảnh</button>
-                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
-                                          <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
-                                       </>
-                                    ) : (
-                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
-                                    )}
-                                 </div>
                               </div>
                            </div>
-                        )
-                     })}
+                        </div>
+                     )})}
                   </div>
                </>
             );
@@ -2090,20 +2060,24 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
             {config?.hienvithuchi && (
                <div className="fm-stats-toprow">
-                  <div className="fm-dau-ky-info" style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', flex: 1 }}>
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <span className="text-muted" style={{ fontSize: '0.9rem', fontWeight: 500 }}>
-                           Ngày mốc: <strong style={{ color: '#334155' }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
+                  <div className="fm-dau-ky-info">
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        <span className="text-muted" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>
+                           Ngày mốc: <strong style={{ color: '#0f172a', fontWeight: 800 }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
                         </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'nowrap' }}>
                            {!initialBalances.id && (
                               <button className="fm-btn-add-dauky" onClick={() => {
                                  setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
                                  setBalanceModal(true);
-                              }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
+                              }}><Plus size={14} /> Đầu Kỳ</button>
                            )}
-                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
-                           <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6', whiteSpace: 'nowrap', padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={handleOpenCanDoi}>
+                              <Activity size={14} /> Cân Đối Dòng Tiền
+                           </button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', whiteSpace: 'nowrap', padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ">
+                              <Clock size={14} color="#64748b" /> Lịch sử
+                           </button>
                         </div>
                      </div>
                   </div>
@@ -2111,8 +2085,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-top-right">
                      {walletsConfig.map(w => (
                         <div className="fm-wallet-card" key={w.id}>
-                           <div className="fm-wc-row" style={{ marginBottom: '0.4rem' }}><span>{w.name}:</span> <strong style={{ color: '#0ea5e9', fontSize: '1.15rem' }}>{fCur(initialBalances[w.id])}</strong></div>
-                           <div className="fm-wc-row"><span>Hiện tại:</span> <strong style={{ fontSize: '1.15rem', color: '#1e293b' }}>{fCur(currentBalances[w.id])}</strong></div>
+                           <div className="fm-wc-row" style={{ marginBottom: '0.3rem' }}>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}>{w.name}:</span>
+                              <strong style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 800 }}>{fCur(initialBalances[w.id])}</strong>
+                           </div>
+                           <div className="fm-wc-row">
+                              <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>HIỆN TẠI:</span>
+                              <strong style={{ fontSize: '1.05rem', color: '#0f172a', fontWeight: 800 }}>{fCur(currentBalances[w.id])}</strong>
+                           </div>
                         </div>
                      ))}
                   </div>
@@ -2688,14 +2668,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         try {
                            const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
                            if (Array.isArray(pts) && pts.length > 0) {
-                              const totalPhuThu = pts.reduce((sum, pt) => sum + (Number(pt.amount) || 0), 0);
-                              if (totalPhuThu <= 0) return null;
                               return (
                                  <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12pt' }}>
-                                       <span>+ Phụ thu:</span>
-                                       <b>{fCur(totalPhuThu)} đ</b>
-                                    </div>
+                                    {pts.map((pt, i) => (
+                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                          <span>+ {pt.name || 'Phụ thu'}:</span>
+                                          <b>{fCur(pt.amount)} đ</b>
+                                       </div>
+                                    ))}
                                  </div>
                               );
                            }
@@ -3371,183 +3351,127 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-
+      
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" className="print-a5-receipt" style={{ display: 'block', position: 'relative', overflow: 'hidden', padding: '24px 30px', background: '#ffffff', color: '#000', width: '800px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
-               {/* Background pattern */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.05,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
-
+            <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+               <div style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.2, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`, backgroundRepeat: 'repeat' }} />
+               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-30deg)', fontSize: '60pt', fontWeight: 'bold', color: 'rgba(0, 102, 204, 0.05)', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap', textAlign: 'center', width: '150%' }}>
+                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
+               </div>
                <div style={{ position: 'relative', zIndex: 1 }}>
-                  {/* HEADER */}
-                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '160px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '140px', maxHeight: '65px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
-
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center', padding: '0 10px' }}>
-                        <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', color: '#000' }}>
-                           {config?.tencongty || 'MẦM NON DOREMI'}
-                        </h2>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', fontWeight: 600, color: '#333' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'Tên Công Ty'}</h2>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      </div>
-
-                     {/* RIGHT: Invoice info */}
-                     <div style={{ width: '160px', textAlign: 'right', fontSize: '13px' }}>
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
                         <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
                         <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice?.ngaylap ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
                      </div>
                   </div>
-
-                  {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "14px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline', letterSpacing: '0.5px' }}>
-                     BIÊN LAI THU HỌC PHÍ
-                  </div>
-
-                  {/* DETAILS */}
-                  <div style={{ fontSize: "12pt", lineHeight: "1.7", margin: '14px 0' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '4px' }}>
-                        <div>Họ và tên: <b style={{ fontSize: '13pt' }}>{downloadingInvoice?.tenhv}</b></div>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>BIÊN LAI THU HỌC PHÍ</div>
+                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                        <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
                         <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
                      </div>
                      <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
-                     <div>
-                        Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
-                     </div>
-                     <div style={{ marginTop: '2px' }}>
-                        Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
-                     </div>
-
-                     <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '12px 0' }} />
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: '12pt' }}>
+                     <div>Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b></div>
+                     
+                     <div style={{ marginTop: '5px' }}>Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b></div>
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
                         <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
                         <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
-
-                     {(() => {
-                        if (!downloadingInvoice?.phuthu || downloadingInvoice.phuthu.length === 0) return null;
-                        const totalPhuThu = downloadingInvoice.phuthu.reduce((sum, pt) => sum + (Number(pt.amount) || 0), 0);
-                        if (totalPhuThu <= 0) return null;
-                        return (
-                           <div style={{ marginTop: '6px', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #f3f4f6' }}>
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '11pt' }}>
-                                 <span>+ Phụ thu:</span>
-                                 <b>{fCur(totalPhuThu)} đ</b>
+                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                           {downloadingInvoice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                 <span>+ {pt.name || 'Phụ thu'}:</span><b>{fCur(pt.amount)} đ</b>
                               </div>
-                           </div>
-                        );
-                     })()}
-
+                           ))}
+                        </div>
+                     )}
                      {downloadingInvoice?.deductionSum > 0 && (
-                        <div style={{ marginTop: '6px', padding: '6px 10px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #d1fae5', color: '#065f46', fontSize: '11pt' }}>
-                           {(Number(downloadingInvoice?.actualMealRefund) || 0) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                 <span>- Hoàn trả tiền ăn:</span>
-                                 <b>-{fCur(downloadingInvoice?.actualMealRefund || 0)} đ</b>
-                              </div>
-                           )}
-                           {(Number(downloadingInvoice?.actualTuitionRefund) || 0) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                                 <span>- Hoàn trả học phí:</span>
-                                 <b>-{fCur(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
-                              </div>
-                           )}
+                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span><b>-{fCur(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                           </div>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span><b>-{fCur(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                           </div>
                            {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                                 <span>- Trừ tiền dã ngoại tháng trước:</span>
-                                 <b>-{fCur(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>
+                                 <span>- Trừ tiền dã ngoại tháng trước:</span><b>-{fCur(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>
                               </div>
                            )}
                         </div>
                      )}
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '10px', fontSize: '12pt' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
                         <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
                         <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
                         <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
                      </div>
-
-                     <div style={{ marginTop: '8px', fontSize: '11pt' }}>
-                        Ghi chú: {downloadingInvoice?.ghichu || ""}
-                     </div>
+                     <div style={{ marginTop: '10px' }}>Ghi chú: {downloadingInvoice?.ghichu || ""}</div>
                   </div>
-
-                  {/* SIGNATURE SECTION */}
-                  <div style={{ marginTop: '20px', fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>
-                        Facebook: Doremi Preschool <br />
-                        SĐT/Zalo: {config?.sdtcongty}
-                     </div>
-                     <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br />
-                        <b style={{ fontSize: '12pt' }}>Doremi Preschool</b>
-                     </div>
-                  </div>
-
-                  {/* FOOTER NOTE */}
-                  <div style={{ marginTop: "16px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '8px', fontSize: '9.5pt', color: '#4b5563' }}>
-                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
+                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+                     <div>Facebook: Trường Lá - E Skills School <br />SĐT/Zalo: {config?.sdtcongty}</div>
+                     <div style={{ textAlign: "center" }}>Nhân viên thu tiền <br /><br /><br /><b>{downloadingInvoice?.nhanvien}</b></div>
                   </div>
                </div>
             </div>
-
-            {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
-            <div id="download-notice-node" data-notice-id={downloadingNotice?.mahd || ''} className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
-               {/* HEADER */}
-               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* LEFT: Logo */}
-                  <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+         </div>
+         {previewImg && (
+            <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
+               <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
+                  <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
+                  <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN</p>
+                  <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                  <div style={{ marginTop: '15px', textAlign: 'center' }}>
+                     <button style={{ width: '100%', padding: '10px', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }} onClick={() => setPreviewImg(null)}>HOÀN TẤT</button>
                   </div>
+               </div>
+            </div>
+         )}
 
-                  {/* CENTER: Info */}
+         {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT - FinanceManager */}
+         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+            <div id="download-notice-node-fm" data-notice-id={downloadingNotice?.mahd || ''} style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
+               {/* HEADER */}
+               <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ width: '180px', textAlign: 'left' }}>
+                     <img crossOrigin="anonymous" src={config?.logo || '/logo.png'} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = '/logo.png'; }} />
+                  </div>
                   <div style={{ flex: 1, textAlign: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        TRƯỜNG MẦM NON DOREMI
-                     </h3>
+                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'Tên Trường'}</h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                   </div>
-
-                  {/* RIGHT: Invoice info */}
                   <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
                      <div>Mã TB: <b style={{ fontWeight: 950 }}>{downloadingNotice?.mahd}</b></div>
-                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
+                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString('vi-VN') : '...'}</span></div>
                   </div>
                </div>
 
                {/* TITLE */}
-               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+               <div style={{ textAlign: 'center', fontWeight: '950', fontSize: '24pt', margin: '20px 0', color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                   THÔNG BÁO THU HỌC PHÍ
                </div>
 
                {/* INFO */}
-               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+               <div style={{ fontSize: '15pt', lineHeight: '1.9', color: '#000' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                      <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
                      <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
                   </div>
 
                   {/* FEES BOX */}
-                  <div style={{
-                     background: '#f0f9ff',
-                     border: '1px solid #bae6fd',
-                     borderRadius: '16px',
-                     padding: '24px',
-                     marginTop: '15px',
-                     lineHeight: '1.6'
-                  }}>
+                  <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '16px', padding: '24px', marginTop: '15px', lineHeight: '1.6' }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                         <div style={{ fontWeight: 600 }}>Học phí:</div>
                         <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
@@ -3560,35 +3484,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         </div>
                      )}
 
-                     {(() => {
-                        if (!downloadingNotice?.phuthu || downloadingNotice.phuthu.length === 0) return null;
-                        let lateFeeSum = 0;
-                        const otherFees = [];
-                        downloadingNotice.phuthu.forEach(pt => {
-                           if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
-                              lateFeeSum += Number(pt.amount) || 0;
-                           } else {
-                              otherFees.push(pt);
-                           }
-                        });
-                        return (
-                           <>
-                              <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
-                              {otherFees.map((pt, i) => (
-                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
-                                    <div style={{ fontWeight: 700 }}>{fCur(pt.amount)} đ</div>
-                                 </div>
-                              ))}
-                              {lateFeeSum > 0 && (
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                    <div style={{ fontWeight: 700 }}>{fCur(lateFeeSum)} đ</div>
-                                 </div>
-                              )}
-                           </>
-                        );
-                     })()}
+                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {downloadingNotice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                                 <div style={{ fontWeight: 700 }}>{fCur(pt.amount)} đ</div>
+                              </div>
+                           ))}
+                        </>
+                     )}
 
                      {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
                         <>
@@ -3623,76 +3529,38 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
                      <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
-                     <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || "..."}</b></div>
-                     {downloadingNotice?.diemDanhInfo && (
-                        <div style={{ opacity: 0.9 }}>
-                           Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}):
-                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>,
-                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>,
-                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
-                        </div>
-                     )}
+                     <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || '...'}</b></div>
                      {downloadingNotice?.ghichu && (
                         <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
                      )}
                   </div>
 
                   {/* QR SECTION */}
-                  {(() => {
-                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig) : null);
-                     if (!qrUrl) return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
+                  {downloadingNotice?.qrUrl && (
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+                        <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
+                        <div style={{ textAlign: 'center' }}>
+                           <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                           <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                         </div>
-                     );
-                     return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
-                           <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
-                           <div style={{ textAlign: 'center' }}>
-                              <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
-                              <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
-                           </div>
-                        </div>
-                     );
-                  })()}
+                     </div>
+                  )}
                </div>
 
                {/* FOOTER */}
-               <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+               <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Doremi Preschool<br />
+                     Facebook: {config?.tencongty}<br />
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien}</b>
                   </div>
-                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                  <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                      (Xác nhận)
                   </div>
                </div>
             </div>
          </div>
-         {(downloadingInvoice || downloadingNotice) && createPortal(
-            <div className="sp-modal-overlay" style={{ zIndex: 9999, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
-               <div className="sp-success-modal animate-slide-up" style={{ padding: '30px', maxWidth: '100%', width: '350px', background: 'white', borderRadius: '16px', position: 'relative', textAlign: 'center' }}>
-                  <div style={{ border: '4px solid #f3f3f3', borderTop: '4px solid #3b82f6', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: '0 auto 15px auto' }} />
-                  <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.1rem', fontWeight: 700 }}>
-                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh hóa đơn...'}
-                  </h3>
-                  <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Vui lòng đợi giây lát</p>
-               </div>
-            </div>,
-            document.body
-         )}
-         {previewImg && (
-            <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
-               <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
-                  <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
-                  <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ THÔNG BÁO / HÓA ĐƠN</p>
-                  <img src={previewImg} alt="Preview Notice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                  <div style={{ marginTop: '15px', textAlign: 'center' }}>
-                     <button style={{ width: '100%', padding: '10px', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }} onClick={() => setPreviewImg(null)}>HOÀN TẤT</button>
-                  </div>
-               </div>
-            </div>
-         )}
-      </div>
+
+</div>
    );
 }

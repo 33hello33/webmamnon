@@ -646,43 +646,6 @@
 .im-warning-actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
-}
-
-.im-btn-warn-confirm {
-  background: #ef4444;
-  color: white;
-  border: none;
-  font-weight: 700;
-  font-size: 1rem;
-  padding: 0.85rem 1.25rem;
-  border-radius: 8px;
-  flex: 1;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.im-btn-warn-confirm:hover {
-  background: #dc2626;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
-}
-
-.im-btn-warn-cancel {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-  font-weight: 700;
-  font-size: 1rem;
-  padding: 0.85rem 1.25rem;
-  border-radius: 8px;
-  flex: 1;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.im-btn-warn-cancel:hover {
-  background: #e2e8f0;
-  color: #1e293b;
 }
 
 .im-btn-warn-ok {
