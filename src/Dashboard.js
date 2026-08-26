@@ -19,7 +19,8 @@ import {
   Key,
   MessageSquare,
   BookOpen,
-  Activity
+  Activity,
+  Clock
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
@@ -37,6 +38,7 @@ import Statistics from './components/Statistics';
 import ChatManager from './components/ChatManager';
 import SystemLogs from './components/SystemLogs';
 import ZaloManager from './components/ZaloManager';
+import TimesheetManager from './components/TimesheetManager';
 
 const ALL_TABS = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
@@ -45,11 +47,12 @@ const ALL_TABS = [
     label: 'Quản lý thu chi',
     icon: Wallet,
     subTabs: [
-      { id: 'hoadon', label: 'QL phiếu thu HP' },
-      { id: 'phieuthongbao', label: 'Doanh thu dự kiến' },
-      { id: 'phieuchi', label: 'QL phiếu thu/chi' },
-      { id: 'nhapkho', label: 'QL Nhập kho' },
-      { id: 'billhang', label: 'QL bill hàng' }
+      { id: 'hoadon', label: 'QL phiếu thu HP', dotColor: '#3b82f6' },
+      { id: 'doanhthudukien', label: 'Doanh thu dự kiến', dotColor: '#06b6d4' },
+      { id: 'phieuchi', label: 'QL phiếu thu/chi', dotColor: '#ef4444' },
+      { id: 'phieuluong', label: 'QL phiếu lương', dotColor: '#ec4899' },
+      { id: 'nhapkho', label: 'QL Nhập kho', dotColor: '#f59e0b' },
+      { id: 'billhang', label: 'QL bill hàng', dotColor: '#8b5cf6' }
     ]
   },
   { id: 'student_list', label: 'Học sinh', icon: GraduationCap },
@@ -74,14 +77,15 @@ const ALL_TABS = [
       { id: 'products', label: 'Quản lý kho hàng' }
     ]
   },
-  { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle },
-  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare },
-  { id: 'zalo_chat', label: 'Chat Zalo', icon: MessageSquare },
-  { id: 'employees', label: 'Nhân viên', icon: Users },
-  { id: 'tasks', label: 'Công việc', icon: Briefcase },
-  { id: 'statistics', label: 'Thống kê', icon: BarChart3 },
-  { id: 'system_logs', label: 'Lịch sử', icon: Activity, adminOnly: true },
-  { id: 'config', label: 'Cấu hình', icon: Settings }
+  { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2' },
+  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare, color: '#0068ff', bg: '#e6f0ff' },
+  { id: 'zalo_chat', label: 'Chat Zalo', icon: MessageSquare, color: '#059669', bg: '#d1fae5' },
+  { id: 'timesheet', label: 'Chấm công', icon: Clock, color: '#f59e0b', bg: '#fef3c7' },
+  { id: 'employees', label: 'Nhân viên', icon: Users, color: '#14b8a6', bg: '#ccfbf1' },
+  { id: 'tasks', label: 'Công việc', icon: Briefcase, color: '#f97316', bg: '#ffedd5' },
+  { id: 'statistics', label: 'Thống kê', icon: BarChart3, color: '#3b82f6', bg: '#dbeafe' },
+  { id: 'system_logs', label: 'Lịch sử', icon: Activity, adminOnly: true, color: '#a855f7', bg: '#f3e8ff' },
+  { id: 'config', label: 'Cấu hình', icon: Settings, color: '#64748b', bg: '#f1f5f9' }
 ];
 
 function Dashboard() {
@@ -427,10 +431,10 @@ function Dashboard() {
         </div>
         <div className="card-container">
           <div className="placeholder-card" style={{
-            padding: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
-            background: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
-            boxShadow: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
-            border: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
+            padding: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
+            background: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
+            boxShadow: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
+            border: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'statistics' && <Statistics />}
@@ -444,6 +448,7 @@ function Dashboard() {
             {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" />}
             {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} />}
             {currentTab?.id === 'debts' && <DebtManager />}
+            {currentTab?.id === 'timesheet' && <TimesheetManager currentUser={user} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
             {currentTab?.id === 'system_logs' && <SystemLogs />}
             {currentTab?.id === 'config' && <ConfigManager />}

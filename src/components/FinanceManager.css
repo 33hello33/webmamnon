@@ -165,6 +165,10 @@
   color: #a855f7;
 }
 
+.card-chiluong {
+  border-left: 4px solid #a855f7 !important;
+}
+
 .ico-nhap {
   background: #fce7f3;
   color: #ec4899;
@@ -309,43 +313,47 @@
 
 .fm-table {
   width: 100%;
-  min-width: 1200px; /* Bắt buộc bảng phải rộng tối thiểu 1200px, từ đó kích hoạt thanh cuộn ngang */
-  border-collapse: collapse;
+  min-width: 1200px;
+  border-collapse: separate;
+  border-spacing: 0;
   text-align: left;
 }
 
 .fm-table th {
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #475569;
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 1rem;
-  font-size: 0.85rem;
-  font-weight: 700;
+  padding: 0.9rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
   border-bottom: 2px solid #e2e8f0;
   white-space: nowrap;
 }
 
 .fm-table td {
-  padding: 1rem;
+  padding: 0.85rem 1rem;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
-  font-size: 0.95rem;
-  color: #1e293b;
+  font-size: 0.92rem;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
 
 .fm-table tbody tr {
-  transition: 0.2s;
+  transition: all 0.15s ease;
 }
 
 .fm-table tbody tr:hover {
-  background: #f8fafc;
+  background: #f1f5f9;
 }
 
 .fm-code {
   letter-spacing: 0.5px;
+  font-family: monospace, sans-serif;
 }
 
 .fm-desc {
@@ -357,11 +365,15 @@
 }
 
 .fm-badge {
-  padding: 0.35rem 0.8rem;
+  padding: 0.35rem 0.85rem;
   border-radius: 99px;
-  font-weight: 700;
-  font-size: 0.8rem;
-  display: inline-block;
+  font-weight: 800;
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  letter-spacing: 0.3px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 
 .bg-success {
@@ -424,6 +436,84 @@
 
 .fm-actions-td button.btn-blue:hover {
   background: #eff6ff;
+}
+
+/* Modern Scoped Badges & Action Buttons */
+.fm-status-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  padding: 0.35rem 0.75rem !important;
+  border-radius: 9999px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  letter-spacing: 0.2px !important;
+  line-height: 1.2 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.fm-status-badge.status-pending {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+}
+
+.fm-status-badge.status-success {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #bbf7d0 !important;
+}
+
+.fm-action-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.35rem !important;
+  padding: 0.4rem 0.7rem !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  line-height: 1 !important;
+}
+
+.fm-action-btn.btn-view {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border: 1px solid #bfdbfe !important;
+}
+.fm-action-btn.btn-view:hover {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+  border-color: #93c5fd !important;
+}
+
+.fm-action-btn.btn-approve {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+.fm-action-btn.btn-approve:hover {
+  background: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #6ee7b7 !important;
+}
+
+.fm-action-btn.btn-delete {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecaca !important;
+  padding: 0.4rem 0.55rem !important;
+}
+.fm-action-btn.btn-delete:hover {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #fca5a5 !important;
 }
 
 /* Modals */
@@ -621,11 +711,23 @@
 }
 
 @media print {
-  /* Hide all elements directly under body except our print receipt */
-  body > *:not(.print-a5-receipt) {
+  /* Hide browser header/footer and set 0 margin */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* Hide all elements directly under body except allowed print elements */
+  body > *:not(.print-a5-receipt):not(.print-pay-slip-a4):not(.print-salary-slip-modal) {
     display: none !important;
   }
   
+  .no-print, 
+  .fm-modal-header, 
+  .fm-modal-footer {
+    display: none !important;
+  }
+
   body, html {
     background: white !important;
     margin: 0 !important;
@@ -648,6 +750,59 @@
     z-index: auto;
     width: 297mm;
     height: 209mm;
+  }
+
+  /* Print Salary Slip Modal Specific Rules */
+  .print-salary-slip-modal {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    background: white !important;
+    padding: 10mm !important;
+    margin: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+    z-index: 99999 !important;
+  }
+
+  .print-salary-slip-modal * {
+    visibility: visible !important;
+  }
+
+  .print-salary-slip-modal .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .print-salary-slip-modal .fm-modal-content {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .print-salary-slip-modal .fm-modal-body {
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  .print-salary-slip-paper {
+    border: 2px solid #000 !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    width: 100% !important;
+>>>>>>> ec52eda (thêm chấm công)
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     page-break-after: avoid !important;
@@ -670,7 +825,9 @@
     border-right: none;
   }
 
-  .print-a5-receipt * {
+  .print-salary-slip-paper * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
     visibility: visible !important;
     line-height: 1.2 !important;
     color: #000 !important;
@@ -1061,4 +1218,88 @@
 
 .fm-card-list {
   display: none;
+}
+
+/* --- Kindergarten Theme Overrides --- */
+[data-theme="kindergarten"] .finance-manager {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  padding: 1rem !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-card {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02) !important;
+  transition: all 0.3s ease !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-card:hover {
+  transform: translateY(-5px);
+  border-color: #f43f5e !important;
+}
+
+[data-theme="kindergarten"] .fm-toolbar {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+}
+
+[data-theme="kindergarten"] .fm-search {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+}
+
+[data-theme="kindergarten"] .fm-search input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+[data-theme="kindergarten"] .fm-table th {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+  font-family: 'Quicksand', sans-serif !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-label {
+  color: #64748b !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-value {
+  color: #1e293b !important;
+}
+
+[data-theme="kindergarten"] .fm-stat-icon {
+  border-radius: 16px !important;
+}
+
+[data-theme="kindergarten"] .fm-modal-content {
+  border-radius: 24px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.1) !important;
+}
+
+[data-theme="kindergarten"] .fm-modal-header {
+  background: #ffffff !important;
+  color: #1e293b !important;
+}
+
+/* Limit table height to ~10 rows and enable scrolling with sticky header */
+.finance-manager .table-scroll-wrapper {
+  max-height: 520px;
+  overflow-y: auto;
+  position: relative;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.finance-manager .table-scroll-wrapper table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }

@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog } from '../supabase';
+import { supabase, baseSupabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2, Receipt
+   Printer, History, Clock, Edit2, Calendar, Banknote, Eye
 } from 'lucide-react';
 
+import { toPng } from 'html-to-image';
+import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
 import './FinanceManager.css';
 
 const pCur = (val) => {
@@ -24,23 +27,6 @@ const fCur = (val) => {
    const parsed = parseInt(sVal, 10);
    return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
-const calcTotal = (val) => {
-   if (!val) return 0;
-   if (typeof val === 'number') return val;
-   if (typeof val === 'string') {
-      const trimmed = val.trim();
-      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-         try {
-            const arr = JSON.parse(val);
-            if (Array.isArray(arr)) return arr.reduce((sum, item) => sum + (pCur(item.amount) || 0), 0);
-            if (typeof arr === 'object' && arr !== null) return pCur(arr.amount) || 0;
-         } catch (e) { }
-      }
-      return pCur(val) || 0;
-   }
-   if (Array.isArray(val)) return val.reduce((sum, item) => sum + (pCur(item.amount) || 0), 0);
-   return pCur(val) || 0;
-};
 const isDeleted = (item) => {
    if (!item) return false;
    if (typeof item.daxoa === 'string') return item.daxoa?.toLowerCase() === 'đã xóa';
@@ -49,6 +35,30 @@ const isDeleted = (item) => {
    return false;
 };
 const safeParse = (arr) => (arr || []).filter(item => !isDeleted(item));
+const normalizeTuitionPeriod = (value) => (
+   String(value || '')
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .sort()
+      .join('|')
+);
+const buildTuitionMatchKey = (item) => {
+   if (!item) return '';
+   const mahv = String(item.mahv || '').trim().toLowerCase();
+   const period = normalizeTuitionPeriod(item.thoiluong);
+   const startDate = String(item.ngaybatdau || '').slice(0, 10);
+   const endDate = String(item.ngayketthuc || '').slice(0, 10);
+   return [mahv, period || `${startDate}_${endDate}`].join('::');
+};
+const formatLocalDate = (dateObj) => {
+   if (!dateObj) return '';
+   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+};
+const createLocalDateTime = (dateObj = new Date()) => {
+   if (!dateObj) return '';
+   return `${formatLocalDate(dateObj)}T${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
+};
 
 // Moved inside component to use config
 const READ_NUMBER_VN = (number) => {
@@ -107,394 +117,249 @@ const READ_NUMBER_VN = (number) => {
    return result.charAt(0).toUpperCase() + result.slice(1);
 };
 
-const ConfirmActionModal = ({ isOpen, title, message, actionType, onCancel, onConfirm }) => {
-   const [password, setPassword] = useState('');
 
-   useEffect(() => {
-      if (isOpen) setPassword('');
-   }, [isOpen]);
-
-   if (!isOpen) return null;
-
-   return createPortal(
-      <div className="fm-modal-overlay" style={{ zIndex: 1200 }}>
-         <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '450px', width: '90%', padding: '2rem', borderRadius: '24px', textAlign: 'center', position: 'relative' }}>
-            <button onClick={onCancel} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={24} /></button>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-               {actionType && actionType.includes('DELETE') ? (
-                  <div style={{ background: '#fef2f2', padding: '1.5rem', borderRadius: '50%', color: '#ef4444' }}>
-                     <Trash2 size={40} />
-                  </div>
-               ) : (
-                  <div style={{ background: '#dcfce3', padding: '1.5rem', borderRadius: '50%', color: '#22c55e' }}>
-                     <CheckCircle2 size={40} />
-                  </div>
-               )}
-            </div>
-            <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '1rem', color: '#0f172a' }}>
-               {title}
-            </h3>
-            <p style={{ color: '#64748b', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '2rem', padding: '0 10px' }}>
-               {message}
-            </p>
-
-            {actionType && (
-               <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
-                  <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
-                  <input
-                     type="password"
-                     autoFocus
-                     value={password}
-                     onChange={(e) => setPassword(e.target.value)}
-                     onKeyDown={(e) => e.key === 'Enter' && onConfirm(password)}
-                     placeholder="Mật khẩu của bạn..."
-                     style={{ width: '100%', height: '52px', padding: '0 1rem', borderRadius: '14px', border: '1px solid #e2e8f0', fontSize: '1rem', transition: 'border-color 0.2s' }}
-                  />
-               </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '1.25rem' }}>
-               <button onClick={onCancel} style={{ flex: 1, height: '56px', borderRadius: '16px', background: 'white', border: '1px solid #e2e8f0', color: '#475569', fontSize: '1.1rem', fontWeight: 700, cursor: 'pointer' }}>Quay lại</button>
-               <button onClick={() => onConfirm(password)} style={{ flex: 1, height: '56px', borderRadius: '16px', background: '#22c55e', border: 'none', color: 'white', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.4)' }}>Đồng ý</button>
-            </div>
-         </div>
-      </div>,
-      document.body
-   );
+const dataUrlToBlob = (dataUrl) => {
+   const [meta, base64] = dataUrl.split(',');
+   const mime = meta.match(/data:(.*?);base64/)?.[1] || 'image/png';
+   const binary = atob(base64);
+   const bytes = new Uint8Array(binary.length);
+   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+   return new Blob([bytes], { type: mime });
 };
-
-const EditInvoiceModal = ({ isOpen, data, walletsConfig, onClose, onSave }) => {
-   const [localData, setLocalData] = React.useState(null);
-
-   React.useEffect(() => {
-      if (data) setLocalData(JSON.parse(JSON.stringify(data)));
-   }, [data]);
-
-   if (!isOpen || !localData) return null;
-
-   return createPortal(
-      <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
-         <div className="fm-modal animate-slide-up" style={{ maxWidth: '600px', background: '#fff', borderRadius: '20px', width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-               <h3 style={{ margin: 0, fontSize: '1.20rem', fontWeight: 800, color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {localData.mahd}</h3>
-               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
-            </div>
-            <form style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }} onSubmit={(e) => { e.preventDefault(); onSave(localData); }}>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày lập HĐ</label>
-                     <input type="date" value={localData.ngaylap ? localData.ngaylap.split('T')[0] : ''} onChange={e => setLocalData(p => ({ ...p, ngaylap: e.target.value + 'T' + (p.ngaylap?.split('T')[1] || '00:00:00') }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Thời lượng / Tháng</label>
-                     <input type="text" value={localData.thoiluong || ''} onChange={e => setLocalData(p => ({ ...p, thoiluong: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} placeholder="VD: Tháng 10/2023" />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Số buổi học</label>
-                     <input type="text" value={localData.sobuoihoc || ''} onChange={e => setLocalData(p => ({ ...p, sobuoihoc: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày bắt đầu</label>
-                     <input type="date" value={localData.ngaybatdau || ''} onChange={e => setLocalData(p => ({ ...p, ngaybatdau: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày kết thúc</label>
-                     <input type="date" value={localData.ngayketthuc || ''} onChange={e => setLocalData(p => ({ ...p, ngayketthuc: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                  </div>
-               </div>
-
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
-                     <input type="text" value={fCur(localData.hocphi)} onChange={e => {
-                        const val = pCur(e.target.value);
-                        const old = pCur(localData.hocphi);
-                        const diff = val - old;
-                        const newTong = pCur(localData.tongcong) + diff;
-                        setLocalData(p => ({ ...p, hocphi: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ học phí (đ)</label>
-                     <input type="text" value={fCur(localData.giamhocphi)} onChange={e => {
-                        const val = pCur(e.target.value);
-                        const old = pCur(localData.giamhocphi);
-                        const diff = val - old;
-                        const newTong = pCur(localData.tongcong) - diff;
-                        setLocalData(p => ({ ...p, giamhocphi: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#dc2626' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền ăn (đ)</label>
-                     <input type="text" value={fCur(localData.trutienan)} onChange={e => {
-                        const val = pCur(e.target.value);
-                        const old = pCur(localData.trutienan);
-                        const diff = val - old;
-                        const newTong = pCur(localData.tongcong) - diff;
-                        setLocalData(p => ({ ...p, trutienan: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ HP nghỉ (đ)</label>
-                     <input type="text" value={fCur(localData.tiennghiphep)} onChange={e => {
-                        const val = pCur(e.target.value);
-                        const old = pCur(localData.tiennghiphep);
-                        const diff = val - old;
-                        const newTong = pCur(localData.tongcong) - diff;
-                        setLocalData(p => ({ ...p, tiennghiphep: val, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-                  </div>
-               </div>
-
-               <div style={{ marginBottom: '1rem', padding: '1rem', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>Tiền ăn</label>
-                  {(() => {
-                     let ta = { amount: 0, days: 0 };
-                     try {
-                        ta = typeof localData.tienan === 'string' ? JSON.parse(localData.tienan) : (localData.tienan || { amount: 0, days: 0 });
-                     } catch (e) { }
-                     return (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                           <div>
-                              <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số tiền (đ)</label>
-                              <input type="text" value={fCur(ta.amount)} onChange={e => {
-                                 const val = pCur(e.target.value);
-                                 const old = pCur(ta.amount);
-                                 const diff = val - old;
-                                 const newTa = { ...ta, amount: val };
-                                 const newTong = pCur(localData.tongcong) + diff;
-                                 setLocalData(p => ({ ...p, tienan: newTa, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                              }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
-                           </div>
-                           <div>
-                              <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số ngày</label>
-                              <input type="number" value={ta.days || 0} onChange={e => {
-                                 const val = parseInt(e.target.value, 10) || 0;
-                                 const newTa = { ...ta, days: val };
-                                 setLocalData(p => ({ ...p, tienan: newTa }));
-                              }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
-                           </div>
-                        </div>
-                     );
-                  })()}
-               </div>
-
-               <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f3ff', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#5b21b6' }}>Phụ thu</label>
-                  {(() => {
-                     let pts = [];
-                     try {
-                        pts = typeof localData.phuthu === 'string' ? JSON.parse(localData.phuthu) : (Array.isArray(localData.phuthu) ? localData.phuthu : []);
-                     } catch (e) { }
-                     return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                           {pts.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
-                                 <input type="text" value={pt.name} onChange={e => {
-                                    const newPts = [...pts];
-                                    newPts[i].name = e.target.value;
-                                    setLocalData(p => ({ ...p, phuthu: newPts }));
-                                 }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Tên phụ thu" />
-                                 <input type="text" value={fCur(pt.amount)} onChange={e => {
-                                    const oldPtVal = pts[i].amount || 0;
-                                    const newPtVal = pCur(e.target.value);
-                                    const diff = newPtVal - oldPtVal;
-                                    const newPts = [...pts];
-                                    newPts[i].amount = newPtVal;
-                                    const newTong = pCur(localData.tongcong) + diff;
-                                    setLocalData(p => ({ ...p, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                                 }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Số tiền" />
-                                 <button type="button" onClick={() => {
-                                    const deletedVal = pts[i].amount || 0;
-                                    const newPts = pts.filter((_, idx) => idx !== i);
-                                    const newTong = pCur(localData.tongcong) - deletedVal;
-                                    setLocalData(p => ({ ...p, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.dadong) }));
-                                 }} style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '0.4rem' }}><X size={14} /></button>
-                              </div>
-                           ))}
-                           <button type="button" onClick={() => {
-                              const newPts = [...pts, { name: '', amount: 0 }];
-                              setLocalData(p => ({ ...p, phuthu: newPts }));
-                           }} style={{ background: '#fff', border: '1px dashed #7c3aed', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#7c3aed', fontWeight: 600 }}>+ Thêm phụ thu</button>
-                        </div>
-                     );
-                  })()}
-               </div>
-
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #ffedd5' }}>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
-                     <input type="text" value={fCur(localData.tongcong)} onChange={e => {
-                        const val = pCur(e.target.value);
-                        setLocalData(p => ({ ...p, tongcong: val, conno: val - pCur(p.dadong) }));
-                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#059669' }}>Đã nộp (đ)</label>
-                     <input type="text" value={fCur(localData.dadong)} onChange={e => {
-                        const val = pCur(e.target.value);
-                        setLocalData(p => ({ ...p, dadong: val, conno: pCur(p.tongcong) - val }));
-                     }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #059669', fontWeight: 700, color: '#059669' }} />
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#dc2626' }}>Còn nợ (đ)</label>
-                     <input disabled type="text" value={fCur(localData.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff', fontWeight: 700, color: '#dc2626' }} />
-                  </div>
-               </div>
-
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
-                     <select value={localData.hinhthuc} onChange={e => setLocalData(p => ({ ...p, hinhthuc: e.target.value }))} style={{ width: '100%', height: '42px', padding: '0 0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
-                        {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
-                     </select>
-                  </div>
-                  <div>
-                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
-                     <textarea value={localData.ghichu} onChange={e => setLocalData(p => ({ ...p, ghichu: e.target.value }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
-                  </div>
-               </div>
-
-               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
-                  <button type="button" onClick={onClose} style={{ flex: 1, padding: '0.85rem', borderRadius: '12px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer', color: '#64748b' }}>Hủy bỏ</button>
-                  <button type="submit" style={{ flex: 2, padding: '0.85rem', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.4)', fontSize: '1.05rem' }}>Lưu Thay Đổi</button>
-               </div>
-            </form>
-         </div>
-      </div>,
-      document.body
-   );
+const sanitizeFileSegment = (value, fallback = 'file') => {
+   const normalized = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/\s/g, '_').replace(/[^A-Za-z0-9._-]/g, '');
+   return normalized || fallback;
 };
-
-const EditBillModal = ({ isOpen, data, walletsConfig, onClose, onSave }) => {
-   const [localData, setLocalData] = React.useState(null);
-
-   React.useEffect(() => {
-      if (data) setLocalData(JSON.parse(JSON.stringify(data)));
-   }, [data]);
-
-   if (!isOpen || !localData) return null;
-
-   return createPortal(
-      <div className="fm-modal-overlay">
-         <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '540px', width: '95%', maxHeight: '90vh', borderRadius: '20px', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
-            <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-               <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Bill Bán Hàng {localData.mabill}</h3>
-               <button type="button" className="tm-btn-icon" onClick={onClose} style={{ color: '#94a3b8' }}><X size={24} /></button>
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); onSave(localData); }} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-               <div className="fm-modal-body" style={{ padding: '1.5rem', overflowY: 'auto', background: '#fff', flex: 1 }}>
-                  <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '1rem', marginBottom: '1.5rem' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <span style={{ fontWeight: 700, color: '#334155' }}>Danh sách sản phẩm</span>
-                        <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{localData.items.length} mục</span>
-                     </div>
-
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {localData.items.map((item, idx) => (
-                           <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', position: 'relative' }}>
-                              <button type="button" onClick={() => {
-                                 const newItems = localData.items.filter((_, i) => i !== idx);
-                                 const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                 const finalTotal = subtotal - pCur(localData.chietkhau);
-                                 setLocalData(p => ({ ...p, items: newItems, tongcong: finalTotal, conno: finalTotal - p.dadong }));
-                              }} style={{ position: 'absolute', top: '8px', right: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
-
-                              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', paddingRight: '20px' }}>
-                                 {item.mahang ? `${item.mahang}|` : ''}{item.tenhang}{item.dvt ? `|${item.dvt}` : ''}
-                              </div>
-
-                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-                                 <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>SL</label>
-                                    <input type="number" value={item.qty} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
-                                       const val = parseInt(e.target.value, 10) || 0;
-                                       const newItems = [...localData.items];
-                                       newItems[idx].qty = val;
-                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                       const finalTotal = subtotal - pCur(localData.chietkhau);
-                                       setLocalData(p => ({ ...p, items: newItems, tongcong: finalTotal, conno: finalTotal - p.dadong }));
-                                    }} />
-                                 </div>
-                                 <div style={{ flex: 1.5 }}>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Đơn giá (đ)</label>
-                                    <input type="text" value={fCur(item.giaban)} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
-                                       const val = pCur(e.target.value);
-                                       const newItems = [...localData.items];
-                                       newItems[idx].giaban = val;
-                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                                       const finalTotal = subtotal - pCur(localData.chietkhau);
-                                       setLocalData(p => ({ ...p, items: newItems, tongcong: finalTotal, conno: finalTotal - p.dadong }));
-                                    }} />
-                                 </div>
-                                 <div style={{ flex: 1, textAlign: 'right' }}>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Thành tiền</label>
-                                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0ea5e9' }}>{fCur(item.qty * item.giaban)}</div>
-                                 </div>
-                              </div>
-                           </div>
-                        ))}
-                        <button type="button" onClick={() => {
-                           const newItems = [...localData.items, { mahang: '', tenhang: 'Sản phẩm mới', dvt: 'Cái', qty: 1, giaban: 0 }];
-                           setLocalData(p => ({ ...p, items: newItems }));
-                        }} style={{ width: '100%', padding: '10px', background: '#fff', border: '1px dashed #e2e8f0', borderRadius: '12px', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }}>+ Thêm sản phẩm</button>
-                     </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                     <div>
-                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Chiết khấu (đ)</label>
-                        <input type="text" value={fCur(localData.chietkhau)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} onChange={e => {
-                           const val = pCur(e.target.value);
-                           const subtotal = localData.items.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
-                           const finalTotal = subtotal - val;
-                           setLocalData(p => ({ ...p, chietkhau: val, tongcong: finalTotal, conno: finalTotal - p.dadong }));
-                        }} />
-                     </div>
-                     <div>
-                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#16a34a', marginBottom: '0.5rem' }}>Tổng cộng (đ)</label>
-                        <input type="text" disabled value={fCur(localData.tongcong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} />
-                     </div>
-                     <div>
-                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>Đã thanh toán (đ)</label>
-                        <input type="text" value={fCur(localData.dadong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #3b82f6', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} onChange={e => {
-                           const val = pCur(e.target.value);
-                           setLocalData(p => ({ ...p, dadong: val, conno: p.tongcong - val }));
-                        }} />
-                     </div>
-                     <div>
-                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>Còn nợ (đ)</label>
-                        <input type="text" disabled value={fCur(localData.conno)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '1rem', fontWeight: 700, color: '#ef4444' }} />
-                     </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                     <div>
-                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
-                        <select value={localData.hinhthuc} onChange={e => setLocalData(p => ({ ...p, hinhthuc: e.target.value }))} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '1rem' }}>
-                           {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
-                        </select>
-                     </div>
-                     <div>
-                        <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú</label>
-                        <textarea value={localData.ghichu} onChange={e => setLocalData(p => ({ ...p, ghichu: e.target.value }))} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', minHeight: '80px', resize: 'none' }} />
-                     </div>
-                  </div>
-               </div>
-               <div className="fm-modal-footer" style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '1rem', flexShrink: 0 }}>
-                  <button type="button" onClick={onClose} style={{ flex: 1, height: '48px', borderRadius: '12px', background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}>Hủy bỏ</button>
-                  <button type="submit" style={{ flex: 1.5, height: '48px', borderRadius: '12px', background: '#3b82f6', border: 'none', color: '#fff', fontSize: '1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.4)' }}>Lưu Thay Đổi</button>
-               </div>
-            </form>
-         </div>
-      </div>,
-      document.body
-   );
+const buildStoredImageKey = (folder, studentId, recordId, extension = 'jpg') => {
+   const safeFolder = sanitizeFileSegment(folder, 'exports');
+   const safeStudentId = sanitizeFileSegment(studentId, 'student');
+   const safeRecordId = sanitizeFileSegment(recordId, 'record');
+   const safeExtension = sanitizeFileSegment(extension, 'jpg').replace(/^\.+/, '') || 'jpg';
+   return `${SUPABASE_SCHEMA}/${safeFolder}/${safeStudentId}/${Date.now()}_${safeRecordId}.${safeExtension}`;
+};
+const uploadGeneratedImage = async (file, storedImageKey, currentConfig) => {
+   if (currentConfig?.r2_endpoint && currentConfig?.r2_access_key_id && currentConfig?.r2_secret_access_key && currentConfig?.r2_bucket_name) {
+      try {
+         const uploadedUrl = await uploadToR2(file, currentConfig.r2_endpoint, currentConfig.r2_access_key_id, currentConfig.r2_secret_access_key, currentConfig.r2_bucket_name, currentConfig.r2_public_url, { key: storedImageKey });
+         if (uploadedUrl) return uploadedUrl;
+      } catch (err) {
+         console.warn('R2 upload failed, falling back to Supabase Storage:', err);
+      }
+   }
+   const { error: upErr } = await supabase.storage.from('assets').upload(storedImageKey, file, { upsert: true, contentType: file.type || 'image/jpeg', cacheControl: '3600' });
+   if (upErr) throw upErr;
+   const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storedImageKey);
+   if (!publicUrl) throw new Error('Lỗi Supabase Storage.');
+   return publicUrl;
+};
+const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl) => {
+   for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await supabase.from(tableName).update({ image_url: imageUrl }).eq('mahv', studentId).eq('mahd', recordId);
+      if (!error) return;
+      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+   }
 };
 
 export default function FinanceManager({ activeSubTab, setActiveSubTab, currentUser }) {
-
    const { config } = useConfig();
+
+   const [downloadingInvoice, setDownloadingInvoice] = useState(null);
+   const [downloadingNotice, setDownloadingNotice] = useState(null);
+   const [previewImg, setPreviewImg] = useState(null);
+   const configRef = React.useRef(config);
+   configRef.current = config;
+   const invoiceExportLockRef = React.useRef(null);
+   const noticeExportLockRef = React.useRef(null);
+
+   const walletsConfigForQR = useMemo(() => (config ? [
+      { name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
+      { name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
+      { name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
+      { name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
+   ].filter(w => w.name.trim() !== '') : []), [config]);
+
+   const getNoticeQRUrl = (notice) => {
+      if (!walletsConfigForQR || !notice.hinhthuc) return null;
+      const hinhThucTrim = String(notice.hinhthuc).trim();
+      const matchedWallet = walletsConfigForQR.find(w => String(w.name).trim() === hinhThucTrim);
+      if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
+         const amountStr = (notice.tongcong || "0").toString().replace(/\D/g, "");
+         const mahv = notice.mahv || '';
+         const rawName = String(notice.tenhv || '').trim().replace(/\s+/g, ' ');
+         const nameParts = rawName ? rawName.split(' ') : [];
+         const shortName = nameParts.length <= 2 ? rawName : nameParts.slice(-2).join(' ');
+         const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
+         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      }
+      return null;
+   };
+
+   useEffect(() => {
+      if (downloadingNotice) {
+         if (noticeExportLockRef.current === downloadingNotice.mahd) return;
+         noticeExportLockRef.current = downloadingNotice.mahd;
+         const processPng = async () => {
+            try {
+               await new Promise(r => setTimeout(r, 1500));
+               const node = document.getElementById('download-notice-node-fm');
+               if (node) {
+                  node.style.position = 'fixed';
+                  node.style.top = '0';
+                  node.style.left = '0';
+                  node.style.zIndex = '9999';
+                  node.style.opacity = '1';
+                  node.style.visibility = 'visible';
+
+                  const qrImg = node.querySelector('img[data-role="notice-qr"]');
+                  if (qrImg && downloadingNotice.qrUrl) {
+                     qrImg.src = downloadingNotice.qrUrl;
+                  }
+
+                  const images = node.querySelectorAll('img');
+                  await Promise.all(Array.from(images).map(img => {
+                     if (img.complete) return Promise.resolve();
+                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 3000); });
+                  }));
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(r => setTimeout(r, 500));
+                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  node.style.position = 'static';
+                  node.style.opacity = '0.01';
+                  if (window.innerWidth <= 991) {
+                     setPreviewImg(dataUrl);
+                  } else {
+                     const link = document.createElement('a');
+                     link.download = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
+                     link.href = dataUrl;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                  }
+                  try {
+                     const fileName = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
+                     const blob = dataUrlToBlob(dataUrl);
+                     const pngFile = new File([blob], fileName, { type: 'image/png' });
+                     const file = await compressImage(pngFile, 150);
+                     const storedImageKey = buildStoredImageKey('notice-images', downloadingNotice.mahv, downloadingNotice.mahd, file.name.split('.').pop() || 'jpg');
+                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
+                     await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
+                  } catch (err) { console.error('Lỗi upload PNG thông báo:', err); }
+               }
+            } catch (err) { console.error('Lỗi xuất PNG thông báo:', err); }
+            finally {
+               if (noticeExportLockRef.current === downloadingNotice.mahd) noticeExportLockRef.current = null;
+               setDownloadingNotice(null);
+            }
+         };
+         processPng();
+      }
+   }, [downloadingNotice]);
+
+   const triggerDownloadNotice = (r) => {
+      const studentName = hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || r.tenhv || '';
+      const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
+      let parsedPt = [];
+      try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
+
+      const noticeObj = {
+         mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
+         tenhv: studentName, sdt: hvMap[r.mahv]?.sdt || r.sdt || '',
+         tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
+         hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
+         tongcong: fCur(r.tongcong), conno: fCur(r.conno || r.tongcong), nocu: fCur(r.nocu || 0),
+         hinhthuc: r.hinhthuc, ghichu: r.ghichu,
+         nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
+         thoiluong: r.thoiluong, phuthu: parsedPt,
+         actualMealRefund: fCur(r.trutienan || 0), actualTuitionRefund: fCur(r.tiennghiphep || 0), ngoaiKhoaDeduction: fCur(r.trutiendangoai || 0),
+      };
+      noticeObj.qrUrl = getNoticeQRUrl(noticeObj);
+      setDownloadingNotice(noticeObj);
+   };
+
+   useEffect(() => {
+      if (downloadingInvoice) {
+         if (invoiceExportLockRef.current === downloadingInvoice.mahd) return;
+         invoiceExportLockRef.current = downloadingInvoice.mahd;
+         const processPng = async () => {
+            try {
+               await new Promise(r => setTimeout(r, 1500));
+               const node = document.getElementById('download-invoice-node');
+               if (node) {
+                  node.style.position = 'fixed';
+                  node.style.top = '0';
+                  node.style.left = '0';
+                  node.style.zIndex = '9999';
+                  node.style.opacity = '1';
+                  node.style.visibility = 'visible';
+                  const images = node.querySelectorAll('img');
+                  await Promise.all(Array.from(images).map(img => {
+                     if (img.complete) return Promise.resolve();
+                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 3000); });
+                  }));
+                  await new Promise(requestAnimationFrame);
+                  await new Promise(r => setTimeout(r, 500));
+                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  node.style.position = 'static';
+                  node.style.opacity = '0.01';
+                  if (window.innerWidth <= 991) {
+                     setPreviewImg(dataUrl);
+                  } else {
+                     const link = document.createElement('a');
+                     link.download = `HoaDon_${sanitizeFileSegment(downloadingInvoice.tenhv, 'Student')}_${downloadingInvoice.mahd}.png`;
+                     link.href = dataUrl;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                  }
+                  try {
+                     const fileName = `HoaDon_${sanitizeFileSegment(downloadingInvoice.tenhv, 'Student')}_${downloadingInvoice.mahd}.png`;
+                     const blob = dataUrlToBlob(dataUrl);
+                     const pngFile = new File([blob], fileName, { type: 'image/png' });
+                     const file = await compressImage(pngFile, 150);
+                     const storedImageKey = buildStoredImageKey('invoice-images', downloadingInvoice.mahv, downloadingInvoice.mahd, file.name.split('.').pop() || 'jpg');
+                     const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
+                     await updateGeneratedImageUrl('tbl_hd', downloadingInvoice.mahv, downloadingInvoice.mahd, imageUrl);
+                  } catch (err) { console.error('Lỗi upload PNG:', err); }
+               }
+            } catch (err) { console.error('Lỗi xuất PNG:', err); }
+            finally {
+               if (invoiceExportLockRef.current === downloadingInvoice.mahd) invoiceExportLockRef.current = null;
+               setDownloadingInvoice(null);
+            }
+         };
+         processPng();
+      }
+   }, [downloadingInvoice]);
+
+   const triggerDownloadInvoice = (r) => {
+      const studentName = hvMap[r.mahv]?.tenhv || (typeof r.mahv === 'object' ? r.mahv?.tenhv : '') || r.tenhv || '';
+      const phone = hvMap[r.mahv]?.sdt || (typeof r.mahv === 'object' ? r.mahv?.sdt : '') || r.sdt || '';
+      const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
+      let parsedPt = [];
+      try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
+      
+      const mealRefund = pCur(r.trutienan);
+      const tuitionRefund = pCur(r.tiennghiphep);
+      const ngoaiKhoaRefund = pCur(r.trutiendangoai);
+      const hasDeduction = mealRefund > 0 || tuitionRefund > 0 || ngoaiKhoaRefund > 0;
+
+      setDownloadingInvoice({
+         mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
+         tenhv: studentName, sdt: phone,
+         tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
+         hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
+         tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
+         hinhthuc: r.hinhthuc, ghichu: r.ghichu,
+         nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
+         thoiluong: r.thoiluong, phuthu: parsedPt,
+         actualMealRefund: mealRefund,
+         actualTuitionRefund: tuitionRefund,
+         ngoaiKhoaDeduction: ngoaiKhoaRefund,
+         deductionSum: mealRefund + tuitionRefund + ngoaiKhoaRefund,
+         hasDeduction: hasDeduction
+      });
+   };
+
    const walletsConfig = useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '' },
       { id: 'vi2', name: config.vi2?.name || '' },
@@ -509,16 +374,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
    const [activeDateRangeStr, setActiveDateRangeStr] = useState('');
    const [hinhThucFilter, setHinhThucFilter] = useState('');
+   const [loaiPhieuFilter, setLoaiPhieuFilter] = useState('');
    const [stats, setStats] = useState({
       phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0, doanhThuDuKien: 0
    });
-   const [loaiPhieuFilter, setLoaiPhieuFilter] = useState('all');
-
-   const handleTabClick = (tab, loai) => {
-      if (setActiveSubTab) setActiveSubTab(tab);
-      if (loai) setLoaiPhieuFilter(loai);
-      else setLoaiPhieuFilter('all');
-   };
 
    const [balanceModal, setBalanceModal] = useState(false);
    const [canDoiModal, setCanDoiModal] = useState(false);
@@ -542,8 +401,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [printHoaDon, setPrintHoaDon] = useState(null);
    const [printBill, setPrintBill] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
+   const [deletePassword, setDeletePassword] = useState('');
    const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
    const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
+   const [editPhieuModal, setEditPhieuModal] = useState({ isOpen: false, data: null, password: '' });
+   const [approveSalaryModal, setApproveSalaryModal] = useState({ isOpen: false, item: null, wallet: '' });
+   const [viewSalarySlipModal, setViewSalarySlipModal] = useState({ isOpen: false, item: null });
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
 
@@ -558,6 +421,48 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       manv: '',
       rows: []
    });
+
+   const parseNoidung = (nd) => {
+      if (!nd || typeof nd !== 'string') return { headers: [], rows: [] };
+
+      try {
+         const obj = JSON.parse(nd);
+         if (Array.isArray(obj) && obj.length > 0) {
+            const headers = Object.keys(obj[0]);
+            const rows = obj.map(o => headers.map(h => o[h] || ''));
+            return { headers, rows };
+         }
+         if (Array.isArray(obj) && obj.length === 0) return { headers: [], rows: [] };
+      } catch (e) { }
+
+      const lines = nd.split(/\r\n|\n|\r/).filter(l => l.trim() !== '');
+      if (lines.length === 0) return { headers: [], rows: [] };
+
+      const splitCsvLine = (str) => {
+         const arr = [];
+         let quote = false;
+         let col = '';
+         for (let i = 0; i < str.length; i++) {
+            let c = str[i];
+            if (c === '"' && str[i + 1] === '"') { col += '"'; i++; }
+            else if (c === '"') { quote = !quote; }
+            else if (c === ',' && !quote) { arr.push(col.trim()); col = ''; }
+            else { col += c; }
+         }
+         arr.push(col.trim());
+         return arr;
+      };
+
+      const headers = splitCsvLine(lines[0]);
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+         const cells = splitCsvLine(lines[i]);
+         while (cells.length < headers.length) cells.push("");
+         if (cells.length > headers.length) cells.splice(headers.length);
+         rows.push(cells);
+      }
+      return { headers, rows };
+   };
 
    const fetchBalances = useCallback(async () => {
       const { data } = await supabase.from('tbl_tiendauky').select('*').order('ngaylap', { ascending: false }).limit(1);
@@ -639,7 +544,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       setPrintLuong(record);
       setTimeout(() => {
          window.print();
-      }, 500);
+      }, 300);
    };
 
    const handlePrintHoaDon = (record) => {
@@ -682,6 +587,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             giamhocphi: pCur(invoice.giamhocphi),
             trutienan: pCur(invoice.trutienan),
             tiennghiphep: pCur(invoice.tiennghiphep),
+            trutiendangoai: pCur(invoice.trutiendangoai),
             tongcong: pCur(invoice.tongcong),
             dadong: pCur(invoice.dadong),
             conno: pCur(invoice.conno)
@@ -690,11 +596,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const handleSaveEditInvoice = (updatedData) => {
-      setEditInvoiceModal(p => ({ ...p, data: updatedData }));
+   const handleSaveEditInvoice = (e) => {
+      e.preventDefault();
+      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
-         title: 'Xác nhận sửa hóa đơn',
+         title: 'Xác nhận sửa phiếu thu HP',
          message: 'Mọi thay đổi về số tiền sẽ ảnh hưởng đến báo cáo tài chính và công nợ của học sinh. Bạn có chắc chắn muốn cập nhật không?',
          actionType: 'EDIT_HOADON'
       });
@@ -727,8 +634,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const handleSaveEditBill = (updatedData) => {
-      setEditBillModal(p => ({ ...p, data: updatedData }));
+   const handleSaveEditBill = (e) => {
+      e.preventDefault();
+      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận sửa bill',
@@ -737,94 +645,81 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       });
    };
 
-   const handleConfirmCreateInvoice = (r) => {
-      setConfirmDialog({
+   const handleOpenEditPhieu = (phieu) => {
+      setEditPhieuModal({
          isOpen: true,
-         title: 'Xác nhận tạo hóa đơn',
-         message: `Bạn có chắc chắn muốn tạo hóa đơn học phí từ phiếu thông báo [${r.mahd}] không?`,
-         actionType: 'CREATE_INVOICE',
-         payload: { notice: r }
+         data: { ...phieu, chiphi: pCur(phieu.chiphi) },
+         password: ''
       });
    };
 
-   const executeConfirmAction = async (submittedPassword) => {
+   const handleSaveEditPhieu = (e) => {
+      e.preventDefault();
+      setDeletePassword('');
+      setConfirmDialog({
+         isOpen: true,
+         title: `Xác nhận sửa phiếu ${editPhieuModal.data.loaiphieu === 'Thu' ? 'thu' : 'chi'}`,
+         message: 'Việc sửa phiếu sẽ ảnh hưởng đến báo cáo tài chính. Bạn có chắc chắn muốn cập nhật không?',
+         actionType: 'EDIT_PHIEU'
+      });
+   };
+
+   const executeConfirmAction = async () => {
       setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
       if (confirmDialog.actionType === 'DELETE') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (submittedPassword !== auth.user?.password) {
+         if (deletePassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
             return;
          }
 
          const { idField, idVal, table } = confirmDialog.payload;
+
+         // NEW: Revert stock if deleting NhapKho or BillHangHoa
+         if (table === 'tbl_nhapkho') {
+            const { data: record } = await supabase.from('tbl_nhapkho').select('mahang, soluong').eq(idField, idVal).single();
+            if (record) {
+               const { data: product } = await supabase.from('tbl_hanghoa').select('soluong').eq('mahang', record.mahang).single();
+               if (product) {
+                  const newQty = (parseInt(product.soluong) || 0) - (parseInt(record.soluong) || 0);
+                  await supabase.from('tbl_hanghoa').update({ soluong: newQty }).eq('mahang', record.mahang);
+               }
+            }
+         } else if (table === 'tbl_billhanghoa') {
+            const { data: record } = await supabase.from('tbl_billhanghoa').select('hanghoa').eq(idField, idVal).single();
+            if (record && record.hanghoa) {
+               const parsed = parseNoidung(record.hanghoa);
+               // headers: [mahang, tenhang, dvt, sl, dg, tt]
+               for (const row of parsed.rows) {
+                  const ma = row[0];
+                  const sl = parseInt(row[3]) || 0;
+                  if (ma && sl > 0) {
+                     const { data: product } = await supabase.from('tbl_hanghoa').select('soluong').eq('mahang', ma).single();
+                     if (product) {
+                        const newQty = (parseInt(product.soluong) || 0) + sl;
+                        await supabase.from('tbl_hanghoa').update({ soluong: newQty }).eq('mahang', ma);
+                     }
+                  }
+               }
+            }
+         }
+
          const { error } = await supabase.from(table).update({ daxoa: 'Đã xóa' }).eq(idField, idVal);
          if (error) alert('Lỗi khi xoá: ' + error.message);
          else {
             const detailDesc = `[XÓA] Bảng: ${table} | Mã: ${idVal}`;
             insertLog(detailDesc);
             fetchData();
-         }
-      } else if (confirmDialog.actionType === 'CREATE_INVOICE') {
-         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (submittedPassword !== auth.user?.password) {
-            alert('Mật khẩu không đúng, vui lòng thử lại!');
-            return;
-         }
-
-         const { notice } = confirmDialog.payload;
-         const currentUser = auth.user?.username || auth.user?.tennv || 'Hệ thống';
-         const manv = auth.user?.manv || '';
-
-         const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
-         let nextNum = 1;
-         if (recentHD && recentHD.length > 0 && recentHD[0].mahd) {
-            const numPart = recentHD[0].mahd.replace(/\D/g, '');
-            if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
-         }
-         const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
-         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
-
-         const insertPayload = {
-            mahd: newMaHD,
-            ngaylap: localNow,
-            mahv: notice.mahv || null,
-            tenlop: notice.tenlop || null,
-            ngaybatdau: notice.ngaybatdau || null,
-            ngayketthuc: notice.ngayketthuc || null,
-            manv: manv,
-            hocphi: notice.hocphi || null,
-            giamhocphi: notice.giamhocphi || null,
-            phuthu: notice.phuthu || null,
-            tongcong: notice.tongcong || null,
-            dadong: notice.dadong || null,
-            conno: notice.conno || null,
-            hinhthuc: notice.hinhthuc || null,
-            ghichu: notice.ghichu || null,
-            daxoa: null,
-            malop: notice.malop || '',
-            thoiluong: notice.thoiluong || '',
-            sobuoihoc: notice.sobuoihoc || '0',
-            tienan: notice.tienan || '0',
-            nocu: notice.nocu || '0',
-            tiennghiphep: notice.tiennghiphep || '0',
-            trutienan: notice.trutienan || '0',
-            dasua: false
-         };
-
-         const { error } = await supabase.from('tbl_hd').insert([insertPayload]);
-
-         if (error) {
-            alert('Lỗi khi tạo hóa đơn: ' + error.message);
-         } else {
-            insertLog(`[TẠO HÓA ĐƠN] Từ TB: ${notice.mahd} -> HĐ: ${newMaHD}`);
-            await supabase.from('tbl_thongbao').update({ daxoa: 'Đã tạo HĐ' }).eq('mahd', notice.mahd);
-            fetchData();
-            alert('Tạo hóa đơn thành công!');
+            // Refresh products if needed
+            if (table === 'tbl_nhapkho' || table === 'tbl_billhanghoa') {
+               const { data: hhs } = await supabase.from('tbl_hanghoa').select('*');
+               setProductList((hhs || []).filter(h => h.daxoa !== 'Đã Xóa'));
+            }
          }
       } else if (confirmDialog.actionType === 'EDIT_BILL') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (submittedPassword !== auth.user?.password) {
+         if (deletePassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
             return;
          }
@@ -861,27 +756,29 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             insertLog(detailDesc);
             alert('Cập nhật bill hàng thành công!');
             setEditBillModal({ isOpen: false, data: null, password: '' });
+            setDeletePassword('');
             fetchData();
             fetchBalances();
          }
       } else if (confirmDialog.actionType === 'CONFIRM_CANDOI') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (submittedPassword !== auth.user?.password) {
+         if (deletePassword !== auth.user?.password) {
             alert('Mật khẩu của bạn không đúng, vui lòng thử lại!');
             return;
          }
          const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
          const manv = auth.user?.manv || '';
-         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+         const localNow = createLocalDateTime();
 
          // 1. Insert into tbl_candoidongtien
          const { error: err1 } = await supabase.from('tbl_candoidongtien').insert([{
             noidung: canDoiData.noidung,
             manv: manv,
-            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: pCur(canDoiData.vi1) },
-            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: pCur(canDoiData.vi2) },
-            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: pCur(canDoiData.vi3) },
-            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: pCur(canDoiData.vi4) }
+            created_at: localNow,
+            vi1: { dauky: initialBalances.vi1, truoc: currentBalances.vi1, sau: getCanDoiAmount('vi1') },
+            vi2: { dauky: initialBalances.vi2, truoc: currentBalances.vi2, sau: getCanDoiAmount('vi2') },
+            vi3: { dauky: initialBalances.vi3, truoc: currentBalances.vi3, sau: getCanDoiAmount('vi3') },
+            vi4: { dauky: initialBalances.vi4, truoc: currentBalances.vi4, sau: getCanDoiAmount('vi4') }
          }]);
 
          if (err1) {
@@ -889,26 +786,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             return;
          }
 
-         // 2. Update existing tbl_tiendauky or Insert if none exists
-         let res2;
-         if (initialBalances.id) {
-            res2 = await supabase.from('tbl_tiendauky').update({
-               vi1: canDoiData.vi1.toString(),
-               vi2: canDoiData.vi2.toString(),
-               vi3: canDoiData.vi3.toString(),
-               vi4: canDoiData.vi4.toString(),
-               nguoilap: currentUser
-            }).eq('id', initialBalances.id);
-         } else {
-            res2 = await supabase.from('tbl_tiendauky').insert([{
-               ngaylap: localNow,
-               vi1: canDoiData.vi1.toString(),
-               vi2: canDoiData.vi2.toString(),
-               vi3: canDoiData.vi3.toString(),
-               vi4: canDoiData.vi4.toString(),
-               nguoilap: currentUser
-            }]);
-         }
+         // 2. Create a new opening-balance milestone after each balance action
+         const res2 = await supabase.from('tbl_tiendauky').insert([{
+            ngaylap: localNow,
+            vi1: getCanDoiAmount('vi1').toString(),
+            vi2: getCanDoiAmount('vi2').toString(),
+            vi3: getCanDoiAmount('vi3').toString(),
+            vi4: getCanDoiAmount('vi4').toString(),
+            nguoilap: currentUser
+         }]);
 
          if (res2.error) {
             alert('Lỗi khi cập nhật tiền đầu kỳ: ' + res2.error.message);
@@ -917,11 +803,12 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             insertLog(detailDesc);
             setCanDoiModal(false);
             fetchBalances();
+            fetchData();
             alert('Cân đối dòng tiền thành công!');
          }
       } else if (confirmDialog.actionType === 'EDIT_HOADON') {
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
-         if (submittedPassword !== auth.user?.password) {
+         if (deletePassword !== auth.user?.password) {
             alert('Mật khẩu không đúng, vui lòng thử lại!');
             return;
          }
@@ -938,6 +825,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                giamhocphi: r.giamhocphi.toString(),
                trutienan: r.trutienan ? r.trutienan.toString() : '0',
                tiennghiphep: r.tiennghiphep ? r.tiennghiphep.toString() : '0',
+               trutiendangoai: r.trutiendangoai ? r.trutiendangoai.toString() : '0',
                phuthu: r.phuthu ? (typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu)) : null,
                tienan: r.tienan ? (typeof r.tienan === 'string' ? r.tienan : JSON.stringify(r.tienan)) : null,
                tongcong: r.tongcong.toString(),
@@ -952,59 +840,50 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          if (error) {
             alert("Lỗi khi cập nhật hóa đơn: " + error.message);
          } else {
-            const detailDesc = `[SỬA HÓA ĐƠN] Mã: ${r.mahd} | Tổng: ${fCur(r.tongcong)} | Học sinh: ${hvMap[r.mahv]?.tenhv || '_'}`;
+            const detailDesc = `[SỬA PHIẾU THU HP] Mã: ${r.mahd} | Tổng: ${fCur(r.tongcong)} | Học sinh: ${hvMap[r.mahv]?.tenhv || '_'}`;
             insertLog(detailDesc);
             setEditInvoiceModal({ isOpen: false, data: null, password: '' });
+            setDeletePassword('');
             fetchData();
             fetchBalances();
             alert("Cập nhật hóa đơn thành công!");
          }
+      } else if (confirmDialog.actionType === 'EDIT_PHIEU') {
+         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         if (deletePassword !== auth.user?.password) {
+            alert('Mật khẩu không đúng, vui lòng thử lại!');
+            return;
+         }
+
+         const r = editPhieuModal.data;
+         const { error } = await supabase.from('tbl_phieuchi')
+            .update({
+               ngaylap: r.ngaylap,
+               hangmucchi: r.hangmucchi,
+               mota: r.mota,
+               chiphi: r.chiphi.toString(),
+               manv: r.manv,
+               hinhthuc: r.hinhthuc,
+               dasua: true
+            })
+            .eq('maphieuchi', r.maphieuchi);
+
+         if (error) {
+            alert("Lỗi khi cập nhật phiếu: " + error.message);
+         } else {
+            const detailDesc = `[SỬA PHIẾU ${r.loaiphieu === 'Thu' ? 'THU' : 'CHI'}] Mã: ${r.maphieuchi} | Tổng: ${fCur(r.chiphi)}`;
+            insertLog(detailDesc);
+            setEditPhieuModal({ isOpen: false, data: null, password: '' });
+            setDeletePassword('');
+            fetchData();
+            fetchBalances();
+            alert(`Cập nhật phiếu ${r.loaiphieu === 'Thu' ? 'thu' : 'chi'} thành công!`);
+         }
       }
    };
 
 
 
-   const parseNoidung = (nd) => {
-      if (!nd || typeof nd !== 'string') return { headers: [], rows: [] };
-
-      try {
-         const obj = JSON.parse(nd);
-         if (Array.isArray(obj) && obj.length > 0) {
-            const headers = Object.keys(obj[0]);
-            const rows = obj.map(o => headers.map(h => o[h] || ''));
-            return { headers, rows };
-         }
-         if (Array.isArray(obj) && obj.length === 0) return { headers: [], rows: [] };
-      } catch (e) { }
-
-      const lines = nd.split(/\r\n|\n|\r/).filter(l => l.trim() !== '');
-      if (lines.length === 0) return { headers: [], rows: [] };
-
-      const splitCsvLine = (str) => {
-         const arr = [];
-         let quote = false;
-         let col = '';
-         for (let i = 0; i < str.length; i++) {
-            let c = str[i];
-            if (c === '"' && str[i + 1] === '"') { col += '"'; i++; }
-            else if (c === '"') { quote = !quote; }
-            else if (c === ',' && !quote) { arr.push(col.trim()); col = ''; }
-            else { col += c; }
-         }
-         arr.push(col.trim());
-         return arr;
-      };
-
-      const headers = splitCsvLine(lines[0]);
-      const rows = [];
-      for (let i = 1; i < lines.length; i++) {
-         const cells = splitCsvLine(lines[i]);
-         while (cells.length < headers.length) cells.push("");
-         if (cells.length > headers.length) cells.splice(headers.length);
-         rows.push(cells);
-      }
-      return { headers, rows };
-   };
 
    useEffect(() => {
       const handleAfterPrint = () => {
@@ -1051,7 +930,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       e.preventDefault();
       const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
       const currentUser = auth.user?.username || auth.user?.tennv || 'Tài khoản ẩn';
-      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
+      const localNow = createLocalDateTime();
       await supabase.from('tbl_tiendauky').insert([{
          ngaylap: localNow,
          vi1: balanceData.vi1 ? balanceData.vi1.toString() : '0',
@@ -1078,10 +957,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleOpenCanDoi = () => {
       setCanDoiData({
-         vi1: initialBalances.vi1.toString(),
-         vi2: initialBalances.vi2.toString(),
-         vi3: initialBalances.vi3.toString(),
-         vi4: initialBalances.vi4.toString(),
+         vi1: currentBalances.vi1.toString(),
+         vi2: currentBalances.vi2.toString(),
+         vi3: currentBalances.vi3.toString(),
+         vi4: currentBalances.vi4.toString(),
          noidung: 'Cân đối dòng tiền định kỳ'
       });
       setCanDoiModal(true);
@@ -1089,6 +968,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleSaveCanDoi = (e) => {
       e.preventDefault();
+      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận cân đối dòng tiền',
@@ -1097,6 +977,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          payload: null
       });
    };
+   const getCanDoiAmount = (walletId) => pCur(canDoiData[walletId]);
 
    const getDateRange = useCallback(() => {
       const today = new Date();
@@ -1171,50 +1052,35 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       const sumBy = (arr, field) => safeParse(arr).reduce((sum, item) => sum + pCur(item[field]), 0);
 
-      const buildQuery = (table, dateField) => {
+      const buildQuery = async (table, dateField) => {
          let q = supabase.from(table).select('*');
          if (start) q = q.gte(dateField, start);
          if (end) q = q.lte(dateField, end);
-         return q;
+         let res = await q;
+         if (res.error && (res.error.message || '').toLowerCase().includes('schema cache')) {
+            let qBase = baseSupabase.from(table).select('*');
+            if (start) qBase = qBase.gte(dateField, start);
+            if (end) qBase = qBase.lte(dateField, end);
+            res = await qBase;
+         }
+         return res;
       };
 
-      const [resChi, resKho, resHd, resBill, resTb] = await Promise.all([
+      const [resChi, resKho, resHd, resBill, resThongBao, resLuong] = await Promise.all([
          buildQuery('tbl_phieuchi', 'ngaylap'),
          buildQuery('tbl_nhapkho', 'ngaynhap'),
          buildQuery('tbl_hd', 'ngaylap'),
          buildQuery('tbl_billhanghoa', 'ngaylap'),
-         buildQuery('tbl_thongbao', 'ngaylap')
+         buildQuery('tbl_thongbao', 'ngaylap'),
+         buildQuery('tbl_luong', 'ngaylap')
       ]);
 
       const chiList = resChi.data || [];
       const khoList = resKho.data || [];
       const hdList = resHd.data || [];
       const billList = resBill.data || [];
-      let tbList = resTb.data || [];
-
-      // Lọc thông báo: chỉ lấy thông báo mới nhất của 1 học sinh, loại nếu có hóa đơn mới hơn hoặc bằng
-      const latestHdMap = {};
-      hdList.forEach(item => {
-         if (isDeleted(item)) return;
-         const mahv = item.mahv;
-         if (!mahv) return;
-         const d = new Date(item.ngaylap).getTime();
-         if (!latestHdMap[mahv] || d > latestHdMap[mahv]) latestHdMap[mahv] = d;
-      });
-
-      const tbMap = {};
-      tbList.forEach(item => {
-         const mahv = item.mahv;
-         if (!mahv) return;
-         const d = new Date(item.ngaylap).getTime();
-         
-         if (!isDeleted(item) && latestHdMap[mahv] && latestHdMap[mahv] >= d) return;
-
-         if (!tbMap[mahv] || d > tbMap[mahv].time) {
-            tbMap[mahv] = { time: d, record: item };
-         }
-      });
-      tbList = Object.values(tbMap).map(x => x.record);
+      const thongBaoList = resThongBao.data || [];
+      const luongList = resLuong.data || [];
 
       const filterByWallet = (list) => {
          if (!hinhThucFilter) return list;
@@ -1228,23 +1094,47 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalKho = filterByWallet(khoList);
       const finalHd = filterByWallet(hdList);
       const finalBill = filterByWallet(billList);
-      const finalTb = filterByWallet(tbList);
+      const finalThongBao = filterByWallet(thongBaoList);
+      const finalLuong = filterByWallet(luongList);
+      const latestNoticeByStudent = [];
+      const seenStudents = new Set();
+      [...finalThongBao]
+         .filter(tb => !isDeleted(tb))
+         .sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0))
+         .forEach(tb => {
+            const studentKey = String(tb.mahv || '').trim().toLowerCase();
+            if (!studentKey || seenStudents.has(studentKey)) return;
+            seenStudents.add(studentKey);
+            latestNoticeByStudent.push(tb);
+         });
+      const paidInvoiceKeys = new Set(
+         finalHd
+            .filter(h => !isDeleted(h))
+            .map(buildTuitionMatchKey)
+            .filter(Boolean)
+      );
+      const pendingNotices = latestNoticeByStudent.filter(tb => {
+         const noticeKey = buildTuitionMatchKey(tb);
+         return noticeKey ? !paidInvoiceKeys.has(noticeKey) : true;
+      });
 
       setStats({
          phieuChi: finalChi.filter(c => !isDeleted(c) && (!c.loaiphieu || c.loaiphieu === 'Chi')).reduce((s, c) => s + pCur(c.chiphi), 0),
+         chiLuong: finalLuong.filter(l => !isDeleted(l) && (l.trangthai === 'Đã chi' || l.trangthai === 'Đã duyệt')).reduce((s, l) => s + pCur(l.thucnhan), 0),
          thuKhac: finalChi.filter(c => !isDeleted(c) && c.loaiphieu === 'Thu').reduce((s, c) => s + pCur(c.chiphi), 0),
          nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
          thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
          thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0),
-         doanhThuDuKien: finalTb.filter(t => !isDeleted(t)).reduce((s, t) => s + pCur(t.tongcong), 0)
+         doanhThuDuKien: pendingNotices.reduce((s, tb) => s + pCur(tb.tongcong), 0)
       });
 
       let activeDataRaw = [];
       if (activeSubTab === 'phieuchi') activeDataRaw = chiList;
       else if (activeSubTab === 'hoadon') activeDataRaw = hdList;
-      else if (activeSubTab === 'phieuthongbao') activeDataRaw = tbList;
       else if (activeSubTab === 'nhapkho') activeDataRaw = khoList;
       else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') activeDataRaw = billList;
+      else if (activeSubTab === 'doanhthudukien') activeDataRaw = pendingNotices;
+      else if (activeSubTab === 'phieuluong') activeDataRaw = luongList;
 
       let orderBy = activeSubTab === 'nhapkho' ? 'ngaynhap' : 'ngaylap';
       const sorted = [...activeDataRaw].sort((a, b) => {
@@ -1290,26 +1180,30 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          headers = ['Mã phiếu', 'Ngày lập', 'Loại', 'Hạng mục', 'Mô tả', 'Số tiền', 'Hình thức', 'Nhân viên'];
          mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv || i.nhanvien]);
       } else if (activeSubTab === 'hoadon') {
-         headers = ['Mã HĐ', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Đã thu', 'Còn nợ'];
-         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.dadong), fCur(i.conno)]);
-      } else if (activeSubTab === 'phieuthongbao') {
-         headers = ['Mã TB', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Học phí', 'Giảm', 'Phụ thu', 'Trừ ăn', 'Trừ nghỉ', 'Tổng cộng'];
-         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, fCur(i.hocphi), fCur(i.giamhocphi), fCur(calcTotal(i.phuthu)), fCur(i.trutienan), fCur(i.tiennghiphep), fCur(i.tongcong)]);
+         headers = ['Số phiếu', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Trừ tiền ăn', 'Trừ HP nghỉ', 'Trừ tiền dã ngoại', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.trutienan), fCur(i.tiennghiphep), fCur(i.trutiendangoai), fCur(i.dadong), fCur(i.thukhac), fCur(i.dadong), fCur(i.conno)]);
       } else if (activeSubTab === 'nhapkho') {
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
          mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
       } else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') {
-         headers = ['Mã Bill', 'Ngày bán', 'Khách hàng', 'Sản phẩm', 'Chiết khấu', 'Tổng thu', 'Lợi nhuận', 'Hình thức', 'Người bán'];
+         headers = ['Mã Bill', 'Ngày bán', 'Khách hàng', 'Sản phẩm', 'Chiết khấu', 'Tổng thu', 'Đã đóng', 'Còn nợ', 'Lợi nhuận', 'Hình thức', 'Người bán'];
          mappedData = data.map(i => {
             let spSummary = i.hanghoa || '';
             if (spSummary.includes('Tên Hàng')) {
                const parsed = parseNoidung(spSummary);
                spSummary = parsed.rows.map(r => `${r[1]} (x${r[3]})`).join('; ');
             }
-            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
+            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.dadong || i.tongcong), fCur(i.conno || 0), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
          });
-      } else {
+      } else if (activeSubTab !== 'doanhthudukien') {
          alert('Chưa hỗ trợ xuất cho tab này'); return;
+      }
+
+      if (activeSubTab === 'doanhthudukien') {
+         headers = ['S\u1ed1 th\u00f4ng b\u00e1o', 'Ng\u00e0y l\u1eadp', 'T\u00ean h\u1ecdc sinh', 'L\u1edbp', 'Ng\u01b0\u1eddi l\u1eadp', 'Th\u1eddi l\u01b0\u1ee3ng', 'H\u00ecnh th\u1ee9c', 'T\u1ed5ng c\u1ed9ng', 'Gi\u1ea3m h\u1ecdc ph\u00ed', 'C\u00f2n d\u1ef1 ki\u1ebfn'];
+         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien || i.manv, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.conno || i.tongcong)]);
+      } else if (!headers.length) {
+         alert('Ch\u01b0a h\u1ed7 tr\u1ee3 xu\u1ea5t cho tab n\u00e0y'); return;
       }
 
       const csvContent = '\uFEFF' + [headers.join(',')].concat(mappedData.map(row => row.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(','))).join('\n');
@@ -1320,6 +1214,66 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+   };
+
+   const handleConfirmThongBao = async (r) => {
+      if (!window.confirm(`Bạn có chắc chắn muốn chuyển thông báo ${r.mahd} thành hóa đơn chính thức không?`)) return;
+      
+      try {
+         const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
+         let nextNum = 1;
+         if (recentHD && recentHD.length > 0 && recentHD[0].mahd) {
+            const numPart = recentHD[0].mahd.replace(/\D/g, '');
+            if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
+         }
+         const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
+         
+         const localNow = createLocalDateTime();
+         const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
+         const cashier = auth.user?.username || auth.user?.tennv || 'Thu Ngân';
+
+         const insertData = {
+            mahd: newMaHD,
+            ngaylap: localNow,
+            mahv: r.mahv,
+            tenlop: r.tenlop,
+            ngaybatdau: r.ngaybatdau,
+            ngayketthuc: r.ngayketthuc,
+            manv: auth.user?.manv || '',
+            hocphi: r.hocphi,
+            giamhocphi: r.giamhocphi,
+            tongcong: r.tongcong,
+            dadong: r.tongcong,
+            conno: '0', 
+            hinhthuc: r.hinhthuc,
+            ghichu: r.ghichu,
+            phuthu: r.phuthu,
+            daxoa: null,
+            malop: r.malop,
+            thoiluong: r.thoiluong,
+            sobuoihoc: r.sobuoihoc,
+            tiennghiphep: r.tiennghiphep,
+            trutienan: r.trutienan,
+            trutiendangoai: r.trutiendangoai,
+            sobuoinghiphep: r.sobuoinghiphep,
+            nhanvien: cashier
+         };
+
+         const { error: insertErr } = await supabase.from('tbl_hd').insert([insertData]);
+         if (insertErr) throw insertErr;
+
+         const { error: updateErr } = await supabase.from('tbl_thongbao').update({ daxoa: 'Đã xác nhận' }).eq('mahd', r.mahd);
+         if (updateErr) throw updateErr;
+
+         insertLog(`[XÁC NHẬN THÔNG BÁO] Mã TB: ${r.mahd} -> Hóa đơn: ${newMaHD}`);
+         alert('Tạo hóa đơn thành công! Hệ thống đang xuất ảnh...');
+         triggerDownloadInvoice({ ...insertData, mahv: r.mahv, tenhv: hvMap[r.mahv]?.tenhv || r.tenhv, sdt: hvMap[r.mahv]?.sdt || r.sdt, dadong: r.tongcong, conno: '0' });
+         fetchData();
+         fetchBalances();
+      } catch (err) {
+         console.error(err);
+         alert('Lỗi xác nhận thông báo: ' + err.message);
+      }
    };
 
    const handleSavePhieu = async (e) => {
@@ -1448,6 +1402,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    };
 
    const handleDelete = (idField, idVal, table) => {
+      setDeletePassword('');
       setConfirmDialog({
          isOpen: true,
          title: 'Xác nhận xoá bản ghi',
@@ -1467,7 +1422,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (rawMatch) return true;
 
             // Tab-specific name search
-            if (activeSubTab === 'hoadon' || activeSubTab === 'phieuthongbao') {
+            if (activeSubTab === 'hoadon') {
                const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
                if (studentName.includes(lowerQ)) return true;
 
@@ -1477,6 +1432,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             } else if (activeSubTab === 'phieuchi') {
                const operatorName = (nvMap[item.manv] || '').toLowerCase();
                if (operatorName.includes(lowerQ)) return true;
+            } else if (activeSubTab === 'doanhthudukien') {
+               const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
+               if (studentName.includes(lowerQ)) return true;
             } else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') {
                const studentName = (hvMap[item.mahv]?.tenhv || '').toLowerCase();
                const productName = (hhMap[item.mahang] || '').toLowerCase();
@@ -1493,10 +1451,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          });
       }
 
-      if (activeSubTab === 'phieuchi' && loaiPhieuFilter !== 'all') {
+      if (activeSubTab === 'phieuchi' && loaiPhieuFilter) {
          filteredData = filteredData.filter(item => {
-            if (loaiPhieuFilter === 'Thu') return item.loaiphieu === 'Thu';
-            return !item.loaiphieu || item.loaiphieu === 'Chi';
+            const lp = item.loaiphieu || 'Chi';
+            return lp === loaiPhieuFilter;
          });
       }
 
@@ -1577,6 +1535,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {!deleted && (
                                           <>
                                              <button title="In chứng từ" className="btn-blue" onClick={() => handlePrint(r)}><Printer size={16} /></button>
+                                             <button title="Sửa chứng từ" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditPhieu(r)}><Edit2 size={16} /></button>
                                              <button title="Huỷ chứng từ" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /></button>
                                           </>
                                        )}
@@ -1613,6 +1572,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     {!deleted ? (
                                        <>
                                           <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrint(r)}><Printer size={16} /> In</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditPhieu(r)}><Edit2 size={14} /> Sửa</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('maphieuchi', r.maphieuchi, 'tbl_phieuchi')}><Trash2 size={16} /> Xóa</button>
                                        </>
                                     ) : (
@@ -1634,18 +1594,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <table className="fm-table">
                         <thead>
                            <tr>
-                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã HĐ <SortIcon columnKey="mahd" /></th>
+                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Số phiếu <SortIcon columnKey="mahd" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
-                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Học sinh <SortIcon columnKey="mahv" /></th>
-                              <th>Lớp</th>
-                              <th className="text-right">Học phí</th>
-                              <th className="text-right">Giảm</th>
-                              <th className="text-right">Phụ thu</th>
-                              <th className="text-right">Trừ ăn</th>
-                              <th className="text-right">Trừ nghỉ</th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học sinh <SortIcon columnKey="mahv" /></th>
+                              <th>Tên lớp</th>
+                              <th>Người lập</th>
+                              <th>Thời lượng</th>
+                              <th>Hình thức</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
-                              <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Thu <SortIcon columnKey="dadong" /></th>
-                              <th className="text-right">Còn nợ</th>
+                              <th className="text-right">Giảm Học Phí</th>
+                              <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Đóng <SortIcon columnKey="dadong" /></th>
+                              <th className="text-right">Phụ thu</th>
+                              <th className="text-right">Nợ Cấn Trừ</th>
                               <th className="text-center">Hành động</th>
                            </tr>
                         </thead>
@@ -1658,20 +1618,21 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{formatDate(r.ngaylap)}</td>
                                     <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
                                     <td>{r.tenlop}</td>
-                                    <td className="text-right">{fCur(r.hocphi)}</td>
-                                    <td className="text-right text-orange-600">-{fCur(r.giamhocphi)}</td>
-                                    <td className="text-right text-blue-600">{fCur(calcTotal(r.phuthu))}</td>
-                                    <td className="text-right text-red-600">-{fCur(r.trutienan)}</td>
-                                    <td className="text-right text-red-600">-{fCur(r.tiennghiphep)}</td>
-                                    <td className="text-right font-bold">{fCur(r.tongcong)}</td>
+                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                    <td>{r.thoiluong ? `${r.thoiluong}` : '_'}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td className="text-right">{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
                                     <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
-                                    <td className="text-right font-bold text-danger">{pCur(r.conno) > 0 ? fCur(r.conno) : ''}</td>
+                                    <td className="text-right font-bold" style={{ color: '#6366f1' }}>{pCur(r.thukhac) > 0 ? `+${fCur(r.thukhac)}` : ''}</td>
+                                    <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                     <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                        {!deleted ? (
                                           <>
                                              <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
-                                             <button title="Sửa hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
-                                             <button title="Hủy hóa đơn" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
+                                             <button title="Sửa phiếu thu" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
+                                             <button title="Tải ảnh Hóa Đơn" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadInvoice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={16} /></button>
+                                             <button title="Hủy phiếu thu" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
                                           </>
                                        ) : (
                                           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
@@ -1698,19 +1659,26 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
                                  <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
                                  <div className="fm-card-row"><span>Kết thúc:</span> <span>{r.ngayketthuc || '_'}</span></div>
-                                 <div className="fm-card-row"><span>Học phí:</span> <strong className="text-slate-700">{fCur(r.hocphi)} ₫</strong></div>
-                                 {pCur(r.giamhocphi) > 0 && <div className="fm-card-row"><span>Giảm:</span> <strong className="text-orange-500">-{fCur(r.giamhocphi)} ₫</strong></div>}
-                                 {calcTotal(r.phuthu) > 0 && <div className="fm-card-row"><span>Phụ thu:</span> <strong className="text-blue-500">+{fCur(calcTotal(r.phuthu))} ₫</strong></div>}
-                                 {pCur(r.trutienan) > 0 && <div className="fm-card-row"><span>Trừ ăn:</span> <strong className="text-red-500">-{fCur(r.trutienan)} ₫</strong></div>}
-                                 {pCur(r.tiennghiphep) > 0 && <div className="fm-card-row"><span>Trừ nghỉ:</span> <strong className="text-red-500">-{fCur(r.tiennghiphep)} ₫</strong></div>}
-                                 <div className="fm-card-row price-row" style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #e2e8f0' }}>
+                                 <div className="fm-card-row">
                                     <span>Tổng cộng:</span>
-                                    <strong className="text-slate-900">{fCur(r.tongcong)} ₫</strong>
+                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
                                  </div>
+                                 {pCur(r.giamhocphi) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Giảm học phí:</span>
+                                       <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
+                                    </div>
+                                 )}
                                  <div className="fm-card-row price-row">
-                                    <span>Đã nộp:</span>
+                                    <span>Đã đóng:</span>
                                     <strong className="text-success">{fCur(r.dadong)} ₫</strong>
                                  </div>
+                                 {pCur(r.thukhac) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Phụ thu:</span>
+                                       <strong style={{ color: '#6366f1' }}>+{fCur(r.thukhac)} ₫</strong>
+                                    </div>
+                                 )}
                                  {pCur(r.conno) > 0 && (
                                     <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
                                  )}
@@ -1719,6 +1687,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        <>
                                           <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
+                                          <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadInvoice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải Ảnh</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
                                        </>
                                     ) : (
@@ -1732,23 +1701,23 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
                </>
             );
-         case 'phieuthongbao':
+         case 'doanhthudukien':
             return (
                <>
                   <div className="table-scroll-wrapper">
                      <table className="fm-table">
                         <thead>
                            <tr>
-                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã TB <SortIcon columnKey="mahd" /></th>
+                              <th onClick={() => requestSort('mahd')} style={{ cursor: 'pointer', userSelect: 'none' }}>Số thông báo <SortIcon columnKey="mahd" /></th>
                               <th onClick={() => requestSort('ngaylap')} style={{ cursor: 'pointer', userSelect: 'none' }}>Ngày lập <SortIcon columnKey="ngaylap" /></th>
-                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Học sinh <SortIcon columnKey="mahv" /></th>
-                              <th>Lớp</th>
-                              <th className="text-right">Học phí</th>
-                              <th className="text-right">Giảm</th>
-                              <th className="text-right">Phụ thu</th>
-                              <th className="text-right">Trừ ăn</th>
-                              <th className="text-right">Trừ nghỉ</th>
+                              <th onClick={() => requestSort('mahv')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tên học sinh <SortIcon columnKey="mahv" /></th>
+                              <th>Tên lớp</th>
+                              <th>Người lập</th>
+                              <th>Thời lượng</th>
+                              <th>Hình thức</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right">Giảm Học Phí</th>
+                              <th className="text-right">Còn Dự Kiến</th>
                               <th className="text-center">Hành động</th>
                            </tr>
                         </thead>
@@ -1756,66 +1725,75 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            {filteredData.map(r => {
                               const deleted = isDeleted(r);
                               return (
-                                 <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
-                                    <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
-                                    <td>{formatDate(r.ngaylap)}</td>
-                                    <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
-                                    <td>{r.tenlop}</td>
-                                    <td className="text-right">{fCur(r.hocphi)}</td>
-                                    <td className="text-right text-orange-600">-{fCur(r.giamhocphi)}</td>
-                                    <td className="text-right text-blue-600">{fCur(calcTotal(r.phuthu))}</td>
-                                    <td className="text-right text-red-600">-{fCur(r.trutienan)}</td>
-                                    <td className="text-right text-red-600">-{fCur(r.tiennghiphep)}</td>
-                                    <td className="text-right font-bold text-success">{fCur(r.tongcong)}</td>
-                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                       {!deleted ? (
-                                          <>
-                                             <button title="Tải thông báo" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><DownloadCloud size={16} /></button>
-                                             <button title="Xác nhận tạo hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleConfirmCreateInvoice(r)}><CheckCircle2 size={16} /></button>
-                                             <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /></button>
-                                          </>
-                                       ) : (
-                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>{r.daxoa || 'ĐÃ XÓA'}</span>
-                                       )}
-                                    </td>
-                                 </tr>
-                              );
-                           })}
+                              <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                 <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
+                                 <td>{formatDate(r.ngaylap)}</td>
+                                 <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                 <td>{r.tenlop}</td>
+                                 <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                 <td>{r.thoiluong || '_'}</td>
+                                 <td>{r.hinhthuc}</td>
+                                 <td className="text-right">{fCur(r.tongcong)}</td>
+                                 <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                 <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
+                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                    {!deleted ? (
+                                       <>
+                                          <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
+                                          <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
+                                          <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </td>
+                              </tr>
+                              )})}
                         </tbody>
                      </table>
                   </div>
 
-                  {/* Card View for Mobile */}
                   <div className="fm-card-list">
                      {filteredData.map(r => {
                         const deleted = isDeleted(r);
                         return (
-                           <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
-                              <div className="fm-card-header">
-                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
-                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                        <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
+                           <div className="fm-card-header">
+                              <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
+                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
+                           </div>
+                           <div className="fm-card-body">
+                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                              <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
+                              <div className="fm-card-row">
+                                 <span>Tổng cộng:</span>
+                                 <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
                               </div>
-                              <div className="fm-card-body">
-                                 <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
-                                 <div className="fm-card-row price-row" style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #e2e8f0' }}>
-                                    <span>Tổng cộng:</span>
-                                    <strong className="text-slate-900">{fCur(r.tongcong)} ₫</strong>
+                              {pCur(r.giamhocphi) > 0 && (
+                                 <div className="fm-card-row">
+                                    <span>Giảm học phí:</span>
+                                    <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
                                  </div>
-                                 <div className="fm-card-actions">
-                                    {!deleted ? (
-                                       <>
-                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><DownloadCloud size={16} /> Tải</button>
-                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmCreateInvoice(r)}><CheckCircle2 size={14} /> Tạo HĐ</button>
-                                          <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
-                                       </>
-                                    ) : (
-                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>{r.daxoa || 'ĐÃ XÓA'}</span>
-                                    )}
-                                 </div>
+                              )}
+                              <div className="fm-card-row price-row">
+                                 <span>Còn dự kiến:</span>
+                                 <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
+                              </div>
+                              <div className="fm-card-actions">
+                                 {!deleted ? (
+                                    <>
+                                       <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
+                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
+                                       <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
+                                    </>
+                                 ) : (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 )}
                               </div>
                            </div>
-                        );
-                     })}
+                        </div>
+                     )})}
                   </div>
                </>
             );
@@ -1911,6 +1889,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th>Danh Mục Sp</th>
                               <th>Chiết Khấu</th>
                               <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Thu <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right">Đã Đóng</th>
+                              <th className="text-right">Còn Nợ</th>
                               <th className="text-right">Biên Lợi Nhuận</th>
                               <th>Hình thức</th>
                               <th>Người Bán</th>
@@ -1926,10 +1906,19 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{formatDate(r.ngaylap)}</td>
                                     <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
                                     <td className="fm-desc" style={{ maxWidth: '220px' }}>
-                                       {r.hanghoa && r.hanghoa.includes('Tên Hàng') ? `${r.hanghoa.split(/\\r\\n|\\n|\\r/).filter(Boolean).length - 1} Loại SP (Bấm in để xem)` : r.hanghoa}
+                                       {(function () {
+                                          if (!r.hanghoa) return '';
+                                          if (r.hanghoa.includes('Tên Hàng')) {
+                                             const parsed = parseNoidung(r.hanghoa);
+                                             return parsed.rows.map(row => `${row[1]} (x${row[3]})`).join('; ');
+                                          }
+                                          return r.hanghoa;
+                                       })()}
                                     </td>
                                     <td>{fCur(r.chietkhau)}</td>
                                     <td className="text-right font-bold text-success">+{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold text-success">{fCur(r.dadong || r.tongcong)}</td>
+                                    <td className="text-right font-bold text-danger">{fCur(r.conno || 0) !== '0' ? fCur(r.conno || 0) : ''}</td>
                                     <td className="text-right font-bold text-primary">{fCur(r.loinhuan)}</td>
                                     <td>{r.hinhthuc}</td>
                                     <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
@@ -1970,9 +1959,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {(function () {
                                           if (!r.hanghoa) return '0 loại SP';
                                           if (!r.hanghoa.includes('Tên Hàng')) return r.hanghoa;
-                                          // Split by real newline and carriage return
-                                          const rows = r.hanghoa.split(/\r?\n/).filter(line => line.trim() !== "");
-                                          return `${rows.length > 0 ? rows.length - 1 : 0} loại SP`;
+                                          const parsed = parseNoidung(r.hanghoa);
+                                          return parsed.rows.map(row => `${row[1]} (x${row[3]})`).join('; ');
                                        })()}
                                     </span>
                                  </div>
@@ -1980,12 +1968,145 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <span>Tổng thu:</span>
                                     <strong className="text-success">+{fCur(r.tongcong)} ₫</strong>
                                  </div>
+                                 <div className="fm-card-row">
+                                    <span>Đã đóng:</span>
+                                    <strong className="text-success">+{fCur(r.dadong || r.tongcong)} ₫</strong>
+                                 </div>
+                                 {pCur(r.conno || 0) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Còn nợ:</span>
+                                       <strong className="text-danger">{fCur(r.conno || 0)} ₫</strong>
+                                    </div>
+                                 )}
                                  <div className="fm-card-actions">
                                     {!deleted ? (
                                        <>
                                           <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
+                              </div>
+                           </div>
+                        );
+                     })}
+                  </div>
+               </>
+            );
+
+         case 'phieuluong':
+            return (
+               <>
+                  <div className="table-scroll-wrapper">
+                     <table className="fm-table">
+                        <thead>
+                           <tr>
+                              <th onClick={() => requestSort('maphieuluong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã Phiếu <SortIcon columnKey="maphieuluong" /></th>
+                              <th onClick={() => requestSort('thang')} style={{ cursor: 'pointer', userSelect: 'none' }}>Kỳ Lương <SortIcon columnKey="thang" /></th>
+                              <th>Mã NV</th>
+                              <th>Tên Nhân Viên</th>
+                              <th>Chức Vụ</th>
+                              <th className="text-right">T.Thu Nhập</th>
+                              <th className="text-right">T.Khấu Trừ</th>
+                              <th className="text-right" onClick={() => requestSort('thucnhan')} style={{ cursor: 'pointer', userSelect: 'none' }}>Thực Nhận (VNĐ) <SortIcon columnKey="thucnhan" /></th>
+                              <th>Hình thức</th>
+                              <th>Trạng thái</th>
+                              <th className="text-center">Hành động</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.maphieuluong || r.id} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                    <td className="fm-code font-semibold text-primary" style={deleted ? { color: '#64748b' } : {}}>{r.maphieuluong || r.id}</td>
+                                    <td><span className="font-bold">{r.thang}</span></td>
+                                    <td>{r.manv}</td>
+                                    <td className="font-bold text-slate-800">{r.tennv}</td>
+                                    <td>{r.chucvu}</td>
+                                    <td className="text-right font-semibold" style={{ color: '#16a34a' }}>{fCur(r.tongthunhap)}</td>
+                                    <td className="text-right font-semibold" style={{ color: '#dc2626' }}>{fCur(r.tongkhautru)}</td>
+                                    <td className="text-right font-bold text-primary" style={{ fontSize: '1.05rem' }}>{fCur(r.thucnhan)}</td>
+                                    <td>{r.hinhthuc || 'Tiền mặt'}</td>
+                                    <td>
+                                       {r.trangthai === 'Đã chi' ? (
+                                          <span className="fm-status-badge status-success">
+                                             <CheckCircle2 size={13} /> Đã chi
+                                          </span>
+                                       ) : (
+                                          <span className="fm-status-badge status-pending">
+                                             <Clock size={13} /> Chờ duyệt
+                                          </span>
+                                       )}
+                                    </td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted && (
+                                          <>
+                                             <button title="Xem chi tiết phiếu lương" className="fm-action-btn btn-view" onClick={() => setViewSalarySlipModal({ isOpen: true, item: r })}>
+                                                <Eye size={15} />
+                                             </button>
+                                             <button title="In phiếu lương PDF" className="fm-action-btn btn-print" style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '0.4rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} onClick={() => handlePrintLuong(r)}>
+                                                <Printer size={15} />
+                                             </button>
+                                             {r.trangthai !== 'Đã chi' && (
+                                                <button
+                                                   title="Duyệt chi lương"
+                                                   className="fm-action-btn btn-approve"
+                                                   onClick={() => setApproveSalaryModal({ isOpen: true, item: r, wallet: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt') })}
+                                                >
+                                                   <CheckCircle2 size={15} />
+                                                </button>
+                                             )}
+                                             <button title="Huỷ / Xóa phiếu" className="fm-action-btn btn-delete" onClick={() => handleDelete(r.maphieuluong ? 'maphieuluong' : 'id', r.maphieuluong || r.id, 'tbl_luong')}>
+                                                <Trash2 size={15} />
+                                             </button>
+                                          </>
+                                       )}
+                                       {deleted && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Đã Xóa</span>}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  </div>
+
+                  {/* Card View for Mobile */}
+                  <div className="fm-card-list">
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.maphieuluong || r.id} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : {}}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : { color: '#8b5cf6' }}>{r.maphieuluong || r.id}</span>
+                                 {r.trangthai === 'Đã chi' ? (
+                                    <span className="fm-status-badge status-success">
+                                       <CheckCircle2 size={12} /> Đã chi
+                                    </span>
+                                 ) : (
+                                    <span className="fm-status-badge status-pending">
+                                       <Clock size={12} /> Chờ duyệt
+                                    </span>
+                                 )}
+                              </div>
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-primary">{r.tennv} ({r.manv})</strong></div>
+                                 <div className="fm-card-row"><span>Kỳ lương:</span> <strong>Tháng {r.thang}</strong></div>
+                                 <div className="fm-card-row price-row">
+                                    <span>Thực nhận:</span>
+                                    <strong style={{ color: '#2563eb', fontSize: '1.1rem' }}>{fCur(r.thucnhan)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions" style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
+                                    {!deleted ? (
+                                       <>
+                                          <button className="fm-action-btn btn-view" onClick={() => setViewSalarySlipModal({ isOpen: true, item: r })}><Printer size={14} /> Xem & In</button>
+                                          {r.trangthai !== 'Đã chi' && (
+                                             <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => setApproveSalaryModal({ isOpen: true, item: r, wallet: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt') })}><CheckCircle2 size={14} /> Duyệt</button>
+                                          )}
+                                          <button className="btn-danger-sm" onClick={() => handleDelete(r.maphieuluong ? 'maphieuluong' : 'id', r.maphieuluong || r.id, 'tbl_luong')}><Trash2 size={16} /> Xóa</button>
                                        </>
                                     ) : (
                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
@@ -2045,6 +2166,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         {activeDateRangeStr}
                      </span>
                   )}
+                  {activeSubTab === 'phieuchi' && (
+                     <div className="fm-loaiphieu-filter">
+                        <select value={loaiPhieuFilter} onChange={e => setLoaiPhieuFilter(e.target.value)} style={{ padding: '0.45rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                           <option value="">Tất cả loại phiếu</option>
+                           <option value="Chi">Phiếu chi</option>
+                           <option value="Thu">Thu khác</option>
+                        </select>
+                     </div>
+                  )}
                   <div className="fm-hinhthuc-filter">
                      <select value={hinhThucFilter} onChange={e => setHinhThucFilter(e.target.value)} style={{ padding: '0.45rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                         <option value="">Tất cả hình thức</option>
@@ -2053,15 +2183,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         )) : <option value="Tiền mặt">Tiền mặt</option>}
                      </select>
                   </div>
-                  {activeSubTab === 'phieuchi' && (
-                     <div className="fm-loaiphieu-filter">
-                        <select value={loaiPhieuFilter} onChange={e => setLoaiPhieuFilter(e.target.value)} style={{ padding: '0.45rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                           <option value="all">Tất cả phiếu</option>
-                           <option value="Chi">Phiếu chi</option>
-                           <option value="Thu">Phiếu thu khác</option>
-                        </select>
-                     </div>
-                  )}
                </div>
                {dateFilter === 'custom' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', width: 'fit-content' }}>
@@ -2076,20 +2197,24 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
             {config?.hienvithuchi && (
                <div className="fm-stats-toprow">
-                  <div className="fm-dau-ky-info" style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', flex: 1 }}>
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <span className="text-muted" style={{ fontSize: '0.9rem', fontWeight: 500 }}>
-                           Ngày mốc: <strong style={{ color: '#334155' }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
+                  <div className="fm-dau-ky-info">
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        <span className="text-muted" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>
+                           Ngày mốc: <strong style={{ color: '#0f172a', fontWeight: 800 }}>{initialBalances.ngaylap ? formatDateRaw(initialBalances.ngaylap) : 'Chưa thiết lập'}</strong>
                         </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'nowrap' }}>
                            {!initialBalances.id && (
                               <button className="fm-btn-add-dauky" onClick={() => {
                                  setBalanceData({ vi1: initialBalances.vi1, vi2: initialBalances.vi2, vi3: initialBalances.vi3, vi4: initialBalances.vi4 });
                                  setBalanceModal(true);
-                              }}><Plus size={16} /> Thiết lập Đầu Kỳ</button>
+                              }}><Plus size={14} /> Đầu Kỳ</button>
                            )}
-                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6' }} onClick={handleOpenCanDoi}><Activity size={16} /> Cân Đối Dòng Tiền</button>
-                           <button className="fm-btn-add-dauky" style={{ background: '#64748b' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ"><Clock size={16} /> Lịch sử</button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#8b5cf6', whiteSpace: 'nowrap', padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={handleOpenCanDoi}>
+                              <Activity size={14} /> Cân Đối Dòng Tiền
+                           </button>
+                           <button className="fm-btn-add-dauky" style={{ background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', whiteSpace: 'nowrap', padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={handleOpenHistory} title="Xem lịch sử biến động quỹ đầu kỳ">
+                              <Clock size={14} color="#64748b" /> Lịch sử
+                           </button>
                         </div>
                      </div>
                   </div>
@@ -2097,8 +2222,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-top-right">
                      {walletsConfig.map(w => (
                         <div className="fm-wallet-card" key={w.id}>
-                           <div className="fm-wc-row" style={{ marginBottom: '0.4rem' }}><span>{w.name}:</span> <strong style={{ color: '#0ea5e9', fontSize: '1.15rem' }}>{fCur(initialBalances[w.id])}</strong></div>
-                           <div className="fm-wc-row"><span>Hiện tại:</span> <strong style={{ fontSize: '1.15rem', color: '#1e293b' }}>{fCur(currentBalances[w.id])}</strong></div>
+                           <div className="fm-wc-row" style={{ marginBottom: '0.3rem' }}>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}>{w.name}:</span>
+                              <strong style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 800 }}>{fCur(initialBalances[w.id])}</strong>
+                           </div>
+                           <div className="fm-wc-row">
+                              <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>HIỆN TẠI:</span>
+                              <strong style={{ fontSize: '1.05rem', color: '#0f172a', fontWeight: 800 }}>{fCur(currentBalances[w.id])}</strong>
+                           </div>
                         </div>
                      ))}
                   </div>
@@ -2106,46 +2237,53 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             )}
 
             <div className="fm-stats-grid">
-               <div className="fm-stat-card" onClick={() => handleTabClick('phieuchi', 'Chi')} style={{ cursor: 'pointer' }}>
-                  <div className="fm-stat-icon ico-chi"><TrendingDown size={24} /></div>
-                  <div className="fm-stat-info">
-                     <span className="fm-stat-label">Phiếu chi</span>
-                     <span className="fm-stat-value text-danger">{fCur(stats.phieuChi)}</span>
-                  </div>
-               </div>
-               <div className="fm-stat-card" onClick={() => handleTabClick('nhapkho')} style={{ cursor: 'pointer' }}>
-                  <div className="fm-stat-icon ico-nhap"><Package size={24} /></div>
-                  <div className="fm-stat-info">
-                     <span className="fm-stat-label">Nhập kho</span>
-                     <span className="fm-stat-value" style={{ color: '#ec4899' }}>{fCur(stats.nhapKho)}</span>
-                  </div>
-               </div>
-               <div className="fm-stat-card" onClick={() => handleTabClick('hoadon')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('hoadon'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-hocphi"><GraduationCap size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu học phí</span>
                      <span className="fm-stat-value text-success">{fCur(stats.thuHocPhi)}</span>
                   </div>
                </div>
-               <div className="fm-stat-card" onClick={() => handleTabClick('billhang')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('doanhthudukien'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-dukien"><Clock size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Doanh thu dự kiến</span>
+                     <span className="fm-stat-value" style={{ color: '#0f766e' }}>{fCur(stats.doanhThuDuKien)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuchi'); setLoaiPhieuFilter('Chi'); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-chi"><TrendingDown size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Phiếu chi</span>
+                     <span className="fm-stat-value text-danger">{fCur(stats.phieuChi)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card card-chiluong" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuluong'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-luong"><Banknote size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Chi lương</span>
+                     <span className="fm-stat-value" style={{ color: '#a855f7' }}>{fCur(stats.chiLuong)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('nhapkho'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-nhap"><Package size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Nhập kho</span>
+                     <span className="fm-stat-value" style={{ color: '#ec4899' }}>{fCur(stats.nhapKho)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('billhang'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-banhang"><ShoppingCart size={24} /></div>
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu bán hàng</span>
                      <span className="fm-stat-value" style={{ color: '#14b8a6' }}>{fCur(stats.thuBanHang)}</span>
                   </div>
                </div>
-               <div className="fm-stat-card" onClick={() => handleTabClick('phieuchi', 'Thu')} style={{ cursor: 'pointer' }}>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuchi'); setLoaiPhieuFilter('Thu'); }} style={{ cursor: 'pointer' }}>
                   <div className="fm-stat-icon ico-thukhac"><Activity size={24} /></div>
                   <div className="fm-stat-info">
-                     <span className="fm-stat-label">Phiếu thu khác</span>
+                     <span className="fm-stat-label">Thu khác</span>
                      <span className="fm-stat-value text-primary">{fCur(stats.thuKhac)}</span>
-                  </div>
-               </div>
-               <div className="fm-stat-card" onClick={() => handleTabClick('phieuthongbao')} style={{ cursor: 'pointer' }}>
-                  <div className="fm-stat-icon" style={{ color: '#f59e0b', background: '#fef3c7' }}><Receipt size={24} /></div>
-                  <div className="fm-stat-info">
-                     <span className="fm-stat-label">Doanh thu dự kiến</span>
-                     <span className="fm-stat-value text-warning">{fCur(stats.doanhThuDuKien)}</span>
                   </div>
                </div>
             </div>
@@ -2160,6 +2298,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      value={searchTerm}
                      onChange={e => setSearchTerm(e.target.value)}
                      placeholder="Tìm kiếm..."
+                     autoComplete="off"
+                     name="fm-search-input"
                   />
                </div>
             </div>
@@ -2462,8 +2602,191 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {/* PRINT TEMPLATE - PHIẾU LƯƠNG */}
+         {/* PRINT TEMPLATE - PHIẾU LƯƠNG CHI TIẾT */}
          {printLuong && document.body && createPortal(
+            <div className="print-salary-slip-modal" style={{ position: 'absolute', top: 0, left: 0, width: '100%', background: 'white', zIndex: 99999, padding: '10mm' }}>
+               <div className="print-salary-slip-paper" style={{ border: '2px solid #000', padding: '0', background: 'white', fontFamily: 'Arial, sans-serif', boxShadow: 'none', borderRadius: '4px', overflow: 'hidden', width: '100%' }}>
+                  <div style={{ background: '#b4c6e7', padding: '10px', textAlign: 'center', borderBottom: '2px solid #000' }}>
+                     <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#000' }}>PHIẾU LƯƠNG NHÂN VIÊN - {(config?.tencongty || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                     <tbody>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', width: '40%' }}>Tháng</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.thang}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{printLuong.manv}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{printLuong.tennv}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.chucvu}</td></tr>
+
+                        <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.luongcoban)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.chuyencan)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_bhxh)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_trachnhiem)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_dilai)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_chuyenmon)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_khac)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.thuongle)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tangluong)} ₫</td></tr>
+                        <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(printLuong.tongthunhap)} ₫</td></tr>
+
+                        <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_bhxh)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tamung)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_khac)} ₫</td></tr>
+                        <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(printLuong.tongkhautru)} ₫</td></tr>
+
+                        <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(printLuong.thucnhan)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{printLuong.bangchu || (READ_NUMBER_VN(pCur(printLuong.thucnhan)) + ' đồng')}</td></tr>
+                     </tbody>
+                  </table>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
+         {printHoaDon && document.body && createPortal(
+            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '20px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+               <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '120px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     </div>
+
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                           {config?.tencongty || 'Tên Công Ty'}
+                        </h2>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     </div>
+
+                     {/* RIGHT: Invoice info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
+                     </div>
+                  </div>
+
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "18pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                     BIÊN LAI THU HỌC PHÍ
+                  </div>
+
+                  <div style={{ fontSize: "12pt", lineHeight: "1.5", margin: '10px 0' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                        <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
+                        <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
+                     </div>
+                     <div>Lớp: <b>{printHoaDon.tenlop}</b></div>
+                     <div>
+                        Thời lượng đóng: <b>{printHoaDon.thoiluong || "..."}</b>
+                     </div>
+                     <div style={{ marginTop: '5px' }}>
+                        Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>
+                     </div>
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '10px 0' }} />
+
+                     {(() => {
+                        const hocV = pCur(printHoaDon.hocphi);
+                        const giamV = pCur(printHoaDon.giamhocphi);
+                        const tongV = pCur(printHoaDon.tongcong);
+                        let ptS = 0;
+                        try {
+                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                           if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
+                        } catch (e) { }
+                        let taS = 0;
+                        try {
+                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                           if (ta && ta.amount) taS = ta.amount;
+                        } catch (e) { }
+                        const rM = pCur(printHoaDon.trutienan);
+                        const rT = pCur(printHoaDon.tiennghiphep);
+                        const rN = pCur(printHoaDon.trutiendangoai);
+                        const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT + rN;
+                        return (
+                           <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
+                              <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
+                              <div>Nợ cũ: <b>{fCur(calcNocu)} đ</b></div>
+                           </div>
+                        );
+                     })()}
+
+                     {printHoaDon.tienan && (() => {
+                        try {
+                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                           if (ta && ta.amount > 0) {
+                              return (
+                                 <div style={{ marginTop: '5px', fontSize: '11pt', color: '#3b82f6', fontWeight: 800 }}>
+                                    + Tiền ăn ({ta.days} ngày): {fCur(ta.amount)} đ
+                                 </div>
+                              );
+                           }
+                        } catch (e) { }
+                        return null;
+                     })()}
+
+                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0 || pCur(printHoaDon.trutiendangoai) > 0) && (
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
+                           {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
+                           {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
+                           {pCur(printHoaDon.trutiendangoai) > 0 && <div>Trừ tiền dã ngoại: <b>{fCur(printHoaDon.trutiendangoai)} đ</b></div>}
+                        </div>
+                     )}
+
+                     {printHoaDon.phuthu && (() => {
+                        try {
+                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                           if (Array.isArray(pts) && pts.length > 0) {
+                              return (
+                                 <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                                    {pts.map((pt, i) => (
+                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                          <span>+ {pt.name || 'Phụ thu'}:</span>
+                                          <b>{fCur(pt.amount)} đ</b>
+                                       </div>
+                                    ))}
+                                 </div>
+                              );
+                           }
+                        } catch (e) { }
+                        return null;
+                     })()}
+
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+                        <div>Tổng cộng: <b>{fCur(printHoaDon.tongcong)} đ</b></div>
+                        <div>Đã đóng: <b style={{ color: '#059669' }}>{fCur(printHoaDon.dadong)} đ</b></div>
+                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{fCur(printHoaDon.conno)} đ</b></div>
+                     </div>
+
+                     <div style={{ marginTop: '10px' }}>
+                        Ghi chú: {printHoaDon.ghichu || ""}
+                     </div>
+                  </div>
+
+                  {/* FOOTER */}
+                  <div style={{ marginTop: 20, fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
+                     <div>
+                        Facebook: {config?.tencongty} <br />
+                        SĐT/Zalo: {config?.sdtcongty}
+                     </div>
+                     <div style={{ textAlign: "center" }}>
+                        Nhân viên thu tiền <br /><br /><br />
+                        <b>{printHoaDon.nhanvien}</b>
+                     </div>
+                  </div>
+
+                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {/* PRINT TEMPLATE - PHIẾU BILL HÀNG POS */}
+         {printBill && document.body && createPortal(
             <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
@@ -2484,35 +2807,37 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                      {/* RIGHT: Info */}
                      <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>GV: <b style={{ fontWeight: 950 }}>{printLuong.manv}</b></div>
-                        <div>Ngày in: <span style={{ fontWeight: 600 }}>{new Date().toLocaleDateString("vi-VN")}</span></div>
+                        <div>Mã Bill: <b style={{ fontWeight: 950 }}>{printBill.mabill}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printBill.ngaylap).toLocaleDateString("vi-VN")}</span></div>
                      </div>
                   </div>
 
                   {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     PHIẾU LƯƠNG GIẢNG VIÊN
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                     BIÊN LAI BÁN HÀNG
                   </div>
 
                   {/* INFO */}
                   <div style={{ fontSize: "13pt", lineHeight: "1.8" }}>
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Họ và tên: <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b></div>
-                        <div>Kỳ lương: <b>Tháng {printLuong.luongthang || ((new Date(printLuong.ngaylap).getMonth() + 1).toString().padStart(2, '0') + '/' + new Date(printLuong.ngaylap).getFullYear())}</b></div>
-                     </div>
-                     <div>Chức vụ: <b>Giảng Viên / Trợ Giảng</b></div>
 
-                     {/* BẢNG LƯƠNG */}
-                     <div style={{ marginTop: '15px', marginBottom: '15px' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <div>Họ và tên: <b>{printBill.tenhv}</b></div>
+                        <div>SĐT: <b>{printBill.sdt || ""}</b></div>
+                     </div>
+
+                     <div className="p-content" style={{ padding: '0' }}>
                         {(() => {
-                           const dt = parseNoidung(printLuong.noidung);
+                           const dt = parseNoidung(printBill.hanghoa);
                            return (
-                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid black', fontSize: '12pt' }}>
+                              <table className="p-luong-table">
                                  <thead>
                                     <tr>
-                                       {dt.headers.map((h, i) => (
-                                          <th key={i} style={{ border: '1px solid black', padding: '5px', textAlign: i === 0 ? 'left' : 'center' }}>{h}</th>
-                                       ))}
+                                       {dt.headers.map((h, i) => {
+                                          const lower = (h || '').toLowerCase();
+                                          const isMoney = lower.includes('lương') || lower.includes('tiền') || lower.includes('đơn giá') || lower.includes('tổng');
+                                          const isCenter = lower.includes('số');
+                                          return <th key={i} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''}>{h}</th>
+                                       })}
                                     </tr>
                                  </thead>
                                  <tbody>
@@ -2521,9 +2846,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           {row.map((cell, cIdx) => {
                                              const h = dt.headers[cIdx];
                                              const lower = (h || '').toLowerCase();
-                                             const isMoney = lower.includes('lương') || lower.includes('tiền') || lower.includes('đơn giá') || lower.includes('tổng');
+                                             const isMoney = lower.includes('đơn giá') || lower.includes('thành tiền');
+                                             const isCenter = lower.includes('số') || lower.includes('dvt');
                                              return (
-                                                <td key={cIdx} style={{ border: '1px solid black', padding: '5px', textAlign: isMoney ? 'right' : cIdx === 0 ? 'left' : 'center', fontWeight: lower.includes('thành tiền') ? 'bold' : 'normal' }}>
+                                                <td key={cIdx} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''}>
                                                    {isMoney && cell ? fCur(cell) : cell}
                                                 </td>
                                              );
@@ -2533,278 +2859,36 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  </tbody>
                               </table>
                            );
-                        })()}
+                        })()
+                        }
+                     </div>
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
+                        <div>CK giảm: {fCur(printBill.chietkhau)}</div>
+                        <div>Tổng cộng: {fCur(printBill.tongcong)}</div>
+                        <div>Đã đóng: {fCur(printBill.dadong)}</div>
+                        <div>Còn lại: {fCur(printBill.conno)}</div>
                      </div>
 
-                     <div style={{ display: "flex", justifyContent: "space-between", margin: '15px 0' }}>
-                        <div style={{ fontWeight: "bold" }}>TỔNG THỰC NHẬN: <span style={{ fontSize: '15pt' }}>{fCur(printLuong.tongcong)} ₫</span></div>
-                     </div>
-                     <div style={{ fontSize: '11pt', borderTop: '1px dashed #ccc', paddingTop: '10px' }}>
-                        Ghi chú: {printLuong.ghichu || '........................................................................'}
+                     <div>
+                        Ghi chú: {printBill.ghichu || ""}
                      </div>
                   </div>
 
                   {/* FOOTER */}
                   <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+
                      <div>
-                        <b>Ngày ..... tháng ..... Năm 20 .....</b> <br /><br />
-                        <div style={{ textAlign: "center" }}>
-                           Nhân viên lập phiếu <br />
-                           (Ký và ghi rõ họ tên)<br /><br /><br /><br />
-                        </div>
+                        {config?.tencongty || 'Tên Công Ty'} <br />
+                        SĐT/Zalo: {config?.sdtcongty}
                      </div>
+
                      <div style={{ textAlign: "center" }}>
-                        <br /><br />
-                        Người nhận tiền <br />(Ký và ghi rõ họ tên)<br /><br /><br /><br />
-                        <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b>
+                        Nhân viên thu tiền <br /><br /><br />
+                        <b>{printBill.nhanvien}</b>
                      </div>
+
                   </div>
                </div>
-            </div>,
-            document.body
-         )}
-
-         {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
-         {printHoaDon && document.body && createPortal(
-            <div className="print-a5-receipt">
-               {[1, 2].map(copyNum => (
-                  <div key={copyNum} className="receipt-copy">
-                     <div className="p-header">
-                        <div style={{ width: '80px' }}>
-                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                        </div>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Công Ty'}</h3>
-                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
-                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
-                        </div>
-                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
-                           <div style={{ fontWeight: 800 }}>Mã HĐ: {printHoaDon.mahd}</div>
-                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</div>
-                        </div>
-                     </div>
-
-                     <div className="p-title-area">
-                        <h2 style={{ fontSize: '14pt' }}>{printHoaDon.mahd?.startsWith('TB') ? 'PHIẾU THÔNG BÁO HỌC PHÍ' : 'BIÊN LAI THU HỌC PHÍ'}</h2>
-                     </div>
-
-                     <div className="p-content">
-                        <div className="p-row">
-                           <span className="p-label">Họa viên:</span>
-                           <span className="p-value" style={{ fontSize: '11pt' }}>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</span>
-                           <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
-                           <span className="p-value">{printHoaDon.tenlop}</span>
-                        </div>
-                        <div className="p-row">
-                           <span className="p-label">SĐT:</span>
-                           <span className="p-value">{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</span>
-                           <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
-                           <span className="p-value">{printHoaDon.thoiluong}</span>
-                        </div>
-
-                        <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
-                           {(() => {
-                              const hocV = pCur(printHoaDon.hocphi);
-                              const giamV = pCur(printHoaDon.giamhocphi);
-                              const tongV = pCur(printHoaDon.tongcong);
-                              let ptS = 0;
-                              try {
-                                 const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
-                                 if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
-                              } catch (e) { }
-                              let taS = 0;
-                              try {
-                                 const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
-                                 if (ta && ta.amount) taS = ta.amount;
-                              } catch (e) { }
-                              const rM = pCur(printHoaDon.trutienan);
-                              const rT = pCur(printHoaDon.tiennghiphep);
-                              const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
-                              return (
-                                 <div className="p-row">
-                                    <span style={{ flex: 1 }}>- Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></span>
-                                    <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{fCur(calcNocu)} đ</b></span>
-                                 </div>
-                              );
-                           })()}
-                           <div className="p-row">
-                              <span style={{ flex: 1 }}>- Ưu đãi: <b>{fCur(printHoaDon.giamhocphi)} đ</b></span>
-                              {printHoaDon.tienan && (() => {
-                                 try {
-                                    const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
-                                    if (ta && ta.amount > 0) return <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{fCur(ta.amount)} đ</b></span>;
-                                 } catch (e) { } return null;
-                              })()}
-                           </div>
-                           {printHoaDon.phuthu && (() => {
-                              try {
-                                 const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
-                                 if (Array.isArray(pts) && pts.length > 0) {
-                                    return (
-                                       <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
-                                          {pts.map((pt, i) => (
-                                             <div key={i} className="p-row" style={{ marginBottom: 0 }}>
-                                                <span>+ {pt.name || 'Phụ thu'}:</span>
-                                                <span style={{ marginLeft: 'auto' }}><b>{fCur(pt.amount)} đ</b></span>
-                                             </div>
-                                          ))}
-                                       </div>
-                                    );
-                                 }
-                              } catch (e) { } return null;
-                           })()}
-                           {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0) && (
-                              <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
-                                 <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                    {pCur(printHoaDon.trutienan) > 0 && <span>Trừ ăn: <b>-{fCur(printHoaDon.trutienan)} đ</b></span>}
-                                    {pCur(printHoaDon.tiennghiphep) > 0 && <span style={{ marginLeft: 'auto' }}>Trừ HP nghỉ: <b>-{fCur(printHoaDon.tiennghiphep)} đ</b></span>}
-                                 </div>
-                              </div>
-                           )}
-                        </div>
-
-                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
-                           <span style={{ fontWeight: 900, fontSize: '10pt' }}>TỔNG CỘNG:</span>
-                           <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{fCur(printHoaDon.tongcong)} đ</span>
-                        </div>
-
-                        {!printHoaDon.mahd?.startsWith('TB') && (
-                           <div className="p-row" style={{ marginTop: '4px' }}>
-                              <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
-                              <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
-                           </div>
-                        )}
-
-                        <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                           <span>HÌNH THỨC:</span>
-                           <span className="p-value">{printHoaDon.hinhthuc}</span>
-                        </div>
-                        {printHoaDon.ghichu && (
-                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
-                              <span>Ghi chú: {printHoaDon.ghichu}</span>
-                           </div>
-                        )}
-                     </div>
-
-                     <div className="p-signatures">
-                        <div className="sig-box">
-                           <h4>Người nộp tiền</h4>
-                           <p>(Ký, họ tên)</p>
-                        </div>
-                        <div className="sig-box">
-                           <h4>Người lập phiếu</h4>
-                           <p>(Ký, họ tên)</p>
-                           <div className="sig-name">{printHoaDon.nhanvien}</div>
-                        </div>
-                     </div>
-                  </div>
-               ))}
-            </div>,
-            document.body
-         )}
-
-
-         {/* PRINT TEMPLATE - PHIẾU BILL HÀNG POS */}
-         {printBill && document.body && createPortal(
-            <div className="print-a5-receipt">
-               {[1, 2].map(copyNum => (
-                  <div key={copyNum} className="receipt-copy">
-                     <div className="p-header">
-                        <div style={{ width: '80px' }}>
-                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                        </div>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Công Ty'}</h3>
-                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
-                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
-                        </div>
-                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
-                           <div style={{ fontWeight: 800 }}>Mã Bill: {printBill.mabill}</div>
-                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{new Date(printBill.ngaylap).toLocaleDateString("vi-VN")}</div>
-                        </div>
-                     </div>
-
-                     <div className="p-title-area">
-                        <h2 style={{ fontSize: '15pt' }}>BIÊN LAI BÁN HÀNG</h2>
-                     </div>
-
-                     <div className="p-content">
-                        <div className="p-row" style={{ marginBottom: '8px' }}>
-                           <span className="p-label">Họ tên:</span>
-                           <span className="p-value" style={{ fontSize: '11pt' }}>{printBill.tenhv}</span>
-                           <span className="p-label" style={{ minWidth: '40px' }}>SĐT:</span>
-                           <span className="p-value">{printBill.sdt || ""}</span>
-                        </div>
-
-                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                           {(() => {
-                              const dt = parseNoidung(printBill.hanghoa);
-                              return (
-                                 <table className="p-luong-table">
-                                    <thead>
-                                       <tr>
-                                          {dt.headers.map((h, i) => {
-                                             const lower = (h || '').toLowerCase();
-                                             const isMoney = lower.includes('lương') || lower.includes('tiền') || lower.includes('đơn giá') || lower.includes('tổng') || lower.includes('tiền');
-                                             const isCenter = lower.includes('số');
-                                             return <th key={i} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''} style={{ fontSize: '8pt' }}>{h}</th>
-                                          })}
-                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                       {dt.rows.map((row, rIdx) => (
-                                          <tr key={rIdx}>
-                                             {row.map((cell, cIdx) => {
-                                                const h = dt.headers[cIdx];
-                                                const lower = (h || '').toLowerCase();
-                                                const isMoney = lower.includes('đơn giá') || lower.includes('thành tiền') || lower.includes('giá') || lower.includes('tiền');
-                                                const isCenter = lower.includes('số') || lower.includes('dvt');
-                                                return (
-                                                   <td key={cIdx} className={isMoney ? 'text-right' : isCenter ? 'text-center' : ''} style={{ fontSize: '8.5pt', padding: '3px 5px' }}>
-                                                      {isMoney && cell ? fCur(cell) : cell}
-                                                   </td>
-                                                );
-                                             })}
-                                          </tr>
-                                       ))}
-                                    </tbody>
-                                 </table>
-                              );
-                           })()
-                           }
-                        </div>
-
-                        <div style={{ marginTop: '8px', borderTop: '2px solid #000', paddingTop: '5px' }}>
-                           <div className="p-row">
-                              <span>CK giảm: <b>{fCur(printBill.chietkhau)} đ</b></span>
-                              <span style={{ marginLeft: 'auto' }}>Tổng cộng: <b>{fCur(printBill.tongcong)} đ</b></span>
-                           </div>
-                           <div className="p-row">
-                              <span>Đã đóng: <b style={{ color: '#059669 !important' }}>{fCur(printBill.dadong)} đ</b></span>
-                              <span style={{ marginLeft: 'auto' }}>Còn lại: <b style={{ color: '#dc2626 !important' }}>{fCur(printBill.conno)} đ</b></span>
-                           </div>
-                        </div>
-
-                        {printBill.ghichu && (
-                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic', marginTop: '4px' }}>
-                              <span>Ghi chú: {printBill.ghichu}</span>
-                           </div>
-                        )}
-                     </div>
-
-                     <div className="p-signatures">
-                        <div className="sig-box">
-                           <h4>Người nộp tiền</h4>
-                           <p>(Ký, họ tên)</p>
-                        </div>
-                        <div className="sig-box">
-                           <h4>Người lập phiếu</h4>
-                           <p>(Ký, họ tên)</p>
-                           <div className="sig-name">{printBill.nhanvien}</div>
-                        </div>
-                     </div>
-                  </div>
-               ))}
             </div>,
             document.body
          )}
@@ -2886,7 +2970,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           const diff = h[w.id] || {};
                                           const truoc = pCur(diff.truoc) || 0;
                                           const sau = pCur(diff.sau) || 0;
-                                          const offset = sau - truoc;
                                           return (
                                              <div key={w.id} style={{ background: 'white', padding: '10px 14px', borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                                 <div style={{ fontSize: '0.75rem', fontWeight: 850, color: '#475569', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px' }}>{w.name}</div>
@@ -2904,7 +2987,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                                       <span style={{ color: '#8b5cf6' }}>{fCur(sau)}</span>
                                                    </div>
                                                    {(() => {
-                                                      const chenhLech = (pCur(diff.dauky) || 0) - sau;
+                                                      const chenhLech = truoc - sau;
                                                       if (chenhLech === 0) return null;
                                                       return (
                                                          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: chenhLech > 0 ? '#ef4444' : '#10b981', textAlign: 'right', marginTop: '2px', background: chenhLech > 0 ? '#fef2f2' : '#f0fdf4', padding: '2px 6px', borderRadius: '4px', alignSelf: 'flex-end' }}>
@@ -2928,31 +3011,795 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         <ConfirmActionModal
-            isOpen={confirmDialog.isOpen}
-            title={confirmDialog.title}
-            message={confirmDialog.message}
-            actionType={confirmDialog.actionType}
-            onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
-            onConfirm={executeConfirmAction}
-         />
+         {confirmDialog.isOpen && document.body && createPortal(
+            <div className="fm-modal-overlay" style={{ zIndex: 2000 }}>
+               <div className="fm-modal-content animate-slide-up" style={{ backgroundColor: 'white', maxWidth: '440px', borderRadius: '32px', padding: '2.5rem', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                     {confirmDialog.actionType === 'DELETE' ? (
+                        <div style={{ background: '#fee2e2', padding: '1.5rem', borderRadius: '50%', color: '#ef4444' }}>
+                           <Trash2 size={40} />
+                        </div>
+                     ) : (
+                        <div style={{ background: '#dcfce3', padding: '1.5rem', borderRadius: '50%', color: '#22c55e' }}>
+                           <CheckCircle2 size={40} />
+                        </div>
+                     )}
+                  </div>
+                  <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '1rem', color: '#0f172a' }}>
+                     {confirmDialog.title}
+                  </h3>
+                  <p style={{ color: '#64748b', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '2rem', padding: '0 10px' }}>
+                     {confirmDialog.message}
+                  </p>
 
-         <EditInvoiceModal
-            isOpen={editInvoiceModal.isOpen}
-            data={editInvoiceModal.data}
-            walletsConfig={walletsConfig}
-            onClose={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })}
-            onSave={handleSaveEditInvoice}
-         />
+                  {confirmDialog.actionType && (
+                     <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
+                        <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 700, color: '#334155', fontSize: '1rem' }}>Xác nhận mật khẩu:</label>
+                        <input
+                           type="password"
+                           autoComplete="new-password"
+                           autoFocus
+                           value={deletePassword}
+                           onChange={(e) => setDeletePassword(e.target.value)}
+                           onKeyDown={(e) => e.key === 'Enter' && executeConfirmAction()}
+                           placeholder="Mật khẩu của bạn..."
+                           style={{ width: '100%', height: '52px', padding: '0 1rem', borderRadius: '14px', border: '1px solid #e2e8f0', fontSize: '1rem', transition: 'border-color 0.2s' }}
+                        />
+                     </div>
+                  )}
 
-         <EditBillModal
-            isOpen={editBillModal.isOpen}
-            data={editBillModal.data}
-            walletsConfig={walletsConfig}
-            onClose={() => setEditBillModal({ isOpen: false, data: null, password: '' })}
-            onSave={handleSaveEditBill}
-         />
+                  <div style={{ display: 'flex', gap: '1.25rem' }}>
+                     <button onClick={() => { setConfirmDialog({ ...confirmDialog, isOpen: false }); setDeletePassword(''); }} style={{ flex: 1, height: '56px', borderRadius: '16px', background: 'white', border: '1px solid #e2e8f0', color: '#475569', fontSize: '1.1rem', fontWeight: 700, cursor: 'pointer' }}>Quay lại</button>
+                     <button onClick={() => executeConfirmAction()} style={{ flex: 1, height: '56px', borderRadius: '16px', background: '#22c55e', border: 'none', color: 'white', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.4)' }}>Đồng ý</button>
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
 
-      </div>
+         {editInvoiceModal.isOpen && editInvoiceModal.data && document.body && createPortal(
+            <div className="fm-modal-overlay" style={{ zIndex: 1150 }}>
+               <div className="fm-modal animate-slide-up" style={{ maxWidth: '600px', background: '#fff', borderRadius: '20px', width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                     <h3 style={{ margin: 0, fontSize: '1.20rem', fontWeight: 800, color: '#1e293b' }}>Chỉnh Sửa Hóa Đơn {editInvoiceModal.data.mahd}</h3>
+                     <button onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+                  </div>
+                  <form style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }} onSubmit={handleSaveEditInvoice}>
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày lập HĐ</label>
+                           <input type="date" value={editInvoiceModal.data.ngaylap ? editInvoiceModal.data.ngaylap.split('T')[0] : ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngaylap: e.target.value + 'T' + (p.data.ngaylap?.split('T')[1] || '00:00:00') } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Thời lượng / Tháng</label>
+                           <input type="text" value={editInvoiceModal.data.thoiluong || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, thoiluong: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} placeholder="VD: Tháng 10/2023" />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Số buổi học</label>
+                           <input type="number" value={editInvoiceModal.data.sobuoihoc || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, sobuoihoc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày bắt đầu</label>
+                           <input type="date" value={editInvoiceModal.data.ngaybatdau || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngaybatdau: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ngày kết thúc</label>
+                           <input type="date" value={editInvoiceModal.data.ngayketthuc || ''} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ngayketthuc: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                     </div>
+
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Học phí gốc (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.hocphi)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.hocphi);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 700 }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Giảm trừ học phí (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.giamhocphi)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.giamhocphi);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, giamhocphi: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#dc2626' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền ăn (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.trutienan)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.trutienan);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, trutienan: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ HP nghỉ (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.tiennghiphep)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.tiennghiphep);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tiennghiphep: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Trừ tiền dã ngoại (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.trutiendangoai)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              const old = pCur(editInvoiceModal.data.trutiendangoai);
+                              const diff = val - old;
+                              const newTong = pCur(editInvoiceModal.data.tongcong) - diff;
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, trutiendangoai: val, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                        </div>
+                     </div>
+
+                     <div style={{ marginBottom: '1rem', padding: '1rem', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>Tiền ăn</label>
+                        {(() => {
+                           let ta = { amount: 0, days: 0 };
+                           try {
+                              ta = typeof editInvoiceModal.data.tienan === 'string' ? JSON.parse(editInvoiceModal.data.tienan) : (editInvoiceModal.data.tienan || { amount: 0, days: 0 });
+                           } catch (e) { }
+                           return (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                 <div>
+                                    <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số tiền (đ)</label>
+                                    <input type="text" value={fCur(ta.amount)} onChange={e => {
+                                       const val = pCur(e.target.value);
+                                       const old = pCur(ta.amount);
+                                       const diff = val - old;
+                                       const newTa = { ...ta, amount: val };
+                                       const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
+                                       setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tienan: newTa, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                                    }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
+                                 </div>
+                                 <div>
+                                    <label style={{ display: 'block', marginBottom: '0.2rem', fontSize: '0.75rem', color: '#1e40af' }}>Số ngày</label>
+                                    <input type="number" value={ta.days || 0} onChange={e => {
+                                       const val = parseInt(e.target.value, 10) || 0;
+                                       const newTa = { ...ta, days: val };
+                                       setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tienan: newTa } }));
+                                    }} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #bfdbfe' }} />
+                                 </div>
+                              </div>
+                           );
+                        })()}
+                     </div>
+
+                     <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f3ff', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#5b21b6' }}>Phụ thu</label>
+                        {(() => {
+                           let pts = [];
+                           try {
+                              pts = typeof editInvoiceModal.data.phuthu === 'string' ? JSON.parse(editInvoiceModal.data.phuthu) : (Array.isArray(editInvoiceModal.data.phuthu) ? editInvoiceModal.data.phuthu : []);
+                           } catch (e) { }
+                           return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                 {pts.map((pt, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
+                                       <input type="text" value={pt.name} onChange={e => {
+                                          const newPts = [...pts];
+                                          newPts[i].name = e.target.value;
+                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
+                                       }} style={{ flex: 2, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Tên phụ thu" />
+                                       <input type="text" value={fCur(pt.amount)} onChange={e => {
+                                          const oldPtVal = pts[i].amount || 0;
+                                          const newPtVal = pCur(e.target.value);
+                                          const diff = newPtVal - oldPtVal;
+                                          const newPts = [...pts];
+                                          newPts[i].amount = newPtVal;
+                                          const newTong = pCur(editInvoiceModal.data.tongcong) + diff;
+                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                                       }} style={{ flex: 1, padding: '0.4rem', borderRadius: '6px', border: '1px solid #ddd6fe' }} placeholder="Số tiền" />
+                                       <button type="button" onClick={() => {
+                                          const deletedVal = pts[i].amount || 0;
+                                          const newPts = pts.filter((_, idx) => idx !== i);
+                                          const newTong = pCur(editInvoiceModal.data.tongcong) - deletedVal;
+                                          setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts, tongcong: newTong, conno: newTong - pCur(p.data.dadong) } }));
+                                       }} style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '0.4rem' }}><X size={14} /></button>
+                                    </div>
+                                 ))}
+                                 <button type="button" onClick={() => {
+                                    const newPts = [...pts, { name: '', amount: 0 }];
+                                    setEditInvoiceModal(p => ({ ...p, data: { ...p.data, phuthu: newPts } }));
+                                 }} style={{ background: '#fff', border: '1px dashed #7c3aed', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem', color: '#7c3aed', fontWeight: 600 }}>+ Thêm phụ thu</button>
+                              </div>
+                           );
+                        })()}
+                     </div>
+
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #ffedd5' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 800, color: '#9a3412' }}>Tổng cộng (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.tongcong)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, tongcong: val, conno: val - pCur(p.data.dadong) } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #9a3412', fontWeight: 900, fontSize: '1.05rem', color: '#9a3412', background: '#fff' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#059669' }}>Đã nộp (đ)</label>
+                           <input type="text" value={fCur(editInvoiceModal.data.dadong)} onChange={e => {
+                              const val = pCur(e.target.value);
+                              setEditInvoiceModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: pCur(p.data.tongcong) - val } }));
+                           }} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #059669', fontWeight: 700, color: '#059669' }} />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#dc2626' }}>Còn nợ (đ)</label>
+                           <input disabled type="text" value={fCur(editInvoiceModal.data.conno)} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff', fontWeight: 700, color: '#dc2626' }} />
+                        </div>
+                     </div>
+
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Hình thức thanh toán</label>
+                           <select value={editInvoiceModal.data.hinhthuc} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} style={{ width: '100%', height: '42px', padding: '0 0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                              {walletsConfig.length > 0 ? walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>) : <option value="Tiền mặt">Tiền mặt</option>}
+                           </select>
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Ghi chú</label>
+                           <textarea value={editInvoiceModal.data.ghichu} onChange={e => setEditInvoiceModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none' }} rows={2} />
+                        </div>
+                     </div>
+
+                     <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
+                        <button type="button" onClick={() => setEditInvoiceModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, padding: '0.85rem', borderRadius: '12px', background: '#f1f5f9', border: 'none', fontWeight: 700, cursor: 'pointer', color: '#64748b' }}>Hủy bỏ</button>
+                        <button type="submit" style={{ flex: 2, padding: '0.85rem', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.4)', fontSize: '1.05rem' }}>Lưu Thay Đổi</button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {editBillModal.isOpen && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '540px', width: '95%', maxHeight: '90vh', borderRadius: '20px', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Bill Bán Hàng {editBillModal.data?.mabill}</h3>
+                     <button type="button" className="tm-btn-icon" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })} style={{ color: '#94a3b8' }}><X size={24} /></button>
+                  </div>
+                  <form onSubmit={handleSaveEditBill} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                     <div className="fm-modal-body" style={{ padding: '1.5rem', overflowY: 'auto', background: '#fff', flex: 1 }}>
+                        {/* Product List Card */}
+                        <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '16px', padding: '1rem', marginBottom: '1.5rem' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                              <span style={{ fontWeight: 700, color: '#334155' }}>Danh sách sản phẩm</span>
+                              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{editBillModal.data.items.length} mục</span>
+                           </div>
+
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                              {editBillModal.data.items.map((item, idx) => (
+                                 <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', position: 'relative' }}>
+                                    <button type="button" onClick={() => {
+                                       const newItems = editBillModal.data.items.filter((_, i) => i !== idx);
+                                       const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                       const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
+                                       setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
+                                    }} style={{ position: 'absolute', top: '8px', right: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
+
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', marginBottom: '10px', paddingRight: '20px' }}>
+                                       {item.mahang ? `${item.mahang}|` : ''}{item.tenhang}{item.dvt ? `|${item.dvt}` : ''}
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+                                       <div style={{ flex: 1 }}>
+                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>SL (-)</label>
+                                          <input type="number" value={item.qty} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
+                                             const val = parseInt(e.target.value, 10) || 0;
+                                             const newItems = [...editBillModal.data.items];
+                                             newItems[idx].qty = val;
+                                             const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                             const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
+                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
+                                          }} />
+                                       </div>
+                                       <div style={{ flex: 1.5 }}>
+                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Đơn giá (đ)</label>
+                                          <input type="text" value={fCur(item.giaban)} style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }} onChange={e => {
+                                             const val = pCur(e.target.value);
+                                             const newItems = [...editBillModal.data.items];
+                                             newItems[idx].giaban = val;
+                                             const subtotal = newItems.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                             const finalTotal = subtotal - pCur(editBillModal.data.chietkhau);
+                                             setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
+                                          }} />
+                                       </div>
+                                       <div style={{ flex: 1, textAlign: 'right' }}>
+                                          <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Thành tiền</label>
+                                          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0ea5e9' }}>{fCur(item.qty * item.giaban)}</div>
+                                       </div>
+                                    </div>
+                                 </div>
+                              ))}
+                              <button type="button" onClick={() => {
+                                 const newItems = [...editBillModal.data.items, { mahang: '', tenhang: 'Sản phẩm mới', dvt: 'Cái', qty: 1, giaban: 0 }];
+                                 setEditBillModal(p => ({ ...p, data: { ...p.data, items: newItems } }));
+                              }} style={{ width: '100%', padding: '10px', background: '#fff', border: '1px dashed #e2e8f0', borderRadius: '12px', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }}>+ Thêm sản phẩm</button>
+                           </div>
+                        </div>
+
+                        {/* Financial Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Chiết khấu (đ)</label>
+                              <input type="text" value={fCur(editBillModal.data.chietkhau)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} onChange={e => {
+                                 const val = pCur(e.target.value);
+                                 const subtotal = editBillModal.data.items.reduce((acc, it) => acc + (it.qty * it.giaban), 0);
+                                 const finalTotal = subtotal - val;
+                                 setEditBillModal(p => ({ ...p, data: { ...p.data, chietkhau: val, tongcong: finalTotal, conno: finalTotal - p.data.dadong } }));
+                              }} />
+                           </div>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#16a34a', marginBottom: '0.5rem' }}>Tổng cộng (đ)</label>
+                              <input type="text" disabled value={fCur(editBillModal.data.tongcong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} />
+                           </div>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>Đã thanh toán (đ)</label>
+                              <input type="text" value={fCur(editBillModal.data.dadong)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', border: '1px solid #3b82f6', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }} onChange={e => {
+                                 const val = pCur(e.target.value);
+                                 setEditBillModal(p => ({ ...p, data: { ...p.data, dadong: val, conno: p.data.tongcong - val } }));
+                              }} />
+                           </div>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>Còn nợ (đ)</label>
+                              <input type="text" disabled value={fCur(editBillModal.data.conno)} style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '1rem', fontWeight: 700, color: '#ef4444' }} />
+                           </div>
+                        </div>
+
+                        {/* Form Group for Payment & Notes */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
+                              <select style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', background: '#fff' }} value={editBillModal.data.hinhthuc} onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))}>
+                                 {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                              </select>
+                           </div>
+                           <div>
+                              <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú bill</label>
+                              <textarea style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.95rem', resize: 'none' }} value={editBillModal.data.ghichu} onChange={e => setEditBillModal(p => ({ ...p, data: { ...p.data, ghichu: e.target.value } }))} placeholder="Nhập ghi chú cho bill..." />
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="fm-modal-footer" style={{ padding: '1.5rem', display: 'flex', gap: '1rem', background: '#fff', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+                        <button type="button" onClick={() => setEditBillModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, height: '52px', background: '#f1f5f9', border: 'none', borderRadius: '12px', color: '#475569', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Bỏ qua</button>
+                        <button type="submit" style={{ flex: 2, height: '52px', background: '#10b981', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>Cập Nhật Bill</button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {editPhieuModal.isOpen && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px', width: '90%', borderRadius: '20px', overflow: 'hidden', padding: 0 }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem 1.5rem', background: '#fff', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>Sửa Phiếu {editPhieuModal.data?.loaiphieu === 'Thu' ? 'Thu' : 'Chi'}</h3>
+                     <button type="button" className="tm-btn-icon" onClick={() => setEditPhieuModal({ isOpen: false, data: null, password: '' })} style={{ color: '#94a3b8' }}><X size={24} /></button>
+                  </div>
+                  <form onSubmit={handleSaveEditPhieu} style={{ padding: '1.5rem', background: '#fff' }}>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ngày lập</label>
+                           <input type="datetime-local" style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: 600 }} value={editPhieuModal.data?.ngaylap ? editPhieuModal.data.ngaylap.slice(0, 16) : ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, ngaylap: e.target.value } }))} required />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hạng mục</label>
+                           <input type="text" style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem' }} value={editPhieuModal.data?.hangmucchi || ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, hangmucchi: e.target.value } }))} required />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Số tiền (VNĐ)</label>
+                           <input type="text" style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1.1rem', fontWeight: 700, color: '#0ea5e9' }} value={fCur(editPhieuModal.data?.chiphi)} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, chiphi: pCur(e.target.value) } }))} required />
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Hình thức thanh toán</label>
+                           <select style={{ width: '100%', height: '48px', padding: '0 12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem' }} value={editPhieuModal.data?.hinhthuc || ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, hinhthuc: e.target.value } }))} required>
+                              {walletsConfig.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                           </select>
+                        </div>
+                        <div>
+                           <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>Ghi chú / Mô tả</label>
+                           <textarea style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.95rem', resize: 'none' }} value={editPhieuModal.data?.mota || ''} onChange={e => setEditPhieuModal(p => ({ ...p, data: { ...p.data, mota: e.target.value } }))} placeholder="Nhập mô tả..." />
+                        </div>
+                     </div>
+                     <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button type="button" onClick={() => setEditPhieuModal({ isOpen: false, data: null, password: '' })} style={{ flex: 1, height: '52px', background: '#f1f5f9', border: 'none', borderRadius: '12px', color: '#475569', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Bỏ qua</button>
+                        <button type="submit" style={{ flex: 2, height: '52px', background: '#3b82f6', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}>Lưu Cập Nhật</button>
+                     </div>
+                  </form>
+               </div>
+            </div>,
+            document.body
+         )}
+
+      
+         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+            <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+               <div style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.2, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`, backgroundRepeat: 'repeat' }} />
+               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-30deg)', fontSize: '60pt', fontWeight: 'bold', color: 'rgba(0, 102, 204, 0.05)', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap', textAlign: 'center', width: '150%' }}>
+                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
+               </div>
+               <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     </div>
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'Tên Công Ty'}</h2>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     </div>
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice?.ngaylap ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
+                     </div>
+                  </div>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>BIÊN LAI THU HỌC PHÍ</div>
+                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                        <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
+                        <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
+                     </div>
+                     <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
+                     <div>Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b></div>
+                     
+                     <div style={{ marginTop: '5px' }}>Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b></div>
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+                     <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
+                        <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
+                        <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
+                     </div>
+                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                           {downloadingInvoice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                 <span>+ {pt.name || 'Phụ thu'}:</span><b>{fCur(pt.amount)} đ</b>
+                              </div>
+                           ))}
+                        </div>
+                     )}
+                     {downloadingInvoice?.deductionSum > 0 && (
+                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span><b>-{fCur(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                           </div>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span><b>-{fCur(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                           </div>
+                           {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                 <span>- Trừ tiền dã ngoại tháng trước:</span><b>-{fCur(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>
+                              </div>
+                           )}
+                        </div>
+                     )}
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+                        <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
+                        <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
+                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
+                     </div>
+                     <div style={{ marginTop: '10px' }}>Ghi chú: {downloadingInvoice?.ghichu || ""}</div>
+                  </div>
+                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+                     <div>Facebook: Trường Lá - E Skills School <br />SĐT/Zalo: {config?.sdtcongty}</div>
+                     <div style={{ textAlign: "center" }}>Nhân viên thu tiền <br /><br /><br /><b>{downloadingInvoice?.nhanvien}</b></div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         {previewImg && (
+            <div className="sp-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 3000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
+               <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
+                  <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
+                  <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN</p>
+                  <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                  <div style={{ marginTop: '15px', textAlign: 'center' }}>
+                     <button style={{ width: '100%', padding: '10px', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }} onClick={() => setPreviewImg(null)}>HOÀN TẤT</button>
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT - FinanceManager */}
+         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+            <div id="download-notice-node-fm" data-notice-id={downloadingNotice?.mahd || ''} style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
+               {/* HEADER */}
+               <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ width: '180px', textAlign: 'left' }}>
+                     <img crossOrigin="anonymous" src={config?.logo || '/logo.png'} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = '/logo.png'; }} />
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+                  </div>
+                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                     <div>Mã TB: <b style={{ fontWeight: 950 }}>{downloadingNotice?.mahd}</b></div>
+                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString('vi-VN') : '...'}</span></div>
+                  </div>
+               </div>
+
+               {/* TITLE */}
+               <div style={{ textAlign: 'center', fontWeight: '950', fontSize: '24pt', margin: '20px 0', color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                  THÔNG BÁO THU HỌC PHÍ
+               </div>
+
+               {/* INFO */}
+               <div style={{ fontSize: '15pt', lineHeight: '1.9', color: '#000' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                     <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.tenhv}</b></div>
+                     <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingNotice?.mahv}</b></div>
+                  </div>
+
+                  {/* FEES BOX */}
+                  <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '16px', padding: '24px', marginTop: '15px', lineHeight: '1.6' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 600 }}>Học phí:</div>
+                        <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
+                     </div>
+
+                     {parseInt(String(downloadingNotice?.giamhocphi).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                           <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                           <div style={{ fontWeight: 900 }}>{downloadingNotice?.giamhocphi}</div>
+                        </div>
+                     )}
+
+                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {downloadingNotice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                                 <div style={{ fontWeight: 700 }}>{fCur(pt.amount)} đ</div>
+                              </div>
+                           ))}
+                        </>
+                     )}
+
+                     {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualMealRefund} đ</div>
+                              </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund} đ</div>
+                              </div>
+                           )}
+                           {parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.ngoaiKhoaDeduction} đ</div>
+                              </div>
+                           )}
+                        </>
+                     )}
+
+                     <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                        <div>TỔNG CỘNG:</div>
+                        <div>{downloadingNotice?.tongcong} VNĐ</div>
+                     </div>
+                  </div>
+
+                   <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                      <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                      <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || '...'}</b></div>
+                      {downloadingNotice?.ghichu && (
+                         <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
+                      )}
+                   </div>
+
+                   {/* QR SECTION */}
+                   {downloadingNotice?.qrUrl && (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+                         <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
+                         <div style={{ textAlign: 'center' }}>
+                            <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                            <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                         </div>
+                      </div>
+                   )}
+                </div>
+
+                {/* FOOTER */}
+                <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                   <div style={{ lineHeight: '1.6' }}>
+                      Facebook: {config?.tencongty}<br />
+                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+                      Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien}</b>
+                   </div>
+                   <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                      (Xác nhận)
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          {/* APPROVE SALARY MODAL */}
+          {approveSalaryModal.isOpen && approveSalaryModal.item && createPortal(
+             <div className="fm-modal-overlay">
+                <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#fff' }}>
+                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Duyệt Chi Lương Nhân Viên</h3>
+                      <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+                   </div>
+                   <div className="fm-modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1 }}>
+                      <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Nhân viên:</span>
+                            <span style={{ fontWeight: 800, color: '#0f172a' }}>{approveSalaryModal.item.tennv} ({approveSalaryModal.item.manv})</span>
+                         </div>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Kỳ lương:</span>
+                            <span style={{ fontWeight: 700 }}>Tháng {approveSalaryModal.item.thang}</span>
+                         </div>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Tổng thu nhập:</span>
+                            <span style={{ fontWeight: 700, color: '#10b981' }}>{fCur(approveSalaryModal.item.tongthunhap)} ₫</span>
+                         </div>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Tổng khấu trừ:</span>
+                            <span style={{ fontWeight: 700, color: '#ef4444' }}>{fCur(approveSalaryModal.item.tongkhautru)} ₫</span>
+                         </div>
+                         <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 800, color: '#0f172a' }}>Thực nhận chi trả:</span>
+                            <span style={{ fontWeight: 900, color: '#2563eb', fontSize: '1.2rem' }}>{fCur(approveSalaryModal.item.thucnhan)} ₫</span>
+                         </div>
+                      </div>
+
+                      <div>
+                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Chọn nguồn quỹ / Ví thanh toán:</label>
+                         <select
+                            value={approveSalaryModal.wallet}
+                            onChange={(e) => setApproveSalaryModal(prev => ({ ...prev, wallet: e.target.value }))}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem' }}
+                         >
+                            {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                            {walletsConfig.map(w => (
+                               <option key={w.id} value={w.name}>{w.name}</option>
+                            ))}
+                         </select>
+                      </div>
+                   </div>
+                   <div className="fm-modal-footer" style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#f8fafc', flexShrink: 0 }}>
+                      <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Hủy</button>
+                      <button onClick={async () => {
+                         try {
+                            setLoading(true);
+                            const slip = approveSalaryModal.item;
+                            const targetWallet = approveSalaryModal.wallet || walletsConfig[0]?.name || 'Tiền mặt';
+                            const idField = slip.maphieuluong ? 'maphieuluong' : 'id';
+                            const idVal = slip.maphieuluong || slip.id;
+
+                            let luongRes = await supabase
+                               .from('tbl_luong')
+                               .update({
+                                  trangthai: 'Đã chi',
+                                  hinhthuc: targetWallet,
+                                  ngayduyet: new Date().toISOString(),
+                                  nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
+                               })
+                               .eq(idField, idVal);
+
+                            if (luongRes.error && (luongRes.error.message || '').toLowerCase().includes('schema cache')) {
+                               luongRes = await baseSupabase
+                                  .from('tbl_luong')
+                                  .update({
+                                     trangthai: 'Đã chi',
+                                     hinhthuc: targetWallet,
+                                     ngayduyet: new Date().toISOString(),
+                                     nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
+                                  })
+                                  .eq(idField, idVal);
+                            }
+
+                            if (luongRes.error) throw luongRes.error;
+
+                            const maphieuchi = await generateId('tbl_phieuchi', 'maphieuchi', 'PC', 4);
+                            const { error: chiErr } = await supabase
+                               .from('tbl_phieuchi')
+                               .insert([{
+                                  maphieuchi,
+                                  loaiphieu: 'Chi',
+                                  hangmucchi: 'Chi lương nhân viên',
+                                  chiphi: pCur(slip.thucnhan),
+                                  mota: `[CHI LƯƠNG] Thanh toán lương tháng ${slip.thang} cho NV: ${slip.tennv} (${slip.manv}) - Mã phiếu lương: ${idVal}`,
+                                  hinhthuc: targetWallet,
+                                  ngaylap: formatLocalDate(new Date()),
+                                  nguoilap: currentUser?.tennv || currentUser?.manv || 'Quản lý',
+                                  trangthai: 'Đã duyệt'
+                               }]);
+
+                            if (chiErr) throw chiErr;
+
+                            await insertLog(`[DUYỆT CHI LƯƠNG] Mã phiếu: ${idVal} | NV: ${slip.tennv} | Số tiền: ${fCur(slip.thucnhan)}đ | Ví chi: ${targetWallet}`);
+                            alert(`Đã duyệt chi lương thành công cho NV ${slip.tennv}! Phiếu chi ${maphieuchi} đã được tạo tự động.`);
+
+                            setApproveSalaryModal({ isOpen: false, item: null, wallet: '' });
+                            fetchData();
+                         } catch (err) {
+                            console.error('Lỗi duyệt chi lương:', err);
+                            alert('Lỗi duyệt chi lương: ' + (err.message || 'Lỗi không xác định'));
+                         } finally {
+                            setLoading(false);
+                         }
+                      }} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Xác nhận Duyệt Chi</button>
+                   </div>
+                </div>
+             </div>,
+             document.body
+          )}
+
+          {/* VIEW / PRINT SALARY SLIP MODAL */}
+          {viewSalarySlipModal.isOpen && viewSalarySlipModal.item && createPortal(
+            <div className="fm-modal-overlay print-salary-slip-modal" style={{ zIndex: 3000 }}>
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '750px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#ffffff', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)' }}>
+                  <div className="fm-modal-header no-print" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#ffffff' }}>
+                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Chi Tiết Phiếu Lương #{viewSalarySlipModal.item.maphieuluong || viewSalarySlipModal.item.id}</h3>
+                     <button onClick={() => setViewSalarySlipModal({ isOpen: false, item: null })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: '4px' }}><X size={20} /></button>
+                  </div>
+                  <div className="fm-modal-body" style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+                     <div className="print-salary-slip-paper" style={{ border: '2px solid #000', padding: '0', background: 'white', fontFamily: 'Arial, sans-serif', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ background: '#b4c6e7', padding: '10px', textAlign: 'center', borderBottom: '2px solid #000' }}>
+                           <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#000' }}>PHIẾU LƯƠNG NHÂN VIÊN - {(config?.tencongty || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
+                        </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                           <tbody>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', width: '40%' }}>Tháng</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.thang}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{viewSalarySlipModal.item.manv}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{viewSalarySlipModal.item.tennv}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.chucvu}</td></tr>
+
+                              <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.luongcoban)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.chuyencan)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_bhxh)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_trachnhiem)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_dilai)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_chuyenmon)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_khac)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.thuongle)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tangluong)} ₫</td></tr>
+                              <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(viewSalarySlipModal.item.tongthunhap)} ₫</td></tr>
+
+                              <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_bhxh)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tamung)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_khac)} ₫</td></tr>
+                              <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(viewSalarySlipModal.item.tongkhautru)} ₫</td></tr>
+
+                              <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(viewSalarySlipModal.item.thucnhan)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{viewSalarySlipModal.item.bangchu || (READ_NUMBER_VN(pCur(viewSalarySlipModal.item.thucnhan)) + ' đồng')}</td></tr>
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+                  <div className="fm-modal-footer no-print" style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#ffffff', flexShrink: 0 }}>
+                     <button onClick={() => setViewSalarySlipModal({ isOpen: false, item: null })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Đóng</button>
+                     <button onClick={() => { window.print(); }} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}><Printer size={16} /> In Phiếu</button>
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
+
+</div>
    );
 }

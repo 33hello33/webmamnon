@@ -728,11 +728,11 @@
   background: white;
 }
 
-/* 
-  InvoiceManager dùng toPng (html-to-image) để xuất ảnh, KHÔNG dùng window.print().
-  → Không cần @media print ở đây — tất cả style cần áp dụng lúc toPng capture (screen scope).
-  → @media print ở đây đã bị xóa vì nó phá hỏng window.print() của FinanceManager.
-*/
+@media print {
+  body > *:not(.print-a5-receipt):not(.print-pay-slip-a4):not(.print-salary-slip-modal) {
+    display: none !important;
+  }
+}
 
 .im-print-a5-receipt .receipt-copy {
   width: 148.5mm;
