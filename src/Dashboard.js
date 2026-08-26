@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import {
@@ -20,10 +20,16 @@ import {
   MessageSquare,
   BookOpen,
   Activity,
+  Check,
+  Trash2,
+  Loader2,
   Clock
 } from 'lucide-react';
-import { supabase } from './supabase';
+import { supabase, SUPABASE_SCHEMA } from './supabase';
 import { useConfig } from './ConfigContext';
+import { deleteFromR2 } from './utils/cloudflareR2';
+import { triggerPushNotification } from './utils/pushNotifications';
+import { buildGroupedMessageDescription, groupAnnouncementsForDisplay } from './utils/chatMessageGrouping';
 import StudentManager from './components/StudentManager';
 import DebtManager from './components/DebtManager';
 import EmployeeManager from './components/EmployeeManager';
@@ -37,15 +43,16 @@ import ConfigManager from './components/ConfigManager';
 import Statistics from './components/Statistics';
 import ChatManager from './components/ChatManager';
 import SystemLogs from './components/SystemLogs';
-import ZaloManager from './components/ZaloManager';
 import TimesheetManager from './components/TimesheetManager';
 
 const ALL_TABS = [
-  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
+  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard, color: '#6366f1', bg: '#e0e7ff' },
   {
     id: 'finances',
     label: 'Quản lý thu chi',
     icon: Wallet,
+    color: '#10b981',
+    bg: '#d1fae5',
     subTabs: [
       { id: 'hoadon', label: 'QL phiếu thu HP', dotColor: '#3b82f6' },
       { id: 'doanhthudukien', label: 'Doanh thu dự kiến', dotColor: '#06b6d4' },
@@ -55,31 +62,35 @@ const ALL_TABS = [
       { id: 'billhang', label: 'QL bill hàng', dotColor: '#8b5cf6' }
     ]
   },
-  { id: 'student_list', label: 'Học sinh', icon: GraduationCap },
+  { id: 'student_list', label: 'Học sinh', icon: GraduationCap, color: '#0284c7', bg: '#e0f2fe' },
   {
     id: 'students',
     label: 'Quản lý lớp học',
     icon: BookOpen,
+    color: '#8b5cf6',
+    bg: '#ede9fe',
     subTabs: [
-      { id: 'classes', label: 'Lớp' },
-      { id: 'attendance', label: 'Điểm danh' },
-      { id: 'leave_list', label: 'Danh sách nghỉ' },
-      { id: 'attendance_today', label: 'Danh sách đi học' }
+      { id: 'classes', label: 'Lớp', dotColor: '#6366f1' },
+      { id: 'attendance_today', label: 'Danh sách đi học', dotColor: '#3b82f6' },
+      { id: 'attendance', label: 'Điểm danh', dotColor: '#10b981' },
+      { id: 'leave_list', label: 'Danh sách nghỉ', dotColor: '#ef4444' },
+      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa', dotColor: '#f59e0b' }
     ]
   },
-  { id: 'invoices', label: 'Thu học phí', icon: Receipt },
+  { id: 'invoices', label: 'Thu học phí', icon: Receipt, color: '#ec4899', bg: '#fce7f3' },
   {
     id: 'sales',
     label: 'Bán hàng',
     icon: ShoppingCart,
+    color: '#06b6d4',
+    bg: '#cffafe',
     subTabs: [
-      { id: 'pos', label: 'Bán hàng' },
-      { id: 'products', label: 'Quản lý kho hàng' }
+      { id: 'pos', label: 'Bán hàng', dotColor: '#06b6d4' },
+      { id: 'products', label: 'Quản lý kho hàng', dotColor: '#10b981' }
     ]
   },
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2' },
   { id: 'chat', label: 'Phụ huynh', icon: MessageSquare, color: '#0068ff', bg: '#e6f0ff' },
-  { id: 'zalo_chat', label: 'Chat Zalo', icon: MessageSquare, color: '#059669', bg: '#d1fae5' },
   { id: 'timesheet', label: 'Chấm công', icon: Clock, color: '#f59e0b', bg: '#fef3c7' },
   { id: 'employees', label: 'Nhân viên', icon: Users, color: '#14b8a6', bg: '#ccfbf1' },
   { id: 'tasks', label: 'Công việc', icon: Briefcase, color: '#f97316', bg: '#ffedd5' },
@@ -90,14 +101,21 @@ const ALL_TABS = [
 
 function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [activeSubTab, setActiveSubTab] = useState('students');
+  const [activeSubTab, setActiveSubTab] = useState('classes');
+  const [invoiceFocusStudentId, setInvoiceFocusStudentId] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(null);
-  const [theme, setTheme] = useState(localStorage.getItem('app_theme') || 'light');
+  const [theme, setTheme] = useState(localStorage.getItem('app_theme') || 'kindergarten');
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [employeesMap, setEmployeesMap] = useState({});
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   const { config } = useConfig();
   const navigate = useNavigate();
   const [isChangePassOpen, setIsChangePassOpen] = useState(false);
@@ -105,6 +123,15 @@ function Dashboard() {
   const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [changePassLoading, setChangePassLoading] = useState(false);
   const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [showPendingApprovals, setShowPendingApprovals] = useState(false);
+  const [selectedApprovalImage, setSelectedApprovalImage] = useState(null);
+  const [pendingApprovalBusyKeys, setPendingApprovalBusyKeys] = useState([]);
+  const [classNameMap, setClassNameMap] = useState({});
+  const isApprovalManager = user?.role === 'Quản lý';
+  const groupedPendingApprovals = groupAnnouncementsForDisplay(pendingApprovals);
+  const pendingApprovalCount = groupedPendingApprovals.length;
 
   const getVisibleTabs = () => {
     if (!user) return [];
@@ -121,23 +148,268 @@ function Dashboard() {
 
     // Check phanquyenrole
     const pq = config?.phanquyenrole?.[user.role];
-    if (!pq) return filtered.filter(t => t.id === 'overview'); // Safe fallback
+    if (!pq) {
+      if (user.role === 'Nhân viên VP') return filtered.filter(t => ['overview', 'finances', 'students', 'student_list'].includes(t.id));
+      return filtered.filter(t => t.id === 'overview'); // Safe fallback
+    }
     if (pq.full) return filtered;
 
     return filtered.filter(t => {
       if (t.adminOnly) return false;
-      return (pq.tabs || []).includes(t.id);
+      const allowedTabs = pq.tabs || [];
+      if (user.role === 'Nhân viên VP' && (t.id === 'student_list' || t.id === 'students')) return true;
+      return allowedTabs.includes(t.id);
     });
   };
 
   const visibleTabs = getVisibleTabs();
 
+  // Auto-sync subTab if activeTab changes and current activeSubTab is not valid for activeTab
+  useEffect(() => {
+    const currentTabObj = ALL_TABS.find(t => t.id === activeTab);
+    if (currentTabObj && currentTabObj.subTabs && currentTabObj.subTabs.length > 0) {
+      const isValidSubTab = currentTabObj.subTabs.some(st => st.id === activeSubTab);
+      if (!isValidSubTab) {
+        setActiveSubTab(currentTabObj.subTabs[0].id);
+      }
+    }
+  }, [activeTab, activeSubTab]);
+
   useEffect(() => {
     document.body.setAttribute('data-theme', theme);
   }, [theme]);
 
+  const setPendingBusy = (groupKey, isBusy) => {
+    setPendingApprovalBusyKeys((prev) => (
+      isBusy ? Array.from(new Set([...prev, groupKey])) : prev.filter((key) => key !== groupKey)
+    ));
+  };
+
+  const removePendingGroupFromState = (groupedNotice) => {
+    const idsToRemove = new Set((groupedNotice?._announcements || []).map((item) => item.id).filter(Boolean));
+    setPendingApprovals((prev) => prev.filter((item) => !idsToRemove.has(item.id)));
+  };
+
+  const fetchPendingApprovals = useCallback(async () => {
+    if (!isApprovalManager) {
+      setPendingApprovals([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('class_announcements')
+      .select('id, malop, manv, title, content, image_url, file_url, file_name, file_mime_type, approved, created_at')
+      .eq('approved', false)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error('Error fetching pending approvals:', error);
+      return;
+    }
+
+    setPendingApprovals(data || []);
+
+    const classIds = Array.from(new Set((data || []).map((item) => item.malop).filter(Boolean)));
+    if (classIds.length === 0) {
+      setClassNameMap({});
+      return;
+    }
+
+    const { data: classes, error: classError } = await supabase
+      .from('tbl_lop')
+      .select('malop, tenlop')
+      .in('malop', classIds);
+
+    if (classError) {
+      console.error('Error fetching class names:', classError);
+      return;
+    }
+
+    const nextMap = {};
+    (classes || []).forEach((item) => {
+      if (item?.malop) nextMap[item.malop] = item.tenlop || item.malop;
+    });
+    setClassNameMap(nextMap);
+  }, [isApprovalManager]);
+
+  const deleteAnnouncementAsset = async (url) => {
+    if (!url) return;
+
+    if (config?.r2_enabled) {
+      try {
+        await deleteFromR2(
+          url,
+          config.r2_endpoint,
+          config.r2_access_key_id,
+          config.r2_secret_access_key,
+          config.r2_bucket_name,
+          config.r2_public_url
+        );
+      } catch (err) {
+        console.warn('Could not delete announcement file from R2:', err);
+      }
+      return;
+    }
+
+    if (url.includes('/storage/v1/object/public/assets/')) {
+      const path = url.split('/assets/')[1];
+      if (!path) return;
+      try {
+        await supabase.storage.from('assets').remove([path]);
+      } catch (err) {
+        console.warn('Could not delete announcement file from Supabase Storage:', err);
+      }
+    }
+  };
+
+  const handleApprovePendingGroup = async (groupedNotice) => {
+    const approvalKey = groupedNotice?.id || groupedNotice?._announcements?.[0]?.id;
+    const noticeIds = (groupedNotice?._announcements || []).map((item) => item.id).filter(Boolean);
+    if (!approvalKey || noticeIds.length === 0) return;
+
+    setPendingBusy(approvalKey, true);
+    try {
+      const { data: updatedRows, error } = await supabase
+        .from('class_announcements')
+        .update({ approved: true })
+        .in('id', noticeIds)
+        .select();
+
+      if (error) throw error;
+
+      const sampleNotice = updatedRows?.[0];
+      if (!sampleNotice?.malop) {
+        removePendingGroupFromState(groupedNotice);
+        return;
+      }
+
+      const { data: classStudents, error: studentError } = await supabase
+        .from('tbl_hv')
+        .select('mahv')
+        .eq('malop', sampleNotice.malop)
+        .or('trangthai.neq."Đã Nghỉ",trangthai.is.null');
+
+      if (studentError) throw studentError;
+
+      const chatPayloads = [];
+      const documentPayloads = [];
+
+      (classStudents || []).filter((student) => student?.mahv).forEach((student) => {
+        (updatedRows || []).forEach((notice) => {
+          if (String(notice?.title || '').toUpperCase().trim() === 'CHƯƠNG TRÌNH HỌC') return;
+
+          chatPayloads.push({
+            mahv: student.mahv,
+            manv: notice.manv || user?.manv || user?.username,
+            content: notice.content || '',
+            image_url: notice.image_url || null,
+            file_url: notice.file_url || null,
+            file_name: notice.file_name || '',
+            file_mime_type: notice.file_mime_type || '',
+            description: buildGroupedMessageDescription('THONG_BAO')
+          });
+
+          if (notice.image_url || notice.file_url) {
+            documentPayloads.push({
+              mahv: student.mahv,
+              name: notice.file_name || 'Thong bao lop',
+              category: notice.image_url ? 'Ảnh' : 'Tài liệu',
+              file_url: notice.image_url || notice.file_url,
+              mime_type: notice.file_mime_type || ''
+            });
+          }
+        });
+      });
+
+      if (chatPayloads.length > 0) {
+        const { data: insertedMessages, error: chatInsertError } = await supabase
+          .from('hv_messages')
+          .insert(chatPayloads)
+          .select();
+
+        if (chatInsertError) throw chatInsertError;
+
+        for (const message of insertedMessages || []) {
+          await triggerPushNotification(supabase, 'hv_messages', message);
+        }
+      }
+
+      if (documentPayloads.length > 0) {
+        const { error: documentError } = await supabase.from('documents').insert(documentPayloads);
+        if (documentError) throw documentError;
+      }
+
+      for (const notice of updatedRows || []) {
+        await triggerPushNotification(supabase, 'class_announcements', notice);
+      }
+
+      removePendingGroupFromState(groupedNotice);
+    } catch (err) {
+      window.alert('Lỗi khi duyệt: ' + err.message);
+    } finally {
+      setPendingBusy(approvalKey, false);
+    }
+  };
+
+  const handleDeletePendingGroup = async (groupedNotice) => {
+    const approvalKey = groupedNotice?.id || groupedNotice?._announcements?.[0]?.id;
+    const noticeIds = (groupedNotice?._announcements || []).map((item) => item.id).filter(Boolean);
+    if (!approvalKey || noticeIds.length === 0) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa nội dung này khỏi danh sách cần duyệt?')) return;
+
+    setPendingBusy(approvalKey, true);
+    try {
+      const { error } = await supabase
+        .from('class_announcements')
+        .delete()
+        .in('id', noticeIds);
+
+      if (error) throw error;
+
+      const attachmentUrls = Array.from(new Set(
+        (groupedNotice?._attachments || [])
+          .flatMap((attachment) => [attachment.image_url, attachment.file_url])
+          .filter(Boolean)
+      ));
+
+      for (const url of attachmentUrls) {
+        await deleteAnnouncementAsset(url);
+      }
+
+      removePendingGroupFromState(groupedNotice);
+    } catch (err) {
+      window.alert('Lỗi khi xóa: ' + err.message);
+    } finally {
+      setPendingBusy(approvalKey, false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isApprovalManager) {
+      setShowPendingApprovals(false);
+      setPendingApprovals([]);
+      return undefined;
+    }
+
+    fetchPendingApprovals();
+
+    const channel = supabase.channel('pending_approvals_dashboard')
+      .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'class_announcements' }, () => fetchPendingApprovals())
+      .on('postgres_changes', { event: 'DELETE', schema: SUPABASE_SCHEMA, table: 'class_announcements' }, () => fetchPendingApprovals())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPendingApprovals, isApprovalManager]);
+
   useEffect(() => {
     const handleLog = (e) => {
+      const mota = e.detail?.mota || '';
+      if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
+
       const newLog = { ...e.detail, isLocal: true };
       setLogs(prev => {
         // Avoid local duplicate if id matches something later, wait simple push
@@ -162,9 +434,13 @@ function Dashboard() {
         }
       });
 
-      // Fetch initial 30 logs
+      // Fetch initial 30 logs (excluding noisy actions)
       supabase.from('tbl_log')
         .select('*')
+        .not('mota', 'ilike', '%tbl_diemdanh%')
+        .not('mota', 'ilike', '%ĐIỂM DANH%')
+        .not('mota', 'ilike', '%hv_messages%')
+        .not('mota', 'ilike', '%documents%')
         .order('created_at', { ascending: false })
         .limit(30)
         .then(({ data }) => {
@@ -175,7 +451,10 @@ function Dashboard() {
 
       // Listen to global changes across devices
       channel = supabase.channel('realtime_logs')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tbl_log' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'tbl_log' }, (payload) => {
+          const mota = payload.new?.mota || '';
+          if (mota.includes('tbl_diemdanh') || mota.includes('ĐIỂM DANH') || mota.includes('hv_messages') || mota.includes('documents')) return;
+
           setLogs(prev => {
             const exists = prev.some(l => l.id === payload.new.id);
             if (exists) return prev;
@@ -185,6 +464,97 @@ function Dashboard() {
           });
         })
         .subscribe();
+    }
+
+    // Fetch unread messages count globally for sidebar
+    const fetchUnreadChatCount = async () => {
+      if (!user) return;
+
+      let studentIds = null;
+      if (user.role === 'Giáo viên') {
+        // Fetch teacher's classes first
+        const { data: teacherClasses } = await supabase
+          .from('tbl_lop')
+          .select('malop')
+          .or(`manv.eq.${user.manv},manv.eq.${user.username},manv.eq.${user.tennv}`);
+
+        if (teacherClasses && teacherClasses.length > 0) {
+          const classIds = teacherClasses.map(c => c.malop);
+          const { data: myStudents } = await supabase
+            .from('tbl_hv')
+            .select('mahv')
+            .in('malop', classIds);
+          if (myStudents) {
+            studentIds = myStudents.map(s => s.mahv);
+          }
+        } else {
+          // Teacher has no classes
+          setUnreadChatCount(0);
+          if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
+          return;
+        }
+      }
+
+      let query = supabase
+        .from('hv_messages')
+        .select('content, manv, description, mahv')
+        .is('is_read', false);
+
+      if (studentIds) {
+        query = query.in('mahv', studentIds);
+      }
+
+      const { data } = await query;
+
+      if (data) {
+        let count = 0;
+        data.forEach(d => {
+          const isPH = d.description === 'PH' || (!d.manv);
+          if (isPH) {
+            const isGopY = d.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
+            if (isGopY && user.role !== 'Quản lý' && user.role !== 'Hiệu trưởng') return;
+            count++;
+          }
+        });
+        setUnreadChatCount(count);
+
+        if ('setAppBadge' in navigator) {
+          if (count > 0) navigator.setAppBadge(count).catch(console.error);
+          else navigator.clearAppBadge().catch(console.error);
+        }
+      }
+    };
+
+    if (user) {
+      fetchUnreadChatCount();
+
+      const chatChannel = supabase.channel('global_chat_unread')
+        .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, (payload) => {
+          const isPH = payload.new.description === 'PH' || (!payload.new.manv);
+          if (isPH) {
+            if (Notification.permission === 'granted') {
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                  registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
+                }).catch(() => {
+                  new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
+                });
+              } else {
+                new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
+              }
+            }
+          }
+          fetchUnreadChatCount();
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .on('postgres_changes', { event: 'DELETE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, () => fetchUnreadChatCount())
+        .subscribe();
+
+      return () => {
+        window.removeEventListener('app_log_inserted', handleLog);
+        if (channel) supabase.removeChannel(channel);
+        supabase.removeChannel(chatChannel);
+      };
     }
 
     return () => {
@@ -200,7 +570,7 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    // Session validation (1 hour)
+    // Session validation (24 hours / 1 day)
     const sessionStr = localStorage.getItem('auth_session');
     if (!sessionStr) {
       navigate('/login');
@@ -210,10 +580,11 @@ function Dashboard() {
     try {
       const session = JSON.parse(sessionStr);
       const currentTime = new Date().getTime();
-      const oneHour = 60 * 60 * 1000;
+      const oneDay = 24 * 60 * 60 * 1000;
 
-      if (currentTime - session.loginTime > oneHour) {
-        localStorage.removeItem('auth_session');
+      if (currentTime - session.loginTime > oneDay) {
+        navigate('/login');
+      } else if (session.loginType === 'attendance' || session.user?.role === 'Giáo viên') {
         navigate('/login');
       } else {
         setUser(session.user);
@@ -231,6 +602,9 @@ function Dashboard() {
   }, [visibleTabs, activeTab, user]);
 
   const handleLogout = () => {
+    if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(console.error);
+    }
     localStorage.removeItem('auth_session');
     navigate('/login');
   };
@@ -263,10 +637,36 @@ function Dashboard() {
                 }}
               >
                 <option value="light">☀️ Sáng (Mặc định)</option>
-                <option value="dark">🌙 Tối (Dark)</option>
                 <option value="kindergarten">🎨 Mầm Non</option>
               </select>
             </div>
+
+            {isApprovalManager && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowPendingApprovals(true)}
+                  style={{
+                    padding: '0.45rem 1rem',
+                    borderRadius: '12px',
+                    border: '1px solid #cbd5e1',
+                    outline: 'none',
+                    background: 'white',
+                    color: '#334155',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                    position: 'relative'
+                  }}
+                >
+                  Cần duyệt
+                  {pendingApprovalCount > 0 && (
+                    <span style={{ position: 'absolute', top: -8, right: -8, background: '#ef4444', color: 'white', borderRadius: '999px', minWidth: '22px', height: '22px', padding: '0 6px', fontSize: '0.75rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+                      {pendingApprovalCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
 
             <div className="top-user-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {user?.role === 'Quản lý' && (
@@ -309,7 +709,7 @@ function Dashboard() {
                                 const tableNames = {
                                   'tbl_hanghoa': 'Sản phẩm/Hàng hóa',
                                   'tbl_billhanghoa': 'Hóa đơn bán hàng',
-                                  'tbl_hd': 'Hóa đơn học phí',
+                                  'tbl_hd': 'Phiếu thu HP',
                                   'tbl_nv': 'Nhân viên',
                                   'tbl_hv': 'Học viên',
                                   'tbl_lop': 'Lớp học',
@@ -436,17 +836,31 @@ function Dashboard() {
             boxShadow: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
             border: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
-            {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
+            {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'statistics' && <Statistics />}
-            {currentTab?.id === 'chat' && <ChatManager currentUser={user} />}
-            {currentTab?.id === 'zalo_chat' && <ZaloManager />}
+            {currentTab?.id === 'chat' && (
+              <ChatManager
+                currentUser={user}
+                onOpenInvoiceForStudent={(studentId) => {
+                  setInvoiceFocusStudentId(studentId || null);
+                  setActiveTab('invoices');
+                }}
+              />
+            )}
             {currentTab?.id === 'finances' && <FinanceManager activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
-            {currentTab?.id === 'invoices' && <InvoiceManager />}
+            {currentTab?.id === 'invoices' && (
+              <InvoiceManager
+                focusStudentId={invoiceFocusStudentId}
+                onFocusStudentHandled={() => setInvoiceFocusStudentId(null)}
+              />
+            )}
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}
             {currentTab?.id === 'sales' && activeSubTab === 'products' && <ProductManager currentUser={user} />}
             {currentTab?.id === 'tasks' && <TaskManager />}
-            {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" />}
-            {currentTab?.id === 'students' && <StudentManager activeSubTab={activeSubTab} />}
+            {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" currentUser={user} />}
+            {currentTab?.id === 'students_list' && <StudentManager activeSubTab="students" currentUser={user} />}
+            {currentTab?.id === 'students' && <StudentManager activeSubTab={['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg'].includes(activeSubTab) ? activeSubTab : 'classes'} currentUser={user} />}
+            {currentTab?.id === 'attendance_menu' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'timesheet' && <TimesheetManager currentUser={user} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
@@ -521,12 +935,14 @@ function Dashboard() {
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <div className="logo-mark" style={{ background: 'transparent' }}>
-              <img
-                src={config?.logo || ''}
-                alt="Logo"
-                style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
+              {config?.logo ? (
+                <img
+                  src={config.logo}
+                  alt="Logo"
+                  style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              ) : null}
             </div>
             {!collapsed && <span className="logo-text">{config?.tenweb || 'EASY4SCHOOL'}</span>}
           </div>
@@ -548,6 +964,10 @@ function Dashboard() {
                 <li key={tab.id} className="nav-item-wrapper">
                   <button
                     className={`nav-btn ${isActive ? 'active' : ''}`}
+                    style={{
+                      '--tab-color': tab.color,
+                      '--tab-bg': tab.bg
+                    }}
                     onClick={() => {
                       setActiveTab(tab.id);
                       if (tab.subTabs && tab.subTabs.length > 0) {
@@ -558,8 +978,22 @@ function Dashboard() {
                       }
                     }}
                   >
-                    <Icon size={20} className="nav-icon" />
+                    <div
+                      className="nav-icon-badge"
+                      style={{
+                        backgroundColor: isActive ? tab.color : (tab.bg || '#f1f5f9'),
+                        color: isActive ? '#ffffff' : tab.color,
+                        boxShadow: isActive ? `0 4px 12px ${tab.color}45` : 'none'
+                      }}
+                    >
+                      <Icon size={18} className="nav-icon" style={{ color: isActive ? '#ffffff' : tab.color }} />
+                    </div>
                     {!collapsed && <span className="nav-label">{tab.label}</span>}
+                    {!collapsed && tab.id === 'chat' && unreadChatCount > 0 && (
+                      <div style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
+                        +{unreadChatCount}
+                      </div>
+                    )}
                   </button>
 
                   {/* Render SubTabs */}
@@ -569,12 +1003,21 @@ function Dashboard() {
                         <button
                           key={subTab.id}
                           className={`sidebar-subtab-btn ${activeSubTab === subTab.id ? 'active' : ''}`}
+                          style={{
+                            '--subtab-color': subTab.dotColor || tab.color
+                          }}
                           onClick={() => {
                             setActiveSubTab(subTab.id);
                             setMobileOpen(false);
                           }}
                         >
-                          <div className="subtab-dot"></div>
+                          <div
+                            className="subtab-dot"
+                            style={{
+                              backgroundColor: subTab.dotColor || tab.color,
+                              boxShadow: activeSubTab === subTab.id ? `0 0 0 3px ${(subTab.dotColor || tab.color)}33` : 'none'
+                            }}
+                          ></div>
                           <span>{subTab.label}</span>
                         </button>
                       ))}
@@ -583,6 +1026,54 @@ function Dashboard() {
                 </li>
               );
             })}
+
+            {/* Disabled / Advance Tabs */}
+            {(() => {
+              const disabledTabs = [];
+              if (config?.hientabthongke === false) {
+                disabledTabs.push({ id: 'disabled_statistics', label: 'Thống kê', icon: BarChart3 });
+              }
+              if (config?.hientabphuhuynh === false) {
+                disabledTabs.push({ id: 'disabled_phuhuynh', label: 'Truy cập Phụ huynh', icon: Users });
+              }
+              if (config?.hientabchamcong === false) {
+                disabledTabs.push({ id: 'disabled_chamcong', label: 'Chấm công', icon: Clock });
+              }
+              if (config?.hienmaqr === false) {
+                disabledTabs.push({ id: 'disabled_maqr', label: 'Mã QR thanh toán', icon: Wallet });
+              }
+
+              if (disabledTabs.length === 0) return null;
+
+              return (
+                <>
+                  <li style={{ marginTop: '1.5rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px', padding: '0 15px', opacity: 0.7 }}>
+                    <div style={{ flex: 1, height: '1px', background: '#cbd5e1' }}></div>
+                    {!collapsed && <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', letterSpacing: '1px' }}>ADVANCE</span>}
+                    <div style={{ flex: 1, height: '1px', background: '#cbd5e1' }}></div>
+                  </li>
+                  {disabledTabs.map(tab => {
+                    const Icon = tab.icon;
+                    return (
+                      <li key={tab.id} className="nav-item-wrapper" style={{ opacity: 0.5, filter: 'grayscale(100%)' }}>
+                        <button
+                          className="nav-btn"
+                          style={{ cursor: 'not-allowed' }}
+                          onClick={() => {
+                            window.alert("Tính năng đã bị khoá. Vui lòng nâng cấp lên bản Advance để mở khoá tính năng này!");
+                          }}
+                        >
+                          <div className="nav-icon-badge" style={{ backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                            <Icon size={18} className="nav-icon" />
+                          </div>
+                          {!collapsed && <span className="nav-label">{tab.label}</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </ul>
         </div>
 
@@ -649,6 +1140,158 @@ function Dashboard() {
         </div>
       )}
 
+      {showPendingApprovals && isApprovalManager && (
+        <div className="modal-overlay" style={{ zIndex: 1250 }} onClick={() => setShowPendingApprovals(false)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '1100px', width: '95%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={20} className="text-primary" /> Cần duyệt
+              </h3>
+              <button className="close-btn" onClick={() => setShowPendingApprovals(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto', padding: '1rem 1.25rem 1.25rem' }}>
+              {groupedPendingApprovals.length === 0 ? (
+                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b' }}>
+                  Không có nội dung cần duyệt.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {groupedPendingApprovals.map((item) => {
+                    const approvalKey = item.id || item._announcements?.[0]?.id;
+                    const isBusy = pendingApprovalBusyKeys.includes(approvalKey);
+                    const imageAttachments = (item._attachments || []).filter((attachment) => attachment.image_url);
+                    const fileAttachments = (item._attachments || []).filter((attachment) => attachment.file_url);
+                    const classLabel = classNameMap[item.malop] || item.malop || '-';
+
+                    return (
+                      <div key={approvalKey} style={{ border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', background: '#fff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '1rem 1rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, color: '#0f172a' }}>{item.title || 'Thông báo lớp'}</div>
+                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '4px' }}>
+                              Lớp: {classLabel}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                            {new Date(item.created_at || Date.now()).toLocaleString('vi-VN')}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: '#334155', background: '#f8fafc', borderRadius: '12px', padding: '0.9rem 1rem' }}>
+                            {item.content || 'Không có nội dung.'}
+                          </div>
+
+                          {imageAttachments.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                              {imageAttachments.map((attachment, index) => (
+                                <button
+                                  key={attachment.id || `${approvalKey}-image-${index}`}
+                                  type="button"
+                                  onClick={() => setSelectedApprovalImage(attachment.image_url)}
+                                  style={{ display: 'block', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', padding: '0', background: '#fff', cursor: 'zoom-in' }}
+                                >
+                                  <img src={attachment.image_url} alt="" style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', display: 'block', background: '#f8fafc' }} />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {fileAttachments.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {fileAttachments.map((attachment, index) => (
+                                <a
+                                  key={attachment.id || `${approvalKey}-file-${index}`}
+                                  href={attachment.file_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.8rem 0.9rem', color: '#334155', background: '#fff' }}
+                                >
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                                    T
+                                  </div>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {attachment.file_name || 'Tài liệu đính kèm'}
+                                    </div>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePendingGroup(item)}
+                              disabled={isBusy}
+                              style={{ border: '1px solid #fecaca', background: '#fff1f2', color: '#be123c', borderRadius: '10px', padding: '0.7rem 1rem', fontWeight: 700, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              {isBusy ? <Loader2 size={16} className="spinner" /> : <Trash2 size={16} />}
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApprovePendingGroup(item)}
+                              disabled={isBusy}
+                              style={{ border: '1px solid #bbf7d0', background: '#dcfce7', color: '#166534', borderRadius: '10px', padding: '0.7rem 1rem', fontWeight: 700, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              {isBusy ? <Loader2 size={16} className="spinner" /> : <Check size={16} />}
+                              Duyệt
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedApprovalImage && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1300, background: 'rgba(15, 23, 42, 0.85)' }}
+          onClick={() => setSelectedApprovalImage(null)}
+        >
+          <div
+            style={{
+              width: 'min(96vw, 1400px)',
+              maxHeight: '92vh',
+              padding: '12px',
+              borderRadius: '20px',
+              background: '#fff',
+              boxShadow: '0 25px 80px rgba(0, 0, 0, 0.35)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setSelectedApprovalImage(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: 'calc(92vh - 64px)', overflow: 'auto', background: '#f8fafc', borderRadius: '16px' }}>
+              <img
+                src={selectedApprovalImage}
+                alt=""
+                style={{ maxWidth: '100%', maxHeight: 'calc(92vh - 96px)', objectFit: 'contain', display: 'block' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="main-content">
         <div className="mobile-top-bar hidden-desktop">
@@ -660,10 +1303,48 @@ function Dashboard() {
             {ALL_TABS.find(t => t.id === activeTab)?.label}
           </div>
 
-          <div className="user-profile compact">
+          <div className="user-profile compact" onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} style={{ cursor: 'pointer', position: 'relative' }}>
             <div className="avatar">
               {user?.tennv ? user.tennv.charAt(0).toUpperCase() : user?.username?.charAt(0).toUpperCase()}
             </div>
+            {/* Dropdown Menu Mobile */}
+            {isUserMenuOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1050 }} onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); }}></div>
+                <div style={{
+                  position: 'absolute', top: '120%', right: 0, background: 'white', width: '200px',
+                  borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0',
+                  overflow: 'hidden', zIndex: 1100, animation: 'contentFadeIn 0.2s ease'
+                }} onClick={e => e.stopPropagation()}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>{user?.tennv || user?.username}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{user?.role}</div>
+                  </div>
+                  <div style={{ padding: '6px' }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsChangePassOpen(true); setIsUserMenuOpen(false); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+                        border: 'none', background: 'none', borderRadius: '10px', color: '#475569',
+                        cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontWeight: 600, fontSize: '0.85rem'
+                      }}
+                    >
+                      <Key size={16} color="#6366f1" /> Đổi mật khẩu
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+                        border: 'none', background: 'none', borderRadius: '10px', color: '#ef4444',
+                        cursor: 'pointer', transition: '0.2s', textAlign: 'left', fontWeight: 600, fontSize: '0.85rem'
+                      }}
+                    >
+                      <LogOut size={16} /> Đăng xuất
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
         {renderContent()}

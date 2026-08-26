@@ -98,7 +98,7 @@ const safeFetch = async (table, start, end) => {
   return data || [];
 };
 
-export default function Overview({ setActiveTab, setActiveSubTab }) {
+export default function Overview({ setActiveTab, setActiveSubTab, currentUser }) {
   const { config } = useConfig();
 
   const walletsConfig = useMemo(() => (config ? [
@@ -181,30 +181,8 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
         validHD.reduce((a, b) => a + parseCurrency(b.dadong), 0) +
         validBill.reduce((a, b) => a + parseCurrency(b.dadong), 0);
 
-      // Tổng nợ chưa thu: dùng pagination để tránh giới hạn 1000 dòng của Supabase
-      const fetchConnoPages = async (table, dateCol) => {
-        let total = 0;
-        let page = 0;
-        const PAGE = 1000;
-        while (true) {
-          const { data: chunk } = await supabase.from(table)
-            .select('conno, daxoa')
-            .or('daxoa.neq."Đã Xóa",daxoa.is.null')
-            .gte(dateCol, startD)
-            .lte(dateCol, endD)
-            .neq('conno', '0')
-            .neq('conno', '')
-            .not('conno', 'is', null)
-            .range(page * PAGE, page * PAGE + PAGE - 1);
-          if (!chunk || chunk.length === 0) break;
-          chunk.filter(isNotDeleted).forEach(r => { total += parseCurrency(r.conno); });
-          if (chunk.length < PAGE) break;
-          page++;
-        }
-        return total;
-      };
-      const noHD = await fetchConnoPages('tbl_hd', 'ngaylap');
-      const noBill = await fetchConnoPages('tbl_billhanghoa', 'ngaylap');
+      const noHD = validHD.reduce((a, b) => a + parseCurrency(b.conno), 0);
+      const noBill = validBill.reduce((a, b) => a + parseCurrency(b.conno), 0);
       const tongNo = noHD + noBill;
 
       const tongChi = validPC.filter(p => (p.loaiphieu || '').trim() === 'Chi').reduce((a, b) => a + parseCurrency(b.chiphi), 0) +
@@ -379,77 +357,19 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
         </div>
       </div>
 
-      <div className="financial-divider"></div>
-
-      {/* ================= 1. BÁO CÁO TỔNG THỂ ================= */}
-      <div className="financial-header">
-        <div className="sh-title-group">
-          <h2 className="sh-massive-title margin-0 text-slate-800">Báo cáo tài chính tổng hợp</h2>
-          <div className="filter-group">
-            <Calendar size={18} className="text-muted" />
-            <select value={totalsDateFilter} onChange={handleTotalsFilterChange}>
-              <option value="Hôm nay">Hôm nay</option>
-              <option value="Trong tuần này">Trong tuần này</option>
-              <option value="Trong tháng này">Trong tháng này</option>
-              <option value="Trong tháng trước">Trong tháng trước</option>
-              <option value="Trong 3 tháng trước">Trong 3 tháng trước</option>
-              <option value="Tùy chọn ngày">Tùy chọn khoảng ngày...</option>
-            </select>
-          </div>
-        </div>
-        <div className="finance-filters">
-          <div className="custom-dates animate-fade-in">
-            <input type="date" value={(totalsDateRange.start || '').split('T')[0]} onChange={e => handleTotalsDateInput('start', e.target.value)} />
-            <span className="date-sep">đến</span>
-            <input type="date" value={(totalsDateRange.end || '').split('T')[0]} onChange={e => handleTotalsDateInput('end', e.target.value)} />
-          </div>
-        </div>
-      </div>
-
-      {loadingTotals ? (
-        <div className="loading-state card-loading">Đang tổng hợp dữ liệu luồng tài chính...</div>
-      ) : (
-        <div className="finance-cards-grid animate-fade-in">
-          <div className="f-card success">
-            <div className="f-icon"><TrendingUp size={36} /></div>
-            <div className="f-data">
-              <span>TỔNG ĐÃ THU</span>
-              <h2>{financeData.thu.toLocaleString('vi-VN')} đ</h2>
-              <p>Tổng tiền đã thu thực tế</p>
-            </div>
-          </div>
-
-          <div className="f-card danger">
-            <div className="f-icon"><TrendingDown size={36} /></div>
-            <div className="f-data">
-              <span>TỔNG ĐÃ CHI</span>
-              <h2>{financeData.chi.toLocaleString('vi-VN')} đ</h2>
-              <p>Tổng tiền đã chi</p>
-            </div>
-          </div>
-
-          <div className="f-card warning">
-            <div className="f-icon"><Wallet size={36} /></div>
-            <div className="f-data">
-              <span>TỔNG NỢ CHƯA THU</span>
-              <h2>{financeData.no.toLocaleString('vi-VN')} đ</h2>
-              <p>Chưa thu đủ</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {config?.hienvithuchi && (
+      {currentUser?.role !== 'Nhân viên VP' && currentUser?.role !== 'Nhân viên' && (
         <>
           <div className="financial-divider"></div>
 
-          {/* ================= 2. BÁO CÁO VÍ THU/CHI ================= */}
+          {/* ================= 1. BÁO CÁO TỔNG THỂ ================= */}
           <div className="financial-header">
             <div className="sh-title-group">
-              <h2 className="sh-standard-title margin-0 text-slate-800">Thống Kê Chi Tiết Ví</h2>
+              <h2 className="sh-standard-title margin-0 text-slate-800 flex-center">
+                <TrendingUp size={22} className="text-emerald-600" /> Báo cáo tài chính tổng hợp
+              </h2>
               <div className="filter-group">
-                <CreditCard size={18} className="text-muted" />
-                <select value={walletsDateFilter} onChange={handleWalletsFilterChange}>
+                <Calendar size={18} className="text-muted" />
+                <select value={totalsDateFilter} onChange={handleTotalsFilterChange}>
                   <option value="Hôm nay">Hôm nay</option>
                   <option value="Trong tuần này">Trong tuần này</option>
                   <option value="Trong tháng này">Trong tháng này</option>
@@ -460,50 +380,115 @@ export default function Overview({ setActiveTab, setActiveSubTab }) {
               </div>
             </div>
             <div className="finance-filters">
-              <div className="custom-dates custom-dates-sm animate-fade-in">
-                <input type="date" value={(walletsDateRange.start || '').split('T')[0]} onChange={e => handleWalletsDateInput('start', e.target.value)} />
+              <div className="custom-dates animate-fade-in">
+                <input type="date" value={(totalsDateRange.start || '').split('T')[0]} onChange={e => handleTotalsDateInput('start', e.target.value)} />
                 <span className="date-sep">đến</span>
-                <input type="date" value={(walletsDateRange.end || '').split('T')[0]} onChange={e => handleWalletsDateInput('end', e.target.value)} />
+                <input type="date" value={(totalsDateRange.end || '').split('T')[0]} onChange={e => handleTotalsDateInput('end', e.target.value)} />
               </div>
             </div>
           </div>
 
-          {loadingWallets ? (
-            <div className="loading-state card-loading-sm">Đang tải biểu đồ ví...</div>
+          {loadingTotals ? (
+            <div className="loading-state card-loading">Đang tổng hợp dữ liệu luồng tài chính...</div>
           ) : (
-            <div className="wallets-grid animate-fade-in">
-              {/* CỘT THU */}
-              <div className="wallet-col thu-col">
-                <div className="wallet-header">
-                  <span className="text-success flex-center"><TrendingUp size={20} /> TỔNG VÍ THU</span>
-                </div>
-                <div className="wallet-cards">
-                  {walletsConfig.map(w => (
-                    <div className="w-card" key={w.id}>
-                      <span className="w-label flex-center"><Banknote size={16} /> {w.name}</span>
-                      <span className="w-amount">{(walletStats.thu[w.id] || 0).toLocaleString('vi-VN')} đ</span>
-                    </div>
-                  ))}
+            <div className="finance-cards-grid animate-fade-in">
+              <div className="f-card success">
+                <div className="f-icon"><TrendingUp size={36} /></div>
+                <div className="f-data">
+                  <span>TỔNG ĐÃ THU</span>
+                  <h2>{financeData.thu.toLocaleString('vi-VN')} đ</h2>
+                  <p>Tổng tiền đã thu thực tế</p>
                 </div>
               </div>
 
-              {/* CỘT CHI */}
-              <div className="wallet-col chi-col">
-                <div className="wallet-header">
-                  <span className="text-danger flex-center"><TrendingDown size={20} /> TỔNG VÍ CHI</span>
+              <div className="f-card danger">
+                <div className="f-icon"><TrendingDown size={36} /></div>
+                <div className="f-data">
+                  <span>TỔNG ĐÃ CHI</span>
+                  <h2>{financeData.chi.toLocaleString('vi-VN')} đ</h2>
+                  <p>Tổng tiền đã chi</p>
                 </div>
-                <div className="wallet-cards">
-                  {walletsConfig.map(w => (
-                    <div className="w-card" key={w.id}>
-                      <span className="w-label flex-center"><Banknote size={16} /> {w.name}</span>
-                      <span className="w-amount">{(walletStats.chi[w.id] || 0).toLocaleString('vi-VN')} đ</span>
-                    </div>
-                  ))}
+              </div>
+
+              <div className="f-card warning">
+                <div className="f-icon"><Wallet size={36} /></div>
+                <div className="f-data">
+                  <span>TỔNG NỢ CHƯA THU</span>
+                  <h2>{financeData.no.toLocaleString('vi-VN')} đ</h2>
+                  <p>Chưa thu đủ</p>
                 </div>
               </div>
             </div>
           )}
 
+          {config?.hienvithuchi && (
+            <>
+              <div className="financial-divider"></div>
+
+              {/* ================= 2. BÁO CÁO VÍ THU/CHI ================= */}
+              <div className="financial-header">
+                <div className="sh-title-group">
+                  <h2 className="sh-standard-title margin-0 text-slate-800 flex-center">
+                    <Wallet size={22} className="text-blue-600" /> Thống Kê Chi Tiết Ví
+                  </h2>
+                  <div className="filter-group">
+                    <CreditCard size={18} className="text-muted" />
+                    <select value={walletsDateFilter} onChange={handleWalletsFilterChange}>
+                      <option value="Hôm nay">Hôm nay</option>
+                      <option value="Trong tuần này">Trong tuần này</option>
+                      <option value="Trong tháng này">Trong tháng này</option>
+                      <option value="Trong tháng trước">Trong tháng trước</option>
+                      <option value="Trong 3 tháng trước">Trong 3 tháng trước</option>
+                      <option value="Tùy chọn ngày">Tùy chọn khoảng ngày...</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="finance-filters">
+                  <div className="custom-dates custom-dates-sm animate-fade-in">
+                    <input type="date" value={(walletsDateRange.start || '').split('T')[0]} onChange={e => handleWalletsDateInput('start', e.target.value)} />
+                    <span className="date-sep">đến</span>
+                    <input type="date" value={(walletsDateRange.end || '').split('T')[0]} onChange={e => handleWalletsDateInput('end', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              {loadingWallets ? (
+                <div className="loading-state card-loading-sm">Đang tải biểu đồ ví...</div>
+              ) : (
+                <div className="wallets-grid animate-fade-in">
+                  {/* CỘT THU */}
+                  <div className="wallet-col thu-col">
+                    <div className="wallet-header">
+                      <span className="text-success flex-center"><TrendingUp size={20} /> TỔNG VÍ THU</span>
+                    </div>
+                    <div className="wallet-cards">
+                      {walletsConfig.map(w => (
+                        <div className="w-card" key={w.id}>
+                          <span className="w-label flex-center"><Banknote size={16} /> {w.name}</span>
+                          <span className="w-amount">{(walletStats.thu[w.id] || 0).toLocaleString('vi-VN')} đ</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CỘT CHI */}
+                  <div className="wallet-col chi-col">
+                    <div className="wallet-header">
+                      <span className="text-danger flex-center"><TrendingDown size={20} /> TỔNG VÍ CHI</span>
+                    </div>
+                    <div className="wallet-cards">
+                      {walletsConfig.map(w => (
+                        <div className="w-card" key={w.id}>
+                          <span className="w-label flex-center"><Banknote size={16} /> {w.name}</span>
+                          <span className="w-amount">{(walletStats.chi[w.id] || 0).toLocaleString('vi-VN')} đ</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </>
       )}
     </div>
