@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+export const SUPABASE_SCHEMA = process.env.REACT_APP_SUPABASE_SCHEMA || 'public';
 
 export const baseSupabase = createClient(
    supabaseUrl || 'https://placeholder.supabase.co',
@@ -10,7 +11,8 @@ export const baseSupabase = createClient(
 
 export const supabase = createClient(
    supabaseUrl || 'https://placeholder.supabase.co',
-   supabaseKey || 'placeholder-key'
+   supabaseKey || 'placeholder-key',
+   process.env.REACT_APP_SUPABASE_SCHEMA ? { db: { schema: process.env.REACT_APP_SUPABASE_SCHEMA } } : undefined
 );
 
 const getManv = () => {
@@ -75,7 +77,7 @@ window.fetch = async (...args) => {
             'tbl_log', 'tbl_hv', 'tbl_nv', 'tbl_hanghoa', 'tbl_lop',
             'tbl_ghichu', 'tbl_hd', 'tbl_nhapkho', 'tbl_thongbao',
             'tbl_config', 'tbl_phieuchi', 'tbl_billhanghoa',
-            'tbl_diemdanh', 'tbl_noidungday'
+            'tbl_diemdanh', 'hv_messages', 'documents'
          ];
          if (!manualLoggedTables.includes(table)) {
             let action = '';
