@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
+import { supabase, baseSupabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2, Calendar
+   Printer, History, Clock, Edit2, Calendar, Banknote, Eye
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
@@ -405,6 +405,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
    const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
    const [editPhieuModal, setEditPhieuModal] = useState({ isOpen: false, data: null, password: '' });
+   const [approveSalaryModal, setApproveSalaryModal] = useState({ isOpen: false, item: null, wallet: '' });
+   const [viewSalarySlipModal, setViewSalarySlipModal] = useState({ isOpen: false, item: null });
 
    const [sortConfig, setSortConfig] = useState({ key: '', direction: '' });
 
@@ -542,7 +544,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       setPrintLuong(record);
       setTimeout(() => {
          window.print();
-      }, 500);
+      }, 300);
    };
 
    const handlePrintHoaDon = (record) => {
@@ -1050,19 +1052,27 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       const sumBy = (arr, field) => safeParse(arr).reduce((sum, item) => sum + pCur(item[field]), 0);
 
-      const buildQuery = (table, dateField) => {
+      const buildQuery = async (table, dateField) => {
          let q = supabase.from(table).select('*');
          if (start) q = q.gte(dateField, start);
          if (end) q = q.lte(dateField, end);
-         return q;
+         let res = await q;
+         if (res.error && (res.error.message || '').toLowerCase().includes('schema cache')) {
+            let qBase = baseSupabase.from(table).select('*');
+            if (start) qBase = qBase.gte(dateField, start);
+            if (end) qBase = qBase.lte(dateField, end);
+            res = await qBase;
+         }
+         return res;
       };
 
-      const [resChi, resKho, resHd, resBill, resThongBao] = await Promise.all([
+      const [resChi, resKho, resHd, resBill, resThongBao, resLuong] = await Promise.all([
          buildQuery('tbl_phieuchi', 'ngaylap'),
          buildQuery('tbl_nhapkho', 'ngaynhap'),
          buildQuery('tbl_hd', 'ngaylap'),
          buildQuery('tbl_billhanghoa', 'ngaylap'),
-         buildQuery('tbl_thongbao', 'ngaylap')
+         buildQuery('tbl_thongbao', 'ngaylap'),
+         buildQuery('tbl_luong', 'ngaylap')
       ]);
 
       const chiList = resChi.data || [];
@@ -1070,6 +1080,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const hdList = resHd.data || [];
       const billList = resBill.data || [];
       const thongBaoList = resThongBao.data || [];
+      const luongList = resLuong.data || [];
 
       const filterByWallet = (list) => {
          if (!hinhThucFilter) return list;
@@ -1084,6 +1095,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalHd = filterByWallet(hdList);
       const finalBill = filterByWallet(billList);
       const finalThongBao = filterByWallet(thongBaoList);
+      const finalLuong = filterByWallet(luongList);
       const latestNoticeByStudent = [];
       const seenStudents = new Set();
       [...finalThongBao]
@@ -1108,6 +1120,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       setStats({
          phieuChi: finalChi.filter(c => !isDeleted(c) && (!c.loaiphieu || c.loaiphieu === 'Chi')).reduce((s, c) => s + pCur(c.chiphi), 0),
+         chiLuong: finalLuong.filter(l => !isDeleted(l) && (l.trangthai === 'Đã chi' || l.trangthai === 'Đã duyệt')).reduce((s, l) => s + pCur(l.thucnhan), 0),
          thuKhac: finalChi.filter(c => !isDeleted(c) && c.loaiphieu === 'Thu').reduce((s, c) => s + pCur(c.chiphi), 0),
          nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
          thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
@@ -1121,6 +1134,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       else if (activeSubTab === 'nhapkho') activeDataRaw = khoList;
       else if (activeSubTab === 'billhang' || activeSubTab === 'billhanghoa') activeDataRaw = billList;
       else if (activeSubTab === 'doanhthudukien') activeDataRaw = pendingNotices;
+      else if (activeSubTab === 'phieuluong') activeDataRaw = luongList;
 
       let orderBy = activeSubTab === 'nhapkho' ? 'ngaynhap' : 'ngaylap';
       const sorted = [...activeDataRaw].sort((a, b) => {
@@ -1982,6 +1996,129 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
                </>
             );
+
+         case 'phieuluong':
+            return (
+               <>
+                  <div className="table-scroll-wrapper">
+                     <table className="fm-table">
+                        <thead>
+                           <tr>
+                              <th onClick={() => requestSort('maphieuluong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mã Phiếu <SortIcon columnKey="maphieuluong" /></th>
+                              <th onClick={() => requestSort('thang')} style={{ cursor: 'pointer', userSelect: 'none' }}>Kỳ Lương <SortIcon columnKey="thang" /></th>
+                              <th>Mã NV</th>
+                              <th>Tên Nhân Viên</th>
+                              <th>Chức Vụ</th>
+                              <th className="text-right">T.Thu Nhập</th>
+                              <th className="text-right">T.Khấu Trừ</th>
+                              <th className="text-right" onClick={() => requestSort('thucnhan')} style={{ cursor: 'pointer', userSelect: 'none' }}>Thực Nhận (VNĐ) <SortIcon columnKey="thucnhan" /></th>
+                              <th>Hình thức</th>
+                              <th>Trạng thái</th>
+                              <th className="text-center">Hành động</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {filteredData.map(r => {
+                              const deleted = isDeleted(r);
+                              return (
+                                 <tr key={r.maphieuluong || r.id} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                    <td className="fm-code font-semibold text-primary" style={deleted ? { color: '#64748b' } : {}}>{r.maphieuluong || r.id}</td>
+                                    <td><span className="font-bold">{r.thang}</span></td>
+                                    <td>{r.manv}</td>
+                                    <td className="font-bold text-slate-800">{r.tennv}</td>
+                                    <td>{r.chucvu}</td>
+                                    <td className="text-right font-semibold" style={{ color: '#16a34a' }}>{fCur(r.tongthunhap)}</td>
+                                    <td className="text-right font-semibold" style={{ color: '#dc2626' }}>{fCur(r.tongkhautru)}</td>
+                                    <td className="text-right font-bold text-primary" style={{ fontSize: '1.05rem' }}>{fCur(r.thucnhan)}</td>
+                                    <td>{r.hinhthuc || 'Tiền mặt'}</td>
+                                    <td>
+                                       {r.trangthai === 'Đã chi' ? (
+                                          <span className="fm-status-badge status-success">
+                                             <CheckCircle2 size={13} /> Đã chi
+                                          </span>
+                                       ) : (
+                                          <span className="fm-status-badge status-pending">
+                                             <Clock size={13} /> Chờ duyệt
+                                          </span>
+                                       )}
+                                    </td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted && (
+                                          <>
+                                             <button title="Xem chi tiết phiếu lương" className="fm-action-btn btn-view" onClick={() => setViewSalarySlipModal({ isOpen: true, item: r })}>
+                                                <Eye size={15} />
+                                             </button>
+                                             <button title="In phiếu lương PDF" className="fm-action-btn btn-print" style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '0.4rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} onClick={() => handlePrintLuong(r)}>
+                                                <Printer size={15} />
+                                             </button>
+                                             {r.trangthai !== 'Đã chi' && (
+                                                <button
+                                                   title="Duyệt chi lương"
+                                                   className="fm-action-btn btn-approve"
+                                                   onClick={() => setApproveSalaryModal({ isOpen: true, item: r, wallet: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt') })}
+                                                >
+                                                   <CheckCircle2 size={15} />
+                                                </button>
+                                             )}
+                                             <button title="Huỷ / Xóa phiếu" className="fm-action-btn btn-delete" onClick={() => handleDelete(r.maphieuluong ? 'maphieuluong' : 'id', r.maphieuluong || r.id, 'tbl_luong')}>
+                                                <Trash2 size={15} />
+                                             </button>
+                                          </>
+                                       )}
+                                       {deleted && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Đã Xóa</span>}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  </div>
+
+                  {/* Card View for Mobile */}
+                  <div className="fm-card-list">
+                     {filteredData.map(r => {
+                        const deleted = isDeleted(r);
+                        return (
+                           <div key={r.maphieuluong || r.id} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : {}}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : { color: '#8b5cf6' }}>{r.maphieuluong || r.id}</span>
+                                 {r.trangthai === 'Đã chi' ? (
+                                    <span className="fm-status-badge status-success">
+                                       <CheckCircle2 size={12} /> Đã chi
+                                    </span>
+                                 ) : (
+                                    <span className="fm-status-badge status-pending">
+                                       <Clock size={12} /> Chờ duyệt
+                                    </span>
+                                 )}
+                              </div>
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-primary">{r.tennv} ({r.manv})</strong></div>
+                                 <div className="fm-card-row"><span>Kỳ lương:</span> <strong>Tháng {r.thang}</strong></div>
+                                 <div className="fm-card-row price-row">
+                                    <span>Thực nhận:</span>
+                                    <strong style={{ color: '#2563eb', fontSize: '1.1rem' }}>{fCur(r.thucnhan)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions" style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
+                                    {!deleted ? (
+                                       <>
+                                          <button className="fm-action-btn btn-view" onClick={() => setViewSalarySlipModal({ isOpen: true, item: r })}><Printer size={14} /> Xem & In</button>
+                                          {r.trangthai !== 'Đã chi' && (
+                                             <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => setApproveSalaryModal({ isOpen: true, item: r, wallet: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt') })}><CheckCircle2 size={14} /> Duyệt</button>
+                                          )}
+                                          <button className="btn-danger-sm" onClick={() => handleDelete(r.maphieuluong ? 'maphieuluong' : 'id', r.maphieuluong || r.id, 'tbl_luong')}><Trash2 size={16} /> Xóa</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
+                              </div>
+                           </div>
+                        );
+                     })}
+                  </div>
+               </>
+            );
          default:
             return <div className="p-5 text-center text-muted">Vui lòng chọn một phân hệ Quản lý Tài chính/Kho/Dịch vụ.</div>
       }
@@ -2119,6 +2256,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Phiếu chi</span>
                      <span className="fm-stat-value text-danger">{fCur(stats.phieuChi)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card card-chiluong" onClick={() => { if (setActiveSubTab) setActiveSubTab('phieuluong'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-luong"><Banknote size={24} /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Chi lương</span>
+                     <span className="fm-stat-value" style={{ color: '#a855f7' }}>{fCur(stats.chiLuong)}</span>
                   </div>
                </div>
                <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('nhapkho'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
@@ -2458,115 +2602,42 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {/* PRINT TEMPLATE - PHIẾU LƯƠNG */}
+         {/* PRINT TEMPLATE - PHIẾU LƯƠNG CHI TIẾT */}
          {printLuong && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
-               <div style={{ position: 'relative', zIndex: 1 }}>
-                  {/* HEADER */}
-                  <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '180px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                     </div>
-
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                           {config?.tencongty || 'Tên Công Ty'}
-                        </h3>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
-                     </div>
-
-                     {/* RIGHT: Info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                        <div>GV: <b style={{ fontWeight: 950 }}>{printLuong.manv}</b></div>
-                        <div>Ngày in: <span style={{ fontWeight: 600 }}>{new Date().toLocaleDateString("vi-VN")}</span></div>
-                     </div>
+            <div className="print-salary-slip-modal" style={{ position: 'absolute', top: 0, left: 0, width: '100%', background: 'white', zIndex: 99999, padding: '10mm' }}>
+               <div className="print-salary-slip-paper" style={{ border: '2px solid #000', padding: '0', background: 'white', fontFamily: 'Arial, sans-serif', boxShadow: 'none', borderRadius: '4px', overflow: 'hidden', width: '100%' }}>
+                  <div style={{ background: '#b4c6e7', padding: '10px', textAlign: 'center', borderBottom: '2px solid #000' }}>
+                     <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#000' }}>PHIẾU LƯƠNG NHÂN VIÊN - {(config?.tencongty || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
                   </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                     <tbody>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', width: '40%' }}>Tháng</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.thang}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{printLuong.manv}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{printLuong.tennv}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.chucvu}</td></tr>
 
-                  {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     PHIẾU LƯƠNG GIÁO VIÊN
-                  </div>
+                        <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.luongcoban)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.chuyencan)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_bhxh)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_trachnhiem)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_dilai)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_chuyenmon)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_khac)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.thuongle)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tangluong)} ₫</td></tr>
+                        <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(printLuong.tongthunhap)} ₫</td></tr>
 
-                  {/* INFO */}
-                  <div style={{ fontSize: "13pt", lineHeight: "1.8" }}>
+                        <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_bhxh)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tamung)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_khac)} ₫</td></tr>
+                        <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(printLuong.tongkhautru)} ₫</td></tr>
 
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Họ và tên: <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b></div>
-                        <div>Kỳ lương: <b>Tháng {printLuong.luongthang || ((new Date(printLuong.ngaylap).getMonth() + 1).toString().padStart(2, '0') + '/' + new Date(printLuong.ngaylap).getFullYear())}</b></div>
-                     </div>
-
-                     <div>
-                        Chức vụ: <b>Giáo Viên</b>
-                     </div>
-
-                     {/* BẢNG LƯƠNG */}
-                     <div style={{ marginTop: '15px', marginBottom: '15px' }}>
-                        {(() => {
-                           const dt = parseNoidung(printLuong.noidung);
-                           return (
-                              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid black', fontSize: '12pt' }}>
-                                 <thead>
-                                    <tr>
-                                       {dt.headers.map((h, i) => {
-                                          return <th key={i} style={{ border: '1px solid black', padding: '5px', textAlign: i === 0 ? 'left' : 'center' }}>{h}</th>
-                                       })}
-                                    </tr>
-                                 </thead>
-                                 <tbody>
-                                    {dt.rows.map((row, rIdx) => (
-                                       <tr key={rIdx}>
-                                          {row.map((cell, cIdx) => {
-                                             const h = dt.headers[cIdx];
-                                             const lower = (h || '').toLowerCase();
-                                             const isMoney = lower.includes('lương') || lower.includes('tiền') || lower.includes('đơn giá') || lower.includes('tổng');
-                                             return (
-                                                <td key={cIdx} style={{ border: '1px solid black', padding: '5px', textAlign: isMoney ? 'right' : cIdx === 0 ? 'left' : 'center', fontWeight: lower.includes('thành tiền') ? 'bold' : 'normal' }}>
-                                                   {isMoney && cell ? fCur(cell) : cell}
-                                                </td>
-                                             );
-                                          })}
-                                       </tr>
-                                    ))}
-                                 </tbody>
-                              </table>
-                           );
-                        })()}
-                     </div>
-
-                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div style={{ flex: 1 }}></div>
-                     </div>
-
-                     <div style={{ display: "flex", justifyContent: "space-between", margin: '15px 0' }}>
-                        <div style={{ fontWeight: "bold" }}>TỔNG THỰC NHẬN: <span style={{ fontSize: '15pt' }}>{fCur(printLuong.tongcong)} ₫</span></div>
-                     </div>
-
-                     <div style={{ fontSize: '11pt', borderTop: '1px dashed #ccc', paddingTop: '10px' }}>
-                        Ghi chú: {printLuong.ghichu || '........................................................................'}
-                     </div>
-                  </div>
-
-                  {/* FOOTER */}
-                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-
-                     <div>
-                        <b>Ngày ..... tháng ..... Năm 20 .....</b> <br /><br />
-                        <div style={{ textAlign: "center" }}>
-                           Nhân viên lập phiếu <br />
-                           (Ký và ghi rõ họ tên)<br /><br /><br /><br />
-                        </div>
-                     </div>
-
-                     <div style={{ textAlign: "center" }}>
-                        <br /><br />
-                        Người nhận tiền <br />(Ký và ghi rõ họ tên)<br /><br /><br /><br />
-                        <b>{printLuong.tennv || nvMap[printLuong.manv] || printLuong.manv}</b>
-                     </div>
-
-                  </div>
+                        <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(printLuong.thucnhan)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{printLuong.bangchu || (READ_NUMBER_VN(pCur(printLuong.thucnhan)) + ' đồng')}</td></tr>
+                     </tbody>
+                  </table>
                </div>
             </div>,
             document.body
@@ -3527,39 +3598,207 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                   </div>
 
-                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
-                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
-                     <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || '...'}</b></div>
-                     {downloadingNotice?.ghichu && (
-                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
-                     )}
-                  </div>
+                   <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                      <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                      <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || '...'}</b></div>
+                      {downloadingNotice?.ghichu && (
+                         <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
+                      )}
+                   </div>
 
-                  {/* QR SECTION */}
-                  {downloadingNotice?.qrUrl && (
-                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
-                        <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
-                        <div style={{ textAlign: 'center' }}>
-                           <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
-                           <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                   {/* QR SECTION */}
+                   {downloadingNotice?.qrUrl && (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+                         <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
+                         <div style={{ textAlign: 'center' }}>
+                            <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                            <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                         </div>
+                      </div>
+                   )}
+                </div>
+
+                {/* FOOTER */}
+                <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                   <div style={{ lineHeight: '1.6' }}>
+                      Facebook: {config?.tencongty}<br />
+                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+                      Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien}</b>
+                   </div>
+                   <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                      (Xác nhận)
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          {/* APPROVE SALARY MODAL */}
+          {approveSalaryModal.isOpen && approveSalaryModal.item && createPortal(
+             <div className="fm-modal-overlay">
+                <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#fff' }}>
+                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Duyệt Chi Lương Nhân Viên</h3>
+                      <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+                   </div>
+                   <div className="fm-modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1 }}>
+                      <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Nhân viên:</span>
+                            <span style={{ fontWeight: 800, color: '#0f172a' }}>{approveSalaryModal.item.tennv} ({approveSalaryModal.item.manv})</span>
+                         </div>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Kỳ lương:</span>
+                            <span style={{ fontWeight: 700 }}>Tháng {approveSalaryModal.item.thang}</span>
+                         </div>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Tổng thu nhập:</span>
+                            <span style={{ fontWeight: 700, color: '#10b981' }}>{fCur(approveSalaryModal.item.tongthunhap)} ₫</span>
+                         </div>
+                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ color: '#64748b' }}>Tổng khấu trừ:</span>
+                            <span style={{ fontWeight: 700, color: '#ef4444' }}>{fCur(approveSalaryModal.item.tongkhautru)} ₫</span>
+                         </div>
+                         <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 800, color: '#0f172a' }}>Thực nhận chi trả:</span>
+                            <span style={{ fontWeight: 900, color: '#2563eb', fontSize: '1.2rem' }}>{fCur(approveSalaryModal.item.thucnhan)} ₫</span>
+                         </div>
+                      </div>
+
+                      <div>
+                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Chọn nguồn quỹ / Ví thanh toán:</label>
+                         <select
+                            value={approveSalaryModal.wallet}
+                            onChange={(e) => setApproveSalaryModal(prev => ({ ...prev, wallet: e.target.value }))}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem' }}
+                         >
+                            {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                            {walletsConfig.map(w => (
+                               <option key={w.id} value={w.name}>{w.name}</option>
+                            ))}
+                         </select>
+                      </div>
+                   </div>
+                   <div className="fm-modal-footer" style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#f8fafc', flexShrink: 0 }}>
+                      <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Hủy</button>
+                      <button onClick={async () => {
+                         try {
+                            setLoading(true);
+                            const slip = approveSalaryModal.item;
+                            const targetWallet = approveSalaryModal.wallet || walletsConfig[0]?.name || 'Tiền mặt';
+                            const idField = slip.maphieuluong ? 'maphieuluong' : 'id';
+                            const idVal = slip.maphieuluong || slip.id;
+
+                            let luongRes = await supabase
+                               .from('tbl_luong')
+                               .update({
+                                  trangthai: 'Đã chi',
+                                  hinhthuc: targetWallet,
+                                  ngayduyet: new Date().toISOString(),
+                                  nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
+                               })
+                               .eq(idField, idVal);
+
+                            if (luongRes.error && (luongRes.error.message || '').toLowerCase().includes('schema cache')) {
+                               luongRes = await baseSupabase
+                                  .from('tbl_luong')
+                                  .update({
+                                     trangthai: 'Đã chi',
+                                     hinhthuc: targetWallet,
+                                     ngayduyet: new Date().toISOString(),
+                                     nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
+                                  })
+                                  .eq(idField, idVal);
+                            }
+
+                            if (luongRes.error) throw luongRes.error;
+
+                            const maphieuchi = await generateId('tbl_phieuchi', 'maphieuchi', 'PC', 4);
+                            const { error: chiErr } = await supabase
+                               .from('tbl_phieuchi')
+                               .insert([{
+                                  maphieuchi,
+                                  loaiphieu: 'Chi',
+                                  hangmucchi: 'Chi lương nhân viên',
+                                  chiphi: pCur(slip.thucnhan),
+                                  mota: `[CHI LƯƠNG] Thanh toán lương tháng ${slip.thang} cho NV: ${slip.tennv} (${slip.manv}) - Mã phiếu lương: ${idVal}`,
+                                  hinhthuc: targetWallet,
+                                  ngaylap: formatLocalDate(new Date()),
+                                  nguoilap: currentUser?.tennv || currentUser?.manv || 'Quản lý',
+                                  trangthai: 'Đã duyệt'
+                               }]);
+
+                            if (chiErr) throw chiErr;
+
+                            await insertLog(`[DUYỆT CHI LƯƠNG] Mã phiếu: ${idVal} | NV: ${slip.tennv} | Số tiền: ${fCur(slip.thucnhan)}đ | Ví chi: ${targetWallet}`);
+                            alert(`Đã duyệt chi lương thành công cho NV ${slip.tennv}! Phiếu chi ${maphieuchi} đã được tạo tự động.`);
+
+                            setApproveSalaryModal({ isOpen: false, item: null, wallet: '' });
+                            fetchData();
+                         } catch (err) {
+                            console.error('Lỗi duyệt chi lương:', err);
+                            alert('Lỗi duyệt chi lương: ' + (err.message || 'Lỗi không xác định'));
+                         } finally {
+                            setLoading(false);
+                         }
+                      }} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Xác nhận Duyệt Chi</button>
+                   </div>
+                </div>
+             </div>,
+             document.body
+          )}
+
+          {/* VIEW / PRINT SALARY SLIP MODAL */}
+          {viewSalarySlipModal.isOpen && viewSalarySlipModal.item && createPortal(
+            <div className="fm-modal-overlay print-salary-slip-modal" style={{ zIndex: 3000 }}>
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '750px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#ffffff', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)' }}>
+                  <div className="fm-modal-header no-print" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#ffffff' }}>
+                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Chi Tiết Phiếu Lương #{viewSalarySlipModal.item.maphieuluong || viewSalarySlipModal.item.id}</h3>
+                     <button onClick={() => setViewSalarySlipModal({ isOpen: false, item: null })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: '4px' }}><X size={20} /></button>
+                  </div>
+                  <div className="fm-modal-body" style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+                     <div className="print-salary-slip-paper" style={{ border: '2px solid #000', padding: '0', background: 'white', fontFamily: 'Arial, sans-serif', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ background: '#b4c6e7', padding: '10px', textAlign: 'center', borderBottom: '2px solid #000' }}>
+                           <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#000' }}>PHIẾU LƯƠNG NHÂN VIÊN - {(config?.tencongty || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
                         </div>
-                     </div>
-                  )}
-               </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                           <tbody>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', width: '40%' }}>Tháng</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.thang}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{viewSalarySlipModal.item.manv}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{viewSalarySlipModal.item.tennv}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.chucvu}</td></tr>
 
-               {/* FOOTER */}
-               <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div style={{ lineHeight: '1.6' }}>
-                     Facebook: {config?.tencongty}<br />
-                     Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien}</b>
+                              <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.luongcoban)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.chuyencan)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_bhxh)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_trachnhiem)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_dilai)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_chuyenmon)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_khac)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.thuongle)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tangluong)} ₫</td></tr>
+                              <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(viewSalarySlipModal.item.tongthunhap)} ₫</td></tr>
+
+                              <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_bhxh)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tamung)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_khac)} ₫</td></tr>
+                              <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(viewSalarySlipModal.item.tongkhautru)} ₫</td></tr>
+
+                              <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(viewSalarySlipModal.item.thucnhan)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{viewSalarySlipModal.item.bangchu || (READ_NUMBER_VN(pCur(viewSalarySlipModal.item.thucnhan)) + ' đồng')}</td></tr>
+                           </tbody>
+                        </table>
+                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
-                     (Xác nhận)
+                  <div className="fm-modal-footer no-print" style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#ffffff', flexShrink: 0 }}>
+                     <button onClick={() => setViewSalarySlipModal({ isOpen: false, item: null })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Đóng</button>
+                     <button onClick={() => { window.print(); }} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}><Printer size={16} /> In Phiếu</button>
                   </div>
                </div>
-            </div>
-         </div>
+            </div>,
+            document.body
+         )}
 
 </div>
    );

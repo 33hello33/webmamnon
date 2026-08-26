@@ -708,7 +708,7 @@
 }
 
 @media print {
-  body>*:not(.print-a5-receipt) {
+  body > *:not(.print-a5-receipt):not(.print-pay-slip-a4):not(.print-salary-slip-modal) {
     display: none !important;
   }
 

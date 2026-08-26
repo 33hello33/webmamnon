@@ -43,6 +43,7 @@ import ConfigManager from './components/ConfigManager';
 import Statistics from './components/Statistics';
 import ChatManager from './components/ChatManager';
 import SystemLogs from './components/SystemLogs';
+import TimesheetManager from './components/TimesheetManager';
 
 const ALL_TABS = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard, color: '#6366f1', bg: '#e0e7ff' },
@@ -56,6 +57,7 @@ const ALL_TABS = [
       { id: 'hoadon', label: 'QL phiếu thu HP', dotColor: '#3b82f6' },
       { id: 'doanhthudukien', label: 'Doanh thu dự kiến', dotColor: '#06b6d4' },
       { id: 'phieuchi', label: 'QL phiếu thu/chi', dotColor: '#ef4444' },
+      { id: 'phieuluong', label: 'QL phiếu lương', dotColor: '#ec4899' },
       { id: 'nhapkho', label: 'QL Nhập kho', dotColor: '#f59e0b' },
       { id: 'billhang', label: 'QL bill hàng', dotColor: '#8b5cf6' }
     ]
@@ -89,6 +91,7 @@ const ALL_TABS = [
   },
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2' },
   { id: 'chat', label: 'Phụ huynh', icon: MessageSquare, color: '#0068ff', bg: '#e6f0ff' },
+  { id: 'timesheet', label: 'Chấm công', icon: Clock, color: '#f59e0b', bg: '#fef3c7' },
   { id: 'employees', label: 'Nhân viên', icon: Users, color: '#14b8a6', bg: '#ccfbf1' },
   { id: 'tasks', label: 'Công việc', icon: Briefcase, color: '#f97316', bg: '#ffedd5' },
   { id: 'statistics', label: 'Thống kê', icon: BarChart3, color: '#3b82f6', bg: '#dbeafe' },
@@ -828,10 +831,10 @@ function Dashboard() {
         </div>
         <div className="card-container">
           <div className="placeholder-card" style={{
-            padding: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
-            background: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
-            boxShadow: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
-            border: ['finances', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
+            padding: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
+            background: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
+            boxShadow: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
+            border: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'statistics' && <Statistics />}
@@ -859,6 +862,7 @@ function Dashboard() {
             {currentTab?.id === 'students' && <StudentManager activeSubTab={['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg'].includes(activeSubTab) ? activeSubTab : 'classes'} currentUser={user} />}
             {currentTab?.id === 'attendance_menu' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
+            {currentTab?.id === 'timesheet' && <TimesheetManager currentUser={user} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
             {currentTab?.id === 'system_logs' && <SystemLogs />}
             {currentTab?.id === 'config' && <ConfigManager />}

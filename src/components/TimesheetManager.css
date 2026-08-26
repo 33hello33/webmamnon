@@ -1,830 +1,678 @@
-.timesheet-manager {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+/* Timesheet Page Container */
+.timesheet-page {
+  padding: 1.5rem;
   background: #f8fafc;
+  min-height: auto;
 }
 
-.tm-layout {
+.ts-container {
   display: flex;
   gap: 1.5rem;
-  padding: 1.5rem;
-  height: calc(100vh - 100px);
-  min-height: 0;
+  height: auto;
+  min-height: auto;
+  align-items: flex-start;
 }
 
-/* Left Pane */
-.tm-left-pane {
-  flex: 0 0 300px;
+/* Left Panel - Employee Selection Sticky */
+.ts-left-panel {
+  width: 320px;
+  flex-shrink: 0;
   background: white;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.05);
   overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 1.5rem;
+  max-height: calc(100vh - 90px);
 }
 
-.tm-search {
-  padding: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.ts-panel-header {
+  padding: 1rem;
   border-bottom: 1px solid #f1f5f9;
   background: #f8fafc;
 }
 
-.tm-search input {
+.ts-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: white;
+  border: 1px solid #cbd5e1;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.ts-search-box:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.ts-search-box input {
   border: none;
-  background: transparent;
-  width: 100%;
   outline: none;
-  font-size: 0.95rem;
+  width: 100%;
+  font-size: 0.9rem;
+  color: #1e293b;
   font-weight: 500;
 }
 
-.tm-employee-list {
+.ts-employee-list {
   flex: 1;
   overflow-y: auto;
   padding: 0.75rem;
 }
 
-.tm-employee-card {
-  padding: 1rem;
+.ts-emp-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
   border-radius: 12px;
   cursor: pointer;
-  transition: 0.2s;
   border: 1px solid transparent;
-  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+  margin-bottom: 0.4rem;
 }
 
-.tm-employee-card:hover {
+.ts-emp-card:hover {
   background: #f1f5f9;
+  transform: translateX(2px);
 }
 
-.tm-employee-card.active {
+.ts-emp-card.active {
   background: #eff6ff;
-  border-color: #bfdbfe;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05);
+  border-color: #93c5fd;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
 }
 
-.tm-card-name {
+.ts-emp-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #3730a3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.ts-emp-card.active .ts-emp-avatar {
+  background: #2563eb;
+  color: white;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.ts-emp-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ts-emp-name {
   font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tm-card-sub {
-  font-size: 0.8rem;
+.ts-emp-sub {
+  font-size: 0.78rem;
   color: #64748b;
+  margin-top: 2px;
 }
 
-/* Right Pane */
-.tm-right-pane {
+.ts-empty-list {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+/* Right Panel - Natural Full Height (No Inner Scroll) */
+.ts-right-panel {
   flex: 1;
   background: white;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.05);
+  overflow: visible;
+  height: auto;
 }
 
-.tm-empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 3rem;
-  color: #64748b;
-}
-
-.tm-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.tm-header {
-  padding: 1.5rem 2rem;
+/* Toolbar */
+.ts-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  border-bottom: 1px solid #f1f5f9;
-  background: #f8fafc;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 1rem;
+  flex-shrink: 0;
 }
 
-.tm-title {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 0;
-}
-
-.tm-global-month {
-  background: white;
-  padding: 4px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.tm-actions {
+.ts-month-picker {
   display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f8fafc;
+  padding: 0.4rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.ts-btn-month {
+  border: none;
+  background: white;
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.ts-btn-month:hover {
+  background: #2563eb;
+  color: white;
+}
+
+.ts-month-display {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.ts-actions {
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
 }
 
-/* Section Matching Invoice style */
-.im-section {
-  border-bottom: 1px dashed #e2e8f0;
+.ts-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 0.65rem 1.35rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+  transition: all 0.2s ease;
 }
 
-.im-section-title {
-  font-size: 1.1rem;
-  font-weight: 800;
+.ts-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+}
+
+.ts-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ts-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  padding: 0.65rem 1.1rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.ts-btn-secondary:hover {
+  background: #f8fafc;
   color: #0f172a;
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 0.6rem;
-  margin-bottom: 1.25rem;
+  border-color: #94a3b8;
+}
+
+/* Pay Sheet Wrapper - Natural Full Height */
+.ts-sheet-wrapper {
+  overflow: visible;
+  padding: 1.5rem 1.5rem 3rem 1.5rem;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: auto;
+}
+
+/* Ultra-Modern Pay Sheet Card - Full Height */
+.ts-pay-sheet {
+  background: white;
+  width: 100%;
+  max-width: 820px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  padding: 0;
+  font-family: inherit;
+  color: #0f172a;
+  overflow: visible;
+  transition: all 0.3s ease;
+  margin-bottom: 0;
+}
+
+.ts-sheet-header {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  padding: 1.1rem 1.5rem;
+  text-align: center;
+  position: relative;
+}
+
+.ts-sheet-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+/* Grid Table */
+.ts-grid-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.ts-grid-table th,
+.ts-grid-table td {
+  border-bottom: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+  padding: 5px 12px;
+  font-size: 0.9rem;
+  vertical-align: middle;
+  transition: background 0.15s ease;
+}
+
+.ts-grid-table td:last-child {
+  border-right: none;
+}
+
+.ts-grid-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ts-cell-label {
+  width: 45%;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+}
+
+.ts-cell-input-td {
+  width: 55%;
+  background: #ffffff;
+  padding: 3px 8px !important;
+}
+
+/* Modern Input Controls */
+.ts-input-raw {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  background: #ffffff;
+  padding: 4px 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.ts-input-raw:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  background: #ffffff;
+}
+
+.ts-input-num {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  background: #ffffff;
+  padding: 4px 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  text-align: right;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  transition: all 0.2s ease;
+}
+
+.ts-input-num:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  background: #ffffff;
+}
+
+.ts-select-raw {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+  background: #ffffff;
+  padding: 6px 10px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #0f172a;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.ts-select-raw:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Section Header Rows */
+.ts-section-header td {
+  font-weight: 800;
+  text-align: left;
+  padding: 10px 14px !important;
+  font-size: 0.92rem;
+  letter-spacing: 0.6px;
+}
+
+/* Khoản Thu Header */
+.ts-section-header:first-of-type td {
+  background: linear-gradient(90deg, #dcfce7 0%, #ffffff 100%);
+  color: #15803d;
+  border-left: 5px solid #10b981;
+}
+
+/* Khoản Khấu Trừ Header */
+.ts-section-header:last-of-type td {
+  background: linear-gradient(90deg, #ffe4e6 0%, #ffffff 100%);
+  color: #be123c;
+  border-left: 5px solid #f43f5e;
+}
+
+/* Row Totals */
+.ts-row-total td {
+  font-weight: 800;
+}
+
+.ts-row-total:nth-of-type(1) td {
+  background: #f0fdf4;
+  border-left: 5px solid #10b981;
+}
+
+.ts-row-total:nth-of-type(2) td {
+  background: #fff1f2;
+  border-left: 5px solid #f43f5e;
+}
+
+/* THỰC NHẬN Net Amount Hero Row */
+.ts-row-net td {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  padding: 12px 14px !important;
+  border-top: 2px solid #3b82f6;
+  border-bottom: 2px solid #3b82f6;
+}
+
+.ts-row-net .ts-cell-label {
+  color: #1e40af;
+  font-weight: 800;
+}
+
+.ts-row-net .ts-cell-input-td {
+  color: #1d4ed8;
+  font-weight: 900;
+  background: transparent;
+}
+
+.ts-inline-flex {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ts-badge-status {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: white;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.im-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
-}
+.bg-success { background: #10b981; }
+.bg-warning { background: #f59e0b; }
 
-.im-field label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  margin-bottom: 0.25rem;
-  display: block;
-}
-
-.val-text {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: #334155;
-}
-
-/* Table Styles */
-.tm-table-wrapper {
-  padding: 1.5rem 2rem;
-}
-
-.tm-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.tm-table th {
-  padding: 12px 16px;
-  text-align: left;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  border-bottom: 2px solid #f1f5f9;
-}
-
-.tm-table td {
-  padding: 16px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-
-.tm-salary-input {
+/* Signature block */
+.ts-signature-row td {
+  padding: 20px 14px 28px 14px !important;
+  vertical-align: top;
   background: #f8fafc;
-  outline: none;
-  transition: 0.2s;
 }
 
-.tm-salary-input:focus {
-  background: white;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+.ts-sig-col {
+  text-align: center;
 }
 
-/* Badges */
-.tm-badge-success {
-  background: #dcfce7;
-  color: #16a34a;
-  padding: 0.35rem 0.75rem;
-  border-radius: 99px;
-  font-size: 0.75rem;
-  font-weight: 700;
+.ts-sig-title {
+  margin-bottom: 45px;
+  color: #475569;
 }
 
-.tm-badge-warning {
-  background: #fef9c3;
-  color: #a16207;
-  padding: 0.35rem 0.75rem;
-  border-radius: 99px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  display: inline-block;
-}
-
-.tm-mobile-cards {
-  display: none;
-}
-
-/* Buttons */
-.tm-btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: #3b82f6;
-  color: white;
+.ts-sig-input {
   border: none;
-  padding: 0.6rem 1.25rem;
-  border-radius: 10px;
+  border-bottom: 2px dashed #94a3b8;
+  text-align: center;
   font-weight: 700;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.tm-btn-outline {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: white;
-  color: #64748b;
-  border: 1px solid #cbd5e1;
-  padding: 0.6rem 1.25rem;
-  border-radius: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.tm-btn-icon {
+  outline: none;
+  width: 75%;
+  padding: 4px;
   background: transparent;
-  border: none;
-  padding: 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: #0f172a;
 }
 
-.tm-btn-icon:hover {
-  background: #f1f5f9;
+.ts-sig-input:focus {
+  border-bottom-color: #2563eb;
 }
 
-/* Summary Section */
-.tm-summary-section {
-  padding: 2rem;
-  border-top: 2px dashed #e2e8f0;
-  background: #f8fafc;
-  display: flex;
-  gap: 2rem;
-}
-
-.tm-extras-dynamic {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-}
-
-.tm-input-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.tm-input-wrapper {
-  display: flex;
-  align-items: center;
-  background: white;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0 10px;
-}
-
-.tm-input-wrapper input {
-  border: none;
-  padding: 10px 0;
-  outline: none;
-  width: 120px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.tm-total {
-  flex: 0 0 300px;
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.tm-total span {
-  font-size: 0.85rem;
-  color: #64748b;
-  font-weight: 600;
-}
-
-/* Calendar Modal */
-.tm-modal-overlay {
+/* Modals */
+.ts-modal-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(5px);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  z-index: 999999;
   padding: 1rem;
 }
 
-.tm-calendar-modal {
+.ts-modal-card {
   background: white;
+  border-radius: 20px;
+  padding: 2rem;
+  max-width: 480px;
   width: 100%;
-  max-width: 600px;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  color: #1e293b;
-}
-
-.tm-close-btn {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-weight: 700;
-  color: #475569;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.tm-close-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
-}
-
-.tm-cal-header {
-  padding: 0.6rem 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.tm-cal-controls {
-  padding: 0.25rem 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-}
-
-.tm-cal-controls button {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: 0.2s;
-  color: #1e293b;
-}
-
-.tm-cal-controls button:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.tm-current-month {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #1e293b !important;
-}
-
-.tm-cal-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  padding: 0.25rem 0.75rem;
-  gap: 4px;
-}
-
-.tm-cal-day-header {
   text-align: center;
-  padding: 2px;
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: #64748b;
-  text-transform: uppercase;
-}
-
-.tm-cal-cell {
-  aspect-ratio: 1.5;
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
-  padding: 2px 4px;
-  cursor: pointer;
-  transition: 0.2s;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  min-height: 48px;
-}
-
-.tm-cal-cell:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.tm-cal-cell.active-teach {
-  background: #dcfce7;
-  border-color: #86efac;
-}
-
-.tm-cal-cell.active-sub {
-  background: #dbeafe;
-  border-color: #93c5fd;
-}
-
-.tm-cal-cell.other-sub {
-  background: #fef9c3;
-  border-color: #fde047;
-}
-
-.tm-cal-cell.holiday-lock {
-  background: #fff1f2;
-  border-color: #fda4af;
-  color: #be123c;
-}
-
-.tm-current-month {
-  color: #1e293b;
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
-}
-
-.tm-day-num {
-  font-weight: 700;
-  font-size: 0.75rem;
-  color: #334155;
-}
-
-.tm-status-text {
-  font-size: 0.55rem;
-  font-weight: 700;
-  line-height: 1;
-  color: #475569;
-  display: none; /* Hide status text to save space - color is enough */
-}
-
-.tm-cal-footer {
-  padding: 0.5rem 1rem;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
   align-items: center;
+  gap: 1rem;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+  animation: modalIn 0.25s ease-out;
 }
 
-/* Mobile Responsiveness */
-@media (max-width: 991px) {
-  .tm-layout {
-    flex-direction: column;
-    padding: 0;
-    height: auto;
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.ts-modal-card h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #0f172a;
+}
+
+.ts-modal-card p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.ts-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.ts-modal-actions button {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Print Hide on Screen */
+.print-pay-slip-a4 {
+  display: none;
+}
+
+/* Formal A4 Print Styling Override */
+@media print {
+  @page {
+    size: A4 portrait !important;
+    margin: 15mm !important;
   }
 
-  .tm-left-pane {
-    width: 100%;
-    flex: none;
-    border-radius: 0;
-    height: 40vh;
-  }
-
-  .tm-right-pane {
-    display: none;
-    width: 100%;
-    border-radius: 0;
-  }
-
-  .mobile-show-details .tm-left-pane {
-    display: none;
-  }
-
-  .mobile-show-details .tm-right-pane {
-    display: flex;
-  }
-
-  .tm-table-wrapper {
+  body > *:not(.print-pay-slip-a4):not(.print-a5-receipt):not(.print-salary-slip-modal) {
     display: none !important;
   }
 
-  .tm-mobile-cards {
-    display: flex !important;
-    flex-direction: column;
-    padding: 1rem;
-    gap: 1rem;
+  body, html {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  .tm-header {
-    flex-direction: column;
-    padding: 1rem 1.5rem;
-    gap: 1.25rem;
-    align-items: stretch;
+  .print-pay-slip-a4 {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    background: white !important;
+    color: black !important;
   }
 
-  .tm-title {
-    font-size: 1.1rem;
+  .print-pay-slip-a4 * {
+    visibility: visible !important;
   }
 
-  .tm-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
+  .print-pay-slip-a4 .p-header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 10px;
   }
 
-  .tm-btn-outline, .tm-btn-primary {
-    justify-content: center;
-    padding: 0.8rem 0.5rem;
-    font-size: 0.85rem;
-    white-space: nowrap;
-  }
-
-  .tm-class-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 1rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  }
-
-  .tm-class-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 0.75rem;
-    border-bottom: 1px solid #f1f5f9;
-    padding-bottom: 0.5rem;
-  }
-
-  .tm-class-name {
+  .print-pay-slip-a4 .p-header h3 {
+    margin: 0;
+    font-size: 16pt;
     font-weight: 800;
-    color: #1e293b;
-    font-size: 1.05rem;
+    text-transform: uppercase;
   }
 
-  .tm-class-id {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-top: 2px;
+  .print-pay-slip-a4 .p-header p {
+    margin: 6px 0 0 0;
+    font-size: 13pt;
+    font-weight: bold;
   }
 
-  .tm-class-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.5rem 0;
+  .print-pay-slip-a4 .p-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 25px;
   }
 
-  .tm-stat {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.95rem;
-  }
-
-  .tm-stat label {
-    color: #64748b;
-    font-weight: 700;
-  }
-
-  .tm-stat input {
-    width: 140px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
+  .print-pay-slip-a4 .p-table td {
+    border: 1px solid #000;
     padding: 8px 12px;
+    font-size: 11pt;
+  }
+
+  .print-pay-slip-a4 .p-section-header td {
+    background: #f1f5f9 !important;
+    font-weight: bold;
+    font-size: 11pt;
+  }
+
+  .print-pay-slip-a4 .p-total-row td {
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-net-row td {
+    font-weight: bold;
+    font-size: 13pt;
+    background: #f8fafc !important;
+  }
+
+  .print-pay-slip-a4 .p-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 40px;
+    page-break-inside: avoid;
+  }
+
+  .print-pay-slip-a4 .p-sig {
+    text-align: center;
+    width: 45%;
+  }
+
+  .text-right {
     text-align: right;
-    font-weight: 800;
-    color: #3b82f6;
-    outline: none;
-    background: #f8fafc;
   }
-
-  .tm-btn-calendar-mobile {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 10px;
-    color: #2563eb;
-    font-weight: 800;
-    cursor: pointer;
-    transition: 0.2s;
-    margin-top: 0.5rem;
+  .fw-bold {
+    font-weight: bold;
   }
-
-  .tm-btn-calendar-mobile:active {
-    transform: scale(0.97);
+  .fst-italic {
+    font-style: italic;
   }
-
-  /* Shrink Calendar on Mobile */
-  .tm-modal-overlay {
-    padding: 0.5rem;
-  }
-
-  .tm-calendar-modal {
-    max-height: 98vh;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .tm-cal-header {
-    padding: 1rem;
-  }
-
-  .tm-cal-header h3 {
-    font-size: 1rem;
-  }
-
-  .tm-cal-controls {
-    padding: 0.5rem;
-    gap: 1rem;
-  }
-
-  .tm-cal-grid {
-    padding: 0.5rem;
-    gap: 4px;
-  }
-
-  .tm-cal-day-header {
-    padding: 4px;
-    font-size: 0.65rem;
-  }
-
-  .tm-cal-cell {
-    padding: 4px;
-    border-radius: 8px;
-    gap: 2px;
-  }
-
-  .tm-day-num {
-    font-size: 0.75rem;
-  }
-
-  .tm-status-text {
-    font-size: 0.55rem;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .tm-cal-controls h2 {
-    font-size: 1rem !important;
-  }
-
-  .tm-cal-controls .tm-btn-icon svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .tm-cal-header > div > div {
-    font-size: 0.75rem !important;
-  }
-
-  .tm-cal-header h3 {
-    font-size: 0.85rem !important;
-  }
-
-  .tm-cal-header .tm-btn-outline {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
-    border-radius: 8px;
-  }
-
-  .tm-cal-footer {
-    padding: 0.75rem 1rem;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .tm-cal-footer .tm-btn-primary {
-    width: 100%;
-    justify-content: center;
-    order: -1;
-  }
-}
-
-/* Re-added dynamic extras styling */
-.tm-extra-label-input {
-  transition: 0.2s;
-  padding: 2px 4px;
-  border-radius: 4px;
-  border: 1px solid transparent !important;
-  background: transparent;
-  width: 100%;
-  font-family: inherit;
-}
-
-.tm-extra-label-input:hover {
-  background: #f1f5f9 !important;
-  border-color: #e2e8f0 !important;
-}
-
-.tm-extra-label-input:focus {
-  background: white !important;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-  border: 1px solid #3b82f6 !important;
-}
-
-.tm-note-section textarea {
-  transition: 0.2s;
-  border: 1px solid #cbd5e1;
-}
-
-.tm-note-section textarea:focus {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* --- Kindergarten Theme Overrides --- */
-[data-theme="kindergarten"] .tm-left-pane, 
-[data-theme="kindergarten"] .tm-right-pane {
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 20px !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.02) !important;
-  background: #ffffff !important;
-}
-
-[data-theme="kindergarten"] .tm-search {
-  background: #ffffff !important;
-  border-bottom: 1px solid #f1f5f9 !important;
-}
-
-[data-theme="kindergarten"] .tm-search input {
-  border: none !important;
-  background: transparent !important;
-  outline: none !important;
-}
-
-[data-theme="kindergarten"] .tm-employee-card.active {
-  background: #fff1f2 !important;
-  border-color: #f43f5e !important;
-}
-
-[data-theme="kindergarten"] .tm-employee-card.active .tm-card-name {
-  color: #f43f5e !important;
-}
-
-[data-theme="kindergarten"] .tm-header {
-  background: #ffffff !important;
-  border-bottom: 1px solid #f1f5f9 !important;
-}
-
-[data-theme="kindergarten"] .tm-title {
-  color: #1e293b !important;
-  font-weight: 800 !important;
-}
-
-[data-theme="kindergarten"] .tm-btn-primary {
-  background: #f43f5e !important;
-  border-radius: 12px !important;
-  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.2) !important;
-}
-
-[data-theme="kindergarten"] .tm-summary-section {
-  background: #ffffff !important;
-  border-top: 2px dashed #f1f5f9 !important;
-}
-
-[data-theme="kindergarten"] .tm-calendar-modal {
-  border-radius: 24px !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.1) !important;
-}
-
-[data-theme="kindergarten"] .tm-cal-header {
-  background: #ffffff !important;
-  border-bottom: 1px solid #f1f5f9 !important;
 }
