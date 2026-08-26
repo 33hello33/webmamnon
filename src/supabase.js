@@ -4,6 +4,11 @@ const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 export const SUPABASE_SCHEMA = process.env.REACT_APP_SUPABASE_SCHEMA || 'public';
 
+export const baseSupabase = createClient(
+   supabaseUrl || 'https://placeholder.supabase.co',
+   supabaseKey || 'placeholder-key'
+);
+
 export const supabase = createClient(
    supabaseUrl || 'https://placeholder.supabase.co',
    supabaseKey || 'placeholder-key',

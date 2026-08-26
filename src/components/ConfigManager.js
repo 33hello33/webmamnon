@@ -119,7 +119,7 @@ const ConfigManager = () => {
 
 
       setMsg({ type: 'success', text: 'Đã lưu cấu hình hệ thống thành công!' });
-      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tentruong || '_'}, SĐT: ${formData.sdt || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'})`);
+      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tencongty || '_'}, SĐT: ${formData.sdt || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'})`);
       refreshConfig();
     } catch (err) {
       console.error(err);
