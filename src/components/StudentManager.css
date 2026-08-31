@@ -118,12 +118,20 @@
   border-radius: 12px;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  cursor: pointer;
+  user-select: none;
 }
 
 .stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card.active-filter {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+  background: #ffffff;
 }
 
 .stat-icon {

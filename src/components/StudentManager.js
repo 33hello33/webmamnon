@@ -45,6 +45,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'dang_hoc' | 'da_nghi'
 
   // Modals & Selections
   const [selectedStudentId, setSelectedStudentId] = useState(null);
@@ -422,7 +423,16 @@ export default function StudentManager({ activeSubTab, currentUser }) {
       (s.sdtba && s.sdtba.includes(searchTerm)) ||
       (s.sdtme && s.sdtme.includes(searchTerm));
     const matchClass = classFilter ? (s.malop === classFilter) : true;
-    return matchSearch && matchClass;
+    
+    const st = (s.trangthai || '').trim().toLowerCase();
+    let matchStatus = true;
+    if (statusFilter === 'dang_hoc') {
+      matchStatus = st === 'đang học';
+    } else if (statusFilter === 'da_nghi') {
+      matchStatus = st === 'đã nghỉ';
+    }
+
+    return matchSearch && matchClass && matchStatus;
   });
 
   const sortedStudents = [...filteredStudents].sort((a, b) => {
@@ -625,13 +635,23 @@ export default function StudentManager({ activeSubTab, currentUser }) {
   };
 
   const renderStudentsTab = () => {
-    // Calculate stats based on filtered list to be more accurate to user view
-    const total = filteredStudents.length;
-    const dangHoc = filteredStudents.filter(s => {
+    // Base list matching search & class filter to compute base totals
+    const baseList = students.filter(s => {
+      const searchStr = searchTerm.toLowerCase();
+      const matchSearch = (s.tenhv && s.tenhv.toLowerCase().includes(searchStr)) ||
+        (s.mahv && s.mahv.toLowerCase().includes(searchStr)) ||
+        (s.sdtba && s.sdtba.includes(searchTerm)) ||
+        (s.sdtme && s.sdtme.includes(searchTerm));
+      const matchClass = classFilter ? (s.malop === classFilter) : true;
+      return matchSearch && matchClass;
+    });
+
+    const total = baseList.length;
+    const dangHoc = baseList.filter(s => {
       const st = (s.trangthai || '').trim().toLowerCase();
       return st === 'đang học';
     }).length;
-    const daNghi = filteredStudents.filter(s => {
+    const daNghi = baseList.filter(s => {
       const st = (s.trangthai || '').trim().toLowerCase();
       return st === 'đã nghỉ';
     }).length;
@@ -640,14 +660,23 @@ export default function StudentManager({ activeSubTab, currentUser }) {
       <div className="students-tab-content animate-fade-in">
         {/* Statistics */}
         <div className="stats-container">
-          <div className="stat-card total">
+          <div
+            className={`stat-card total ${statusFilter === 'all' ? 'active-filter' : ''}`}
+            onClick={() => setStatusFilter('all')}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="stat-icon"><Users size={24} /></div>
             <div className="stat-info">
               <span className="stat-label">Tổng Học Sinh</span>
               <span className="stat-value">{total}</span>
             </div>
           </div>
-          <div className="stat-card active">
+
+          <div
+            className={`stat-card active ${statusFilter === 'dang_hoc' ? 'active-filter' : ''}`}
+            onClick={() => setStatusFilter('dang_hoc')}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="stat-icon"><BookOpen size={24} /></div>
             <div className="stat-info">
               <span className="stat-label">Đang Học</span>
@@ -655,7 +684,11 @@ export default function StudentManager({ activeSubTab, currentUser }) {
             </div>
           </div>
 
-          <div className="stat-card inactive">
+          <div
+            className={`stat-card inactive ${statusFilter === 'da_nghi' ? 'active-filter' : ''}`}
+            onClick={() => setStatusFilter('da_nghi')}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="stat-icon"><Users size={24} color="#ef4444" /></div>
             <div className="stat-info">
               <span className="stat-label">Đã Nghỉ</span>
