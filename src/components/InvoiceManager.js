@@ -240,6 +240,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const [classes, setClasses] = useState([]);
    const [employees, setEmployees] = useState([]);
    const [searchTerm, setSearchTerm] = useState('');
+   const [sortState, setSortState] = useState({ field: null, dir: 'asc' }); // field: 'ten' | 'lop' | 'mahv', dir: 'asc' | 'desc'
    const [selectedStudent, setSelectedStudent] = useState(null);
    const [activeClass, setActiveClass] = useState(null);
    const [classTeacher, setClassTeacher] = useState(null);
@@ -1595,11 +1596,42 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       }
    };
 
-   const filteredStudents = students.filter(s =>
-      (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.sdt && s.sdt.includes(searchTerm)) ||
-      (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
-   );
+   const handleSort = (field) => {
+      setSortState(prev => {
+         if (prev.field === field) {
+            return { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+         }
+         return { field, dir: 'asc' };
+      });
+   };
+
+   const filteredStudents = students
+      .filter(s =>
+         (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
+         (s.sdt && s.sdt.includes(searchTerm)) ||
+         (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+      .sort((a, b) => {
+         if (!sortState.field) return 0;
+         let valA = '';
+         let valB = '';
+
+         if (sortState.field === 'ten') {
+            valA = (a.tenhv || '').trim();
+            valB = (b.tenhv || '').trim();
+         } else if (sortState.field === 'lop') {
+            const classNamesA = (a.malop_list || []).map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+            const classNamesB = (b.malop_list || []).map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
+            valA = classNamesA.trim();
+            valB = classNamesB.trim();
+         } else if (sortState.field === 'mahv') {
+            valA = (a.mahv || '').trim();
+            valB = (b.mahv || '').trim();
+         }
+
+         const cmp = valA.localeCompare(valB, 'vi', { sensitivity: 'base', numeric: true });
+         return sortState.dir === 'asc' ? cmp : -cmp;
+      });
 
    useEffect(() => {
       if (!focusStudentId || students.length === 0) return;
@@ -1694,6 +1726,29 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                />
+            </div>
+            <div className="im-sort-bar">
+               <button
+                  type="button"
+                  className={`im-sort-btn ${sortState.field === 'ten' ? 'active' : ''}`}
+                  onClick={() => handleSort('ten')}
+               >
+                  Tên {sortState.field === 'ten' ? (sortState.dir === 'asc' ? '↑' : '↓') : ''}
+               </button>
+               <button
+                  type="button"
+                  className={`im-sort-btn ${sortState.field === 'lop' ? 'active' : ''}`}
+                  onClick={() => handleSort('lop')}
+               >
+                  Lớp {sortState.field === 'lop' ? (sortState.dir === 'asc' ? '↑' : '↓') : ''}
+               </button>
+               <button
+                  type="button"
+                  className={`im-sort-btn ${sortState.field === 'mahv' ? 'active' : ''}`}
+                  onClick={() => handleSort('mahv')}
+               >
+                  Mã HV {sortState.field === 'mahv' ? (sortState.dir === 'asc' ? '↑' : '↓') : ''}
+               </button>
             </div>
             <div className="im-student-list">
                {filteredStudents.length > 0 ? filteredStudents.map(st => {
