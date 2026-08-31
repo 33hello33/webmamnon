@@ -3712,25 +3712,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                             if (luongRes.error) throw luongRes.error;
 
-                            const maphieuchi = await generateId('tbl_phieuchi', 'maphieuchi', 'PC', 4);
-                            const { error: chiErr } = await supabase
-                               .from('tbl_phieuchi')
-                               .insert([{
-                                  maphieuchi,
-                                  loaiphieu: 'Chi',
-                                  hangmucchi: 'Chi lương nhân viên',
-                                  chiphi: pCur(slip.thucnhan),
-                                  mota: `[CHI LƯƠNG] Thanh toán lương tháng ${slip.thang} cho NV: ${slip.tennv} (${slip.manv}) - Mã phiếu lương: ${idVal}`,
-                                  hinhthuc: targetWallet,
-                                  ngaylap: formatLocalDate(new Date()),
-                                  nguoilap: currentUser?.tennv || currentUser?.manv || 'Quản lý',
-                                  trangthai: 'Đã duyệt'
-                               }]);
-
-                            if (chiErr) throw chiErr;
 
                             await insertLog(`[DUYỆT CHI LƯƠNG] Mã phiếu: ${idVal} | NV: ${slip.tennv} | Số tiền: ${fCur(slip.thucnhan)}đ | Ví chi: ${targetWallet}`);
-                            alert(`Đã duyệt chi lương thành công cho NV ${slip.tennv}! Phiếu chi ${maphieuchi} đã được tạo tự động.`);
+                            alert(`Đã duyệt chi lương thành công cho NV ${slip.tennv}!`);
 
                             setApproveSalaryModal({ isOpen: false, item: null, wallet: '' });
                             fetchData();
