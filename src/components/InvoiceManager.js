@@ -414,7 +414,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                const node = document.getElementById('download-notice-node');
                if (node) {
                   const expectedNoticeId = downloadingNotice.mahd;
-                  // Ưu tiên qrUrl đã baked cache-buster; fallback cũng dùng cacheBust=true
                   const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig, true);
 
                   // Capture setup
@@ -425,23 +424,42 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
 
-                  // Force-reload QR img: xóa src rồi set lại để tránh trình duyệt dùng cache
+                  // === FIX TRIỆT ĐỂ CACHE QR ===
+                  // Fetch QR image hoàn toàn mới với cache:'no-store' → convert sang data URL
+                  // html-to-image sẽ không fetch lại (data: URL = embed sẵn) → không thể bị cache nhầm
                   if (expectedQrSrc) {
-                     const qrImgInit = node.querySelector('[data-role="notice-qr"]');
-                     if (qrImgInit) {
-                        qrImgInit.removeAttribute('src');
-                        await new Promise(r => setTimeout(r, 50));
-                        qrImgInit.setAttribute('src', expectedQrSrc);
+                     const qrImgEl = node.querySelector('[data-role="notice-qr"]');
+                     if (qrImgEl) {
+                        try {
+                           const resp = await fetch(expectedQrSrc, {
+                              cache: 'no-store',
+                              headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
+                           });
+                           const blob = await resp.blob();
+                           const qrDataUrl = await new Promise((res, rej) => {
+                              const reader = new FileReader();
+                              reader.onload = () => res(reader.result);
+                              reader.onerror = rej;
+                              reader.readAsDataURL(blob);
+                           });
+                           // Gán data URL trực tiếp — không còn CORS, không còn cache
+                           qrImgEl.removeAttribute('crossorigin');
+                           qrImgEl.src = qrDataUrl;
+                           await new Promise(r => setTimeout(r, 100));
+                        } catch (fetchErr) {
+                           // Nếu fetch thất bại, fallback: set src bình thường
+                           console.warn('QR fetch failed, fallback to src:', fetchErr);
+                           qrImgEl.removeAttribute('src');
+                           await new Promise(r => setTimeout(r, 50));
+                           qrImgEl.setAttribute('src', expectedQrSrc);
+                        }
                      }
                   }
 
+                  // Chờ data-notice-id khớp (không cần so qrSrc vì đã inject data URL)
                   for (let retry = 0; retry < 20; retry++) {
-                     const qrImg = node.querySelector('[data-role="notice-qr"]');
                      const noticeId = node.dataset.noticeId;
-                     const qrSrc = qrImg?.getAttribute('src') || '';
-                     if (noticeId === expectedNoticeId && (!expectedQrSrc || qrSrc === expectedQrSrc)) {
-                        break;
-                     }
+                     if (noticeId === expectedNoticeId) break;
                      await new Promise(r => setTimeout(r, 150));
                   }
 
@@ -452,17 +470,14 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }));
                   const qrImg = node.querySelector('[data-role="notice-qr"]');
                   if (qrImg?.decode) {
-                     try {
-                        await qrImg.decode();
-                     } catch (err) {
-                        // Ignore decode errors and rely on image completeness checks above.
-                     }
+                     try { await qrImg.decode(); } catch (_) { /* ignore */ }
                   }
                   await new Promise(requestAnimationFrame);
                   await new Promise(requestAnimationFrame);
-                  await new Promise(r => setTimeout(r, 600));
+                  await new Promise(r => setTimeout(r, 400));
 
-                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  // cacheBust:false vì QR img đã là data URL — không cần html-to-image fetch lại
+                  const dataUrl = await toPng(node, { cacheBust: false, backgroundColor: '#ffffff' });
 
                   // Restore hide
                   node.style.position = 'static';
@@ -1407,8 +1422,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             trutienan: formatCurrency(Math.round(actualMealRefund)),
             trutiendangoai: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
             sobuoinghiphep: studySummary?.nghiPhep || 0,
-            nhanvien: cashier,
-            phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null
+            nhanvien: cashier
          };
 
          const res = await supabase.from('tbl_thongbao').insert([insertData]);
