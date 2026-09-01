@@ -102,18 +102,20 @@ const getShortStudentName = (name) => {
    return parts.slice(-2).join(' ');
 };
 
-const getQRUrl = (hoaDon, walletsConfig) => {
+const getQRUrl = (hoaDon, walletsConfig, cacheBust = false) => {
    if (!walletsConfig || !hoaDon.hinhthuc) return null;
    const hinhThucTrim = String(hoaDon.hinhthuc).trim();
    const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
 
-      // Cải thiện nội dung chuyển khoản để chính xác và tránh nhầm lẫn
+      // Nội dung chuyển khoản: mã học viên + tên rút gọn
       const mahv = hoaDon.mahv || '';
-      const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || hoaDon.hoten || '');
+      const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || '');
       const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
-      return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      const base = `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      // Thêm cache-buster để tránh trình duyệt cache ảnh QR của học sinh khác
+      return cacheBust ? `${base}&_cb=${Date.now()}_${Math.random().toString(36).slice(2)}` : base;
    }
    return null;
 };
@@ -412,7 +414,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                const node = document.getElementById('download-notice-node');
                if (node) {
                   const expectedNoticeId = downloadingNotice.mahd;
-                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig);
+                  // Ưu tiên qrUrl đã baked cache-buster; fallback cũng dùng cacheBust=true
+                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig, true);
 
                   // Capture setup
                   node.style.position = 'fixed';
@@ -421,6 +424,16 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   node.style.zIndex = '9999';
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
+
+                  // Force-reload QR img: xóa src rồi set lại để tránh trình duyệt dùng cache
+                  if (expectedQrSrc) {
+                     const qrImgInit = node.querySelector('[data-role="notice-qr"]');
+                     if (qrImgInit) {
+                        qrImgInit.removeAttribute('src');
+                        await new Promise(r => setTimeout(r, 50));
+                        qrImgInit.setAttribute('src', expectedQrSrc);
+                     }
+                  }
 
                   for (let retry = 0; retry < 20; retry++) {
                      const qrImg = node.querySelector('[data-role="notice-qr"]');
@@ -1422,15 +1435,15 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             thoiluong: currentTimePeriod,
             phuthu: normalizeSurcharges(invoiceData.phuthu),
             qrUrl: (() => {
-               const base = getQRUrl({
+               // cacheBust=true: mỗi lần xuất tạo URL duy nhất, tránh cache ảnh QR của học sinh khác
+               return getQRUrl({
                   mahv: selectedStudent.mahv,
                   tenhv: selectedStudent.tenhv,
                   tongcong: formatCurrency(tongCong),
                   hinhthuc: invoiceData.hinhThuc,
                   thoiluong: currentTimePeriod,
                   ngaybatdau: invoiceData.ngayBatDau || null
-               }, walletsConfig);
-               return base ? `${base}&t=${Date.now()}` : null;
+               }, walletsConfig, true);
             })(),
             diemDanhInfo: studySummary ? {
                diHoc: studySummary.daHoc || 0,
@@ -2227,7 +2240,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
                   {/* QR SECTION */}
                   {(() => {
-                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig) : null);
+                     // Dùng qrUrl đã cache-busted khi tạo notice; fallback cũng bật cacheBust
+                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig, true) : null);
                      if (!qrUrl) return (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
                         </div>
