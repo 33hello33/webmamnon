@@ -91,8 +91,17 @@ const ALL_TABS = [
   },
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2' },
   { id: 'chat', label: 'Phụ huynh', icon: MessageSquare, color: '#0068ff', bg: '#e6f0ff' },
-  { id: 'timesheet', label: 'Chấm công', icon: Clock, color: '#f59e0b', bg: '#fef3c7' },
-  { id: 'employees', label: 'Nhân viên', icon: Users, color: '#14b8a6', bg: '#ccfbf1' },
+  {
+    id: 'employees',
+    label: 'Nhân viên',
+    icon: Users,
+    color: '#14b8a6',
+    bg: '#ccfbf1',
+    subTabs: [
+      { id: 'employee_list', label: 'Danh sách nhân viên', dotColor: '#14b8a6' },
+      { id: 'timesheet', label: 'Tính lương', dotColor: '#f59e0b' }
+    ]
+  },
   { id: 'tasks', label: 'Công việc', icon: Briefcase, color: '#f97316', bg: '#ffedd5' },
   { id: 'statistics', label: 'Thống kê', icon: BarChart3, color: '#3b82f6', bg: '#dbeafe' },
   { id: 'system_logs', label: 'Lịch sử', icon: Activity, adminOnly: true, color: '#a855f7', bg: '#f3e8ff' },
@@ -158,6 +167,7 @@ function Dashboard() {
       if (t.adminOnly) return false;
       const allowedTabs = pq.tabs || [];
       if (user.role === 'Nhân viên VP' && (t.id === 'student_list' || t.id === 'students')) return true;
+      if (t.id === 'employees' && (allowedTabs.includes('employees') || allowedTabs.includes('timesheet'))) return true;
       return allowedTabs.includes(t.id);
     });
   };
@@ -863,7 +873,8 @@ function Dashboard() {
             {currentTab?.id === 'attendance_menu' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'timesheet' && <TimesheetManager currentUser={user} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
-            {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
+            {currentTab?.id === 'employees' && activeSubTab === 'timesheet' && <TimesheetManager currentUser={user} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
+            {currentTab?.id === 'employees' && activeSubTab !== 'timesheet' && <EmployeeManager currentUser={user} />}
             {currentTab?.id === 'system_logs' && <SystemLogs />}
             {currentTab?.id === 'config' && <ConfigManager />}
           </div>
