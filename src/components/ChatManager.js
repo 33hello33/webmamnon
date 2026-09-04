@@ -1968,18 +1968,19 @@ ${ngoaiKhoaForm.content}
           </div>
         )}
 
-        {previewImage && (
+        {previewImage && createPortal(
           <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
             <div className="preview-container" onClick={e => e.stopPropagation()}>
-              <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '10px', zIndex: 2 }}>
+              <div className="preview-actions">
                 <button className="preview-close-btn" onClick={() => handleSavePreviewImage(previewImage)} title="Lưu ảnh">
                   <Download size={20} />
                 </button>
-                <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+                <button className="preview-close-btn" onClick={() => setPreviewImage(null)} title="Đóng"><X size={24} /></button>
               </div>
               <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {forwardingMessage && createPortal(
@@ -2413,18 +2414,19 @@ ${ngoaiKhoaForm.content}
         </table>
       </div>
 
-      {previewImage && (
+      {previewImage && createPortal(
         <div className="image-preview-overlay" onClick={() => setPreviewImage(null)}>
           <div className="preview-container" onClick={e => e.stopPropagation()}>
-            <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '10px', zIndex: 2 }}>
+            <div className="preview-actions">
               <button className="preview-close-btn" onClick={() => handleSavePreviewImage(previewImage)} title="Lưu ảnh">
                 <Download size={20} />
               </button>
-              <button className="preview-close-btn" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+              <button className="preview-close-btn" onClick={() => setPreviewImage(null)} title="Đóng"><X size={24} /></button>
             </div>
             <img src={getDisplayUrl(previewImage)} alt="Preview" referrerPolicy="no-referrer" />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Announcement Modal */}
