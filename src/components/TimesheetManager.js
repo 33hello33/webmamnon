@@ -54,9 +54,12 @@ export default function TimesheetManager() {
             const { data: nvData } = await supabase
                .from('tbl_nv')
                .select('*')
-               .eq('role', 'Giáo viên')
-               .eq('trangthai', 'Đang Làm');
-            setEmployees(nvData || []);
+               .eq('role', 'Giáo viên');
+            const valid = (nvData || []).filter(e => {
+               const st = (e.trangthai || '').trim().toLowerCase();
+               return st !== 'đã nghỉ' && st !== 'đã xóa';
+            });
+            setEmployees(valid);
          } catch (err) {
             console.error(err);
          } finally {
