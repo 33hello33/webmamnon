@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Users, User, Search, Download, Calendar, Filter, X, CheckSquare, Save, Loader2, BookOpen
+  Users, User, Search, Download, Calendar, Filter, X, CheckSquare, Save, Loader2, BookOpen, Trash2
 } from 'lucide-react';
 import { useConfig } from '../ConfigContext';
 import { fetchHolidayDates, isHoliday } from '../utils/holidays';
@@ -190,6 +190,49 @@ export default function AttendanceManager({ students, showMessage }) {
       }
     } catch (err) { console.error(err); showMessage('error', 'Lỗi lưu điểm danh'); }
     setLoading(false);
+  };
+
+  const handleDeleteAttendance = async () => {
+    const targetMalop = viewMode === 'class' ? selectedId : markingClassId;
+    if (!targetMalop) return showMessage('error', 'Chưa chọn lớp!');
+    if (isAttendanceHoliday) return showMessage('error', 'Ngày này là ngày nghỉ, không thể xóa điểm danh.');
+    
+    if (!window.confirm(`Bạn có chắc chắn muốn XÓA TOÀN BỘ dữ liệu điểm danh ngày ${attDate} của lớp ${targetMalop} không?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('tbl_diemdanh')
+        .delete()
+        .eq('malop', targetMalop)
+        .eq('ngay', attDate);
+
+      if (error) throw error;
+
+      showMessage('success', `Đã xóa điểm danh ngày ${attDate} thành công!`);
+      insertLog(`[XÓA ĐIỂM DANH] Bảng: tbl_diemdanh | Chi tiết: Xóa điểm danh ngày ${attDate} cho lớp ${targetMalop}`);
+
+      // Cập nhật lại state cục bộ attRecords
+      const rMap = {};
+      attStudents.forEach(student => {
+        rMap[student.mahv] = { trangthai: 'Có mặt', ghichu: '' };
+      });
+      setAttRecords(rMap);
+
+      // Cập nhật lại danh sách báo cáo
+      setAttendanceRecords(prev => prev.filter(r => !(r.malop === targetMalop && r.ngay === attDate)));
+
+      if (attDate === today) {
+        await fetchTodayAttendance();
+      }
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'Lỗi khi xóa điểm danh: ' + (err.message || 'Lỗi không xác định'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Reset selection when changing view mode
@@ -659,14 +702,27 @@ export default function AttendanceManager({ students, showMessage }) {
                     <Download size={16} /> Xuất Danh Sách
                   </button>
                   {['Quản lý', 'Nhân viên VP'].includes(currentUser?.role) && (
-                    <button
-                      className={`btn ${markingMode ? 'btn-danger' : 'btn-primary'}`}
-                      style={{ background: markingMode ? '#64748b' : '#db2777', color: 'white', borderColor: 'transparent' }}
-                      onClick={() => setMarkingMode(!markingMode)}
-                    >
-                      {markingMode ? <X size={16} /> : <CheckSquare size={16} />}
-                      {markingMode ? 'Đóng Ghi Điểm Danh' : 'Ghi Điểm Danh HS'}
-                    </button>
+                    <>
+                      {markingMode && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={handleDeleteAttendance}
+                          disabled={loading || isAttendanceHoliday}
+                          style={{ background: '#ef4444', color: 'white', borderColor: 'transparent' }}
+                        >
+                          {loading ? <Loader2 className="spinner" size={16} /> : <Trash2 size={16} />}
+                          Xóa Điểm Danh
+                        </button>
+                      )}
+                      <button
+                        className={`btn ${markingMode ? 'btn-danger' : 'btn-primary'}`}
+                        style={{ background: markingMode ? '#64748b' : '#db2777', color: 'white', borderColor: 'transparent' }}
+                        onClick={() => setMarkingMode(!markingMode)}
+                      >
+                        {markingMode ? <X size={16} /> : <CheckSquare size={16} />}
+                        {markingMode ? 'Đóng Ghi Điểm Danh' : 'Ghi Điểm Danh HS'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
