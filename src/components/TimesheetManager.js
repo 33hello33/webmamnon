@@ -145,7 +145,10 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                .from('tbl_nv')
                .select('*')
                .order('manv', { ascending: true });
-            const valid = (data || []).filter(e => e.trangthai !== 'Đã nghỉ' && e.trangthai !== 'Đã xóa');
+            const valid = (data || []).filter(e => {
+               const st = (e.trangthai || '').trim().toLowerCase();
+               return st !== 'đã nghỉ' && st !== 'đã xóa';
+            });
             setEmployees(valid);
             if (valid.length > 0) {
                setSelectedEmployee(prev => prev || valid[0]);
