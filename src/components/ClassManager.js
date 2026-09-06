@@ -405,6 +405,58 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setSelectionAlert({ open: true, title, message });
   };
 
+  const [saturdayAttendanceMonth, setSaturdayAttendanceMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [saturdayStatsMap, setSaturdayStatsMap] = useState({});
+
+  useEffect(() => {
+    const fetchSaturdayAttendance = async () => {
+      const stdIds = classStudents.map(s => s.mahv);
+      if (!stdIds.length || !saturdayAttendanceMonth) {
+        setSaturdayStatsMap({});
+        return;
+      }
+      try {
+        const [y, m] = saturdayAttendanceMonth.split('-').map(Number);
+        const startDate = `${saturdayAttendanceMonth}-01`;
+        const lastDay = new Date(y, m, 0).getDate();
+        const endDate = `${saturdayAttendanceMonth}-${String(lastDay).padStart(2, '0')}`;
+
+        const { data: attData, error } = await supabase
+          .from('tbl_diemdanh')
+          .select('mahv, ngay, trangthai')
+          .in('mahv', stdIds)
+          .gte('ngay', startDate)
+          .lte('ngay', endDate);
+
+        if (error) throw error;
+
+        const statMap = {};
+        stdIds.forEach(id => { statMap[id] = 0; });
+
+        (attData || []).forEach(item => {
+          if (!item.ngay) return;
+          // Check if day is Saturday (getDay === 6)
+          const d = new Date(item.ngay);
+          if (d.getDay() === 6) {
+            const st = (item.trangthai || '').trim().toLowerCase();
+            if (st === 'có mặt') {
+              statMap[item.mahv] = (statMap[item.mahv] || 0) + 1;
+            }
+          }
+        });
+
+        setSaturdayStatsMap(statMap);
+      } catch (err) {
+        console.error('Lỗi tải điểm danh thứ 7:', err);
+      }
+    };
+
+    fetchSaturdayAttendance();
+  }, [selectedClassId, classStudents, saturdayAttendanceMonth]);
+
   useEffect(() => {
     const fetchContractsForClass = async () => {
       const stdIds = classStudents.map(s => s.mahv);
@@ -598,10 +650,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const normalizeStatus = (s) => (s || '').trim().toLowerCase();
         const uniqueDayRecords = dedupeAttendanceRecordsByDay(studentAttendance);
 
-        let diHoc = 0, nghiPhep = 0, nghiKP = 0;
+        let diHoc = 0, nghiPhep = 0, nghiKP = 0, soBuoiT7 = 0;
         uniqueDayRecords.forEach(att => {
           const s = normalizeStatus(att.trangthai);
-          if (s === 'có mặt') diHoc++;
+          if (s === 'có mặt') {
+            diHoc++;
+            if (att.ngay && new Date(att.ngay).getDay() === 6) {
+              soBuoiT7++;
+            }
+          }
           else if (s === 'nghỉ phép') nghiPhep++;
           else if (s === 'nghỉ không phép') nghiKP++;
         });
@@ -611,6 +668,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let maxLeave = 0;
         const mealRefundRate = getMealRefundRate(initHocPhi);
         const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+        const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+        const tienHocT7 = soBuoiT7 * donGiaT7;
 
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
@@ -657,15 +716,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
+          soBuoiT7,
+          tienHocT7,
           nghiLienTiep: maxLeave,
-          tongcong: Math.max(0, initHocPhi + stNoCu + surchargeSum - totalRefund - giamhocphi),
+          tongcong: Math.max(0, initHocPhi + tienHocT7 + stNoCu + surchargeSum - totalRefund - giamhocphi),
           ngaybatdau: startStr,
           hinhthuc: stHinhThuc,
           phuthu,
           ghichu: ngoaiKhoaAutoNote,
           ngoaiKhoaAutoNote,
           thoigianbieu: selectedClass?.thoigianbieu || '',
-          diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod },
+          diemDanhInfo: { diHoc, nghiPhep, nghiKP, soBuoiT7, statsPeriod },
           lastHdStart: '',
           lastHdEnd: '',
           lastHdDuration: ''
@@ -763,10 +824,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const normalizeStatus = (s) => (s || '').trim().toLowerCase();
         const uniqueDayRecords = dedupeAttendanceRecordsByDay(studentAttendance);
 
-        let diHoc = 0, nghiPhep = 0, nghiKP = 0;
+        let diHoc = 0, nghiPhep = 0, nghiKP = 0, soBuoiT7 = 0;
         uniqueDayRecords.forEach(att => {
           const s = normalizeStatus(att.trangthai);
-          if (s === 'có mặt') diHoc++;
+          if (s === 'có mặt') {
+            diHoc++;
+            if (att.ngay && new Date(att.ngay).getDay() === 6) {
+              soBuoiT7++;
+            }
+          }
           else if (s === 'nghỉ phép') nghiPhep++;
           else if (s === 'nghỉ không phép') nghiKP++;
         });
@@ -798,6 +864,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const hp = parseInt(row.hocphi || 0);
         const ghp = parseInt(row.giamhocphi || 0);
         const nocu = parseInt(row.noCu || 0);
+        const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+        const tienHocT7 = soBuoiT7 * donGiaT7;
 
         const surchargeSum = sumSurcharges(row.phuthu);
 
@@ -806,11 +874,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
+          soBuoiT7,
+          tienHocT7,
           ngoaiKhoaAutoNote,
           nghiLienTiep: maxLeave,
-          diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod: sPeriod },
+          diemDanhInfo: { diHoc, nghiPhep, nghiKP, soBuoiT7, statsPeriod: sPeriod },
           ghichu: buildCombinedNote(batchNoticeData.ghiChu, ngoaiKhoaAutoNote),
-          tongcong: Math.max(0, hp - ghp + nocu + surchargeSum - totalRefund),
+          tongcong: Math.max(0, hp + tienHocT7 - ghp + nocu + surchargeSum - totalRefund),
           ngaybatdau: startStr
         };
       }));
@@ -850,13 +920,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         calculatedGiamHocPhi = Math.round((hpNumber * item.giamhp_percent) / 100);
       }
 
-      const tc = Math.max(0, hpNumber + currentNoCu + surchargeSum - calculatedGiamHocPhi - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
+      const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+      const tienHocT7 = (item.soBuoiT7 || 0) * donGiaT7;
+      const tc = Math.max(0, hpNumber + tienHocT7 + currentNoCu + surchargeSum - calculatedGiamHocPhi - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
 
       return {
         ...item,
         hocphi: hpNumber,
         giamhocphi: calculatedGiamHocPhi,
         truTienAn: recalculatedMealRefund,
+        tienHocT7,
         ngaybatdau: batchNoticeData.ngayBatDau,
         ghichu: buildCombinedNote(batchNoticeData.ghiChu, item.ngoaiKhoaAutoNote),
         tongcong: tc
@@ -868,7 +941,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'soBuoiT7', 'tienHocT7'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         
@@ -882,6 +955,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
            if (!newItem.phuthu) newItem.phuthu = [];
            if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
            newItem.phuthu[0].amount = cleanVal;
+        } else if (field === 'soBuoiT7') {
+           newItem.soBuoiT7 = cleanVal;
+           const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+           newItem.tienHocT7 = cleanVal * donGiaT7;
         } else {
            newItem[field] = cleanVal;
         }
@@ -895,15 +972,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             newItem.giamhocphi = Math.round((cleanVal * newItem.giamhp_percent) / 100);
           }
         }
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'soBuoiT7', 'tienHocT7'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
           const nocu = parseInt(newItem.noCu || 0);
           const tta = parseInt(newItem.truTienAn || 0);
           const thp = parseInt(newItem.truHocPhi || 0);
           const ttdn = parseInt(newItem.truTienDaNgoai || 0);
+          const tht7 = parseInt(newItem.tienHocT7 || 0);
           const surchargeSum = sumSurcharges(newItem.phuthu);
-          newItem.tongcong = Math.max(0, hp - ghp + nocu + surchargeSum - tta - thp - ttdn);
+          newItem.tongcong = Math.max(0, hp + tht7 - ghp + nocu + surchargeSum - tta - thp - ttdn);
         }
         return newItem;
       }
@@ -944,6 +1022,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           truTienAnStr: formatTuition(row.truTienAn || 0),
           truHocPhiStr: formatTuition(row.truHocPhi || 0),
           truTienDaNgoaiStr: formatTuition(row.truTienDaNgoai || 0),
+          soBuoiT7: row.soBuoiT7 || 0,
+          tienHocT7: row.tienHocT7 || 0,
+          tienHocT7Str: formatTuition(row.tienHocT7 || 0),
           noCuStr: formatTuition(row.noCu || 0),
           phuthu: normalizeSurcharges(row.phuthu),
           tongcongStr: formatTuition(row.tongcong),
@@ -982,6 +1063,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         tiennghiphep: n.truHocPhiStr,
         trutienan: n.truTienAnStr,
         trutiendangoai: n.truTienDaNgoaiStr,
+        tienhoct7: n.tienHocT7Str,
+        sobuoito7: n.soBuoiT7,
         phuthu: n.phuthu,
         daxoa: null
       }));
@@ -1000,6 +1083,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         "Tháng": n.thoiluong,
         "CM/P/KP": `${n.diemDanhInfo?.diHoc || 0}/${n.diemDanhInfo?.nghiPhep || 0}/${n.diemDanhInfo?.nghiKP || 0}`,
         "Học phí": n.hocphi || 0,
+        "Số buổi T7": n.soBuoiT7 || 0,
+        "Tiền học T7": n.tienHocT7 || 0,
         "Giảm học phí": n.giamhocphi || 0,
         "Nợ cũ": n.noCu || 0,
         "Hoàn tiền Ăn": n.truTienAn || 0,
@@ -1408,16 +1493,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const handleExportStudents = () => {
     if (classStudents.length === 0) return showMessage('error', 'Lớp này hiện không có học sinh');
     const cleanStudents = classStudents.map(s => {
-
-      const latestHd = contracts
-        .filter(c => c.mahv === s.mahv)
-        .sort((a, b) => new Date(b.ngaylap) - new Date(a.ngaylap))[0];
+      const soBuoiT7 = saturdayStatsMap[s.mahv] || 0;
+      const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+      const tienHocT7 = soBuoiT7 * donGiaT7;
 
       return {
         "Mã HS": s.mahv || '',
         "Họ tên": s.tenhv || '',
         "SĐT": s.sdt || '',
-        "Trạng thái": s.trangthai || ''
+        "Trạng thái": s.trangthai || '',
+        "Hình thức đóng": s.hinhthucdong || '',
+        [`Số buổi T7 (${saturdayAttendanceMonth})`]: soBuoiT7,
+        [`Tiền học T7 (${saturdayAttendanceMonth})`]: tienHocT7
       };
     });
     const ws = XLSX.utils.json_to_sheet(cleanStudents);
@@ -1712,7 +1799,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
               <div className="class-students-section">
                 <div className="section-head">
-                  <h3>Danh sách học sinh ({classStudents.length})</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <h3>Danh sách học sinh ({classStudents.length})</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', background: '#f0fdf4', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                      <span style={{ fontWeight: 600, color: '#15803d' }}>Điểm danh T7:</span>
+                      <input
+                        type="month"
+                        value={saturdayAttendanceMonth}
+                        onChange={(e) => setSaturdayAttendanceMonth(e.target.value)}
+                        style={{ border: '1px solid #86efac', borderRadius: '4px', padding: '2px 6px', fontSize: '0.85rem', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
                   <div className="student-actions">
                     {config?.xuatthongbaohangloat !== false && (
                       <button className="btn" style={{ background: '#f59e0b', color: '#ffffff', border: 'none' }} onClick={handleOpenBatchNotice}>
@@ -1755,12 +1853,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         <th>Trạng Thái</th>
                         <th>Hình thức đóng</th>
                         <th>Thời Lượng</th>
+                        <th style={{ textAlign: 'center', color: '#0369a1' }}>Số buổi T7</th>
+                        <th style={{ textAlign: 'right', color: '#0369a1' }}>Tiền học T7</th>
                       </tr>
                     </thead>
                     <tbody>
                       {classStudents.length > 0 ? (
                         classStudents.map((s, idx) => {
                           const latestHd = contracts.find(c => c.mahv === s.mahv);
+                          const soBuoiT7 = saturdayStatsMap[s.mahv] || 0;
+                          const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+                          const tienHocT7 = soBuoiT7 * donGiaT7;
+
                           return (
                             <tr key={s.mahv}>
                               <td>{idx + 1}</td>
@@ -1797,12 +1901,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               </td>
                               <td>{s.hinhthucdong || '-'}</td>
                               <td style={{ fontWeight: 600, color: '#0369a1' }}>{latestHd?.thoiluong || '-'}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 700, color: soBuoiT7 > 0 ? '#0284c7' : '#94a3b8' }}>
+                                {soBuoiT7 > 0 ? `${soBuoiT7} buổi` : '0'}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: tienHocT7 > 0 ? '#0284c7' : '#94a3b8' }}>
+                                {tienHocT7 > 0 ? `${formatPlainCurrency(tienHocT7)} đ` : '0 đ'}
+                              </td>
                             </tr>
                           );
                         })
                       ) : (
                         <tr>
-                          <td colSpan="8" className="empty-state">Lớp chưa có học sinh nào</td>
+                          <td colSpan="10" className="empty-state">Lớp chưa có học sinh nào</td>
                         </tr>
                       )}
                     </tbody>
@@ -1861,6 +1971,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 : '-'}
                             </span>
                           </div>
+
+                          {(() => {
+                            const soBuoiT7 = saturdayStatsMap[s.mahv] || 0;
+                            const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+                            const tienHocT7 = soBuoiT7 * donGiaT7;
+                            return (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 8px', background: '#f0f9ff', borderRadius: '4px', margin: '4px 0', color: '#0369a1', fontWeight: 600 }}>
+                                <span>Học T7: {soBuoiT7} buổi</span>
+                                <span>{formatPlainCurrency(tienHocT7)} đ</span>
+                              </div>
+                            );
+                          })()}
 
                           <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                             <button
@@ -2305,6 +2427,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '100px', whiteSpace: 'nowrap' }}>CM/P/KP</th>
                           <th style={{ minWidth: '130px' }}>Nợ cũ</th>
                           <th style={{ minWidth: '130px' }}>Học phí</th>
+                          <th style={{ width: '80px', color: '#0284c7' }}>Buổi T7</th>
+                          <th style={{ minWidth: '120px', color: '#0284c7' }}>Tiền học T7</th>
                           <th style={{ minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '80px' }}>Nghỉ LT</th>
                           <th style={{ minWidth: '130px' }}>Trừ Tiền Ăn</th>
@@ -2351,6 +2475,25 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   onChange={e => handleBatchStudentChange(row.mahv, 'hocphi', e.target.value)}
                                   className="td-input"
                                   style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600 }}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={row.soBuoiT7 ?? 0}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'soBuoiT7', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f0f9ff', borderRadius: '4px', padding: '4px', textAlign: 'center', fontWeight: 700, color: '#0284c7' }}
+                                  min="0"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.tienHocT7 || 0)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'tienHocT7', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f0f9ff', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 700, color: '#0284c7' }}
                                 />
                               </td>
                               <td>
@@ -2506,6 +2649,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                   <div style={{ fontWeight: 600 }}>{parseFormattedNumber(exportingNotice.noCu) > 0 ? 'Tiền nợ cũ:' : 'Tiền dư (đối trừ):'}</div>
                   <div style={{ fontWeight: 900 }}>{exportingNotice.noCuStr} đ</div>
+                </div>
+              )}
+              {parseInt(String(exportingNotice.tienHocT7).replace(/\D/g, '')) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#0369a1' }}>
+                  <div style={{ fontWeight: 600 }}>Học Thứ 7 ({exportingNotice.soBuoiT7 || 0} buổi):</div>
+                  <div style={{ fontWeight: 900 }}>+{exportingNotice.tienHocT7Str} đ</div>
                 </div>
               )}
               {parseInt(String(exportingNotice.giamhocphi).replace(/\D/g, '')) > 0 && (

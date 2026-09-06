@@ -82,6 +82,7 @@ const ConfigManager = () => {
         nghilientiep: normalizeConsecutiveRefundConfig(config.nghilientiep, config),
         trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
         tiendangoai: config.tiendangoai || '0',
+        tienhoct7: config.tienhoct7 || '0',
         xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
       });
     }
