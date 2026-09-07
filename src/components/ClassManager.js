@@ -944,23 +944,23 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'soBuoiT7', 'tienHocT7'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
-        
+
         let newItem = { ...item };
-        
+
         if (field === 'phuthu_name') {
-           if (!newItem.phuthu) newItem.phuthu = [];
-           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
-           newItem.phuthu[0].name = cleanVal;
+          if (!newItem.phuthu) newItem.phuthu = [];
+          if (!newItem.phuthu[0]) newItem.phuthu[0] = { name: '', amount: 0 };
+          newItem.phuthu[0].name = cleanVal;
         } else if (field === 'phuthu_amount') {
-           if (!newItem.phuthu) newItem.phuthu = [];
-           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
-           newItem.phuthu[0].amount = cleanVal;
+          if (!newItem.phuthu) newItem.phuthu = [];
+          if (!newItem.phuthu[0]) newItem.phuthu[0] = { name: '', amount: 0 };
+          newItem.phuthu[0].amount = cleanVal;
         } else if (field === 'soBuoiT7') {
-           newItem.soBuoiT7 = cleanVal;
-           const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
-           newItem.tienHocT7 = cleanVal * donGiaT7;
+          newItem.soBuoiT7 = cleanVal;
+          const donGiaT7 = parseInt(String(config?.tienhoct7 || '0').replace(/\D/g, '')) || 0;
+          newItem.tienHocT7 = cleanVal * donGiaT7;
         } else {
-           newItem[field] = cleanVal;
+          newItem[field] = cleanVal;
         }
 
         if (field === 'hocphi') {
@@ -1063,8 +1063,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         tiennghiphep: n.truHocPhiStr,
         trutienan: n.truTienAnStr,
         trutiendangoai: n.truTienDaNgoaiStr,
-        tienhoct7: n.tienHocT7Str,
-        sobuoito7: n.soBuoiT7,
         phuthu: n.phuthu,
         daxoa: null
       }));
