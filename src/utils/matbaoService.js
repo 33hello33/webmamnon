@@ -1,3 +1,5 @@
+import { supabase } from '../supabase';
+
 /**
  * Service tích hợp API Hóa Đơn Điện Tử Mắt Bão (MIFI)
  * Dựa trên tài liệu Postman collection api-matbao
@@ -21,28 +23,61 @@ export const getEnvMatBaoConfig = () => ({
 export const DEFAULT_MATBAO_CONFIG = getEnvMatBaoConfig();
 
 /**
- * Lấy cấu hình kết nối Mắt Bão hiện tại (Ưu tiên: localStorage tùy chỉnh > .env)
+ * Lấy cấu hình kết nối Mắt Bão hiện tại
+ * Thứ tự ưu tiên: tbl_config (schema truongla) > localStorage tùy chỉnh > .env
  */
-export const getMatBaoConfig = () => {
+export const getMatBaoConfig = (dbConfig = null) => {
   const envConfig = getEnvMatBaoConfig();
+  
+  // Nếu có dbConfig truyền vào hoặc từ tbl_config
+  let cfg = { ...envConfig };
+  if (dbConfig) {
+    if (dbConfig.matbao_base_url) cfg.baseUrl = dbConfig.matbao_base_url;
+    if (dbConfig.matbao_mst) cfg.mst = dbConfig.matbao_mst;
+    if (dbConfig.matbao_username) cfg.username = dbConfig.matbao_username;
+    if (dbConfig.matbao_password) cfg.password = dbConfig.matbao_password;
+    if (dbConfig.matbao_khmshdon) cfg.khmshDon = dbConfig.matbao_khmshdon;
+    if (dbConfig.matbao_khhdon) cfg.khhDon = dbConfig.matbao_khhdon;
+  }
+
   try {
     const saved = localStorage.getItem(STORAGE_KEY_CONFIG);
     if (saved) {
-      return { ...envConfig, ...JSON.parse(saved) };
+      cfg = { ...cfg, ...JSON.parse(saved) };
     }
   } catch (e) {
     console.warn('Lỗi đọc cấu hình Mắt Bão:', e);
   }
-  return { ...envConfig };
+  return cfg;
 };
 
 /**
- * Lưu cấu hình kết nối Mắt Bão (ghi đè tạm thời hoặc lưu từ giao diện)
+ * Lưu cấu hình kết nối Mắt Bão:
+ * Ghi trực tiếp vào bảng tbl_config (schema truongla) đồng thời đồng bộ localStorage
  */
-export const saveMatBaoConfig = (cfg) => {
+export const saveMatBaoConfig = async (cfg) => {
   localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(cfg));
-  // Xóa token cũ để đăng nhập lại với thông tin mới
   localStorage.removeItem(STORAGE_KEY_TOKEN);
+
+  try {
+    const payload = {
+      matbao_base_url: cfg.baseUrl,
+      matbao_mst: cfg.mst,
+      matbao_username: cfg.username,
+      matbao_password: cfg.password,
+      matbao_khmshdon: cfg.khmshDon,
+      matbao_khhdon: cfg.khhDon
+    };
+
+    const { data: existing } = await supabase.from('tbl_config').select('id').maybeSingle();
+    if (existing?.id) {
+      await supabase.from('tbl_config').update(payload).eq('id', existing.id);
+    } else {
+      await supabase.from('tbl_config').insert([payload]);
+    }
+  } catch (err) {
+    console.warn('Lỗi khi lưu cấu hình Mắt Bão vào tbl_config:', err);
+  }
 };
 
 /**
@@ -52,6 +87,36 @@ export const resetMatBaoConfig = () => {
   localStorage.removeItem(STORAGE_KEY_CONFIG);
   localStorage.removeItem(STORAGE_KEY_TOKEN);
   return getEnvMatBaoConfig();
+};
+
+/**
+ * Gửi request tới API Mắt Bão DUY NHẤT qua Supabase Edge Function 'matbao-proxy'
+ * (Không qua localhost proxy, không gọi trực tiếp từ browser để tránh lộ key và chặn CORS)
+ */
+export const callMatBaoApi = async ({ endpoint, method = 'POST', headers = {}, body = null }) => {
+  const config = getMatBaoConfig();
+
+  if (!supabase?.functions?.invoke) {
+    throw new Error('Supabase client chưa được khởi tạo đúng cách để gọi Edge Function.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('matbao-proxy', {
+    body: {
+      schema: process.env.REACT_APP_SUPABASE_SCHEMA || 'truongla',
+      endpoint,
+      method,
+      headers,
+      body,
+      baseUrl: config.baseUrl
+    }
+  });
+
+  if (error) {
+    console.error('[matbaoService] Lỗi Supabase Edge Function matbao-proxy:', error);
+    throw new Error(error.message || 'Lỗi khi gọi Supabase Edge Function matbao-proxy');
+  }
+
+  return data;
 };
 
 /**
@@ -76,21 +141,19 @@ export const getMatBaoToken = async (forceRefresh = false) => {
     }
   }
 
-  // Gọi API login
-  const loginUrl = `${config.baseUrl.replace(/\/+$/, '')}/api/auth/login`;
-  const response = await fetch(loginUrl, {
+  // Gọi API login qua proxy
+  const resJson = await callMatBaoApi({
+    endpoint: '/api/auth/login',
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    body: {
       MST: config.mst,
       TDNhap: config.username,
       MKhau: config.password
-    })
+    }
   });
 
-  const resJson = await response.json();
-  if (!response.ok || resJson.errorCode !== 200 || !resJson.data?.accessToken) {
-    const errMsg = resJson.message || `Đăng nhập Mắt Bão thất bại (Mã lỗi: ${resJson.errorCode || response.status})`;
+  if (resJson.errorCode !== 200 || !resJson.data?.accessToken) {
+    const errMsg = resJson.message || `Đăng nhập Mắt Bão thất bại (Mã lỗi: ${resJson.errorCode || 'UNKNOWN'})`;
     throw new Error(errMsg);
   }
 
@@ -106,18 +169,16 @@ export const getMatBaoToken = async (forceRefresh = false) => {
  * Lấy danh sách mẫu hóa đơn theo năm từ Mắt Bão
  */
 export const getMatBaoTemplates = async (year = new Date().getFullYear()) => {
-  const config = getMatBaoConfig();
   const token = await getMatBaoToken();
-  const url = `${config.baseUrl.replace(/\/+$/, '')}/api/invoice/templates?year=${year}`;
-
-  const response = await fetch(url, {
+  const resJson = await callMatBaoApi({
+    endpoint: `/api/invoice/templates?year=${year}`,
+    method: 'GET',
     headers: {
       'Authorization': `Bearer ${token}`
     }
   });
 
-  const resJson = await response.json();
-  if (!response.ok || resJson.errorCode !== 200) {
+  if (resJson.errorCode !== 200) {
     throw new Error(resJson.message || 'Không thể lấy danh sách mẫu hóa đơn từ Mắt Bão');
   }
 
@@ -255,18 +316,16 @@ export const createMatBaoInvoice = async ({ invoice, buyer, items = [], options 
     }
   ];
 
-  const createUrl = `${config.baseUrl.replace(/\/+$/, '')}/api/invoice/create-invoice`;
-  const response = await fetch(createUrl, {
+  const resJson = await callMatBaoApi({
+    endpoint: '/api/invoice/create-invoice',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify(payload)
+    body: payload
   });
 
-  const resJson = await response.json();
-  if (!response.ok || resJson.errorCode !== 200) {
+  if (resJson.errorCode !== 200) {
     throw new Error(resJson.message || 'Lỗi tạo hóa đơn Mắt Bão');
   }
 
@@ -282,24 +341,21 @@ export const createMatBaoInvoice = async ({ invoice, buyer, items = [], options 
  * Tải nội dung PDF hóa đơn điện tử
  */
 export const downloadMatBaoInvoice = async ({ maTraCuu, maSoHDon }) => {
-  const config = getMatBaoConfig();
   const token = await getMatBaoToken();
 
-  const url = `${config.baseUrl.replace(/\/+$/, '')}/api/invoice/download-invoice`;
-  const response = await fetch(url, {
+  const resJson = await callMatBaoApi({
+    endpoint: '/api/invoice/download-invoice',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({
+    body: {
       MaTraCuu: maTraCuu,
       MaSoHDon: maSoHDon
-    })
+    }
   });
 
-  const resJson = await response.json();
-  if (!response.ok || resJson.errorCode !== 200) {
+  if (resJson.errorCode !== 200) {
     throw new Error(resJson.message || 'Lỗi tải hóa đơn từ Mắt Bão');
   }
 

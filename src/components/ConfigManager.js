@@ -28,7 +28,8 @@ import {
   BarChart3,
   Briefcase,
   Users,
-  CalendarDays
+  CalendarDays,
+  FileCheck2
 } from 'lucide-react';
 import './ConfigManager.css';
 
@@ -82,7 +83,11 @@ const ConfigManager = () => {
         nghilientiep: normalizeConsecutiveRefundConfig(config.nghilientiep, config),
         trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
         tiendangoai: config.tiendangoai || '0',
-        xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
+        xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00',
+        matbao_base_url: config.matbao_base_url || '',
+        matbao_mst: config.matbao_mst || '',
+        matbao_username: config.matbao_username || '',
+        matbao_password: config.matbao_password || ''
       });
     }
   }, [config]);
@@ -596,6 +601,55 @@ const ConfigManager = () => {
             </div>
           </section>
         )}
+
+        {/* Row: Cấu hình Hóa đơn điện tử Mắt Bão */}
+        <section className="config-section">
+          <div className="section-title">
+            <FileCheck2 size={20} color="#dc2626" />
+            <h3>Cấu hình Hóa Đơn Điện Tử Mắt Bão (MIFI)</h3>
+          </div>
+          <p className="hint" style={{ marginTop: '-8px', marginBottom: '16px' }}>
+            Thông tin kết nối phát hành Hóa Đơn Đỏ được lưu trực tiếp vào bảng <code>tbl_config</code> (schema truongla) và sử dụng bởi Supabase Edge Function.
+          </p>
+          <div className="form-grid">
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label>Base API URL</label>
+              <input
+                type="text"
+                value={formData.matbao_base_url || ''}
+                onChange={e => setFormData({ ...formData, matbao_base_url: e.target.value })}
+                placeholder="VD: https://demo-api-hddt.matbao.in:11443"
+              />
+            </div>
+            <div className="form-group">
+              <label>Mã số thuế (MST)</label>
+              <input
+                type="text"
+                value={formData.matbao_mst || ''}
+                onChange={e => setFormData({ ...formData, matbao_mst: e.target.value })}
+                placeholder="VD: 0302712571-999"
+              />
+            </div>
+            <div className="form-group">
+              <label>Tên đăng nhập (TDNhap)</label>
+              <input
+                type="text"
+                value={formData.matbao_username || ''}
+                onChange={e => setFormData({ ...formData, matbao_username: e.target.value })}
+                placeholder="Nhập tên tài khoản API Mắt Bão"
+              />
+            </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label>Mật khẩu (MKhau)</label>
+              <input
+                type="password"
+                value={formData.matbao_password || ''}
+                onChange={e => setFormData({ ...formData, matbao_password: e.target.value })}
+                placeholder="Nhập mật khẩu tài khoản API Mắt Bão"
+              />
+            </div>
+          </div>
+        </section>
 
         {/* Row 4: Categories & Tuition Config */}
         <section className="config-section categories-row">

@@ -12,7 +12,8 @@ import {
 import { toPng } from 'html-to-image';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
-import { getMatBaoConfig, saveMatBaoConfig, resetMatBaoConfig, createMatBaoInvoice, getMatBaoTemplates } from '../utils/matbaoService';
+import { getMatBaoConfig, saveMatBaoConfig, resetMatBaoConfig, getMatBaoTemplates } from '../utils/matbaoService';
+import MatbaoInvoiceModal from './MatbaoInvoiceModal';
 import './FinanceManager.css';
 
 const pCur = (val) => {
@@ -413,19 +414,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    // MatBao E-Invoice State
    const [matbaoModal, setMatbaoModal] = useState({
       isOpen: false,
-      invoice: null,
-      buyer: null,
-      items: [],
-      options: {
-         mauSo: '1',
-         kiHieu: 'C26TAT',
-         loaiHDon: 0, // 0: Nháp, 1: Phát hành
-         hinhThucTT: 'TM/CK',
-         ghiChu: ''
-      },
-      loading: false,
-      result: null,
-      error: ''
+      data: null
    });
    const [matbaoTemplates, setMatbaoTemplates] = useState([]);
    const [matbaoConfigModal, setMatbaoConfigModal] = useState({
@@ -605,7 +594,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    // MATBAO HDDT HANDLERS
    const handleOpenMatbaoModal = async (record) => {
       const hv = hvMap[record.mahv] || {};
-      const config = getMatBaoConfig();
+      const matbaoCfg = getMatBaoConfig(config);
 
       // Phân tách các mục chi phí trong phiếu thu
       const hocV = pCur(record.hocphi);
@@ -686,19 +675,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       setMatbaoModal({
          isOpen: true,
-         invoice: record,
-         buyer,
-         items,
-         options: {
-            mauSo: config.khmshDon || '1',
-            kiHieu: config.khhDon || 'C26TAT',
-            loaiHDon: Number(config.loaiHDon || 0),
-            hinhThucTT: record.hinhthuc || config.hinhThucTT || 'TM/CK',
-            ghiChu: `Thu học phí ${record.thoiluong || ''} - Mã phiếu ${record.mahd}`.trim()
-         },
-         loading: false,
-         result: null,
-         error: ''
+         data: {
+            invoice: record,
+            buyer,
+            items,
+            options: {
+               mauSo: matbaoCfg.khmshDon || '1',
+               kiHieu: matbaoCfg.khhDon || 'C26TAT',
+               loaiHDon: Number(matbaoCfg.loaiHDon || 0),
+               hinhThucTT: record.hinhthuc || matbaoCfg.hinhThucTT || 'TM/CK',
+               ghiChu: `Thu học phí ${record.thoiluong || ''} - Mã phiếu ${record.mahd}`.trim()
+            }
+         }
       });
 
       // Tự động tải template mẫu hóa đơn trong nền nếu chưa có
@@ -708,56 +696,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                setMatbaoTemplates(list);
             }
          }).catch(() => { });
-      }
-   };
-
-   const handleCreateMatbaoInvoice = async (e) => {
-      e?.preventDefault();
-      if (!matbaoModal.invoice || matbaoModal.loading) return;
-
-      setMatbaoModal(prev => ({ ...prev, loading: true, error: '', result: null }));
-      try {
-         const res = await createMatBaoInvoice({
-            invoice: matbaoModal.invoice,
-            buyer: matbaoModal.buyer,
-            items: matbaoModal.items,
-            options: matbaoModal.options
-         });
-
-         setMatbaoModal(prev => ({
-            ...prev,
-            loading: false,
-            result: res,
-            error: ''
-         }));
-
-         // Cập nhật trạng thái daxuathddo = true trong database và giao diện
-         try {
-            const { error: updErr } = await supabase
-               .from('tbl_hd')
-               .update({ daxuathddo: true })
-               .eq('mahd', matbaoModal.invoice.mahd);
-
-            if (updErr) {
-               console.warn('Cập nhật daxuathddo trong tbl_hd thất bại:', updErr);
-            } else {
-               setData(prevData => prevData.map(item => 
-                  item.mahd === matbaoModal.invoice.mahd ? { ...item, daxuathddo: true } : item
-               ));
-            }
-         } catch (dbErr) {
-            console.warn('Lỗi ghi daxuathddo:', dbErr);
-         }
-
-         // Ghi log hoạt động
-         insertLog(`[XUẤT HĐ ĐỎ MẮT BÃO] Phiếu thu: ${matbaoModal.invoice.mahd} | Tra cứu: ${res.maTraCuu || '_'} | Số HĐ: ${res.shDon || 0} | Ký hiệu: ${res.khhDon || '_'}`);
-      } catch (err) {
-         console.error('Lỗi xuất hóa đơn Mắt Bão:', err);
-         setMatbaoModal(prev => ({
-            ...prev,
-            loading: false,
-            error: err.message || 'Có lỗi xảy ra khi gọi API Mắt Bão.'
-         }));
       }
    };
 
@@ -3993,225 +3931,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {/* MODAL XUẤT HÓA ĐƠN ĐỎ MẮT BÃO */}
-         {matbaoModal.isOpen && document.body && createPortal(
-            <div className="fm-modal-overlay" style={{ zIndex: 9999, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-               <div className="fm-modal animate-slide-up" style={{ maxWidth: '750px', width: '95%', maxHeight: '90vh', background: 'white', borderRadius: '16px', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
-                  <div className="fm-modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ background: '#fee2e2', color: '#dc2626', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}>
-                           <FileCheck2 size={20} />
-                        </div>
-                        <div>
-                           <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#1e293b', fontWeight: 800 }}>Xuất Hóa Đơn Đỏ (Mắt Bão - MIFI)</h3>
-                           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Phiếu thu: <b>{matbaoModal.invoice?.mahd}</b> | Học sinh: <b>{matbaoModal.buyer?.ten}</b></span>
-                        </div>
-                     </div>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button type="button" onClick={() => setMatbaoConfigModal({ isOpen: true, data: getMatBaoConfig() })} title="Cấu hình tài khoản Mắt Bão" style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#334155', fontWeight: 600 }}>
-                           <Settings size={14} /> Cấu hình API
-                        </button>
-                        <button type="button" onClick={() => setMatbaoModal(prev => ({ ...prev, isOpen: false }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}>
-                           <X size={20} />
-                        </button>
-                     </div>
-                  </div>
-
-                  <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                     {/* Báo lỗi nếu có */}
-                     {matbaoModal.error && (
-                        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#b91c1c', fontSize: '0.88rem' }}>
-                           <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-                           <div>
-                              <strong>Lỗi xuất hóa đơn:</strong> {matbaoModal.error}
-                           </div>
-                        </div>
-                     )}
-
-                     {/* Kết quả thành công nếu có */}
-                     {matbaoModal.result && (
-                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '1rem', color: '#166534' }}>
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                              <CheckCircle2 size={20} color="#16a34a" />
-                              <strong style={{ fontSize: '1rem' }}>Tạo hóa đơn thành công trên hệ thống Mắt Bão!</strong>
-                           </div>
-                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '0.88rem', marginTop: '0.5rem', background: 'white', padding: '0.75rem', borderRadius: '6px', border: '1px solid #dcfce7' }}>
-                              <div>Mã tra cứu: <b style={{ color: '#1e293b' }}>{matbaoModal.result.maTraCuu}</b></div>
-                              <div>Mẫu số / Ký hiệu: <b>{matbaoModal.result.khmshDon}/{matbaoModal.result.khhDon}</b></div>
-                              <div>Số HĐ: <b style={{ color: '#2563eb' }}>{matbaoModal.result.shDon || '0 (HĐ Nháp)'}</b></div>
-                              <div>Ngày lập: <b>{new Date(matbaoModal.result.nLap).toLocaleDateString('vi-VN')}</b></div>
-                           </div>
-
-                           {matbaoModal.result.urlDownloadPDF && (
-                              <div style={{ marginTop: '12px', display: 'flex', gap: '10px' }}>
-                                 <a href={matbaoModal.result.urlDownloadPDF} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#16a34a', color: 'white', padding: '0.6rem 1rem', borderRadius: '8px', fontWeight: 700, fontSize: '0.88rem', textDecoration: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                                    <ExternalLink size={16} /> Xem / Tải PDF Hóa Đơn Đỏ
-                                 </a>
-                              </div>
-                           )}
-                        </div>
-                     )}
-
-                     <form onSubmit={handleCreateMatbaoInvoice} id="form-matbao-invoice">
-                        {/* THÔNG TIN NGƯỜI MUA / HỌC SINH */}
-                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
-                           <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span>1. Thông tin người mua / Phụ huynh</span>
-                           </h4>
-                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Tên đơn vị / Người mua (*)</label>
-                                 <input type="text" required value={matbaoModal.buyer?.ten || ''} onChange={e => setMatbaoModal(prev => ({ ...prev, buyer: { ...prev.buyer, ten: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="Tên cá nhân hoặc công ty..." />
-                              </div>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Mã số thuế (nếu xuất cty)</label>
-                                 <input type="text" value={matbaoModal.buyer?.mst || ''} onChange={e => setMatbaoModal(prev => ({ ...prev, buyer: { ...prev.buyer, mst: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: 0302712571" />
-                              </div>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Số điện thoại</label>
-                                 <input type="text" value={matbaoModal.buyer?.sdt || ''} onChange={e => setMatbaoModal(prev => ({ ...prev, buyer: { ...prev.buyer, sdt: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} />
-                              </div>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Địa chỉ (*)</label>
-                                 <input type="text" required value={matbaoModal.buyer?.diachi || ''} onChange={e => setMatbaoModal(prev => ({ ...prev, buyer: { ...prev.buyer, diachi: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="Địa chỉ giao dịch..." />
-                              </div>
-                           </div>
-                        </div>
-
-                        {/* DANH SÁCH DỊCH VỤ / SẢN PHẨM TRÊN HÓA ĐƠN */}
-                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                              <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>2. Chi tiết dịch vụ / Tiền học</h4>
-                              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Tổng cộng: <b style={{ color: '#2563eb', fontSize: '1rem' }}>{fCur(matbaoModal.items.reduce((sum, it) => sum + ((Number(it.sl) || 1) * (Number(it.gia) || 0)), 0))} ₫</b></span>
-                           </div>
-                           <div style={{ overflowX: 'auto' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                 <thead>
-                                    <tr style={{ background: '#e2e8f0', color: '#334155' }}>
-                                       <th style={{ padding: '6px', textAlign: 'left', borderRadius: '4px 0 0 4px' }}>Nội dung</th>
-                                       <th style={{ padding: '6px', textAlign: 'center', width: '70px' }}>ĐVT</th>
-                                       <th style={{ padding: '6px', textAlign: 'center', width: '70px' }}>SL</th>
-                                       <th style={{ padding: '6px', textAlign: 'right', width: '120px' }}>Đơn giá</th>
-                                       <th style={{ padding: '6px', textAlign: 'right', width: '130px', borderRadius: '0 4px 4px 0' }}>Thành tiền</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody>
-                                    {matbaoModal.items.map((item, idx) => (
-                                       <tr key={item.id || idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                          <td style={{ padding: '6px' }}>
-                                             <input type="text" value={item.ten} onChange={e => {
-                                                const val = e.target.value;
-                                                setMatbaoModal(prev => {
-                                                   const copy = [...prev.items];
-                                                   copy[idx] = { ...copy[idx], ten: val };
-                                                   return { ...prev, items: copy };
-                                                });
-                                             }} style={{ width: '100%', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }} />
-                                          </td>
-                                          <td style={{ padding: '6px' }}>
-                                             <input type="text" value={item.dvt} onChange={e => {
-                                                const val = e.target.value;
-                                                setMatbaoModal(prev => {
-                                                   const copy = [...prev.items];
-                                                   copy[idx] = { ...copy[idx], dvt: val };
-                                                   return { ...prev, items: copy };
-                                                });
-                                             }} style={{ width: '100%', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem', textAlign: 'center' }} />
-                                          </td>
-                                          <td style={{ padding: '6px' }}>
-                                             <input type="number" min="1" value={item.sl} onChange={e => {
-                                                const val = parseInt(e.target.value, 10) || 1;
-                                                setMatbaoModal(prev => {
-                                                   const copy = [...prev.items];
-                                                   copy[idx] = { ...copy[idx], sl: val };
-                                                   return { ...prev, items: copy };
-                                                });
-                                             }} style={{ width: '100%', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem', textAlign: 'center' }} />
-                                          </td>
-                                          <td style={{ padding: '6px' }}>
-                                             <input type="text" value={fCur(item.gia)} onChange={e => {
-                                                const val = pCur(e.target.value);
-                                                setMatbaoModal(prev => {
-                                                   const copy = [...prev.items];
-                                                   copy[idx] = { ...copy[idx], gia: val };
-                                                   return { ...prev, items: copy };
-                                                });
-                                             }} style={{ width: '100%', padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem', textAlign: 'right' }} />
-                                          </td>
-                                          <td style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: '#1e293b' }}>
-                                             {fCur((item.sl || 1) * (item.gia || 0))} ₫
-                                          </td>
-                                       </tr>
-                                    ))}
-                                 </tbody>
-                              </table>
-                           </div>
-                        </div>
-
-                        {/* CẤU HÌNH PHÁT HÀNH & KÝ HIỆU */}
-                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                           <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: '#1e293b' }}>3. Tùy chọn hóa đơn</h4>
-                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Mẫu số (*)</label>
-                                 <input type="text" required value={matbaoModal.options.mauSo} onChange={e => setMatbaoModal(prev => ({ ...prev, options: { ...prev.options, mauSo: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: 1 hoặc 2" />
-                              </div>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Ký hiệu mẫu HĐ (*)</label>
-                                 {matbaoTemplates.length > 0 ? (
-                                    <select value={matbaoModal.options.kiHieu} onChange={e => {
-                                       const tmpl = matbaoTemplates.find(t => t.khhDon === e.target.value);
-                                       setMatbaoModal(prev => ({
-                                          ...prev,
-                                          options: {
-                                             ...prev.options,
-                                             kiHieu: e.target.value,
-                                             mauSo: tmpl?.khmshDon || prev.options.mauSo
-                                          }
-                                       }));
-                                    }} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}>
-                                       {matbaoTemplates.map((t, i) => (
-                                          <option key={i} value={t.khhDon}>{t.khhDon} - {t.thDon} (Mẫu {t.khmshDon})</option>
-                                       ))}
-                                    </select>
-                                 ) : (
-                                    <input type="text" required value={matbaoModal.options.kiHieu} onChange={e => setMatbaoModal(prev => ({ ...prev, options: { ...prev.options, kiHieu: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: C26TAT" />
-                                 )}
-                              </div>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Loại hóa đơn (*)</label>
-                                 <select value={matbaoModal.options.loaiHDon} onChange={e => setMatbaoModal(prev => ({ ...prev, options: { ...prev.options, loaiHDon: Number(e.target.value) } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}>
-                                    <option value={0}>0 - Hóa đơn nháp (Khuyên dùng)</option>
-                                    <option value={1}>1 - Tạo & Phát hành chính thức</option>
-                                 </select>
-                              </div>
-                              <div>
-                                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Hình thức thanh toán</label>
-                                 <input type="text" value={matbaoModal.options.hinhThucTT} onChange={e => setMatbaoModal(prev => ({ ...prev, options: { ...prev.options, hinhThucTT: e.target.value } }))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="TM/CK" />
-                              </div>
-                           </div>
-                        </div>
-                     </form>
-                  </div>
-
-                  <div className="fm-modal-footer" style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#f8fafc', flexShrink: 0 }}>
-                     <button type="button" onClick={() => setMatbaoModal(prev => ({ ...prev, isOpen: false }))} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Đóng</button>
-                     <button type="submit" form="form-matbao-invoice" disabled={matbaoModal.loading} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#dc2626', color: 'white', cursor: matbaoModal.loading ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', opacity: matbaoModal.loading ? 0.7 : 1 }}>
-                        {matbaoModal.loading ? (
-                           <>Đang tạo HĐ Mắt Bão...</>
-                        ) : (
-                           <><FileCheck2 size={16} /> Tạo Hóa Đơn Đỏ Mắt Bão</>
-                        )}
-                     </button>
-                  </div>
-               </div>
-            </div>,
-            document.body
+         {/* MODAL XUẤT HÓA ĐƠN ĐỎ MẮT BÃO (ĐÃ CÔ LẬP TRÁNH LAG KHI GÕ TEXT) */}
+         {matbaoModal.isOpen && (
+            <MatbaoInvoiceModal
+               isOpen={matbaoModal.isOpen}
+               onClose={() => setMatbaoModal({ isOpen: false, data: null })}
+               initialData={matbaoModal.data}
+               templates={matbaoTemplates}
+               onOpenConfig={() => setMatbaoConfigModal({ isOpen: true, data: getMatBaoConfig(config) })}
+               onSuccess={(mahd) => {
+                  setData(prevData => prevData.map(item => 
+                     item.mahd === mahd ? { ...item, daxuathddo: true } : item
+                  ));
+               }}
+            />
          )}
 
          {/* MODAL CẤU HÌNH KẾT NỐI MẮT BÃO */}
          {matbaoConfigModal.isOpen && document.body && createPortal(
-            <div className="fm-modal-overlay" style={{ zIndex: 10000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+            <div className="fm-modal-overlay" style={{ zIndex: 100005, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
                <div className="fm-modal animate-slide-up" style={{ maxWidth: '520px', width: '90%', background: 'white', borderRadius: '16px', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
                   <div className="fm-modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
                      <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#1e293b', fontWeight: 800 }}>Cấu Hình Tài Khoản Mắt Bão (MIFI)</h3>
