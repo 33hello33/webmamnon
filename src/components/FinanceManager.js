@@ -547,7 +547,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }, 300);
    };
 
-   const handlePrintHoaDon = (record) => {
+   const handlePrintHoaDon = async (record) => {
       const hv = hvMap[record.mahv] || {};
       const enriched = {
          ...record,
@@ -557,8 +557,73 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       };
       setPrintHoaDon(enriched);
 
-      setTimeout(() => {
-         window.print();
+      setTimeout(async () => {
+         const node = document.getElementById('fm-hoadon-print-node');
+         if (node) {
+            try {
+               // Đưa node vào màn hình để html-to-image chụp được chính xác, không bị blank
+               node.style.display = 'flex';
+               node.style.position = 'fixed';
+               node.style.top = '0';
+               node.style.left = '0';
+               node.style.zIndex = '99999';
+               node.style.opacity = '1';
+               node.style.visibility = 'visible';
+
+               const images = node.querySelectorAll('img');
+               await Promise.all(Array.from(images).map(img => {
+                  if (img.complete) return Promise.resolve();
+                  return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 2000); });
+               }));
+               await new Promise(r => setTimeout(r, 400));
+
+               const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff', pixelRatio: 2 });
+
+               // Đưa node trở lại ẩn sau khi chụp xong
+               node.style.position = 'fixed';
+               node.style.top = '-9999px';
+               node.style.left = '-9999px';
+               node.style.zIndex = '-1000';
+               node.style.opacity = '0.01';
+
+               const printWin = window.open('', '_blank');
+               if (printWin) {
+                  printWin.document.write(`
+                     <html>
+                        <head>
+                           <title>In Biên Lai Thu Học Phí</title>
+                           <style>
+                              @page { size: A4 landscape; margin: 0; }
+                              body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
+                              img { width: 297mm; height: 210mm; object-fit: contain; }
+                           </style>
+                        </head>
+                        <body>
+                           <img src="${dataUrl}" />
+                           <script>
+                              window.onload = function() {
+                                 setTimeout(function() {
+                                    window.focus();
+                                    window.print();
+                                    window.close();
+                                 }, 500);
+                              };
+                           </script>
+                        </body>
+                     </html>
+                  `);
+                  printWin.document.close();
+               } else {
+                  // Dự phòng nếu popup bị trình duyệt chặn
+                  window.print();
+               }
+            } catch (err) {
+               console.error("Lỗi tạo bản in:", err);
+               window.print();
+            }
+         } else {
+            window.print();
+         }
       }, 500);
    };
 
@@ -2643,143 +2708,146 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-         {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
+         {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ (2 BẢN / 2 LIÊN CHUẨN A4 LANDSCAPE NHƯ INVOICEMANAGER) */}
          {printHoaDon && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'visible', padding: '10mm 15mm', background: 'white', color: '#000', width: '100%', maxWidth: '210mm', margin: '0 auto', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
-               <div style={{ position: 'relative', zIndex: 1, width: '100%' }}>
-                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '160px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '120px', maxHeight: '90px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                     </div>
+            <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+               <div id="fm-hoadon-print-node" className="im-print-a5-receipt" style={{ width: '297mm', height: '210mm', background: '#fff', display: 'flex', position: 'relative', overflow: 'hidden' }}>
+               {[1, 2].map(copyNum => {
+                  const hocV = pCur(printHoaDon.hocphi);
+                  const giamV = pCur(printHoaDon.giamhocphi);
+                  const tongV = pCur(printHoaDon.tongcong);
+                  let ptS = 0;
+                  let parsedPhuThu = [];
+                  try {
+                     const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
+                     if (Array.isArray(pts)) {
+                        parsedPhuThu = pts;
+                        ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
+                     }
+                  } catch (e) { }
+                  let taS = 0;
+                  let parsedTienAn = null;
+                  try {
+                     const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
+                     if (ta && ta.amount) {
+                        parsedTienAn = ta;
+                        taS = ta.amount;
+                     }
+                  } catch (e) { }
+                  const rM = pCur(printHoaDon.trutienan);
+                  const rT = pCur(printHoaDon.tiennghiphep);
+                  const rN = pCur(printHoaDon.trutiendangoai);
+                  const calcNocu = printHoaDon.nocu !== undefined && printHoaDon.nocu !== null
+                     ? printHoaDon.nocu
+                     : fCur(tongV - hocV - taS - ptS + giamV + rM + rT + rN);
 
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center', padding: '0 10px' }}>
-                        <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, textTransform: 'uppercase' }}>
-                           {config?.tencongty || 'Tên Công Ty'}
-                        </h2>
-                        <p style={{ margin: '4px 0', fontSize: '13px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     </div>
-
-                     {/* RIGHT: Invoice info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '13px' }}>
-                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
-                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
-                     </div>
-                  </div>
-
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "17pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                     BIÊN LAI THU HỌC PHÍ
-                  </div>
-
-                  <div style={{ fontSize: "11.5pt", lineHeight: "1.6", margin: '10px 0' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b style={{ fontSize: "12pt" }}>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
-                        <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
-                     </div>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Lớp: <b>{printHoaDon.tenlop}</b></div>
-                        <div>Thời lượng đóng: <b>{printHoaDon.thoiluong || "..."}</b></div>
-                     </div>
-                     <div style={{ marginTop: '4px', marginBottom: '8px' }}>
-                        Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>
-                     </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '8px 0' }} />
-
-                     {(() => {
-                        const hocV = pCur(printHoaDon.hocphi);
-                        const giamV = pCur(printHoaDon.giamhocphi);
-                        const tongV = pCur(printHoaDon.tongcong);
-                        let ptS = 0;
-                        try {
-                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
-                           if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
-                        } catch (e) { }
-                        let taS = 0;
-                        try {
-                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
-                           if (ta && ta.amount) taS = ta.amount;
-                        } catch (e) { }
-                        const rM = pCur(printHoaDon.trutienan);
-                        const rT = pCur(printHoaDon.tiennghiphep);
-                        const rN = pCur(printHoaDon.trutiendangoai);
-                        const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT + rN;
-                        return (
-                           <div style={{ display: "flex", justifyContent: "space-between", padding: '3px 0' }}>
-                              <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
-                              <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
-                              <div>Nợ cũ: <b>{fCur(calcNocu)} đ</b></div>
+                  return (
+                     <div key={copyNum} className="receipt-copy">
+                        {/* HEADER */}
+                        <div className="p-header">
+                           <div style={{ width: '80px' }}>
+                              <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                            </div>
-                        );
-                     })()}
-
-                     {printHoaDon.tienan && (() => {
-                        try {
-                           const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
-                           if (ta && ta.amount > 0) {
-                              return (
-                                 <div style={{ marginTop: '5px', fontSize: '11pt', color: '#1d4ed8', fontWeight: 800 }}>
-                                    + Tiền ăn ({ta.days} ngày): {fCur(ta.amount)} đ
-                                 </div>
-                              );
-                           }
-                        } catch (e) { }
-                        return null;
-                     })()}
-
-                     {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0 || pCur(printHoaDon.trutiendangoai) > 0) && (
-                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: '4px', background: '#fefce8', padding: '4px 8px', borderRadius: '4px', fontSize: '10.5pt' }}>
-                           {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
-                           {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
-                           {pCur(printHoaDon.trutiendangoai) > 0 && <div>Trừ tiền dã ngoại: <b>{fCur(printHoaDon.trutiendangoai)} đ</b></div>}
+                           <div style={{ flex: 1, textAlign: 'center' }}>
+                              <h3 style={{ fontSize: '13pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                              <p style={{ fontSize: '9pt' }}>ĐC: {config?.diachicongty}</p>
+                              <p style={{ fontSize: '9pt' }}>SĐT: {config?.sdtcongty}</p>
+                           </div>
+                           <div style={{ width: '105px', textAlign: 'right', fontSize: '9pt' }}>
+                              <div style={{ fontWeight: 800 }}>Mã HĐ: {printHoaDon.mahd}</div>
+                              <div style={{ fontSize: '8pt', opacity: 0.8 }}>{printHoaDon.ngaylap ? new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN") : ""}</div>
+                              <div style={{ fontSize: '8pt', fontStyle: 'italic', color: '#64748b' }}>{copyNum === 1 ? '(Liên 1: Nhà trường)' : '(Liên 2: Phụ huynh)'}</div>
+                           </div>
                         </div>
-                     )}
 
-                     {printHoaDon.phuthu && (() => {
-                        try {
-                           const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
-                           if (Array.isArray(pts) && pts.length > 0) {
-                              return (
-                                 <div style={{ marginTop: '5px', padding: '6px 8px', background: '#f9fafb', borderRadius: '4px' }}>
-                                    {pts.map((pt, i) => (
-                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11pt', margin: '2px 0' }}>
+                        {/* TITLE */}
+                        <div className="p-title-area">
+                           <h2 style={{ fontSize: '15pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
+                        </div>
+
+                        {/* CONTENT */}
+                        <div className="p-content">
+                           <div className="p-row">
+                              <span className="p-label">Học viên:</span>
+                              <span className="p-value" style={{ fontSize: '11pt' }}>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</span>
+                              <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                              <span className="p-value">{printHoaDon.tenlop}</span>
+                           </div>
+                           <div className="p-row">
+                              <span className="p-label">SĐT liên hệ:</span>
+                              <span className="p-value">{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</span>
+                              <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                              <span className="p-value">{printHoaDon.thoiluong || "..."}</span>
+                           </div>
+
+                           <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                              <div className="p-row">
+                                 <span style={{ flex: 1 }}>- Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></span>
+                                 <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{parsedTienAn && parsedTienAn.amount > 0 ? `${fCur(parsedTienAn.amount)} đ` : '0 đ'}</b></span>
+                              </div>
+                              <div className="p-row">
+                                 <span style={{ flex: 1 }}>- Ưu đãi: <b>{fCur(printHoaDon.giamhocphi)} đ</b></span>
+                                 <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{typeof calcNocu === 'number' ? fCur(calcNocu) : calcNocu} đ</b></span>
+                              </div>
+
+                              {parsedPhuThu.length > 0 && (
+                                 <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                    {parsedPhuThu.map((pt, i) => (
+                                       <div key={i} className="p-row" style={{ marginBottom: 0 }}>
                                           <span>+ {pt.name || 'Phụ thu'}:</span>
-                                          <b>{fCur(pt.amount)} đ</b>
+                                          <span style={{ marginLeft: 'auto' }}><b>{fCur(pt.amount)} đ</b></span>
                                        </div>
                                     ))}
                                  </div>
-                              );
-                           }
-                        } catch (e) { }
-                        return null;
-                     })()}
+                              )}
 
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '8px', padding: '5px 0', borderTop: '1px solid #eee' }}>
-                        <div>Tổng cộng: <b>{fCur(printHoaDon.tongcong)} đ</b></div>
-                        <div>Đã đóng: <b style={{ color: '#059669' }}>{fCur(printHoaDon.dadong)} đ</b></div>
-                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{fCur(printHoaDon.conno)} đ</b></div>
-                     </div>
+                              {(rM > 0 || rT > 0 || rN > 0) && (
+                                 <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                    <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                       {rM > 0 && <span>Trừ tiền ăn: <b>-{fCur(rM)} đ</b></span>}
+                                       {rT > 0 && <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{fCur(Math.round(rT))} đ</b></span>}
+                                       {rN > 0 && <span style={{ marginLeft: 'auto' }}>Trừ dã ngoại: <b>-{fCur(rN)} đ</b></span>}
+                                    </div>
+                                 </div>
+                              )}
+                           </div>
 
-                     <div style={{ marginTop: '8px', fontStyle: 'italic', fontSize: '10.5pt' }}>
-                        Ghi chú: {printHoaDon.ghichu || "Không có"}
-                     </div>
-                  </div>
+                           <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                              <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
+                              <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 950, fontSize: '12pt' }}>{fCur(printHoaDon.tongcong)} đ</span>
+                           </div>
 
-                  {/* FOOTER */}
-                  <div style={{ marginTop: 20, fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>
-                        Facebook: {config?.tencongty} <br />
-                        SĐT/Zalo: {config?.sdtcongty}
-                     </div>
-                     <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br /><br />
-                        <b>{printHoaDon.nhanvien}</b>
-                     </div>
-                  </div>
+                           <div className="p-row" style={{ marginTop: '4px' }}>
+                              <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{fCur(printHoaDon.dadong)} đ</span></span>
+                              <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{fCur(printHoaDon.conno)} đ</span></span>
+                           </div>
 
-                  <div style={{ marginTop: "25px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
-                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
-                  </div>
+                           <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                              <span>HÌNH THỨC:</span>
+                              <span className="p-value">{printHoaDon.hinhthuc || "..."}</span>
+                           </div>
+                           {printHoaDon.ghichu && (
+                              <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                                 <span>Ghi chú: {printHoaDon.ghichu}</span>
+                              </div>
+                           )}
+                        </div>
+
+                        {/* SIGNATURES */}
+                        <div className="p-signatures">
+                           <div className="sig-box">
+                              <h4>Người nộp tiền</h4>
+                              <p>(Ký, họ tên)</p>
+                           </div>
+                           <div className="sig-box">
+                              <h4>Người lập phiếu</h4>
+                              <p>(Ký, họ tên)</p>
+                              <div className="sig-name">{printHoaDon.nhanvien || 'Thu ngân'}</div>
+                           </div>
+                        </div>
+                     </div>
+                  );
+               })}
                </div>
             </div>,
             document.body

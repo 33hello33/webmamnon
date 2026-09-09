@@ -711,9 +711,9 @@
 }
 
 @media print {
-  /* Hide browser header/footer and set 0 margin */
+  /* Khổ in giấy mặc định */
   @page {
-    size: A4 portrait;
+    size: A4 landscape;
     margin: 0;
   }
 
@@ -735,25 +735,22 @@
     overflow: visible !important;
   }
 
-  /* Define Print Canvas */
-  @page {
-    size: A4 portrait;
-    margin: 10mm;
-  }
-
   .print-a5-receipt {
-    display: block !important;
+    display: flex !important;
+    flex-direction: row !important;
     visibility: visible !important;
     position: static !important;
     top: auto !important;
     left: auto !important;
     z-index: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
+    width: 297mm !important;
+    max-width: 297mm !important;
+    height: 209mm !important;
+    max-height: 209mm !important;
     margin: 0 auto !important;
     padding: 0 !important;
     box-sizing: border-box !important;
+    overflow: hidden !important;
   }
 
   .print-a5-receipt * {
@@ -826,10 +823,19 @@
     position: relative;
     background: white;
     border-right: 1px dashed #ccc;
+    color: #000 !important;
   }
 
   .receipt-copy:last-child {
     border-right: none;
+  }
+
+  .receipt-copy * {
+    color: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   .print-salary-slip-paper * {
@@ -839,6 +845,15 @@
     line-height: 1.2 !important;
     color: #000 !important;
   }
+}
+
+.receipt-copy {
+  color: #000 !important;
+}
+
+.receipt-copy * {
+  color: #000 !important;
+  box-sizing: border-box;
 }
 
 .receipt-copy h3 {
