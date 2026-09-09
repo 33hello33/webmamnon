@@ -732,24 +732,32 @@
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
 
-  /* Define A5 Print Canvas */
+  /* Define Print Canvas */
   @page {
-    size: A4 landscape;
-    margin: 0;
+    size: A4 portrait;
+    margin: 10mm;
   }
 
   .print-a5-receipt {
-    display: flex !important;
+    display: block !important;
     visibility: visible !important;
     position: static !important;
-    top: auto;
-    left: auto;
-    z-index: auto;
-    width: 297mm;
-    height: 209mm;
+    top: auto !important;
+    left: auto !important;
+    z-index: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-a5-receipt * {
+    visibility: visible !important;
   }
 
   /* Print Salary Slip Modal Specific Rules */

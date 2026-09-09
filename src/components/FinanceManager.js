@@ -2645,46 +2645,46 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          {/* PRINT TEMPLATE - PHIẾU THU HỌC PHÍ */}
          {printHoaDon && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden', padding: '20px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-               <div style={{ position: 'relative', zIndex: 1 }}>
+            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'visible', padding: '10mm 15mm', background: 'white', color: '#000', width: '100%', maxWidth: '210mm', margin: '0 auto', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
+               <div style={{ position: 'relative', zIndex: 1, width: '100%' }}>
                   <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      {/* LEFT: Logo */}
-                     <div style={{ width: '180px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '120px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     <div style={{ width: '160px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '120px', maxHeight: '90px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
 
                      {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                     <div style={{ flex: 1, textAlign: 'center', padding: '0 10px' }}>
+                        <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, textTransform: 'uppercase' }}>
                            {config?.tencongty || 'Tên Công Ty'}
                         </h2>
-                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                        <p style={{ margin: '4px 0', fontSize: '13px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      </div>
 
                      {/* RIGHT: Invoice info */}
-                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '13px' }}>
                         <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{printHoaDon.mahd}</b></div>
                         <div>Ngày lập: <span style={{ fontWeight: 600 }}>{new Date(printHoaDon.ngaylap).toLocaleDateString("vi-VN")}</span></div>
                      </div>
                   </div>
 
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "18pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "17pt", margin: "10px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
                      BIÊN LAI THU HỌC PHÍ
                   </div>
 
-                  <div style={{ fontSize: "12pt", lineHeight: "1.5", margin: '10px 0' }}>
+                  <div style={{ fontSize: "11.5pt", lineHeight: "1.6", margin: '10px 0' }}>
                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                        <div>Họ và tên: <b>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
+                        <div>Họ và tên: <b style={{ fontSize: "12pt" }}>{hvMap[printHoaDon.mahv]?.tenhv || printHoaDon.tenhv || '_'}</b></div>
                         <div>SĐT: <b>{hvMap[printHoaDon.mahv]?.sdt || printHoaDon.sdt || ""}</b></div>
                      </div>
-                     <div>Lớp: <b>{printHoaDon.tenlop}</b></div>
-                     <div>
-                        Thời lượng đóng: <b>{printHoaDon.thoiluong || "..."}</b>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                        <div>Lớp: <b>{printHoaDon.tenlop}</b></div>
+                        <div>Thời lượng đóng: <b>{printHoaDon.thoiluong || "..."}</b></div>
                      </div>
-                     <div style={{ marginTop: '5px' }}>
+                     <div style={{ marginTop: '4px', marginBottom: '8px' }}>
                         Hình thức đóng tiền: <b>{printHoaDon.hinhthuc || "..."}</b>
                      </div>
-                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '10px 0' }} />
+                     <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '8px 0' }} />
 
                      {(() => {
                         const hocV = pCur(printHoaDon.hocphi);
@@ -2705,7 +2705,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         const rN = pCur(printHoaDon.trutiendangoai);
                         const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT + rN;
                         return (
-                           <div style={{ display: "flex", justifyContent: "space-between" }}>
+                           <div style={{ display: "flex", justifyContent: "space-between", padding: '3px 0' }}>
                               <div>Học phí: <b>{fCur(printHoaDon.hocphi)} đ</b></div>
                               <div>Giảm HP: <b>{fCur(printHoaDon.giamhocphi)} đ</b></div>
                               <div>Nợ cũ: <b>{fCur(calcNocu)} đ</b></div>
@@ -2718,7 +2718,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            const ta = typeof printHoaDon.tienan === 'string' ? JSON.parse(printHoaDon.tienan) : printHoaDon.tienan;
                            if (ta && ta.amount > 0) {
                               return (
-                                 <div style={{ marginTop: '5px', fontSize: '11pt', color: '#3b82f6', fontWeight: 800 }}>
+                                 <div style={{ marginTop: '5px', fontSize: '11pt', color: '#1d4ed8', fontWeight: 800 }}>
                                     + Tiền ăn ({ta.days} ngày): {fCur(ta.amount)} đ
                                  </div>
                               );
@@ -2728,7 +2728,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      })()}
 
                      {(pCur(printHoaDon.trutienan) > 0 || pCur(printHoaDon.tiennghiphep) > 0 || pCur(printHoaDon.trutiendangoai) > 0) && (
-                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: '2px', background: '#fefce8', padding: '2px 5px', borderRadius: '4px' }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: '4px', background: '#fefce8', padding: '4px 8px', borderRadius: '4px', fontSize: '10.5pt' }}>
                            {pCur(printHoaDon.trutienan) > 0 && <div>Trừ tiền ăn: <b>{fCur(printHoaDon.trutienan)} đ</b></div>}
                            {pCur(printHoaDon.tiennghiphep) > 0 && <div>Trừ HP nghỉ: <b>{fCur(printHoaDon.tiennghiphep)} đ</b></div>}
                            {pCur(printHoaDon.trutiendangoai) > 0 && <div>Trừ tiền dã ngoại: <b>{fCur(printHoaDon.trutiendangoai)} đ</b></div>}
@@ -2740,9 +2740,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
                            if (Array.isArray(pts) && pts.length > 0) {
                               return (
-                                 <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                                 <div style={{ marginTop: '5px', padding: '6px 8px', background: '#f9fafb', borderRadius: '4px' }}>
                                     {pts.map((pt, i) => (
-                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11pt', margin: '2px 0' }}>
                                           <span>+ {pt.name || 'Phụ thu'}:</span>
                                           <b>{fCur(pt.amount)} đ</b>
                                        </div>
@@ -2754,14 +2754,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         return null;
                      })()}
 
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '8px', padding: '5px 0', borderTop: '1px solid #eee' }}>
                         <div>Tổng cộng: <b>{fCur(printHoaDon.tongcong)} đ</b></div>
                         <div>Đã đóng: <b style={{ color: '#059669' }}>{fCur(printHoaDon.dadong)} đ</b></div>
                         <div>Còn lại: <b style={{ color: '#dc2626' }}>{fCur(printHoaDon.conno)} đ</b></div>
                      </div>
 
-                     <div style={{ marginTop: '10px' }}>
-                        Ghi chú: {printHoaDon.ghichu || ""}
+                     <div style={{ marginTop: '8px', fontStyle: 'italic', fontSize: '10.5pt' }}>
+                        Ghi chú: {printHoaDon.ghichu || "Không có"}
                      </div>
                   </div>
 
@@ -2777,7 +2777,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                   </div>
 
-                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+                  <div style={{ marginTop: "25px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
                      Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
                   </div>
                </div>
