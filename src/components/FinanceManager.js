@@ -376,7 +376,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [hinhThucFilter, setHinhThucFilter] = useState('');
    const [loaiPhieuFilter, setLoaiPhieuFilter] = useState('');
    const [stats, setStats] = useState({
-      phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0, doanhThuDuKien: 0
+      phieuChi: 0, chiLuong: 0, nhapKho: 0, thuHocPhi: 0, thuBanHang: 0, thuKhac: 0, doanhThuDuKien: 0, giamHocPhi: 0
    });
 
    const [balanceModal, setBalanceModal] = useState(false);
@@ -1190,7 +1190,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
          thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
          thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0),
-         doanhThuDuKien: pendingNotices.reduce((s, tb) => s + pCur(tb.tongcong), 0)
+         doanhThuDuKien: pendingNotices.reduce((s, tb) => s + pCur(tb.tongcong), 0),
+         giamHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.giamhocphi), 0)
       });
 
       let activeDataRaw = [];
@@ -2349,6 +2350,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-stat-info">
                      <span className="fm-stat-label">Thu khác</span>
                      <span className="fm-stat-value text-primary">{fCur(stats.thuKhac)}</span>
+                  </div>
+               </div>
+               <div className="fm-stat-card" onClick={() => { if (setActiveSubTab) setActiveSubTab('hoadon'); setLoaiPhieuFilter(''); }} style={{ cursor: 'pointer' }}>
+                  <div className="fm-stat-icon ico-giamhocphi" style={{ background: 'linear-gradient(135deg, #fff7ed, #ffedd5)' }}><TrendingDown size={24} color="#ea580c" /></div>
+                  <div className="fm-stat-info">
+                     <span className="fm-stat-label">Giảm học phí</span>
+                     <span className="fm-stat-value" style={{ color: '#ea580c' }}>{fCur(stats.giamHocPhi)}</span>
                   </div>
                </div>
             </div>
