@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
-import { supabase, insertLog } from '../supabase';
+import { supabase, insertLog, generateId } from '../supabase';
 import * as XLSX from 'xlsx';
 import { Search, PlusCircle, Edit, Trash2, DownloadCloud, UploadCloud, PackageOpen, X, Info, Plus } from 'lucide-react';
 import './ProductManager.css';
@@ -48,8 +48,11 @@ export default function ProductManager({ currentUser }) {
 
    const fetchItems = async () => {
       setLoading(true);
-      const { data } = await supabase.from('tbl_hanghoa').select('*').order('mahang');
-      setProducts((data || []).filter(p => p.daxoa !== 'Đã Xóa'));
+      const { data, error } = await supabase.from('tbl_hanghoa').select('*').order('mahang');
+      if (error) {
+         console.error('Lỗi khi tải danh sách kho:', error);
+      }
+      setProducts((data || []).filter(p => !p.daxoa || String(p.daxoa).toLowerCase() !== 'đã xóa'));
       setLoading(false);
    };
 
@@ -69,17 +72,9 @@ export default function ProductManager({ currentUser }) {
       return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
    };
 
-   const generateCode = () => {
-      let highest = 0;
-      products.forEach(p => {
-         const num = parseInt(p.mahang.replace(/\D/g, ''), 10);
-         if (!isNaN(num) && num > highest) highest = num;
-      });
-      return `SP${String(highest + 1).padStart(3, '0')}`;
-   };
-
-   const handleOpenAdd = () => {
-      setFormData({ mahang: generateCode(), tenhang: '', dvt: 'Cái', giaban: '0' });
+   const handleOpenAdd = async () => {
+      const newCode = await generateId('tbl_hanghoa', 'mahang', 'SP', 3);
+      setFormData({ mahang: newCode, tenhang: '', dvt: 'Cái', giaban: '0' });
       setIsEdit(false);
       setIsFormOpen(true);
    };
@@ -94,13 +89,17 @@ export default function ProductManager({ currentUser }) {
       e.preventDefault();
       const rawGiaban = String(formData.giaban || '0').replace(/,/g, '');
       if (isEdit) {
-         await supabase.from('tbl_hanghoa').update({
+         const { error } = await supabase.from('tbl_hanghoa').update({
             tenhang: formData.tenhang,
             dvt: formData.dvt,
             giaban: rawGiaban
          }).eq('mahang', formData.mahang);
+         if (error) {
+            alert('Lỗi cập nhật sản phẩm: ' + error.message);
+            return;
+         }
       } else {
-         await supabase.from('tbl_hanghoa').insert([{
+         const { error } = await supabase.from('tbl_hanghoa').insert([{
             mahang: formData.mahang,
             tenhang: formData.tenhang,
             dvt: formData.dvt,
@@ -109,6 +108,10 @@ export default function ProductManager({ currentUser }) {
             gianhap: '0',
             daxoa: null
          }]);
+         if (error) {
+            alert('Lỗi thêm mới sản phẩm: ' + error.message);
+            return;
+         }
       }
       const logDesc = `[KHO HÀNG] ${isEdit ? 'Cập nhật' : 'Thêm mới'} SP: ${formData.mahang} | Tên: ${formData.tenhang}`;
       insertLog(logDesc);
@@ -284,8 +287,11 @@ export default function ProductManager({ currentUser }) {
          const wsname = wb.SheetNames[0];
          const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname]);
 
+         const baseIdStr = await generateId('tbl_hanghoa', 'mahang', 'SP', 3);
+         let baseNum = parseInt(baseIdStr.replace(/\D/g, ''), 10) || 1;
+
          const inserts = data.map((row, i) => ({
-            mahang: row['Mã Hàng'] || generateCode() + i,
+            mahang: row['Mã Hàng'] || `SP${String(baseNum + i).padStart(3, '0')}`,
             tenhang: row['Tên Hàng'],
             soluong: parseInt(row['Số Lượng'], 10) || 0,
             dvt: row['ĐVT'] || 'Cái',
@@ -336,7 +342,7 @@ export default function ProductManager({ currentUser }) {
             </div>
          </div>
 
-         <div className="pm-table-wrapper table-container">
+         <div className="pm-table-wrapper table-container" style={{ maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
             <table className="data-table mb-0">
                <thead>
                   <tr>
