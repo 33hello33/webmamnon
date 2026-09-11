@@ -2597,15 +2597,33 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      </div>
 
                      {(() => {
-                        if (!downloadingInvoice?.phuthu || downloadingInvoice.phuthu.length === 0) return null;
-                        const totalPhuThu = downloadingInvoice.phuthu.reduce((sum, pt) => sum + (Number(pt.amount) || 0), 0);
-                        if (totalPhuThu <= 0) return null;
+                        if (!downloadingInvoice?.phuthu) return null;
+                        let phuThuList = [];
+                        if (Array.isArray(downloadingInvoice.phuthu)) {
+                           phuThuList = downloadingInvoice.phuthu;
+                        } else if (typeof downloadingInvoice.phuthu === 'string') {
+                           try {
+                              phuThuList = JSON.parse(downloadingInvoice.phuthu);
+                           } catch (_) {}
+                        }
+                        if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
+
+                        const validPhuThu = phuThuList.filter(pt => pt && (pt.name || pt.tenpp || pt.ten || pt.baseName) && (Number(pt.amount) || 0) > 0);
+                        if (validPhuThu.length === 0) return null;
+
                         return (
-                           <div style={{ marginTop: '6px', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #f3f4f6' }}>
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '11pt' }}>
-                                 <span>+ Phụ thu:</span>
-                                 <b>{formatCurrency(totalPhuThu)} đ</b>
-                              </div>
+                           <div style={{ marginTop: '6px', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '11pt', color: '#1e293b', lineHeight: '1.4' }}>
+                              <span>+ Phụ thu: </span>
+                              {validPhuThu.map((pt, i) => {
+                                 const name = pt.name || pt.tenpp || pt.ten || pt.baseName || 'Phụ thu';
+                                 const amount = Number(pt.amount) || 0;
+                                 return (
+                                    <span key={i}>
+                                       {i > 0 ? ', ' : ''}
+                                       {name}: <b>{formatCurrency(amount)} đ</b>
+                                    </span>
+                                 );
+                              })}
                            </div>
                         );
                      })()}

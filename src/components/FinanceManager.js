@@ -1587,10 +1587,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th>Người lập</th>
                               <th>Thời lượng</th>
                               <th>Hình thức</th>
-                              <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right" onClick={() => requestSort('hocphi')} style={{ cursor: 'pointer', userSelect: 'none' }}>Học Phí <SortIcon columnKey="hocphi" /></th>
                               <th className="text-right">Giảm Học Phí</th>
-                              <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Đóng <SortIcon columnKey="dadong" /></th>
                               <th className="text-right">Phụ thu</th>
+                              <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right" onClick={() => requestSort('dadong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Đã Đóng <SortIcon columnKey="dadong" /></th>
                               <th className="text-right">Nợ Cấn Trừ</th>
                               <th className="text-center">Hành động</th>
                            </tr>
@@ -1598,6 +1599,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <tbody>
                            {filteredData.map(r => {
                               const deleted = isDeleted(r);
+                              let phuThuVal = 0;
+                              if (r.phuthu) {
+                                 if (typeof r.phuthu === 'number') {
+                                    phuThuVal = r.phuthu;
+                                 } else {
+                                    try {
+                                       const pts = typeof r.phuthu === 'string' ? JSON.parse(r.phuthu) : r.phuthu;
+                                       if (Array.isArray(pts)) {
+                                          phuThuVal = pts.reduce((s, it) => s + (Number(it?.amount || it?.sotien || it?.dongia) || 0), 0);
+                                       } else if (typeof pts === 'number') {
+                                          phuThuVal = pts;
+                                       }
+                                    } catch (e) {}
+                                 }
+                              }
+                              if (!phuThuVal && r.thukhac) {
+                                 phuThuVal = pCur(r.thukhac);
+                              }
+
                               return (
                                  <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
                                     <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
@@ -1607,10 +1627,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
                                     <td>{r.thoiluong ? `${r.thoiluong}` : '_'}</td>
                                     <td>{r.hinhthuc}</td>
-                                    <td className="text-right">{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-semibold">{fCur(r.hocphi)}</td>
                                     <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                    <td className="text-right font-bold" style={{ color: '#6366f1' }}>{phuThuVal > 0 ? `+${fCur(phuThuVal)}` : ''}</td>
+                                    <td className="text-right font-bold text-slate-800">{fCur(r.tongcong)}</td>
                                     <td className="text-right font-bold text-success">{fCur(r.dadong)}</td>
-                                    <td className="text-right font-bold" style={{ color: '#6366f1' }}>{pCur(r.thukhac) > 0 ? `+${fCur(r.thukhac)}` : ''}</td>
                                     <td className="text-right font-bold text-danger">{fCur(r.conno) !== '0' ? fCur(r.conno) : ''}</td>
                                     <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                        {!deleted ? (
@@ -1635,6 +1656,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   <div className="fm-card-list">
                      {filteredData.map(r => {
                         const deleted = isDeleted(r);
+                        let phuThuVal = 0;
+                        if (r.phuthu) {
+                           if (typeof r.phuthu === 'number') {
+                              phuThuVal = r.phuthu;
+                           } else {
+                              try {
+                                 const pts = typeof r.phuthu === 'string' ? JSON.parse(r.phuthu) : r.phuthu;
+                                 if (Array.isArray(pts)) {
+                                    phuThuVal = pts.reduce((s, it) => s + (Number(it?.amount || it?.sotien || it?.dongia) || 0), 0);
+                                 } else if (typeof pts === 'number') {
+                                    phuThuVal = pts;
+                                 }
+                              } catch (e) {}
+                           }
+                        }
+                        if (!phuThuVal && r.thukhac) {
+                           phuThuVal = pCur(r.thukhac);
+                        }
+
                         return (
                            <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : (r.dasua ? { border: '1px solid #fb923c', background: '#fff7ed' } : {})}>
                               <div className="fm-card-header">
@@ -1645,26 +1685,27 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
                                  <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
                                  <div className="fm-card-row"><span>Kết thúc:</span> <span>{r.ngayketthuc || '_'}</span></div>
-                                 <div className="fm-card-row">
-                                    <span>Tổng cộng:</span>
-                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
-                                 </div>
+                                 <div className="fm-card-row"><span>Học phí:</span> <strong>{fCur(r.hocphi)} ₫</strong></div>
                                  {pCur(r.giamhocphi) > 0 && (
                                     <div className="fm-card-row">
                                        <span>Giảm học phí:</span>
                                        <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
                                     </div>
                                  )}
+                                 {phuThuVal > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Phụ thu:</span>
+                                       <strong style={{ color: '#6366f1' }}>+{fCur(phuThuVal)} ₫</strong>
+                                    </div>
+                                 )}
                                  <div className="fm-card-row price-row">
+                                    <span>Tổng cộng:</span>
+                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-row">
                                     <span>Đã đóng:</span>
                                     <strong className="text-success">{fCur(r.dadong)} ₫</strong>
                                  </div>
-                                 {pCur(r.thukhac) > 0 && (
-                                    <div className="fm-card-row">
-                                       <span>Phụ thu:</span>
-                                       <strong style={{ color: '#6366f1' }}>+{fCur(r.thukhac)} ₫</strong>
-                                    </div>
-                                 )}
                                  {pCur(r.conno) > 0 && (
                                     <div className="fm-card-row"><span>Còn nợ:</span> <strong className="text-danger">{fCur(r.conno)} ₫</strong></div>
                                  )}
@@ -1701,8 +1742,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <th>Người lập</th>
                               <th>Thời lượng</th>
                               <th>Hình thức</th>
-                              <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
+                              <th className="text-right" onClick={() => requestSort('hocphi')} style={{ cursor: 'pointer', userSelect: 'none' }}>Học Phí <SortIcon columnKey="hocphi" /></th>
                               <th className="text-right">Giảm Học Phí</th>
+                              <th className="text-right">Phụ thu</th>
+                              <th className="text-right" onClick={() => requestSort('tongcong')} style={{ cursor: 'pointer', userSelect: 'none' }}>Tổng Cộng <SortIcon columnKey="tongcong" /></th>
                               <th className="text-right">Còn Dự Kiến</th>
                               <th className="text-center">Hành động</th>
                            </tr>
@@ -1710,6 +1753,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <tbody>
                            {filteredData.map(r => {
                               const deleted = isDeleted(r);
+                              let phuThuVal = 0;
+                              if (r.phuthu) {
+                                 if (typeof r.phuthu === 'number') {
+                                    phuThuVal = r.phuthu;
+                                 } else {
+                                    try {
+                                       const pts = typeof r.phuthu === 'string' ? JSON.parse(r.phuthu) : r.phuthu;
+                                       if (Array.isArray(pts)) {
+                                          phuThuVal = pts.reduce((s, it) => s + (Number(it?.amount || it?.sotien || it?.dongia) || 0), 0);
+                                       } else if (typeof pts === 'number') {
+                                          phuThuVal = pts;
+                                       }
+                                    } catch (e) {}
+                                 }
+                              }
+                              if (!phuThuVal && r.thukhac) {
+                                 phuThuVal = pCur(r.thukhac);
+                              }
+
                               return (
                               <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
                                  <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
@@ -1719,8 +1781,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
                                  <td>{r.thoiluong || '_'}</td>
                                  <td>{r.hinhthuc}</td>
-                                 <td className="text-right">{fCur(r.tongcong)}</td>
+                                 <td className="text-right font-semibold">{fCur(r.hocphi)}</td>
                                  <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                 <td className="text-right font-bold" style={{ color: '#6366f1' }}>{phuThuVal > 0 ? `+${fCur(phuThuVal)}` : ''}</td>
+                                 <td className="text-right font-bold text-slate-800">{fCur(r.tongcong)}</td>
                                  <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
                                  <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                     {!deleted ? (
@@ -2668,14 +2732,21 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         try {
                            const pts = typeof printHoaDon.phuthu === 'string' ? JSON.parse(printHoaDon.phuthu) : printHoaDon.phuthu;
                            if (Array.isArray(pts) && pts.length > 0) {
+                              const validPhuThu = pts.filter(pt => pt && (pt.name || pt.tenpp || pt.ten || pt.baseName) && (Number(pt.amount) || 0) > 0);
+                              if (validPhuThu.length === 0) return null;
                               return (
-                                 <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                                    {pts.map((pt, i) => (
-                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                          <span>+ {pt.name || 'Phụ thu'}:</span>
-                                          <b>{fCur(pt.amount)} đ</b>
-                                       </div>
-                                    ))}
+                                 <div style={{ marginTop: '5px', padding: '5px 8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11pt', color: '#1e293b', lineHeight: '1.4' }}>
+                                    <span>+ Phụ thu: </span>
+                                    {validPhuThu.map((pt, i) => {
+                                       const name = pt.name || pt.tenpp || pt.ten || pt.baseName || 'Phụ thu';
+                                       const amount = Number(pt.amount) || 0;
+                                       return (
+                                          <span key={i}>
+                                             {i > 0 ? ', ' : ''}
+                                             {name}: <b>{fCur(amount)} đ</b>
+                                          </span>
+                                       );
+                                    })}
                                  </div>
                               );
                            }
@@ -3388,15 +3459,37 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
                         <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
                      </div>
-                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
-                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
-                           {downloadingInvoice.phuthu.map((pt, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
-                                 <span>+ {pt.name || 'Phụ thu'}:</span><b>{fCur(pt.amount)} đ</b>
-                              </div>
-                           ))}
-                        </div>
-                     )}
+                     {(() => {
+                        if (!downloadingInvoice?.phuthu) return null;
+                        let phuThuList = [];
+                        if (Array.isArray(downloadingInvoice.phuthu)) {
+                           phuThuList = downloadingInvoice.phuthu;
+                        } else if (typeof downloadingInvoice.phuthu === 'string') {
+                           try {
+                              phuThuList = JSON.parse(downloadingInvoice.phuthu);
+                           } catch (_) {}
+                        }
+                        if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
+
+                        const validPhuThu = phuThuList.filter(pt => pt && (pt.name || pt.tenpp || pt.ten || pt.baseName) && (Number(pt.amount) || 0) > 0);
+                        if (validPhuThu.length === 0) return null;
+
+                        return (
+                           <div style={{ marginTop: '5px', padding: '5px 8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11pt', color: '#1e293b', lineHeight: '1.4' }}>
+                              <span>+ Phụ thu: </span>
+                              {validPhuThu.map((pt, i) => {
+                                 const name = pt.name || pt.tenpp || pt.ten || pt.baseName || 'Phụ thu';
+                                 const amount = Number(pt.amount) || 0;
+                                 return (
+                                    <span key={i}>
+                                       {i > 0 ? ', ' : ''}
+                                       {name}: <b>{fCur(amount)} đ</b>
+                                    </span>
+                                 );
+                              })}
+                           </div>
+                        );
+                     })()}
                      {downloadingInvoice?.deductionSum > 0 && (
                         <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
