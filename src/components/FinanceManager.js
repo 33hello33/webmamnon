@@ -337,7 +337,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
       try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
-      
+
       const mealRefund = pCur(r.trutienan);
       const tuitionRefund = pCur(r.tiennghiphep);
       const ngoaiKhoaRefund = pCur(r.trutiendangoai);
@@ -562,17 +562,65 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handlePrintBill = (record) => {
       const hv = hvMap[record.mahv] || {};
+      const isEmp = !record.mahv && !!record.manv;
       const enriched = {
          ...record,
-         tenhv: hv.tenhv,
+         tenhv: hv.tenhv || (isEmp ? (nvMap[record.manv] || record.nhanvien || record.manv) : 'Khách cn khác'),
          sdt: hv.sdt,
+         tenlop: isEmp ? '' : (hv.tenlop || ''),
+         isEmp: isEmp,
          nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_'
       };
       setPrintBill(enriched);
+      setTimeout(() => { window.print(); }, 500);
+   };
 
-      setTimeout(() => {
-         window.print();
-      }, 500);
+   const handleDownloadBillPng = (record) => {
+      const hv = hvMap[record.mahv] || {};
+      const isEmp = !record.mahv && !!record.manv;
+      const enriched = {
+         ...record,
+         tenhv: hv.tenhv || (isEmp ? (nvMap[record.manv] || record.nhanvien || record.manv) : 'Khách cn khác'),
+         sdt: hv.sdt,
+         tenlop: isEmp ? '' : (hv.tenlop || ''),
+         isEmp: isEmp,
+         nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_'
+      };
+      setPrintBill(enriched);
+      setTimeout(async () => {
+         try {
+            const node = document.getElementById('fm-bill-print-node');
+            if (!node) return;
+            node.style.position = 'fixed';
+            node.style.top = '0';
+            node.style.left = '0';
+            node.style.zIndex = '9999';
+            node.style.opacity = '1';
+            node.style.visibility = 'visible';
+            // Chờ ảnh load
+            const images = node.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+               if (img.complete) return Promise.resolve();
+               return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 3000); });
+            }));
+            await new Promise(r => setTimeout(r, 400));
+            const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+            node.style.position = 'static';
+            node.style.opacity = '0.01';
+            const link = document.createElement('a');
+            const safeName = (enriched.tenhv || 'KhachHang').replace(/\s+/g, '_');
+            const safeBill = record.mabill || enriched.mabill || Date.now();
+            link.download = 'BillHang_' + safeName + '_' + safeBill + '.png';
+            link.href = dataUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setPrintBill(null);
+         } catch (err) {
+            console.error('Lỗi xuất PNG:', err);
+            setPrintBill(null);
+         }
+      }, 1000);
    };
 
 
@@ -750,7 +798,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          if (error) {
             alert('Lỗi cập nhật bill hàng: ' + error.message);
          } else {
-            const detailDesc = `[SỬA BILL] Mã: ${mabill} | Tổng: ${fCur(tongcong)} | Học sinh: ${hvMap[editBillModal.data.mahv]?.tenhv || 'Khách vãng lai'}`;
+            const detailDesc = `[SỬA BILL] Mã: ${mabill} | Tổng: ${fCur(tongcong)} | Học sinh: ${hvMap[editBillModal.data.mahv]?.tenhv || 'Khách cn khác'}`;
             insertLog(detailDesc);
             alert('Cập nhật bill hàng thành công!');
             setEditBillModal({ isOpen: false, data: null, password: '' });
@@ -901,12 +949,19 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    useEffect(() => {
       const fetchDicts = async () => {
-         const { data: hvs } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme');
+         const [{ data: hvs }, { data: lops }] = await Promise.all([
+            supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme, malop'),
+            supabase.from('tbl_lop').select('malop, tenlop')
+         ]);
+         const lopMap = {};
+         (lops || []).forEach(l => lopMap[l.malop] = l.tenlop);
          const hVM = {};
          (hvs || []).forEach(h => {
             hVM[h.mahv] = {
                tenhv: h.tenhv,
-               sdt: h.sdtba || h.sdtme || ''
+               sdt: h.sdtba || h.sdtme || '',
+               malop: h.malop,
+               tenlop: lopMap[h.malop] || ''
             };
          });
          setHvMap(hVM);
@@ -1179,7 +1234,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                const parsed = parseNoidung(spSummary);
                spSummary = parsed.rows.map(r => `${r[1]} (x${r[3]})`).join('; ');
             }
-            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách vãng lai', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.dadong || i.tongcong), fCur(i.conno || 0), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
+            return [i.mabill, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || 'Khách cn khác', spSummary, fCur(i.chietkhau), fCur(i.tongcong), fCur(i.dadong || i.tongcong), fCur(i.conno || 0), fCur(i.loinhuan), i.hinhthuc, nvMap[i.manv] || i.nhanvien];
          });
       } else if (activeSubTab !== 'doanhthudukien') {
          alert('Chưa hỗ trợ xuất cho tab này'); return;
@@ -1204,7 +1259,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleConfirmThongBao = async (r) => {
       if (!window.confirm(`Bạn có chắc chắn muốn chuyển thông báo ${r.mahd} thành hóa đơn chính thức không?`)) return;
-      
+
       try {
          const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
          let nextNum = 1;
@@ -1213,7 +1268,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
          }
          const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
-         
+
          const localNow = createLocalDateTime();
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          const cashier = auth.user?.username || auth.user?.tennv || 'Thu Ngân';
@@ -1230,7 +1285,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             giamhocphi: r.giamhocphi,
             tongcong: r.tongcong,
             dadong: r.tongcong,
-            conno: '0', 
+            conno: '0',
             hinhthuc: r.hinhthuc,
             ghichu: r.ghichu,
             phuthu: r.phuthu,
@@ -1611,7 +1666,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        } else if (typeof pts === 'number') {
                                           phuThuVal = pts;
                                        }
-                                    } catch (e) {}
+                                    } catch (e) { }
                                  }
                               }
                               if (!phuThuVal && r.thukhac) {
@@ -1668,7 +1723,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  } else if (typeof pts === 'number') {
                                     phuThuVal = pts;
                                  }
-                              } catch (e) {}
+                              } catch (e) { }
                            }
                         }
                         if (!phuThuVal && r.thukhac) {
@@ -1765,7 +1820,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        } else if (typeof pts === 'number') {
                                           phuThuVal = pts;
                                        }
-                                    } catch (e) {}
+                                    } catch (e) { }
                                  }
                               }
                               if (!phuThuVal && r.thukhac) {
@@ -1773,32 +1828,33 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               }
 
                               return (
-                              <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
-                                 <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
-                                 <td>{formatDate(r.ngaylap)}</td>
-                                 <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
-                                 <td>{r.tenlop}</td>
-                                 <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
-                                 <td>{r.thoiluong || '_'}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td className="text-right font-semibold">{fCur(r.hocphi)}</td>
-                                 <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
-                                 <td className="text-right font-bold" style={{ color: '#6366f1' }}>{phuThuVal > 0 ? `+${fCur(phuThuVal)}` : ''}</td>
-                                 <td className="text-right font-bold text-slate-800">{fCur(r.tongcong)}</td>
-                                 <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!deleted ? (
-                                       <>
-                                          <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
-                                          <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
-                                          <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
-                                       </>
-                                    ) : (
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
-                                    )}
-                                 </td>
-                              </tr>
-                              )})}
+                                 <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                    <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
+                                    <td>{formatDate(r.ngaylap)}</td>
+                                    <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                    <td>{r.tenlop}</td>
+                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                    <td>{r.thoiluong || '_'}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td className="text-right font-semibold">{fCur(r.hocphi)}</td>
+                                    <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                    <td className="text-right font-bold" style={{ color: '#6366f1' }}>{phuThuVal > 0 ? `+${fCur(phuThuVal)}` : ''}</td>
+                                    <td className="text-right font-bold text-slate-800">{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted ? (
+                                          <>
+                                             <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
+                                             <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
+                                             <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
+                                          </>
+                                       ) : (
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              )
+                           })}
                         </tbody>
                      </table>
                   </div>
@@ -1807,43 +1863,44 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      {filteredData.map(r => {
                         const deleted = isDeleted(r);
                         return (
-                        <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
-                           <div className="fm-card-header">
-                              <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
-                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
-                           </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
-                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
-                              <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
-                              <div className="fm-card-row">
-                                 <span>Tổng cộng:</span>
-                                 <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                           <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
+                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                               </div>
-                              {pCur(r.giamhocphi) > 0 && (
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                                 <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                                 <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
                                  <div className="fm-card-row">
-                                    <span>Giảm học phí:</span>
-                                    <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
+                                    <span>Tổng cộng:</span>
+                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
                                  </div>
-                              )}
-                              <div className="fm-card-row price-row">
-                                 <span>Còn dự kiến:</span>
-                                 <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
-                              </div>
-                              <div className="fm-card-actions">
-                                 {!deleted ? (
-                                    <>
-                                       <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
-                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
-                                       <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
-                                    </>
-                                 ) : (
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 {pCur(r.giamhocphi) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Giảm học phí:</span>
+                                       <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
+                                    </div>
                                  )}
+                                 <div className="fm-card-row price-row">
+                                    <span>Còn dự kiến:</span>
+                                    <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <>
+                                          <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
+                                          <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
                               </div>
                            </div>
-                        </div>
-                     )})}
+                        )
+                     })}
                   </div>
                </>
             );
@@ -1954,7 +2011,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <tr key={r.mabill} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : (r.dasua ? { background: '#fff7ed' } : {})}>
                                     <td className="fm-code font-semibold text-success" style={deleted ? { color: '#64748b' } : {}}>{r.mabill}</td>
                                     <td>{formatDate(r.ngaylap)}</td>
-                                    <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</td>
+                                    <td className="font-medium">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách cn khác'}</td>
                                     <td className="fm-desc" style={{ maxWidth: '220px' }}>
                                        {(function () {
                                           if (!r.hanghoa) return '';
@@ -1976,6 +2033,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {!deleted ? (
                                           <>
                                              <button title="In bill hàng" className="btn-blue" onClick={() => handlePrintBill(r)}><Printer size={16} /></button>
+                                             <button title="Tải PNG bill hàng" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleDownloadBillPng(r)}><DownloadCloud size={16} /></button>
                                              <button title="Sửa bill hàng" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={16} /></button>
                                              <button title="Hủy bill hàng POS" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /></button>
                                           </>
@@ -2001,7 +2059,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                               </div>
                               <div className="fm-card-body">
-                                 <div className="fm-card-row"><span>Khách hàng:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách vãng lai'}</strong></div>
+                                 <div className="fm-card-row"><span>Khách hàng:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || 'Khách cn khác'}</strong></div>
                                  <div className="fm-card-row"><span>Người bán:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
                                  <div className="fm-card-row">
                                     <span>Hàng hóa:</span>
@@ -2031,6 +2089,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-actions">
                                     {!deleted ? (
                                        <>
+                                          <button className="btn-blue-sm" style={{ background: '#0284c7' }} onClick={() => handleDownloadBillPng(r)}><DownloadCloud size={14} /> PNG</button>
                                           <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintBill(r)}><Printer size={16} /> In</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditBill(r)}><Edit2 size={14} /> Sửa</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mabill', r.mabill, 'tbl_billhanghoa')}><Trash2 size={16} /> Hủy</button>
@@ -2787,7 +2846,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
          {/* PRINT TEMPLATE - PHIẾU BILL HÀNG POS */}
          {printBill && document.body && createPortal(
-            <div className="print-a5-receipt" style={{ position: 'relative', overflow: 'hidden' }}>
+            <div id="fm-bill-print-node" className="print-a5-receipt" style={{ display: 'block', position: 'fixed', left: '-9999px', top: '0', zIndex: -1, width: '800px', background: 'white', color: '#000', fontFamily: 'Arial, sans-serif', padding: '30px', overflow: 'hidden' }}>
                <div style={{ position: 'relative', zIndex: 1 }}>
                   {/* HEADER */}
                   <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2822,6 +2881,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>Họ và tên: <b>{printBill.tenhv}</b></div>
+                        {!printBill.isEmp && printBill.tenlop && (
+                           <div>Lớp: <b>{printBill.tenlop}</b></div>
+                        )}
                         <div>SĐT: <b>{printBill.sdt || ""}</b></div>
                      </div>
 
@@ -3422,7 +3484,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-      
+
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
             <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
                <div style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.2, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`, backgroundRepeat: 'repeat' }} />
@@ -3451,7 +3513,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                      <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
                      <div>Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b></div>
-                     
+
                      <div style={{ marginTop: '5px' }}>Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b></div>
                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -3467,7 +3529,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         } else if (typeof downloadingInvoice.phuthu === 'string') {
                            try {
                               phuThuList = JSON.parse(downloadingInvoice.phuthu);
-                           } catch (_) {}
+                           } catch (_) { }
                         }
                         if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
 
@@ -3654,6 +3716,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             </div>
          </div>
 
-</div>
+      </div>
    );
 }
+

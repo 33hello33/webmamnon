@@ -244,12 +244,22 @@ export default function SalesPOS() {
          });
 
          // Auto download image PNG
+         const tenLop = (!isEmp && selectedCustomer)
+            ? (
+               (selectedCustomer.malop_list && selectedCustomer.malop_list.length > 0)
+                  ? selectedCustomer.malop_list.map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).filter(Boolean).join(', ')
+                  : (selectedCustomer.tenlop || (selectedCustomer.malop ? (classes.find(c => c.malop === selectedCustomer.malop)?.tenlop || selectedCustomer.malop) : ''))
+            )
+            : '';
+
          const finalPrintData = {
             mabill: newMaBill,
             ngaylap: localNow,
             tenhv: custName,
-            loaiKhach: isEmp ? (selectedCustomer.role || 'Nhân viên/Giáo viên') : 'Học sinh',
-            sdt: selectedCustomer.sdt,
+            isEmp: isEmp,
+            tenlop: tenLop,
+            loaiKhach: isEmp ? (selectedCustomer?.role || 'Nhân viên/Giáo viên') : (selectedCustomer ? 'Học sinh' : 'Khách cn khác'),
+            sdt: selectedCustomer?.sdt,
             cart: [...cart],
             nocu: noCu,
             tongcong: tongGiaoDich,
@@ -317,7 +327,7 @@ export default function SalesPOS() {
             <div className="sp-col-header" style={{ borderBottom: 'none', paddingBottom: '0.5rem' }}>
                DANH SÁCH KHÁCH HÀNG
             </div>
-            
+
             {/* SWITCH HỌC SINH / NHÂN VIÊN */}
             <div style={{ display: 'flex', gap: '4px', padding: '0 1rem 0.5rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
                <button
@@ -645,7 +655,10 @@ export default function SalesPOS() {
 
                   <div style={{ fontSize: "13pt", lineHeight: "1.8", marginBottom: '15px' }}>
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <div>Họ và tên: <b>{posPrintData?.tenhv || 'Khách vãng lai'}</b></div>
+                        <div>Họ và tên: <b>{posPrintData?.tenhv || 'Khách cn khác'}</b></div>
+                        {!posPrintData?.isEmp && posPrintData?.loaiKhach === 'Học sinh' && (
+                           <div>Lớp: <b>{posPrintData?.tenlop || 'Chưa phân lớp'}</b></div>
+                        )}
                         <div>SĐT: <b>{posPrintData?.sdt || "_"}</b></div>
                      </div>
                      {posPrintData?.loaiKhach && posPrintData.loaiKhach !== 'Học sinh' && (
