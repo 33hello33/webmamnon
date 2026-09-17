@@ -435,10 +435,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   node.style.zIndex = '9999';
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
-                  node.style.display = 'block';
 
                   for (let retry = 0; retry < 20; retry++) {
-                     const invoiceId = downloadingInvoice.mahd;
+                     const invoiceId = node.dataset.invoiceId;
                      if (invoiceId === expectedInvoiceId) {
                         break;
                      }
@@ -452,9 +451,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }));
                   await new Promise(requestAnimationFrame);
                   await new Promise(requestAnimationFrame);
-                  await new Promise(r => setTimeout(r, 600));
+                  await new Promise(r => setTimeout(r, 400));
 
-                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  const dataUrl = await toPng(node, { cacheBust: false, backgroundColor: '#ffffff' });
 
                   // Restore hide
                   node.style.position = 'static';
@@ -464,7 +463,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      setPreviewImg(dataUrl);
                   } else {
                      const link = document.createElement('a');
-                     link.download = `${sanitizeFileSegment(`HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'HoaDon')}.png`;
+                     link.download = `${sanitizeFileSegment(`BienLai_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'BienLai')}.png`;
                      link.href = dataUrl;
                      document.body.appendChild(link);
                      link.click();
@@ -472,7 +471,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }
 
                   try {
-                     const fileName = `${sanitizeFileSegment(`HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'HoaDon')}.png`;
+                     const fileName = `${sanitizeFileSegment(`BienLai_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'BienLai')}.png`;
                      const blob = dataUrlToBlob(dataUrl);
                      const pngFile = new File([blob], fileName, { type: 'image/png' });
                      const file = await compressImage(pngFile, 150);
@@ -1509,12 +1508,31 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             thoiluong: currentTimePeriod,
             phuthu: effectiveSurcharges,
             studySummary: studySummary,
-            actualMealRefund,
-            actualTuitionRefund,
-            ngoaiKhoaDeduction,
+            actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
+            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0)),
+            ngoaiKhoaDeduction: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
             deductionSum,
             trutienan_val,
-            trutiennghi_val
+            trutiennghi_val,
+            qrUrl: (() => {
+               return getQRUrl({
+                  mahv: selectedStudent.mahv,
+                  tenhv: selectedStudent.tenhv,
+                  tongcong: formatCurrency(tongCong),
+                  hinhthuc: invoiceData.hinhThuc,
+                  thoiluong: currentTimePeriod,
+                  ngaybatdau: invoiceData.ngayBatDau || null
+               }, walletsConfig, true);
+            })(),
+            diemDanhInfo: studySummary ? {
+               diHoc: studySummary.daHoc || 0,
+               nghiPhep: studySummary.nghiPhep || 0,
+               nghiKP: studySummary.nghiKhongPhep || 0,
+               traTre1: studySummary.traTre1 || 0,
+               traTre2: studySummary.traTre2 || 0,
+               traTre3: studySummary.traTre3 || 0,
+               statsPeriod: studySummary.period || currentTimePeriod
+            } : null
          });
 
          // Reload old debt dynamically mimicking real-time refresh
@@ -2533,68 +2551,62 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" className="print-a5-receipt" style={{ display: 'block', position: 'relative', overflow: 'hidden', padding: '24px 30px', background: '#ffffff', color: '#000', width: '800px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
-               {/* Background pattern */}
-               <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  opacity: 0.05,
-                  pointerEvents: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'repeat'
-               }} />
-
-               <div style={{ position: 'relative', zIndex: 1 }}>
-                  {/* HEADER */}
-                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* LEFT: Logo */}
-                     <div style={{ width: '160px', textAlign: 'left' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '140px', maxHeight: '65px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                     </div>
-
-                     {/* CENTER: Info */}
-                     <div style={{ flex: 1, textAlign: 'center', padding: '0 10px' }}>
-                        <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', color: '#000' }}>
-                           {config?.tencongty || 'MẦM NON DOREMI'}
-                        </h2>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', fontWeight: 600, color: '#333' }}>Địa chỉ: {config?.diachicongty}</p>
-                     </div>
-
-                     {/* RIGHT: Invoice info */}
-                     <div style={{ width: '160px', textAlign: 'right', fontSize: '13px' }}>
-                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
-                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
-                     </div>
+            <div id="download-invoice-node" data-invoice-id={downloadingInvoice?.mahd || ''} className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
+               {/* HEADER */}
+               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* LEFT: Logo */}
+                  <div style={{ width: '180px', textAlign: 'left' }}>
+                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                   </div>
 
-                  {/* TITLE */}
-                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "14px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline', letterSpacing: '0.5px' }}>
-                     BIÊN LAI THU HỌC PHÍ
+                  {/* CENTER: Info */}
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                        {config?.tencongty || 'TRƯỜNG MẦM NON DOREMI'}
+                     </h3>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                   </div>
 
-                  {/* DETAILS */}
-                  <div style={{ fontSize: "12pt", lineHeight: "1.7", margin: '14px 0' }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '4px' }}>
-                        <div>Họ và tên: <b style={{ fontSize: '13pt' }}>{downloadingInvoice?.tenhv}</b></div>
-                        <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
-                     </div>
-                     <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
-                     <div>
-                        Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
+                  {/* RIGHT: Invoice info */}
+                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                     <div>Mã BL: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
+                  </div>
+               </div>
+
+               {/* TITLE */}
+               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                  BIÊN LAI THU HỌC PHÍ
+               </div>
+
+               {/* INFO */}
+               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                     <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingInvoice?.tenhv}</b></div>
+                     <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingInvoice?.mahv}</b></div>
+                  </div>
+
+                  {/* FEES BOX */}
+                  <div style={{
+                     background: '#f0f9ff',
+                     border: '1px solid #bae6fd',
+                     borderRadius: '16px',
+                     padding: '24px',
+                     marginTop: '15px',
+                     lineHeight: '1.6'
+                  }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 600 }}>Học phí:</div>
+                        <div style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi}</div>
                      </div>
 
-                     <div style={{ marginTop: '2px' }}>
-                        Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
-                     </div>
-
-                     <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '12px 0' }} />
-
-                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: '12pt' }}>
-                        <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
-                        <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
-                        <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
-                     </div>
+                     {parseInt(String(downloadingInvoice?.giamhocphi).replace(/\D/g, '')) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                           <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
+                           <div style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi}</div>
+                        </div>
+                     )}
 
                      {(() => {
                         if (!downloadingInvoice?.phuthu) return null;
@@ -2608,75 +2620,98 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         }
                         if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
 
-                        const validPhuThu = phuThuList.filter(pt => pt && (pt.name || pt.tenpp || pt.ten || pt.baseName) && (Number(pt.amount) || 0) > 0);
-                        if (validPhuThu.length === 0) return null;
+                        let lateFeeSum = 0;
+                        const otherFees = [];
+                        phuThuList.forEach(pt => {
+                           if (!pt) return;
+                           const name = pt.name || pt.tenpp || pt.ten || pt.baseName || 'Phụ thu';
+                           const amount = Number(pt.amount) || 0;
+                           if (amount <= 0) return;
+                           if (name.toLowerCase().includes('trả trễ')) {
+                              lateFeeSum += amount;
+                           } else {
+                              otherFees.push({ name, amount });
+                           }
+                        });
+                        if (otherFees.length === 0 && lateFeeSum === 0) return null;
 
                         return (
-                           <div style={{ marginTop: '6px', padding: '6px 10px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '11pt', color: '#1e293b', lineHeight: '1.4' }}>
-                              <span>+ Phụ thu: </span>
-                              {validPhuThu.map((pt, i) => {
-                                 const name = pt.name || pt.tenpp || pt.ten || pt.baseName || 'Phụ thu';
-                                 const amount = Number(pt.amount) || 0;
-                                 return (
-                                    <span key={i}>
-                                       {i > 0 ? ', ' : ''}
-                                       {name}: <b>{formatCurrency(amount)} đ</b>
-                                    </span>
-                                 );
-                              })}
-                           </div>
+                           <>
+                              <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                              {otherFees.map((pt, i) => (
+                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                    <div style={{ fontStyle: 'italic' }}>+ {pt.name}:</div>
+                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
+                                 </div>
+                              ))}
+                              {lateFeeSum > 0 && (
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                    <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
+                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)} đ</div>
+                                 </div>
+                              )}
+                           </>
                         );
                      })()}
 
-                     {downloadingInvoice?.deductionSum > 0 && (
-                        <div style={{ marginTop: '6px', padding: '6px 10px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #d1fae5', color: '#065f46', fontSize: '11pt' }}>
-                           {(Number(downloadingInvoice?.actualMealRefund) || 0) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                 <span>- Hoàn trả tiền ăn:</span>
-                                 <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                     {(parseInt(String(downloadingInvoice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingInvoice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingInvoice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {parseInt(String(downloadingInvoice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualMealRefund} đ</div>
                               </div>
                            )}
-                           {(Number(downloadingInvoice?.actualTuitionRefund) || 0) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                                 <span>- Hoàn trả học phí:</span>
-                                 <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                           {parseInt(String(downloadingInvoice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualTuitionRefund} đ</div>
                               </div>
                            )}
-                           {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                                 <span>- Trừ tiền dã ngoại tháng trước:</span>
-                                 <b>-{formatCurrency(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>
+                           {parseInt(String(downloadingInvoice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
+                                 <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.ngoaiKhoaDeduction} đ</div>
                               </div>
                            )}
-                        </div>
+                        </>
                      )}
 
-                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '10px', fontSize: '12pt' }}>
-                        <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
-                        <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
-                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
-                     </div>
-
-                     <div style={{ marginTop: '8px', fontSize: '11pt' }}>
-                        Ghi chú: {downloadingInvoice?.ghichu || ""}
+                     <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
+                        <div>TỔNG CỘNG:</div>
+                        <div>{downloadingInvoice?.tongcong} VNĐ</div>
                      </div>
                   </div>
 
-                  {/* SIGNATURE SECTION */}
-                  <div style={{ marginTop: '20px', fontSize: "11pt", display: "flex", justifyContent: "space-between" }}>
-                     <div>
-                        Facebook: Doremi Preschool <br />
-                        SĐT/Zalo: {config?.sdtcongty}
-                     </div>
-                     <div style={{ textAlign: "center" }}>
-                        Nhân viên thu tiền <br /><br />
-                        <b style={{ fontSize: '12pt' }}>Doremi Preschool</b>
-                     </div>
+                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
+                     {downloadingInvoice?.diemDanhInfo && (
+                        <div style={{ opacity: 0.9 }}>
+                           Điểm danh ({downloadingInvoice.diemDanhInfo.statsPeriod}):
+                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingInvoice.diemDanhInfo.diHoc}</b></span>,
+                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingInvoice.diemDanhInfo.nghiPhep}</b></span>,
+                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingInvoice.diemDanhInfo.nghiKP || 0}</b></span>
+                        </div>
+                     )}
+                     {downloadingInvoice?.ghichu && (
+                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.ghichu}</b></div>
+                     )}
                   </div>
+               </div>
 
-                  {/* FOOTER NOTE */}
-                  <div style={{ marginTop: "16px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '8px', fontSize: '9.5pt', color: '#4b5563' }}>
-                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
+               {/* FOOTER */}
+               <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
+                  <div style={{ lineHeight: '1.6' }}>
+                     Facebook: Doremi Preschool
+                     Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
+                  </div>
+                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                     (Xác nhận)
                   </div>
                </div>
             </div>
@@ -2860,7 +2895,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      `}
                   </style>
                   <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.1rem', fontWeight: 700 }}>
-                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh hóa đơn...'}
+                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh biên lai...'}
                   </h3>
                   <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Vui lòng đợi giây lát</p>
                </div>
@@ -2873,7 +2908,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
                   <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
                   <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>
-                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN
+                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ BIÊN LAI
                   </p>
                   <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
                   <div style={{ marginTop: '15px', textAlign: 'center' }}>

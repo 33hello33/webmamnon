@@ -637,63 +637,73 @@ export default function DebtManager() {
 
       {/* HIDDEN TEMPLATE FOR DEBT RECEIPT PNG EXPORT */}
       <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-        <div id="download-debt-receipt-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ width: '180px', textAlign: 'left' }}>
-                {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+        <div id="download-debt-receipt-node" data-receipt-id={downloadingPayment?.mahd || ''} className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01, fontFamily: 'Arial, sans-serif' }}>
+          {/* HEADER */}
+          <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ width: '180px', textAlign: 'left' }}>
+              <img crossOrigin="anonymous" src={config?.logo || '/logo.png'} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = '/logo.png'; }} />
+            </div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'TRƯỜNG MẦM NON DOREMI'}</h3>
+              <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+              <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
+            </div>
+            <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+              <div>Mã BL: <b style={{ fontWeight: 950 }}>{downloadingPayment?.mahd}</b></div>
+              <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingPayment?.ngaylap ? new Date(downloadingPayment.ngaylap).toLocaleDateString('vi-VN') : '...'}</span></div>
+            </div>
+          </div>
+
+          {/* TITLE */}
+          <div style={{ textAlign: 'center', fontWeight: '950', fontSize: '24pt', margin: '20px 0', color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+            BIÊN LAI THU HÀNG / NỢ
+          </div>
+
+          {/* INFO */}
+          <div style={{ fontSize: '15pt', lineHeight: '1.9', color: '#000' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingPayment?.tenhv}</b></div>
+              {downloadingPayment?.mahv && <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingPayment?.mahv}</b></div>}
+            </div>
+
+            {/* FEES BOX */}
+            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '16px', padding: '24px', marginTop: '15px', lineHeight: '1.6' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                <div style={{ fontWeight: 600 }}>Cần thu:</div>
+                <div style={{ fontWeight: 900 }}>{downloadingPayment?.tongcong || downloadingPayment?.hocphi} đ</div>
               </div>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'Tên Công Ty'}</h2>
-                <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+
+              <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1', marginBottom: '10px' }}>
+                <div>TỔNG CỘNG:</div>
+                <div>{downloadingPayment?.tongcong} VNĐ</div>
               </div>
-              <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                <div>Số phiếu: <b style={{ fontWeight: 950 }}>{downloadingPayment?.mahd}</b></div>
-                <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingPayment ? new Date(downloadingPayment.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
+
+              <div style={{ borderTop: '1px solid #bae6fd', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
+                <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingPayment?.dadong} đ</b></div>
+                <div>Còn lại: <b style={{ color: '#dc2626', fontWeight: 900 }}>{downloadingPayment?.conno} đ</b></div>
               </div>
             </div>
-            <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-              BIÊN LAI THU HÀNG / NỢ
+
+            <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+              <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingPayment?.tenlop}</b></div>
+              {downloadingPayment?.thoiluong && <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingPayment?.thoiluong}</b></div>}
+              <div style={{ marginBottom: '5px' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingPayment?.hinhthuc || '...'}</b></div>
+              {downloadingPayment?.ghichu && (
+                <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingPayment?.ghichu}</b></div>
+              )}
             </div>
-            <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                <div>Họ và tên: <b style={{ fontWeight: 950 }}>{downloadingPayment?.tenhv}</b></div>
-              </div>
-              <div>Lớp: <b style={{ fontWeight: 900 }}>{downloadingPayment?.tenlop}</b></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <div>Hình thức: <b style={{ fontWeight: 900 }}>{downloadingPayment?.hinhthuc || "..."}</b></div>
-              </div>
+          </div>
 
-              <div style={{ borderTop: '2px solid #000', marginTop: '15px', paddingTop: '10px' }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
-                  <div>Học phí: <b style={{ fontWeight: 900 }}>{downloadingPayment?.hocphi} đ</b></div>
-                  {/* Bỏ chữ nợ cũ ở đây theo yêu cầu */}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginTop: '10px', fontSize: '18pt', background: '#f8fafc' }}>
-                <div style={{ color: '#000' }}>TỔNG CỘNG:</div>
-                <div style={{ color: '#000' }}>{downloadingPayment?.tongcong} đ</div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14pt", marginTop: '5px' }}>
-                <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingPayment?.dadong} đ</b></div>
-                <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingPayment?.conno} đ</b></div>
-              </div>
-
-              <div style={{ marginTop: '10px' }}>
-                Ghi chú: {downloadingPayment?.ghichu || ""}
-              </div>
+          {/* FOOTER */}
+          <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div style={{ lineHeight: '1.6' }}>
+              Facebook: {config?.tencongty || 'Doremi Preschool'}<br />
+              Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+              Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingPayment?.nhanvien}</b>
             </div>
-            <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
-              <div>
-                Facebook: {config?.tencongty} <br />
-                SĐT/Zalo: {config?.sdtcongty}
-              </div>
-              <div style={{ textAlign: "center" }}>
-                Nhân viên thu tiền <br /><br /><br />
-                <b>{downloadingPayment?.nhanvien}</b>
-              </div>
+            <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+              (Xác nhận)
             </div>
           </div>
         </div>
