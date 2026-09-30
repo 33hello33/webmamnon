@@ -58,22 +58,32 @@ export default function DebtManager() {
   };
 
   const getQRUrl = (hoaDon, wConfig) => {
-    if (!wConfig || wConfig.length === 0) return null;
-    const hinhThucTrim = String(hoaDon?.hinhthuc || '').trim().toLowerCase();
-    let matchedWallet = wConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim);
-    if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
-      matchedWallet = wConfig.find(w => hinhThucTrim.includes(String(w.name || '').trim().toLowerCase()) && w.bankId && w.accNo);
+    if (!wConfig || wConfig.length === 0 || !hoaDon?.hinhthuc) return null;
+    const hinhThucTrim = String(hoaDon.hinhthuc).trim().toLowerCase();
+
+    // Không hiển thị mã QR nếu là hình thức Tiền mặt
+    if (hinhThucTrim.includes('tiền mặt') || hinhThucTrim.includes('tien mat')) {
+      return null;
     }
-    if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
-      matchedWallet = wConfig.find(w => w.bankId && w.accNo);
+
+    // Chỉ hiển thị mã QR khi hình thức thanh toán khớp với ví/tài khoản có STK ngân hàng
+    let matchedWallet = wConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim && w.bankId && w.accNo);
+    if (!matchedWallet) {
+      matchedWallet = wConfig.find(w => {
+        const wName = String(w.name || '').trim().toLowerCase();
+        return wName && (hinhThucTrim.includes(wName) || wName.includes(hinhThucTrim)) && w.bankId && w.accNo;
+      });
     }
+
     if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
       const amountStr = (hoaDon.tongcong || hoaDon.conno || hoaDon.hocphi || "0").toString().replace(/\D/g, "");
+
       let suffix = '';
       if (hoaDon.tenhv) {
         const parts = hoaDon.tenhv.trim().split(' ');
         suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
       }
+
       const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
     }
@@ -117,7 +127,7 @@ export default function DebtManager() {
       mahd: debtOrOverdue.mahd || `TB-${debtOrOverdue.mahv}`,
       ngaylap: new Date().toISOString(),
       tongcong: formatCurrency(debtOrOverdue.conno || debtOrOverdue.hocphi || 0),
-      hinhthuc: walletsConfig[0]?.name || 'Chuyển khoản',
+      hinhthuc: debtOrOverdue.hinhthuc || (walletsConfig.find(w => w.bankId && w.accNo)?.name) || walletsConfig[0]?.name || 'Chuyển khoản',
       nhanvien: cashier,
       attendanceStats
     });
