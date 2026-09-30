@@ -75,11 +75,17 @@ const calculateThoiluong = (inv) => {
 };
 
 const getQRUrl = (hoaDon, walletsConfig) => {
-   if (!walletsConfig || !hoaDon.hinhthuc) return null;
-   const hinhThucTrim = String(hoaDon.hinhthuc).trim();
-   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
+   if (!walletsConfig || walletsConfig.length === 0) return null;
+   const hinhThucTrim = String(hoaDon?.hinhthuc || '').trim().toLowerCase();
+   let matchedWallet = walletsConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim);
+   if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+      matchedWallet = walletsConfig.find(w => hinhThucTrim.includes(String(w.name || '').trim().toLowerCase()) && w.bankId && w.accNo);
+   }
+   if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+      matchedWallet = walletsConfig.find(w => w.bankId && w.accNo);
+   }
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-      const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
+      const amountStr = (hoaDon.tongcong || hoaDon.conno || "0").toString().replace(/\D/g, "");
 
       let suffix = '';
       if (hoaDon.tenhv) {
@@ -87,11 +93,12 @@ const getQRUrl = (hoaDon, walletsConfig) => {
          suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
       }
 
-      const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
+      const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
       return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
 };
+
 
 const calculateEndDateBySessions = (startDateStr, numSessions, activeDays) => {
    if (!startDateStr || !numSessions || activeDays.length === 0) return '';
@@ -613,7 +620,7 @@ export default function InvoiceManager() {
                }
             }
          }
-         
+
          if (!selectedTienAnTier && mealTiers.length > 0) {
             selectedTienAnTier = mealTiers[0];
          }
@@ -1693,230 +1700,249 @@ export default function InvoiceManager() {
 
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          {(downloadingInvoice || downloadingNotice) && document.body && createPortal(
-         <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            {downloadingInvoice && (
-            <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               {[1, 2].map(copyNum => (
-                  <div key={copyNum} className="receipt-copy" style={{ height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
-                     {/* HEADER */}
-                     <div className="p-header">
-                        <div style={{ width: '80px' }}>
-                           <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                        </div>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                           <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
-                           <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
-                           <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
-                        </div>
-                        <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
-                           <div style={{ fontWeight: 800 }}>Mã HĐ: {downloadingInvoice?.mahd}</div>
-                           <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
-                        </div>
-                     </div>
-
-                     <div className="p-title-area">
-                        <h2 style={{ fontSize: '15pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
-                     </div>
-
-                     <div className="p-content">
-                        <div className="p-row">
-                           <span className="p-label">Học viên:</span>
-                           <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingInvoice?.tenhv}</span>
-                           <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
-                           <span className="p-value">{downloadingInvoice?.tenlop}</span>
-                        </div>
-                        <div className="p-row">
-                           <span className="p-label">SĐT liên hệ:</span>
-                           <span className="p-value">{downloadingInvoice?.sdt || ""}</span>
-                           <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
-                           <span className="p-value">{downloadingInvoice?.thoiluong}</span>
-                        </div>
-
-                        <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
-                           <div className="p-row">
-                              <span style={{ flex: 1 }}>- Học phí: <b>{downloadingInvoice?.hocphi} đ</b></span>
-                              <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></span>
-                           </div>
-                           <div className="p-row">
-                              <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingInvoice?.giamhocphi} đ</b></span>
-                              <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{downloadingInvoice?.nocu || 0} đ</b></span>
+            <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+               {downloadingInvoice && (
+                  <div id="download-invoice-node" className="print-a5-receipt" style={{ width: '297mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+                     {[1, 2].map(copyNum => (
+                        <div key={copyNum} className="receipt-copy" style={{ height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
+                           {/* HEADER */}
+                           <div className="p-header">
+                              <div style={{ width: '80px' }}>
+                                 <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                              </div>
+                              <div style={{ flex: 1, textAlign: 'center' }}>
+                                 <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                                 <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                                 <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                              </div>
+                              <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                                 <div style={{ fontWeight: 800 }}>Mã HĐ: {downloadingInvoice?.mahd}</div>
+                                 <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
+                              </div>
                            </div>
 
-                           {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
-                              <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
-                                 {downloadingInvoice.phuthu.map((pt, i) => (
-                                    <div key={i} className="p-row" style={{ marginBottom: 0 }}>
-                                       <span>+ {pt.name || 'Phụ thu'}:</span>
-                                       <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
+                           <div className="p-title-area">
+                              <h2 style={{ fontSize: '15pt' }}>BIÊN LAI THU HỌC PHÍ</h2>
+                           </div>
+
+                           <div className="p-content">
+                              <div className="p-row">
+                                 <span className="p-label">Học viên:</span>
+                                 <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingInvoice?.tenhv}</span>
+                                 <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                                 <span className="p-value">{downloadingInvoice?.tenlop}</span>
+                              </div>
+                              <div className="p-row">
+                                 <span className="p-label">SĐT liên hệ:</span>
+                                 <span className="p-value">{downloadingInvoice?.sdt || ""}</span>
+                                 <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                                 <span className="p-value">{downloadingInvoice?.thoiluong}</span>
+                              </div>
+
+                              <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                                 <div className="p-row">
+                                    <span style={{ flex: 1 }}>- Học phí: <b>{downloadingInvoice?.hocphi} đ</b></span>
+                                    <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingInvoice?.monthlyMealFee || 0)} đ</b></span>
+                                 </div>
+                                 <div className="p-row">
+                                    <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingInvoice?.giamhocphi} đ</b></span>
+                                    <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{downloadingInvoice?.nocu || 0} đ</b></span>
+                                 </div>
+
+                                 {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                                    <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                       {downloadingInvoice.phuthu.map((pt, i) => (
+                                          <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                             <span>+ {pt.name || 'Phụ thu'}:</span>
+                                             <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
+                                          </div>
+                                       ))}
                                     </div>
-                                 ))}
+                                 )}
+
+                                 {downloadingInvoice?.actualTuitionRefund > 0 && (
+                                    <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                       <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                          <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b></span>
+                                       </div>
+                                    </div>
+                                 )}
+
+                                 {downloadingInvoice?.actualMealRefund > 0 && (
+                                    <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                       <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                          <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualMealRefund || 0))} đ</b></span>
+                                       </div>
+                                    </div>
+                                 )}
                               </div>
-                           )}
 
-                           {downloadingInvoice?.actualTuitionRefund > 0 && (
-                              <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
-                                 <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                    <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b></span>
-                                 </div>
+                              <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                                 <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
+                                 <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
                               </div>
-                           )}
-                           
-                           {downloadingInvoice?.actualMealRefund > 0 && (
-                              <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
-                                 <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                    <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{formatCurrency(Math.round(downloadingInvoice?.actualMealRefund || 0))} đ</b></span>
-                                 </div>
+
+                              <div className="p-row" style={{ marginTop: '4px' }}>
+                                 <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{downloadingInvoice?.dadong} đ</span></span>
+                                 <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{downloadingInvoice?.conno} đ</span></span>
                               </div>
-                           )}
-                        </div>
 
-                        <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
-                           <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CỘNG:</span>
-                           <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 950, fontSize: '12pt' }}>{downloadingInvoice?.tongcong} đ</span>
-                        </div>
-
-                        <div className="p-row" style={{ marginTop: '4px' }}>
-                           <span style={{ fontWeight: 800 }}>Đã đóng: <span style={{ color: '#059669 !important' }}>{downloadingInvoice?.dadong} đ</span></span>
-                           <span style={{ marginLeft: 'auto', fontWeight: 800 }}>Còn nợ: <span style={{ color: '#dc2626 !important' }}>{downloadingInvoice?.conno} đ</span></span>
-                        </div>
-
-                        <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                           <span>HÌNH THỨC:</span>
-                           <span className="p-value">{downloadingInvoice?.hinhthuc}</span>
-                        </div>
-                        {downloadingInvoice?.ghichu && (
-                           <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
-                              <span>Ghi chú: {downloadingInvoice.ghichu}</span>
-                           </div>
-                        )}
-                     </div>
-
-                     <div className="p-signatures">
-                        <div className="sig-box">
-                           <h4>Người nộp tiền</h4>
-                           <p>(Ký, họ tên)</p>
-                        </div>
-                        <div className="sig-box">
-                           <h4>Người lập phiếu</h4>
-                           <p>(Ký, họ tên)</p>
-                           <div className="sig-name">{downloadingInvoice?.nhanvien || cashier}</div>
-                        </div>
-                     </div>
-                  </div>
-               ))}
-            </div>
-            )}
-
-            {downloadingNotice && (
-            <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148.5mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
-               <div className="receipt-copy" style={{ borderRight: 'none', height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
-                  {/* HEADER */}
-                  <div className="p-header">
-                     <div style={{ width: '80px' }}>
-                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                     </div>
-                     <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
-                        <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
-                        <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
-                     </div>
-                     <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
-                        <div style={{ fontWeight: 800 }}>Mã TB: {downloadingNotice?.mahd}</div>
-                        <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
-                     </div>
-                  </div>
-
-                  <div className="p-title-area">
-                     <h2 style={{ fontSize: '15pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
-                  </div>
-
-                  <div className="p-content">
-                     <div className="p-row">
-                        <span className="p-label">Họ tên:</span>
-                        <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingNotice?.tenhv}</span>
-                        <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
-                        <span className="p-value">{downloadingNotice?.tenlop}</span>
-                     </div>
-                     <div className="p-row">
-                        <span className="p-label">SĐT liên hệ:</span>
-                        <span className="p-value">{downloadingNotice?.sdt || ""}</span>
-                        <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
-                        <span className="p-value">{downloadingNotice?.thoiluong}</span>
-                     </div>
-
-                     <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
-                        <div className="p-row">
-                           <span style={{ flex: 1 }}>- Học phí: <b>{downloadingNotice?.hocphi} đ</b></span>
-                           <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></span>
-                        </div>
-                        <div className="p-row">
-                           <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingNotice?.giamhocphi} đ</b></span>
-                           <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{formatCurrency(noCu)} đ</b></span>
-                        </div>
-
-                        {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
-                           <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
-                              {downloadingNotice.phuthu.map((pt, i) => (
-                                 <div key={i} className="p-row" style={{ marginBottom: 0 }}>
-                                    <span>+ {pt.name || 'Phụ thu'}:</span>
-                                    <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
-                                 </div>
-                              ))}
-                           </div>
-                        )}
-
-                        {downloadingNotice?.actualTuitionRefund > 0 && (
-                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
                               <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                 <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                                 <span>HÌNH THỨC:</span>
+                                 <span className="p-value">{downloadingInvoice?.hinhthuc}</span>
+                              </div>
+                              {downloadingInvoice?.ghichu && (
+                                 <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                                    <span>Ghi chú: {downloadingInvoice.ghichu}</span>
+                                 </div>
+                              )}
+                           </div>
+
+                           <div className="p-signatures">
+                              <div className="sig-box">
+                                 <h4>Người nộp tiền</h4>
+                                 <p>(Ký, họ tên)</p>
+                              </div>
+                              <div className="sig-box">
+                                 <h4>Người lập phiếu</h4>
+                                 <p>(Ký, họ tên)</p>
+                                 <div className="sig-name">{downloadingInvoice?.nhanvien || cashier}</div>
                               </div>
                            </div>
-                        )}
-                        
-                        {downloadingNotice?.actualMealRefund > 0 && (
-                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
-                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
-                                 <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{formatCurrency(Math.round(downloadingNotice?.actualMealRefund || 0))} đ</b></span>
-                              </div>
-                           </div>
-                        )}
-                     </div>
-
-                     <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
-                        <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
-                        <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
-                     </div>
-
-                     <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
-                        <span>HÌNH THỨC:</span>
-                        <span className="p-value">{downloadingNotice?.hinhthuc}</span>
-                     </div>
-                     {downloadingNotice?.ghichu && (
-                        <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
-                           <span>Ghi chú: {downloadingNotice.ghichu}</span>
                         </div>
-                     )}
-                     <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
-                        * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
-                     </div>
+                     ))}
                   </div>
+               )}
 
-                  <div className="p-signatures">
-                     <div className="sig-box">
-                        <h4>Người nộp tiền</h4>
-                        <p>(Ký, họ tên)</p>
-                     </div>
-                     <div className="sig-box">
-                        <h4>Nhà trường</h4>
-                        <p>(Ký, đóng dấu)</p>
-                        <div className="sig-name">{cashier}</div>
+               {downloadingNotice && (
+                  <div id="download-notice-node" className="print-a5-receipt" style={{ width: '148.5mm', height: 'auto', padding: 0, margin: 0, background: '#fff', display: 'flex', opacity: 0.01, position: 'relative', overflow: 'hidden' }}>
+                     <div className="receipt-copy" style={{ borderRight: 'none', height: 'auto', padding: '8mm', boxSizing: 'border-box' }}>
+                        {/* HEADER */}
+                        <div className="p-header">
+                           <div style={{ width: '80px' }}>
+                              <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                           </div>
+                           <div style={{ flex: 1, textAlign: 'center' }}>
+                              <h3 style={{ fontSize: '14pt' }}>{config?.tencongty || 'Tên Trường'}</h3>
+                              <p style={{ fontSize: '10pt' }}>ĐC: {config?.diachicongty}</p>
+                              <p style={{ fontSize: '10pt' }}>SĐT: {config?.sdtcongty}</p>
+                           </div>
+                           <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                              <div style={{ fontWeight: 800 }}>Mã TB: {downloadingNotice?.mahd}</div>
+                              <div style={{ fontSize: '8pt', opacity: 0.8 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : "..."}</div>
+                           </div>
+                        </div>
+
+                        <div className="p-title-area">
+                           <h2 style={{ fontSize: '15pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
+                        </div>
+
+                        <div className="p-content">
+                           <div className="p-row">
+                              <span className="p-label">Họ tên:</span>
+                              <span className="p-value" style={{ fontSize: '11pt' }}>{downloadingNotice?.tenhv}</span>
+                              <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                              <span className="p-value">{downloadingNotice?.tenlop}</span>
+                           </div>
+                           <div className="p-row">
+                              <span className="p-label">SĐT liên hệ:</span>
+                              <span className="p-value">{downloadingNotice?.sdt || ""}</span>
+                              <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                              <span className="p-value">{downloadingNotice?.thoiluong}</span>
+                           </div>
+
+                           <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                              <div className="p-row">
+                                 <span style={{ flex: 1 }}>- Học phí: <b>{downloadingNotice?.hocphi} đ</b></span>
+                                 <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{formatCurrency(downloadingNotice?.monthlyMealFee || 0)} đ</b></span>
+                              </div>
+                              <div className="p-row">
+                                 <span style={{ flex: 1 }}>- Ưu đãi: <b>{downloadingNotice?.giamhocphi} đ</b></span>
+                                 <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{formatCurrency(noCu)} đ</b></span>
+                              </div>
+
+                              {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                                 <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                    {downloadingNotice.phuthu.map((pt, i) => (
+                                       <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                          <span>+ {pt.name || 'Phụ thu'}:</span>
+                                          <span style={{ marginLeft: 'auto' }}><b>{formatCurrency(pt.amount)} đ</b></span>
+                                       </div>
+                                    ))}
+                                 </div>
+                              )}
+
+                              {downloadingNotice?.actualTuitionRefund > 0 && (
+                                 <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                    <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                       <span style={{ marginLeft: 'auto' }}>Hoàn HP: <b>-{formatCurrency(Math.round(downloadingNotice?.actualTuitionRefund || 0))} đ</b></span>
+                                    </div>
+                                 </div>
+                              )}
+
+                              {downloadingNotice?.actualMealRefund > 0 && (
+                                 <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                                    <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                       <span style={{ marginLeft: 'auto' }}>Hoàn TA: <b>-{formatCurrency(Math.round(downloadingNotice?.actualMealRefund || 0))} đ</b></span>
+                                    </div>
+                                 </div>
+                              )}
+                           </div>
+
+                           {/* Thống kê điểm danh - 1 dòng text */}
+                           {downloadingNotice?.studySummary && (
+                              <div className="p-row" style={{ fontSize: '8.5pt', margin: '3px 0' }}>
+                                 <span>- Điểm danh: Có mặt <b>{downloadingNotice.studySummary.daHoc || 0}</b> | Phép <b>{downloadingNotice.studySummary.nghiPhep || 0}</b> | Không phép <b>{downloadingNotice.studySummary.nghiKhongPhep || 0}</b>{downloadingNotice.studySummary.maxConsecutive > 0 ? <> | Nghỉ liên tiếp <b>{downloadingNotice.studySummary.maxConsecutive}</b></> : ''} (Tổng <b>{downloadingNotice.studySummary.tongBuoi || (Number(downloadingNotice.studySummary.daHoc || 0) + Number(downloadingNotice.studySummary.nghiPhep || 0) + Number(downloadingNotice.studySummary.nghiKhongPhep || 0))}</b> buổi)</span>
+                              </div>
+                           )}
+
+                           <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
+                              <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
+                              <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 900, fontSize: '12pt' }}>{downloadingNotice?.tongcong} đ</span>
+                           </div>
+
+                           <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '5px' }}>
+                              <span>HÌNH THỨC:</span>
+                              <span className="p-value">{downloadingNotice?.hinhthuc}</span>
+                           </div>
+                           {downloadingNotice?.ghichu && (
+                              <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                                 <span>Ghi chú: {downloadingNotice.ghichu}</span>
+                              </div>
+                           )}
+
+                           {/* Mã QR Thanh toán VietQR - Chỉ mỗi hình mã QR */}
+                           {(() => {
+                              const qrUrl = getQRUrl(downloadingNotice, walletsConfig);
+                              if (!qrUrl) return null;
+                              return (
+                                 <div style={{ textAlign: 'center', margin: '6px 0' }}>
+                                    <img crossOrigin="anonymous" src={qrUrl} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                                 </div>
+                              );
+                           })()}
+
+                           <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
+                              * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
+                           </div>
+                        </div>
+
+                        <div className="p-signatures">
+                           <div className="sig-box">
+                              <h4>Người nộp tiền</h4>
+                              <p>(Ký, họ tên)</p>
+                           </div>
+                           <div className="sig-box">
+                              <h4>Nhà trường</h4>
+                              <p>(Ký, đóng dấu)</p>
+                              <div className="sig-name">{cashier}</div>
+                           </div>
+                        </div>
                      </div>
                   </div>
-               </div>
-            </div>
-            )}
-         </div>,
-         document.body
+               )}
+            </div>,
+            document.body
          )}
 
          {(downloadingNotice || downloadingInvoice) && (

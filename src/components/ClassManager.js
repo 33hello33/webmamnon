@@ -20,11 +20,17 @@ const formatMonthYear = (dateStr) => {
 };
 
 const getQRUrl = (hoaDon, walletsConfig) => {
-  if (!walletsConfig || !hoaDon.hinhthuc) return null;
-  const hinhThucTrim = String(hoaDon.hinhthuc).trim();
-  const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
+  if (!walletsConfig || walletsConfig.length === 0) return null;
+  const hinhThucTrim = String(hoaDon?.hinhthuc || '').trim().toLowerCase();
+  let matchedWallet = walletsConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim);
+  if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+    matchedWallet = walletsConfig.find(w => hinhThucTrim.includes(String(w.name || '').trim().toLowerCase()) && w.bankId && w.accNo);
+  }
+  if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+    matchedWallet = walletsConfig.find(w => w.bankId && w.accNo);
+  }
   if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-    const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
+    const amountStr = (hoaDon.tongcong || hoaDon.conno || "0").toString().replace(/\D/g, "");
 
     let suffix = '';
     if (hoaDon.tenhv) {
@@ -32,7 +38,7 @@ const getQRUrl = (hoaDon, walletsConfig) => {
       suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
     }
 
-    const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
+    const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
     return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
   }
   return null;
@@ -967,7 +973,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           dadong: '0',
           conno: formatTuition(row.tongcong),
           hinhthuc: row.hinhthuc,
-          ghichu: row.ghichu,
+          ghichu: `${row.ghichu || ''}${row.coMat !== undefined ? ` [Điểm danh: Có mặt ${row.coMat || 0}, Phép ${row.nghiPhep || 0}, KP ${row.nghiKP || 0}, Liên tiếp ${row.maxConsecutive || 0}]` : ''}`,
           daxoa: null,
           malop: selectedClass?.malop || '',
           thoiluong: tl,
@@ -978,6 +984,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         currentNotices.push({
           ...row,
           ...insertData,
+          statsPeriod: batchNoticeData.statsStart && batchNoticeData.statsEnd ? `${new Date(batchNoticeData.statsStart).toLocaleDateString('vi-VN')} - ${new Date(batchNoticeData.statsEnd).toLocaleDateString('vi-VN')}` : '',
           sdt: students.find(s => s.mahv === row.mahv)?.sdt || ''
         });
       }
@@ -2311,6 +2318,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                         )}
                      </div>
 
+                     {/* Thống kê điểm danh - 1 dòng text */}
+                     {(printHoaDon.coMat !== undefined || printHoaDon.nghiPhep !== undefined) && (
+                        <div className="p-row" style={{ fontSize: '8.5pt', margin: '3px 0' }}>
+                           <span>- Điểm danh: Có mặt <b>{printHoaDon.coMat || 0}</b> | Phép <b>{printHoaDon.nghiPhep || 0}</b> | Không phép <b>{printHoaDon.nghiKP || 0}</b>{printHoaDon.maxConsecutive > 0 ? <> | Nghỉ liên tiếp <b>{printHoaDon.maxConsecutive}</b></> : ''} (Tổng <b>{(Number(printHoaDon.coMat || 0) + Number(printHoaDon.nghiPhep || 0) + Number(printHoaDon.nghiKP || 0))}</b> buổi)</span>
+                        </div>
+                     )}
+
                      <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', background: '#0ea5e9', color: '#fff', borderRadius: '4px' }}>
                         <span style={{ color: '#fff', fontWeight: 900, fontSize: '11pt' }}>TỔNG CẦN NỘP:</span>
                         <span style={{ marginLeft: 'auto', color: '#fff', fontWeight: 900, fontSize: '12pt' }}>{printHoaDon.tongcong} đ</span>
@@ -2325,6 +2339,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                            <span>Ghi chú: {printHoaDon.ghichu}</span>
                         </div>
                      )}
+
+                     {/* Mã QR Thanh toán VietQR - Chỉ mỗi hình mã QR */}
+                     {(() => {
+                        const qrUrl = getQRUrl(printHoaDon, walletsConfig);
+                        if (!qrUrl) return null;
+                        return (
+                           <div style={{ textAlign: 'center', margin: '6px 0' }}>
+                              <img crossOrigin="anonymous" src={qrUrl} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                           </div>
+                        );
+                     })()}
+
                      <div style={{ fontSize: '7pt', marginTop: '5px', color: '#ef4444', fontWeight: 600 }}>
                         * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
                      </div>

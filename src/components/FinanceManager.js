@@ -496,11 +496,34 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const { config } = useConfig();
    const walletsConfig = useMemo(() => (config ? [
-      { id: 'vi1', name: config.vi1?.name || '' },
-      { id: 'vi2', name: config.vi2?.name || '' },
-      { id: 'vi3', name: config.vi3?.name || '' },
-      { id: 'vi4', name: config.vi4?.name || '' }
+      { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
+      { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
+      { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
+      { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
    ].filter(w => w.name.trim() !== '') : []), [config]);
+
+   const getQRUrl = (hoaDon, wConfig) => {
+      if (!wConfig || wConfig.length === 0) return null;
+      const hinhThucTrim = String(hoaDon?.hinhthuc || '').trim().toLowerCase();
+      let matchedWallet = wConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim);
+      if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+         matchedWallet = wConfig.find(w => hinhThucTrim.includes(String(w.name || '').trim().toLowerCase()) && w.bankId && w.accNo);
+      }
+      if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+         matchedWallet = wConfig.find(w => w.bankId && w.accNo);
+      }
+      if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
+         const amountStr = (hoaDon.tongcong || hoaDon.conno || "0").toString().replace(/\D/g, "");
+         let suffix = '';
+         if (hoaDon.tenhv) {
+            const parts = hoaDon.tenhv.trim().split(' ');
+            suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
+         }
+         const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
+         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      }
+      return null;
+   };
    const [data, setData] = useState([]);
    const [loading, setLoading] = useState(false);
    const [searchTerm, setSearchTerm] = useState('');
@@ -642,13 +665,75 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }, 500);
    };
 
-   const handlePrintHoaDon = (record) => {
+   const handlePrintHoaDon = async (record) => {
       const hv = hvMap[record.mahv] || {};
+      let attendanceStats = null;
+
+      // 1. Phân tích thống kê từ ghi chú nếu có
+      if (record.ghichu && record.ghichu.includes('Điểm danh:')) {
+         const m = record.ghichu.match(/Có mặt\s*(\d+).*?Phép\s*(\d+).*?KP\s*(\d+)(?:.*?Liên tiếp\s*(\d+))?/i);
+         if (m) {
+            attendanceStats = {
+               daHoc: parseInt(m[1], 10),
+               nghiPhep: parseInt(m[2], 10),
+               nghiKhongPhep: parseInt(m[3], 10),
+               maxConsecutive: m[4] ? parseInt(m[4], 10) : 0,
+               tongBuoi: parseInt(m[1], 10) + parseInt(m[2], 10) + parseInt(m[3], 10)
+            };
+         }
+      }
+
+      // 2. Nếu chưa có và là thông báo TB, truy vấn trực tiếp từ tbl_diemdanh
+      if (!attendanceStats && record.mahv) {
+         try {
+            let sDate = '';
+            let eDate = '';
+            if (record.thoiluong && record.thoiluong.includes('/')) {
+               const parts = record.thoiluong.match(/(\d{1,2})\/(\d{4})/);
+               if (parts) {
+                  const m = parseInt(parts[1], 10);
+                  const y = parseInt(parts[2], 10);
+                  sDate = new Date(y, m - 1, 1).toISOString().split('T')[0];
+                  eDate = new Date(y, m, 0).toISOString().split('T')[0];
+               }
+            }
+            if (!sDate) {
+               const baseDate = new Date(record.ngaylap || new Date());
+               sDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - 1, 1).toISOString().split('T')[0];
+               eDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 0).toISOString().split('T')[0];
+            }
+            const { data: attData } = await supabase.from('tbl_diemdanh')
+               .select('ngay, trangthai')
+               .eq('mahv', record.mahv)
+               .gte('ngay', sDate)
+               .lte('ngay', eDate);
+            if (attData && attData.length > 0) {
+               const normalizeStatus = (st) => (st || '').trim().toLowerCase();
+               const uniqueDayRecords = Array.from(new Map(attData.map(r => [r.ngay, r])).values());
+               const coMat = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('có mặt')).length;
+               const nghiPhep = uniqueDayRecords.filter(r => {
+                  const s = normalizeStatus(r.trangthai);
+                  return s.includes('nghỉ phép') && !s.includes('không');
+               }).length;
+               const nghiKP = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
+               attendanceStats = {
+                  daHoc: coMat,
+                  nghiPhep,
+                  nghiKhongPhep: nghiKP,
+                  tongBuoi: uniqueDayRecords.length
+               };
+            }
+         } catch (e) {
+            console.error('Lỗi lấy dữ liệu điểm danh:', e);
+         }
+      }
+
       const enriched = {
          ...record,
          tenhv: hv.tenhv,
          sdt: hv.sdt,
-         nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_'
+         nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_',
+         attendanceStats
       };
       setPrintHoaDon(enriched);
 
@@ -2658,6 +2743,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            )}
                         </div>
 
+                        {/* Thống kê điểm danh cho phiếu thông báo học phí - 1 dòng text */}
+                        {printHoaDon.attendanceStats && (
+                           <div className="p-row" style={{ fontSize: '8.5pt', margin: '3px 0' }}>
+                              <span>- Điểm danh: Có mặt <b>{printHoaDon.attendanceStats.daHoc || 0}</b> | Phép <b>{printHoaDon.attendanceStats.nghiPhep || 0}</b> | Không phép <b>{printHoaDon.attendanceStats.nghiKhongPhep || 0}</b>{printHoaDon.attendanceStats.maxConsecutive > 0 ? <> | Nghỉ liên tiếp <b>{printHoaDon.attendanceStats.maxConsecutive}</b></> : ''} (Tổng <b>{printHoaDon.attendanceStats.tongBuoi || (Number(printHoaDon.attendanceStats.daHoc || 0) + Number(printHoaDon.attendanceStats.nghiPhep || 0) + Number(printHoaDon.attendanceStats.nghiKhongPhep || 0))}</b> buổi)</span>
+                           </div>
+                        )}
+
                         <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
                            <span style={{ fontWeight: 900, fontSize: '10pt' }}>TỔNG CỘNG:</span>
                            <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{fCur(printHoaDon.tongcong)} đ</span>
@@ -2679,6 +2771,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <span>Ghi chú: {printHoaDon.ghichu}</span>
                            </div>
                         )}
+
+                        {/* Mã QR Thanh toán VietQR - Chỉ mỗi hình mã QR */}
+                        {(() => {
+                           const qrUrl = getQRUrl(printHoaDon, walletsConfig);
+                           if (!qrUrl) return null;
+                           return (
+                              <div style={{ textAlign: 'center', margin: '6px 0' }}>
+                                 <img crossOrigin="anonymous" src={qrUrl} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                              </div>
+                           );
+                        })()}
                      </div>
 
                      <div className="p-signatures">

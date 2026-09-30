@@ -2,17 +2,17 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
-import { BadgeDollarSign, Clock, CheckCircle, X } from 'lucide-react';
+import { BadgeDollarSign, Clock, CheckCircle, X, FileText } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './DebtManager.css';
 
 export default function DebtManager() {
   const { config } = useConfig();
   const walletsConfig = (config ? [
-    { id: 'vi1', name: config.vi1?.name || '' },
-    { id: 'vi2', name: config.vi2?.name || '' },
-    { id: 'vi3', name: config.vi3?.name || '' },
-    { id: 'vi4', name: config.vi4?.name || '' }
+    { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
+    { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
+    { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
+    { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
   ].filter(w => w.name && w.name.trim() !== '') : []);
 
   const [classes, setClasses] = useState([]);
@@ -29,6 +29,7 @@ export default function DebtManager() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Tiền mặt');
   const [downloadingPayment, setDownloadingPayment] = useState(null);
+  const [downloadingNotice, setDownloadingNotice] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
 
   const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -55,6 +56,119 @@ export default function DebtManager() {
     setPaymentMethod(walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
     setShowPaymentModal(true);
   };
+
+  const getQRUrl = (hoaDon, wConfig) => {
+    if (!wConfig || wConfig.length === 0) return null;
+    const hinhThucTrim = String(hoaDon?.hinhthuc || '').trim().toLowerCase();
+    let matchedWallet = wConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim);
+    if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+      matchedWallet = wConfig.find(w => hinhThucTrim.includes(String(w.name || '').trim().toLowerCase()) && w.bankId && w.accNo);
+    }
+    if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) {
+      matchedWallet = wConfig.find(w => w.bankId && w.accNo);
+    }
+    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
+      const amountStr = (hoaDon.tongcong || hoaDon.conno || hoaDon.hocphi || "0").toString().replace(/\D/g, "");
+      let suffix = '';
+      if (hoaDon.tenhv) {
+        const parts = hoaDon.tenhv.trim().split(' ');
+        suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
+      }
+      const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
+      return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+    }
+    return null;
+  };
+
+  const handleOpenNotice = async (debtOrOverdue) => {
+    let attendanceStats = null;
+    try {
+      const now = new Date();
+      const sDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const eDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      const { data: attData } = await supabase.from('tbl_diemdanh')
+        .select('ngay, trangthai')
+        .eq('mahv', debtOrOverdue.mahv)
+        .gte('ngay', sDate)
+        .lte('ngay', eDate);
+      if (attData && attData.length > 0) {
+        const normalizeStatus = (st) => (st || '').trim().toLowerCase();
+        const uniqueDayRecords = Array.from(new Map(attData.map(r => [r.ngay, r])).values());
+        const coMat = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('có mặt')).length;
+        const nghiPhep = uniqueDayRecords.filter(r => {
+          const s = normalizeStatus(r.trangthai);
+          return s.includes('nghỉ phép') && !s.includes('không');
+        }).length;
+        const nghiKP = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
+        attendanceStats = {
+          daHoc: coMat,
+          nghiPhep,
+          nghiKhongPhep: nghiKP,
+          tongBuoi: uniqueDayRecords.length,
+          period: `Tháng ${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`
+        };
+      }
+    } catch (e) {
+      console.error('Lỗi lấy điểm danh:', e);
+    }
+
+    setDownloadingNotice({
+      ...debtOrOverdue,
+      mahd: debtOrOverdue.mahd || `TB-${debtOrOverdue.mahv}`,
+      ngaylap: new Date().toISOString(),
+      tongcong: formatCurrency(debtOrOverdue.conno || debtOrOverdue.hocphi || 0),
+      hinhthuc: walletsConfig[0]?.name || 'Chuyển khoản',
+      nhanvien: cashier,
+      attendanceStats
+    });
+  };
+
+  useEffect(() => {
+    if (downloadingNotice) {
+      const processPng = async () => {
+        try {
+          await new Promise(r => setTimeout(r, 1000));
+          const node = document.getElementById('download-debt-notice-node');
+          if (node) {
+            node.style.position = 'fixed';
+            node.style.top = '0';
+            node.style.left = '0';
+            node.style.zIndex = '9999';
+            node.style.opacity = '1';
+            node.style.visibility = 'visible';
+
+            const images = node.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+              if (img.complete) return Promise.resolve();
+              return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
+            }));
+            await new Promise(r => setTimeout(r, 500));
+
+            const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+
+            node.style.position = 'static';
+            node.style.opacity = '0.01';
+
+            if (window.innerWidth <= 991) {
+              setPreviewImg(dataUrl);
+            } else {
+              const link = document.createElement('a');
+              link.download = `ThongBao_HocPhi_${downloadingNotice.tenhv}_${downloadingNotice.mahd}.png`;
+              link.href = dataUrl;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }
+        } catch (err) {
+          console.error('Lỗi xuất PNG thông báo:', err);
+        } finally {
+          setDownloadingNotice(null);
+        }
+      };
+      processPng();
+    }
+  }, [downloadingNotice]);
 
   useEffect(() => {
     if (downloadingPayment) {
@@ -413,12 +527,21 @@ export default function DebtManager() {
                           {parseInt(String(d.conno).replace(/,/g, '')) < 0 && <span style={{ fontSize: '0.7rem', marginLeft: '4px' }}>(Tiền dư)</span>}
                         </td>
                         <td className="text-center">
-                          <button
-                            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500 }}
-                            onClick={() => openPaymentModal(d)}
-                          >
-                            Trả nợ
-                          </button>
+                          <div style={{ display: 'inline-flex', gap: '6px', justifyContent: 'center' }}>
+                            <button
+                              style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500 }}
+                              onClick={() => openPaymentModal(d)}
+                            >
+                              Trả nợ
+                            </button>
+                            <button
+                              style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0284c7', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Tải / In thông báo học phí"
+                              onClick={() => handleOpenNotice(d)}
+                            >
+                              <FileText size={13} /> Thông báo
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -452,7 +575,10 @@ export default function DebtManager() {
                       </div>
                       <div className="info-line amount-row">
                         <span className="debt-amount">{d.conno.toLocaleString()} ₫</span>
-                        <button className="btn-pay" onClick={() => openPaymentModal(d)}>Trả nợ</button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn-pay" onClick={() => openPaymentModal(d)}>Trả nợ</button>
+                          <button style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0284c7', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleOpenNotice(d)}><FileText size={13} /> Thông báo</button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -483,6 +609,7 @@ export default function DebtManager() {
                     <th>Tên Lớp</th>
                     <th>Ngày Lập HĐ</th>
                     <th className="text-danger">Ngày Kết Thúc (Deadline)</th>
+                    <th className="text-center">Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -497,12 +624,21 @@ export default function DebtManager() {
                           <td>{d.tenlop}</td>
                           <td className="text-muted">{formattedLap}</td>
                           <td className="font-bold text-danger text-lg">{formattedKetThuc}</td>
+                          <td className="text-center">
+                            <button
+                              style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px', background: '#0284c7', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Tải / In thông báo nhắc đóng học phí"
+                              onClick={() => handleOpenNotice(d)}
+                            >
+                              <FileText size={13} /> Thông báo
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan="5" className="empty-state">Rất tốt! Không có học sinh nào đang học vượt khung thời gian đóng phí.</td>
+                      <td colSpan="6" className="empty-state">Rất tốt! Không có học sinh nào đang học vượt khung thời gian đóng phí.</td>
                     </tr>
                   )}
                 </tbody>
@@ -530,6 +666,9 @@ export default function DebtManager() {
                       <div className="info-line deadline-row">
                         <span className="deadline-label">Hạn kết thúc:</span>
                         <span className="deadline-date">{new Date(d.ngayketthuc).toLocaleDateString('vi-VN')}</span>
+                      </div>
+                      <div className="info-line" style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', background: '#0284c7', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleOpenNotice(d)}><FileText size={13} /> Thông báo học phí</button>
                       </div>
                     </div>
                   </div>
@@ -612,6 +751,19 @@ export default function DebtManager() {
               </select>
             </div>
 
+            {/* Hiển thị QR Code thanh toán nếu chọn Ví/Ngân hàng */}
+            {(() => {
+              const qr = getQRUrl({ ...selectedDebt, conno: paymentAmount || selectedDebt.conno, hinhthuc: paymentMethod }, walletsConfig);
+              if (!qr || paymentMethod === 'Tiền mặt') return null;
+              return (
+                <div style={{ marginBottom: '20px', padding: '10px', background: '#f0fdf4', border: '1px dashed #22c55e', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#15803d', marginBottom: '6px' }}>Mã QR Chuyển khoản (VietQR)</div>
+                  <img src={qr} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                  <div style={{ fontSize: '0.75rem', color: '#166534', marginTop: '4px' }}>Quét mã chuyển khoản nhanh</div>
+                </div>
+              );
+            })()}
+
             {paymentError && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '0.9rem' }}>{paymentError}</div>}
             {paymentSuccess && <div style={{ color: '#10b981', marginBottom: '16px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}><CheckCircle size={16} /> {paymentSuccess}</div>}
 
@@ -685,6 +837,17 @@ export default function DebtManager() {
               <div style={{ marginTop: '10px' }}>
                 Ghi chú: {downloadingPayment?.ghichu || ""}
               </div>
+
+              {/* QR Code trên Biên lai thu tiền - Chỉ mỗi hình mã QR */}
+              {(() => {
+                const qrUrl = getQRUrl(downloadingPayment, walletsConfig);
+                if (!qrUrl) return null;
+                return (
+                  <div style={{ textAlign: 'center', margin: '10px 0' }}>
+                    <img crossOrigin="anonymous" src={qrUrl} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
               <div>
@@ -699,6 +862,85 @@ export default function DebtManager() {
           </div>
         </div>
       </div>
+
+      {/* HIDDEN TEMPLATE FOR NOTICE PNG EXPORT */}
+      {downloadingNotice && (
+        <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
+          <div id="download-debt-notice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ width: '180px', textAlign: 'left' }}>
+                  {config?.logo && <img crossOrigin="anonymous" src={config.logo} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                </div>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'Tên Công Ty'}</h2>
+                  <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                  <p style={{ margin: '2px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>SĐT: {config?.sdtcongty}</p>
+                </div>
+                <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                  <div>Mã TB: <b style={{ fontWeight: 950 }}>{downloadingNotice?.mahd}</b></div>
+                  <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingNotice ? new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
+                </div>
+              </div>
+
+              <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#0284c7', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                THÔNG BÁO THU HỌC PHÍ
+              </div>
+
+              <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '15px 0' }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                  <div>Họ và tên học sinh: <b style={{ fontWeight: 950 }}>{downloadingNotice?.tenhv}</b></div>
+                  <div>Mã HS: <b style={{ fontWeight: 900 }}>{downloadingNotice?.mahv}</b></div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <div>Lớp / Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                  {downloadingNotice?.ngayketthuc && (
+                    <div>Hạn đóng phí: <b style={{ color: '#dc2626' }}>{new Date(downloadingNotice.ngayketthuc).toLocaleDateString("vi-VN")}</b></div>
+                  )}
+                </div>
+
+                {/* Thống kê điểm danh - 1 dòng text */}
+                {downloadingNotice?.attendanceStats && (
+                  <div style={{ fontSize: '13pt', margin: '12px 0', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                    - Điểm danh: Có mặt <b>{downloadingNotice.attendanceStats.daHoc || 0}</b> | Phép <b>{downloadingNotice.attendanceStats.nghiPhep || 0}</b> | Không phép <b>{downloadingNotice.attendanceStats.nghiKhongPhep || 0}</b>{downloadingNotice.attendanceStats.maxConsecutive > 0 ? <> | Nghỉ liên tiếp <b>{downloadingNotice.attendanceStats.maxConsecutive}</b></> : ''} (Tổng <b>{downloadingNotice.attendanceStats.tongBuoi || (Number(downloadingNotice.attendanceStats.daHoc || 0) + Number(downloadingNotice.attendanceStats.nghiPhep || 0) + Number(downloadingNotice.attendanceStats.nghiKhongPhep || 0))}</b> buổi)
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "950", borderTop: '2.5px solid #000', borderBottom: '2px solid #000', padding: '12px 10px', marginTop: '10px', fontSize: '18pt', background: '#e0f2fe' }}>
+                  <div style={{ color: '#0369a1' }}>SỐ TIỀN CẦN NỘP:</div>
+                  <div style={{ color: '#0369a1' }}>{downloadingNotice?.tongcong} đ</div>
+                </div>
+
+                {/* Mã QR Thanh toán VietQR - Chỉ mỗi hình mã QR */}
+                {(() => {
+                  const qrUrl = getQRUrl(downloadingNotice, walletsConfig);
+                  if (!qrUrl) return null;
+                  return (
+                    <div style={{ textAlign: 'center', margin: '12px 0' }}>
+                      <img crossOrigin="anonymous" src={qrUrl} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '6px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                    </div>
+                  );
+                })()}
+
+                <div style={{ fontSize: '11pt', marginTop: '10px', color: '#ef4444', fontWeight: 600 }}>
+                  * Kính đề nghị Quý phụ huynh vui lòng thanh toán học phí sớm để đảm bảo quyền lợi học tập của học sinh. Xin chân thành cảm ơn!
+                </div>
+              </div>
+
+              <div style={{ marginTop: 30, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+                <div>
+                  Facebook: {config?.tencongty} <br />
+                  SĐT/Zalo: {config?.sdtcongty}
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  Người lập thông báo <br /><br /><br />
+                  <b>{downloadingNotice?.nhanvien}</b>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewImg && (
         <div className="modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 10000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '15px' }}>
