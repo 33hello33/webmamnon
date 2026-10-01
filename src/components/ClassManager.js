@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText, Plus
+  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, Users, User, DollarSign, X, Eye, GraduationCap, FileText, Plus
 } from 'lucide-react';
 
 import { toPng } from 'html-to-image';
@@ -13,7 +13,7 @@ import './ClassManager.css';
 const INITIAL_FORM = {
   malop: '', tenlop: '', hocphi: '', manv: '', daxoa: 'Đang Học'
 }
-const formatMonthYear = (dateStr) => {
+const _unusedFormatMonthYear = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -47,7 +47,8 @@ const getQRUrl = (hoaDon, walletsConfig) => {
     }
 
     const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
-    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+    const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
+    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
   }
   return null;
 };
@@ -172,7 +173,7 @@ const calculateConsecutiveLeave = (attendance) => {
 };
 
 export default function ClassManager({ students, showMessage, fetchStudents }) {
-  const { config, getTruTienAn, getTienAnConfig } = useConfig();
+  const { config } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
     { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -236,7 +237,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [transferMode, setTransferMode] = useState('single');
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [selectionAlert, setSelectionAlert] = useState({ open: false, title: '', message: '' });
-  const isProcessingRef = React.useRef(false);
+  const isProcessingRef = useRef(false);
 
 
 
@@ -548,7 +549,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         studentTienAnTiers[s.mahv] = lastTienAnTier;
       });
 
-      const trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+      const _unused_trutienan_val_default = parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
       const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
       // Default stats range: previous month
@@ -992,6 +993,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         currentNotices.push({
           ...row,
           ...insertData,
+          _t: `${Date.now()}_${i}`,
           statsPeriod: batchNoticeData.statsStart && batchNoticeData.statsEnd ? `${new Date(batchNoticeData.statsStart).toLocaleDateString('vi-VN')} - ${new Date(batchNoticeData.statsEnd).toLocaleDateString('vi-VN')}` : '',
           sdt: students.find(s => s.mahv === row.mahv)?.sdt || ''
         });
@@ -1010,7 +1012,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     }
   };
 
-  const getNoticeQRUrl = (hoaDon) => {
+  const _unused_getNoticeQRUrl = (hoaDon) => {
     return getQRUrl(hoaDon, walletsConfig);
   };
 
@@ -1027,7 +1029,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           const allImageTags = Array.from(document.querySelectorAll('[id^="print-notice-"] img'));
           await Promise.all(
             allImageTags.map(img => {
-              if (img.complete) return Promise.resolve();
+              if (img.complete && img.naturalWidth !== 0) return Promise.resolve();
               return new Promise(resolve => {
                 img.onload = resolve;
                 img.onerror = resolve;
@@ -1036,7 +1038,28 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             })
           );
 
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 600));
+
+          // Chuyen toan bo anh sang base64 dataURL de triet tieu cache
+          allImageTags.forEach(img => {
+            if (img.complete && img.naturalWidth > 0 && !img.src.startsWith('data:')) {
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const dUrl = canvas.toDataURL('image/png');
+                if (dUrl && dUrl.length > 100) {
+                  img.src = dUrl;
+                }
+              } catch (convErr) {
+                console.warn('Loi chuyen anh sang dataURL:', convErr);
+              }
+            }
+          });
+
+          await new Promise(r => setTimeout(r, 400));
 
           for (let i = 0; i < noticesToPrint.length; i++) {
             const node = document.getElementById(`print-notice-${i}`);
@@ -1055,6 +1078,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               try {
                 const dataUrl = await toPng(node, {
                   cacheBust: true,
+                  includeQueryParams: true,
                   backgroundColor: '#ffffff'
                 });
 
@@ -1072,7 +1096,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 } else {
                   console.warn(`Empty or tiny dataUrl for index ${i}. Length: ${dataUrl?.length}`);
                   // Immediate retry with simple capture
-                  const retryUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  const retryUrl = await toPng(node, { cacheBust: true, includeQueryParams: true, backgroundColor: '#ffffff' });
                   if (retryUrl && retryUrl.length > 2500) {
                     if (batchMode === 'print') {
                       collectedUrls.push(retryUrl);

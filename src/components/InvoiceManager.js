@@ -44,9 +44,9 @@ const getWorkingDaysInMonth = (dateStr) => {
    return workingDays;
 };
 
-const calculateWorkingDaysInMonth = getWorkingDaysInMonth;
+const _unused_calculateWorkingDaysInMonth = getWorkingDaysInMonth;
 
-const parseAmount = (val) => {
+const _unused_parseAmount = (val) => {
    if (typeof val === 'number') return val;
    if (!val) return 0;
    const str = String(val);
@@ -102,7 +102,8 @@ const getQRUrl = (hoaDon, walletsConfig) => {
     }
 
     const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
-    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+    const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
+    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
   }
   return null;
 };
@@ -303,12 +304,30 @@ export default function InvoiceManager() {
 
                   const images = node.querySelectorAll('img');
                   await Promise.all(Array.from(images).map(img => {
-                     if (img.complete) return Promise.resolve();
+                     if (img.complete && img.naturalWidth !== 0) return Promise.resolve();
                      return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
                   }));
-                  await new Promise(r => setTimeout(r, 500));
+                  await new Promise(r => setTimeout(r, 400));
+                  Array.from(images).forEach(img => {
+                     if (img.complete && img.naturalWidth > 0 && !img.src.startsWith('data:')) {
+                        try {
+                           const canvas = document.createElement('canvas');
+                           canvas.width = img.naturalWidth;
+                           canvas.height = img.naturalHeight;
+                           const ctx = canvas.getContext('2d');
+                           ctx.drawImage(img, 0, 0);
+                           const dUrl = canvas.toDataURL('image/png');
+                           if (dUrl && dUrl.length > 100) {
+                              img.src = dUrl;
+                           }
+                        } catch (cErr) {
+                           console.warn('Canvas conversion skipped:', cErr);
+                        }
+                     }
+                  });
+                  await new Promise(r => setTimeout(r, 200));
 
-                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  const dataUrl = await toPng(node, { cacheBust: true, includeQueryParams: true, backgroundColor: '#ffffff' });
 
                   // Restore hide
                   node.style.position = 'fixed';
@@ -385,12 +404,30 @@ export default function InvoiceManager() {
 
                   const images = node.querySelectorAll('img');
                   await Promise.all(Array.from(images).map(img => {
-                     if (img.complete) return Promise.resolve();
+                     if (img.complete && img.naturalWidth !== 0) return Promise.resolve();
                      return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
                   }));
-                  await new Promise(r => setTimeout(r, 600));
+                  await new Promise(r => setTimeout(r, 400));
+                  Array.from(images).forEach(img => {
+                     if (img.complete && img.naturalWidth > 0 && !img.src.startsWith('data:')) {
+                        try {
+                           const canvas = document.createElement('canvas');
+                           canvas.width = img.naturalWidth;
+                           canvas.height = img.naturalHeight;
+                           const ctx = canvas.getContext('2d');
+                           ctx.drawImage(img, 0, 0);
+                           const dUrl = canvas.toDataURL('image/png');
+                           if (dUrl && dUrl.length > 100) {
+                              img.src = dUrl;
+                           }
+                        } catch (cErr) {
+                           console.warn('Canvas conversion skipped:', cErr);
+                        }
+                     }
+                  });
+                  await new Promise(r => setTimeout(r, 200));
 
-                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
+                  const dataUrl = await toPng(node, { cacheBust: true, includeQueryParams: true, backgroundColor: '#ffffff' });
 
                   // Restore hide
                   node.style.position = 'fixed';
@@ -540,7 +577,7 @@ export default function InvoiceManager() {
       let endMonthStr = '';
 
       let recentDoc = null;
-      let recentHD = null;
+      let _unused_recentHD = null;
 
       try {
          const [{ data: allHDs }, { data: allTBs }] = await Promise.all([
@@ -555,7 +592,7 @@ export default function InvoiceManager() {
             if (!d) return 0;
             const t = new Date(d).getTime();
             if (!isNaN(t)) return t;
-            const parts = String(d).split(/[\/\- :T]/);
+            const parts = String(d).split(/[/\- :T]/);
             if (parts.length >= 3) {
                const p0 = parseInt(parts[0], 10);
                const p1 = parseInt(parts[1], 10) - 1;
@@ -573,7 +610,7 @@ export default function InvoiceManager() {
          recentDoc = allDocs.length > 0 ? allDocs[0] : null;
 
          validHDs.sort((a, b) => safeTime(b.ngayketthuc || b.ngaylap) - safeTime(a.ngayketthuc || a.ngaylap));
-         recentHD = validHDs.length > 0 ? validHDs[0] : null;
+         _unused_recentHD = validHDs.length > 0 ? validHDs[0] : null;
 
          if (recentDoc) {
             setRecentSourceText(recentDoc.mahd?.startsWith('TB') ? `Lấy dữ liệu từ Thông báo HP gần nhất (${recentDoc.mahd})` : `Lấy dữ liệu từ Hóa đơn gần nhất (${recentDoc.mahd})`);
@@ -1039,6 +1076,7 @@ export default function InvoiceManager() {
 
          setDownloadingNotice({
             isPrinting,
+            _t: Date.now(),
             mahd: newMaTB,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
@@ -1185,6 +1223,7 @@ export default function InvoiceManager() {
 
          setDownloadingInvoice({
             isPrinting,
+            _t: Date.now(),
             mahd: newMaHD,
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,

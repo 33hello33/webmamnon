@@ -3,7 +3,7 @@ import { useConfig } from '../ConfigContext';
 import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog } from '../supabase';
 import {
-   Search, Plus, TrendingDown, Users, Package, ShoppingCart,
+   Search, Plus, TrendingDown, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
    Printer, History, Clock, Edit2, Receipt
 } from 'lucide-react';
@@ -530,7 +530,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
 
          const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
-         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+         const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
+         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
       }
       return null;
    };

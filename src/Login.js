@@ -743,7 +743,7 @@ function Login() {
                                  <h3 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.15rem' }}>1-Chạm Qua App Ngân Hàng</h3>
                                  <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem', lineHeight: 1.5 }}>Vui lòng mở ứng dụng ngân hàng và bấm quét QRCode này để auto-điền số tiền chính xác cần đóng.</p>
                                  <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'inline-block' }}>
-                                    <img id="qr-payment" src={getQRUrl()} alt="QR Code" style={{ width: '100%', maxWidth: '220px', borderRadius: '8px', display: 'block' }} />
+                                    <img id="qr-payment" crossOrigin="anonymous" src={getQRUrl()} alt="QR Code" style={{ width: '100%', maxWidth: '220px', borderRadius: '8px', display: 'block' }} />
                                  </div>
                               </div>
                            </div>

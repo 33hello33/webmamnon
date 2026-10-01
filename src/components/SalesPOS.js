@@ -252,7 +252,7 @@ export default function SalesPOS() {
             const element = document.getElementById('pos-print-temp');
             if (!element) return;
 
-            toPng(element, { cacheBust: true, backgroundColor: '#fff' })
+            toPng(element, { cacheBust: true, includeQueryParams: true, backgroundColor: '#fff' })
                .then((dataUrl) => {
                   if (window.innerWidth <= 991) {
                      // Mobile: Preview for long-press
