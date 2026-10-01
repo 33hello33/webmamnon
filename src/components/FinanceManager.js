@@ -502,7 +502,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
    ].filter(w => w.name.trim() !== '') : []), [config]);
 
-   const getQRUrl = (hoaDon, wConfig) => {
+   const getQRUrl = (hoaDon, wConfig, qrTemplate = '') => {
       if (!wConfig || wConfig.length === 0 || !hoaDon?.hinhthuc) return null;
       const hinhThucTrim = String(hoaDon.hinhthuc).trim().toLowerCase();
 
@@ -523,13 +523,28 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
          const amountStr = (hoaDon.tongcong || hoaDon.conno || hoaDon.hocphi || "0").toString().replace(/\D/g, "");
 
-         let suffix = '';
+         let shortName = '';
          if (hoaDon.tenhv) {
             const parts = hoaDon.tenhv.trim().split(' ');
-            suffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + hoaDon.tenhv;
+            shortName = parts.length >= 2 ? parts.slice(-2).join(' ') : hoaDon.tenhv;
          }
 
-         const info = encodeURIComponent(`${hoaDon.mahv || ''}${suffix}`);
+         let addInfoText = '';
+         if (qrTemplate && qrTemplate.trim()) {
+            addInfoText = qrTemplate
+               .replace(/\{mahv\}/gi, hoaDon.mahv || '')
+               .replace(/\{tenhv\}/gi, hoaDon.tenhv || '')
+               .replace(/\{ten\}/gi, shortName)
+               .replace(/\{mahd\}/gi, hoaDon.mahd || '')
+               .replace(/\{tenlop\}/gi, hoaDon.tenlop || '')
+               .replace(/\{sdt\}/gi, hoaDon.sdt || '')
+               .replace(/\{thoiluong\}/gi, hoaDon.thoiluong || '')
+               .trim().replace(/\s+/g, ' ');
+         } else {
+            addInfoText = `${hoaDon.mahv || ''}${shortName ? ' ' + shortName : ''}`.trim();
+         }
+
+         const info = encodeURIComponent(addInfoText);
          const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
          return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
       }
@@ -2785,7 +2800,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                         {/* Mã QR Thanh toán VietQR - Chỉ mỗi hình mã QR */}
                         {(() => {
-                           const qrUrl = getQRUrl(printHoaDon, walletsConfig);
+                           const qrUrl = getQRUrl(printHoaDon, walletsConfig, config?.qr_template);
                            if (!qrUrl) return null;
                            return (
                               <div style={{ textAlign: 'center', margin: '6px 0' }}>

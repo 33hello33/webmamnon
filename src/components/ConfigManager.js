@@ -47,6 +47,38 @@ const TAB_OPTIONS = [
   { id: 'export_excel', label: 'Xuất Excel (Quyền)' }
 ];
 
+const QR_PLACEHOLDERS = [
+  { tag: '{mahv}', label: 'Mã học sinh' },
+  { tag: '{tenhv}', label: 'Họ và tên' },
+  { tag: '{ten}', label: 'Tên rút gọn' },
+  { tag: '{mahd}', label: 'Mã HĐ / TB' },
+  { tag: '{tenlop}', label: 'Tên lớp' },
+  { tag: '{thoiluong}', label: 'Thời lượng' },
+  { tag: '{sdt}', label: 'Số điện thoại' }
+];
+
+const computeQRPreview = (template) => {
+  const sample = {
+    mahv: 'HV0012',
+    tenhv: 'Nguyễn Văn An',
+    ten: 'Văn An',
+    mahd: 'TB0005',
+    tenlop: 'Lớp Dolphin',
+    sdt: '0987654321',
+    thoiluong: '10/2026'
+  };
+  const tmpl = (template && template.trim()) ? template : '{mahv} {ten}';
+  return tmpl
+    .replace(/\{mahv\}/gi, sample.mahv)
+    .replace(/\{tenhv\}/gi, sample.tenhv)
+    .replace(/\{ten\}/gi, sample.ten)
+    .replace(/\{mahd\}/gi, sample.mahd)
+    .replace(/\{tenlop\}/gi, sample.tenlop)
+    .replace(/\{sdt\}/gi, sample.sdt)
+    .replace(/\{thoiluong\}/gi, sample.thoiluong)
+    .trim().replace(/\s+/g, ' ');
+};
+
 const ConfigManager = () => {
   const { config, refreshConfig } = useConfig();
   const [formData, setFormData] = useState(null);
@@ -57,6 +89,7 @@ const ConfigManager = () => {
     if (config) {
       setFormData({
         ...config,
+        qr_template: config.qr_template || '',
         hangmucthu: Array.isArray(config.hangmucthu) ? config.hangmucthu.join('\n') : '',
         hangmucchi: Array.isArray(config.hangmucchi) ? config.hangmucchi.join('\n') : '',
         phanquyenrole: config.phanquyenrole || {
@@ -355,6 +388,68 @@ const ConfigManager = () => {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Cấu hình Nội dung chuyển khoản QR */}
+            <div className="qr-template-config">
+              <div className="qr-template-header">
+                <label>🏷️ Cú pháp nội dung chuyển khoản QR (QR Template):</label>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Bấm vào các thẻ bên dưới để chèn nhanh vào cú pháp
+                </div>
+              </div>
+              <div className="qr-template-input-wrapper">
+                <input
+                  type="text"
+                  className="qr-template-input"
+                  placeholder="Ví dụ: {mahv} {ten} hoặc HP {mahv} {mahd}"
+                  value={formData.qr_template || ''}
+                  onChange={e => setFormData({ ...formData, qr_template: e.target.value })}
+                />
+                {formData.qr_template && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, qr_template: '' })}
+                    style={{
+                      padding: '0.6rem 0.8rem',
+                      background: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      color: '#64748b',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Đặt lại mặc định"
+                  >
+                    Mặc định
+                  </button>
+                )}
+              </div>
+              <div className="qr-tags-container">
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>Thẻ gợi ý:</span>
+                {QR_PLACEHOLDERS.map(p => (
+                  <button
+                    key={p.tag}
+                    type="button"
+                    className="qr-tag-chip"
+                    onClick={() => {
+                      const cur = formData.qr_template || '';
+                      const next = cur ? `${cur.trim()} ${p.tag}` : p.tag;
+                      setFormData({ ...formData, qr_template: next });
+                    }}
+                    title={`Chèn ${p.tag}`}
+                  >
+                    <b>{p.tag}</b> ({p.label})
+                  </button>
+                ))}
+              </div>
+              <div className="qr-template-preview">
+                👀 Xem trước nội dung QR: <b>{computeQRPreview(formData.qr_template)}</b>
+                <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  {formData.qr_template ? '(Đang dùng cấu hình tùy chỉnh)' : '(Đang dùng mặc định: {mahv} {ten})'}
+                </span>
+              </div>
             </div>
           </section>
         )}

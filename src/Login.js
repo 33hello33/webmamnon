@@ -81,17 +81,29 @@ function Login() {
 
       if (!matched) return '';
 
-      let nameSuffix = '';
+      let shortName = '';
       if (parentData?.student?.tenhv) {
          const parts = parentData.student.tenhv.trim().split(' ');
-         nameSuffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + parentData.student.tenhv;
+         shortName = parts.length >= 2 ? parts.slice(-2).join(' ') : parentData.student.tenhv;
       }
 
-      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png
-?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}
-&addInfo=${encodeURIComponent(parentMahv + nameSuffix)}
-&accountName=${encodeURIComponent(matched.accName)}`;
+      let addInfoText = '';
+      const qrTemplate = config?.qr_template;
+      if (qrTemplate && qrTemplate.trim()) {
+         addInfoText = qrTemplate
+            .replace(/\{mahv\}/gi, parentMahv || parentData?.student?.mahv || fee.mahv || '')
+            .replace(/\{tenhv\}/gi, parentData?.student?.tenhv || fee.tenhv || '')
+            .replace(/\{ten\}/gi, shortName)
+            .replace(/\{mahd\}/gi, fee.mahd || '')
+            .replace(/\{tenlop\}/gi, fee.tenlop || parentData?.student?.tenlop || '')
+            .replace(/\{sdt\}/gi, parentData?.student?.sdt || '')
+            .replace(/\{thoiluong\}/gi, fee.thoiluong || '')
+            .trim().replace(/\s+/g, ' ');
+      } else {
+         addInfoText = `${parentMahv || ''}${shortName ? ' ' + shortName : ''}`.trim();
+      }
 
+      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}&addInfo=${encodeURIComponent(addInfoText)}&accountName=${encodeURIComponent(matched.accName)}`;
    };
    const formatMonthYear = (dateStr) => {
       if (!dateStr) return '';
