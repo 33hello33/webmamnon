@@ -10,7 +10,7 @@ import { groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/
 import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '../utils/ngoaiKhoaUtils';
 import { saveImageToDevice } from '../utils/mobileImageSave';
 import { fetchParentStudentPortalData } from '../utils/parentPortalData';
-import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, Megaphone, BookOpen, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone, CheckCircle2 } from 'lucide-react';
+import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, Megaphone, BookOpen, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone, CheckCircle2, Clock } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
    const deletedValue = String(record?.daxoa || '').trim().toLowerCase();
@@ -129,6 +129,131 @@ const formatDateStringVi = (dateStr) => {
    if (!year || !month || !day) return dateStr;
    return `${day}/${month}/${year}`;
 };
+
+const formatLeaveRequestTime = (dateValue) => {
+   if (!dateValue) return '';
+   const d = new Date(dateValue);
+   if (Number.isNaN(d.getTime())) return '';
+   const timePart = d.toLocaleTimeString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+   });
+   const datePart = d.toLocaleDateString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit'
+   });
+   return `${timePart} ${datePart}`;
+};
+
+const parseLeaveMessages = (messages = []) => {
+   const results = [];
+   for (const msg of messages) {
+      const content = msg?.content || '';
+      if (!content.toUpperCase().includes('XIN NGHỈ')) continue;
+
+      const fromMatch = content.match(/từ\s*ngày\s*[:：]?\s*(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/i);
+      const toMatch = content.match(/đến\s*ngày\s*[:：]?\s*(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/i);
+      const reasonMatch = content.match(/lý\s*do\s*[:：]?\s*([^\n\r]+)/i);
+
+      let fromDate = '';
+      let toDate = '';
+
+      if (fromMatch) {
+         fromDate = `${fromMatch[3]}-${String(fromMatch[2]).padStart(2, '0')}-${String(fromMatch[1]).padStart(2, '0')}`;
+      }
+      if (toMatch) {
+         toDate = `${toMatch[3]}-${String(toMatch[2]).padStart(2, '0')}-${String(toMatch[1]).padStart(2, '0')}`;
+      } else if (fromDate) {
+         toDate = fromDate;
+      }
+
+      if (!fromDate) {
+         const dateMatch = content.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+         if (dateMatch) {
+            fromDate = toDate = `${dateMatch[3]}-${String(dateMatch[2]).padStart(2, '0')}-${String(dateMatch[1]).padStart(2, '0')}`;
+         } else if (msg.created_at) {
+            fromDate = toDate = String(msg.created_at).slice(0, 10);
+         }
+      }
+
+      const requestTime = msg.created_at ? formatLeaveRequestTime(msg.created_at) : '';
+      const reason = reasonMatch ? reasonMatch[1].trim() : '';
+
+      results.push({
+         id: msg.id,
+         created_at: msg.created_at,
+         requestTime,
+         fromDate,
+         toDate,
+         reason
+      });
+   }
+   return results;
+};
+
+const getLeaveInfoForDate = (dateStr, rec, leaveRequests = []) => {
+   const ghichu = String(rec?.ghichu || '').trim();
+   const ghichuMatch = ghichu.match(/(?:\[|\()(?:Xin nghỉ|Đã xin nghỉ)(?:\s*lúc)?:?\s*([^\]\)]+)(?:\]|\))/i);
+   let timeFromGhichu = null;
+   if (ghichuMatch) {
+      const matchText = ghichuMatch[1].trim();
+      const dtMatch = matchText.match(/(\d{1,2}:\d{2})\s*(?:ngày\s*)?(\d{1,2})[\/\-](\d{1,2})/i);
+      if (dtMatch) {
+         const hhmm = dtMatch[1];
+         const dd = String(dtMatch[2]).padStart(2, '0');
+         const mm = String(dtMatch[3]).padStart(2, '0');
+         timeFromGhichu = `${hhmm} ${dd}/${mm}`;
+      } else {
+         const timeOnly = matchText.match(/\b\d{1,2}:\d{2}\b/);
+         timeFromGhichu = timeOnly ? timeOnly[0] : matchText;
+      }
+   }
+
+   const matchingRequest = (leaveRequests || []).find(req => {
+      if (!req.fromDate || !req.toDate) return false;
+      return dateStr >= req.fromDate && dateStr <= req.toDate;
+   });
+
+   let requestTime = timeFromGhichu || matchingRequest?.requestTime || null;
+
+   if (!requestTime) {
+      requestTime = matchingRequest?.requestTime || null;
+   } else if (!requestTime.includes('/') && matchingRequest?.requestTime && matchingRequest.requestTime.includes('/')) {
+      requestTime = matchingRequest.requestTime;
+   } else if (!requestTime.includes('/') && rec?.created_at) {
+      const d = new Date(rec.created_at);
+      if (!Number.isNaN(d.getTime())) {
+         const datePart = d.toLocaleDateString('vi-VN', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            day: '2-digit',
+            month: '2-digit'
+         });
+         requestTime = `${requestTime} ${datePart}`;
+      }
+   }
+
+   const requestRange = matchingRequest ? {
+      from: matchingRequest.fromDate,
+      to: matchingRequest.toDate,
+      created_at: matchingRequest.created_at
+   } : null;
+
+   const cleanReason = ghichu
+      .replace(/\[(?:Xin nghỉ|Đã xin nghỉ)[^\]]*\]/gi, '')
+      .replace(/\((?:Xin nghỉ|Đã xin nghỉ)[^\)]*\)/gi, '')
+      .trim() || matchingRequest?.reason || '';
+
+   return {
+      hasLeaveInfo: Boolean(requestTime || matchingRequest),
+      requestTime,
+      requestRange,
+      cleanReason
+   };
+};
+
 
 const getNoticeTypeDetails = (notice, studentMahv) => {
    const titleUpper = String(notice.title || '').toUpperCase().trim();
@@ -289,6 +414,8 @@ function ParentPortal({ parentData, setParentData }) {
    const [isSwitchingChild, setIsSwitchingChild] = useState(false);
    const [calendarDate, setCalendarDate] = useState(new Date());
    const [monthlyAttendance, setMonthlyAttendance] = useState([]);
+   const [monthlyLeaveRequests, setMonthlyLeaveRequests] = useState([]);
+   const [selectedAttendanceDay, setSelectedAttendanceDay] = useState(null);
    const [calendarLoading, setCalendarLoading] = useState(false);
    const [healthHistory, setHealthHistory] = useState([]);
    const [healthLoading, setHealthLoading] = useState(false);
@@ -756,6 +883,45 @@ function ParentPortal({ parentData, setParentData }) {
       }
    };
 
+   const fetchMonthlyAttendance = React.useCallback(async () => {
+      const studentMahv = parentDataRef.current?.student?.mahv;
+      if (!studentMahv) return;
+      setCalendarLoading(true);
+      const year = calendarDate.getFullYear();
+      const month = calendarDate.getMonth();
+      const startDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
+      try {
+         const [attRes, chatRes] = await Promise.all([
+            supabase.from('tbl_diemdanh')
+               .select('*')
+               .eq('mahv', studentMahv)
+               .gte('ngay', startDay)
+               .lte('ngay', endDay),
+            supabase.from('hv_messages')
+               .select('id, content, created_at, description, manv')
+               .eq('mahv', studentMahv)
+               .ilike('content', '%XIN NGHỈ%')
+               .order('created_at', { ascending: false })
+               .limit(50)
+         ]);
+
+         const attData = attRes?.data || [];
+         setMonthlyAttendance(attData);
+
+         let leaveMsgs = [];
+         if (chatRes && !chatRes.error && Array.isArray(chatRes.data)) {
+            leaveMsgs = chatRes.data;
+         }
+         const parsed = parseLeaveMessages(leaveMsgs);
+         setMonthlyLeaveRequests(parsed);
+      } catch (err) {
+         console.error('Lỗi khi tải điểm danh:', err);
+      } finally {
+         setCalendarLoading(false);
+      }
+   }, [calendarDate]);
+
    const fetchClassAnnouncementsByTitle = async (title, limit = 10) => {
       if (!parentData?.student?.malop) return [];
 
@@ -1026,6 +1192,12 @@ function ParentPortal({ parentData, setParentData }) {
          const msg = `🔔 XIN NGHỈ HỌC\n- Bé: ${parentData.student.tenhv}\n- Từ ngày: ${formatDateStringVi(fromDateStr)}\n- Đến ngày: ${formatDateStringVi(toDateStr)}\n- Lý do: ${trimmedReason}`;
          await sendQuickMessage(msg);
 
+         const reqNow = new Date();
+         const reqTimeStr = reqNow.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+         const reqDateStr = reqNow.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+         const leaveStamp = `[Xin nghỉ: ${reqTimeStr} ${reqDateStr}]`;
+         const combinedGhichu = trimmedReason ? `${trimmedReason} ${leaveStamp}` : leaveStamp;
+
          // Insert into tbl_diemdanh
          const configTimeStr = config?.xinnghitruocmaygio || '08:00';
          const [cfgHour, cfgMin] = configTimeStr.split(':').map(Number);
@@ -1070,7 +1242,7 @@ function ParentPortal({ parentData, setParentData }) {
                malop: leaveMalop,
                ngay: currDateStr,
                trangthai,
-               ghichu: trimmedReason,
+               ghichu: combinedGhichu,
                manv: leaveManv
             };
 
@@ -1087,6 +1259,8 @@ function ParentPortal({ parentData, setParentData }) {
          setIsLeaveModalOpen(false);
          setLeaveForm({ from: '', to: '', reason: '' });
          setLeaveType('today');
+         fetchMonthlyAttendance();
+         alert('Đã gửi đơn xin nghỉ thành công!');
       } catch (err) {
          console.error('Lỗi khi gửi đơn xin nghỉ:', err);
          alert('Có lỗi xảy ra khi gửi đơn xin nghỉ.');
@@ -2166,19 +2340,6 @@ function ParentPortal({ parentData, setParentData }) {
          const { data } = await supabase.from('documents').select('*').eq('mahv', parentData.student.mahv).order('created_at', { ascending: false });
          if (data) setChatDocuments((data || []).filter(doc => doc.category !== tuitionTransferProofCategory));
       };
-      const fetchMonthlyAttendance = async () => {
-         if (!parentData) return;
-         setCalendarLoading(true);
-         const year = calendarDate.getFullYear();
-         const month = calendarDate.getMonth();
-         const startDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-         const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
-         try {
-            const { data } = await supabase.from('tbl_diemdanh').select('*').eq('mahv', parentData.student.mahv).gte('ngay', startDay).lte('ngay', endDay);
-            setMonthlyAttendance(data || []);
-         } catch (err) { console.error(err); }
-         finally { setCalendarLoading(false); }
-      };
 
       if (parentTab === 'chat-tab') { fetchChatMessages(); fetchChatDocs(); }
       if (parentTab === 'notices-tab' || parentTab === 'menu-tab' || parentTab === 'chuongtrinhhoc-tab' || parentTab === 'menu') fetchParentNotices();
@@ -3093,17 +3254,20 @@ function ParentPortal({ parentData, setParentData }) {
 
                   {parentTab === 'attendance-tab' && (
                      <div id="attendance-tab" className="parent-tab-content active" style={{ animation: 'contentFadeIn 0.3s ease' }}>
-                        <div style={{ background: 'white', borderRadius: '20px', padding: '15px', border: '1px solid #e2e8f0' }}>
-                           <div className="calendar-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                        <div style={{ background: 'white', borderRadius: '20px', padding: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                           <div className="calendar-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                               <button style={{ padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#64748b', cursor: 'pointer' }} onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}><ChevronLeft size={18} /></button>
-                              <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Tháng {calendarDate.getMonth() + 1} - {calendarDate.getFullYear()}</h4>
+                              <div style={{ textAlign: 'center' }}>
+                                 <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>Tháng {calendarDate.getMonth() + 1} - {calendarDate.getFullYear()}</h4>
+                                 <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>Chạm vào ngày để xem chi tiết điểm danh & xin nghỉ</div>
+                              </div>
                               <button style={{ padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#64748b', cursor: 'pointer' }} onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}><ChevronRight size={18} /></button>
                            </div>
 
-                           <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                           <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                                  {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
-                                    <div key={d} style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: '#64748b', fontSize: '0.75rem' }}>{d}</div>
+                                    <div key={d} style={{ padding: '8px 2px', textAlign: 'center', fontWeight: 800, color: '#64748b', fontSize: '0.75rem' }}>{d}</div>
                                  ))}
                               </div>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', position: 'relative' }}>
@@ -3116,30 +3280,135 @@ function ParentPortal({ parentData, setParentData }) {
                                     const cells = [];
 
                                     for (let i = 0; i < startIdx; i++) {
-                                       cells.push(<div key={`b-${i}`} style={{ height: '70px', background: '#f8fafc', borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }} />);
+                                       cells.push(<div key={`b-${i}`} style={{ minHeight: '74px', background: '#f8fafc', borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }} />);
                                     }
 
                                     for (let d = 1; d <= daysInMonth; d++) {
                                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                                        const rec = monthlyAttendance.find(a => a.ngay === dateStr);
+                                       const leaveInfo = getLeaveInfoForDate(dateStr, rec, monthlyLeaveRequests);
                                        let bg = 'white';
                                        let color = '#94a3b8';
+                                       const s = (rec?.trangthai || '').toLowerCase();
+                                       const isLeave = s.includes('nghỉ') || (!rec && leaveInfo.hasLeaveInfo);
+
                                        if (rec) {
-                                          const s = (rec.trangthai || '').toLowerCase();
                                           if (s === 'có mặt') { bg = '#f0fdf4'; color = '#16a34a'; }
                                           else if (s === 'nghỉ phép') { bg = '#fffbeb'; color = '#d97706'; }
                                           else if (s === 'nghỉ không phép') { bg = '#fef2f2'; color = '#dc2626'; }
+                                       } else if (leaveInfo.hasLeaveInfo) {
+                                          bg = '#fffdf7';
+                                          color = '#d97706';
                                        }
 
+                                       const shortTime = leaveInfo.requestTime
+                                          ? (leaveInfo.requestTime.match(/(\d{1,2}:\d{2}(?:\s+\d{1,2}[\/\-]\d{1,2})?)/)
+                                             ? leaveInfo.requestTime.match(/(\d{1,2}:\d{2}(?:\s+\d{1,2}[\/\-]\d{1,2})?)/)[0]
+                                             : leaveInfo.requestTime)
+                                          : '';
+
                                        cells.push(
-                                          <div key={d} style={{ height: '70px', padding: '4px', background: bg, borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
-                                             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: color }}>{d}</div>
-                                             {rec && (
-                                                <>
-                                                   <div style={{ fontSize: '0.65rem', fontWeight: 800, color: color, lineHeight: 1 }}>{rec.trangthai.split(' ')[0]}</div>
-                                                   {rec.ghichu && <div style={{ fontSize: '0.6rem', color: '#64748b', lineHeight: 1.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.ghichu}</div>}
-                                                </>
-                                             )}
+                                          <div
+                                             key={d}
+                                             onClick={() => setSelectedAttendanceDay({ date: dateStr, day: d, rec, leaveInfo })}
+                                             style={{
+                                                minHeight: '74px',
+                                                padding: '4px 3px',
+                                                background: bg,
+                                                borderRight: '1px solid #f1f5f9',
+                                                borderBottom: '1px solid #f1f5f9',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '2px',
+                                                overflow: 'hidden',
+                                                cursor: (rec || leaveInfo.hasLeaveInfo) ? 'pointer' : 'default',
+                                                transition: 'all 0.15s ease'
+                                             }}
+                                             title={rec || leaveInfo.hasLeaveInfo ? `Bấm xem chi tiết ngày ${d}` : undefined}
+                                          >
+                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '2px' }}>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (rec || leaveInfo.hasLeaveInfo) ? color : '#94a3b8', lineHeight: 1 }}>{d}</span>
+                                                {isLeave && (
+                                                   <Clock size={13} strokeWidth={1.8} color="#64748b" style={{ flexShrink: 0 }} />
+                                                )}
+                                             </div>
+                                             {rec ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', overflow: 'hidden', gap: '1px' }}>
+                                                   <div style={{
+                                                      fontSize: '0.65rem',
+                                                      fontWeight: 800,
+                                                      color: color,
+                                                      lineHeight: 1.25,
+                                                      background: s === 'có mặt' ? '#dcfce7' : (s === 'nghỉ phép' ? '#fef3c7' : '#fee2e2'),
+                                                      padding: '1px 6px',
+                                                      borderRadius: '999px',
+                                                      textAlign: 'center',
+                                                      whiteSpace: 'nowrap',
+                                                      overflow: 'hidden',
+                                                      textOverflow: 'ellipsis',
+                                                      width: '100%',
+                                                      boxSizing: 'border-box'
+                                                   }}>
+                                                      {s === 'có mặt' ? 'Có mặt' : (s === 'nghỉ phép' ? 'Nghỉ phép' : 'Nghỉ không phép')}
+                                                   </div>
+                                                   {isLeave && shortTime && (
+                                                      <div style={{
+                                                         fontSize: '0.72rem',
+                                                         fontWeight: 800,
+                                                         color: s === 'nghỉ không phép' ? '#dc2626' : '#b45309',
+                                                         lineHeight: 1.15,
+                                                         textAlign: 'center',
+                                                         marginTop: '2px',
+                                                         whiteSpace: 'nowrap',
+                                                         letterSpacing: '-0.2px'
+                                                      }} title={`Xin nghỉ lúc: ${leaveInfo.requestTime}`}>
+                                                         {shortTime}
+                                                      </div>
+                                                   )}
+                                                   {leaveInfo.cleanReason && (
+                                                      <div style={{
+                                                         fontSize: '0.65rem',
+                                                         color: '#475569',
+                                                         lineHeight: 1.2,
+                                                         whiteSpace: 'nowrap',
+                                                         overflow: 'hidden',
+                                                         textOverflow: 'ellipsis',
+                                                         width: '100%',
+                                                         textAlign: 'center',
+                                                         marginTop: '1px'
+                                                      }} title={leaveInfo.cleanReason}>
+                                                         {leaveInfo.cleanReason}
+                                                      </div>
+                                                   )}
+                                                </div>
+                                             ) : leaveInfo.hasLeaveInfo ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', overflow: 'hidden', gap: '1px' }}>
+                                                   <div style={{
+                                                      fontSize: '0.65rem',
+                                                      fontWeight: 800,
+                                                      color: '#d97706',
+                                                      lineHeight: 1.25,
+                                                      background: '#fef3c7',
+                                                      padding: '1px 6px',
+                                                      borderRadius: '999px',
+                                                      textAlign: 'center',
+                                                      width: '100%',
+                                                      boxSizing: 'border-box'
+                                                   }}>
+                                                      Nghỉ phép
+                                                   </div>
+                                                   {shortTime && (
+                                                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#b45309', textAlign: 'center', lineHeight: 1.15, marginTop: '2px', whiteSpace: 'nowrap', letterSpacing: '-0.2px' }} title={`Xin nghỉ lúc: ${leaveInfo.requestTime}`}>
+                                                         {shortTime}
+                                                      </div>
+                                                   )}
+                                                   {leaveInfo.cleanReason && (
+                                                      <div style={{ fontSize: '0.65rem', color: '#475569', textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', marginTop: '1px' }} title={leaveInfo.cleanReason}>
+                                                         {leaveInfo.cleanReason}
+                                                      </div>
+                                                   )}
+                                                </div>
+                                             ) : null}
                                           </div>
                                        );
                                     }
@@ -3153,18 +3422,267 @@ function ParentPortal({ parentData, setParentData }) {
                               </div>
                            </div>
 
-                           <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                 <div style={{ width: '10px', height: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '2px' }}></div> Có mặt: {monthlyAttendance.filter(a => a.trangthai === 'Có mặt').length}
+                           <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                 <div style={{ width: '12px', height: '12px', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '3px' }}></div> Có mặt: {monthlyAttendance.filter(a => a.trangthai === 'Có mặt').length}
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                 <div style={{ width: '10px', height: '10px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '2px' }}></div> Nghỉ phép: {monthlyAttendance.filter(a => a.trangthai === 'Nghỉ phép').length}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                 <div style={{ width: '12px', height: '12px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '3px' }}></div> Nghỉ phép: {monthlyAttendance.filter(a => a.trangthai === 'Nghỉ phép').length}
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                 <div style={{ width: '10px', height: '10px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '2px' }}></div> Nghỉ KP: {monthlyAttendance.filter(a => a.trangthai === 'Nghỉ không phép').length}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                 <div style={{ width: '12px', height: '12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '3px' }}></div> Nghỉ KP: {monthlyAttendance.filter(a => a.trangthai === 'Nghỉ không phép').length}
                               </div>
                            </div>
+
+                           {/* Dedicated section: Leave Request Times & Records in Month */}
+                           <div style={{ marginTop: '22px', borderTop: '1px solid #f1f5f9', paddingTop: '18px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                                 <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span>📋</span> Thông tin & thời gian đã xin nghỉ ({calendarDate.getMonth() + 1}/{calendarDate.getFullYear()})
+                                 </h4>
+                                 <button
+                                    onClick={() => setIsLeaveModalOpen(true)}
+                                    style={{
+                                       background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                                       color: 'white',
+                                       border: 'none',
+                                       padding: '6px 14px',
+                                       borderRadius: '999px',
+                                       fontSize: '0.75rem',
+                                       fontWeight: 700,
+                                       cursor: 'pointer',
+                                       display: 'flex',
+                                       alignItems: 'center',
+                                       gap: '4px',
+                                       boxShadow: '0 2px 4px rgba(236, 72, 153, 0.3)'
+                                    }}
+                                 >
+                                    + Gửi đơn xin nghỉ
+                                 </button>
+                              </div>
+
+                              {(() => {
+                                 const leaveAttendanceList = monthlyAttendance
+                                    .filter(a => (a.trangthai || '').toLowerCase().includes('nghỉ'))
+                                    .sort((a, b) => a.ngay.localeCompare(b.ngay));
+
+                                 if (leaveAttendanceList.length === 0 && monthlyLeaveRequests.length === 0) {
+                                    return (
+                                       <div style={{ padding: '20px', background: '#f8fafc', borderRadius: '14px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', border: '1px dashed #e2e8f0' }}>
+                                          Bé đi học đầy đủ, chưa có ngày xin nghỉ nào trong tháng {calendarDate.getMonth() + 1}/{calendarDate.getFullYear()}.
+                                       </div>
+                                    );
+                                 }
+
+                                 return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                       {leaveAttendanceList.map((rec) => {
+                                          const isPhep = (rec.trangthai || '').toLowerCase() === 'nghỉ phép';
+                                          const leaveInfo = getLeaveInfoForDate(rec.ngay, rec, monthlyLeaveRequests);
+
+                                          return (
+                                             <div
+                                                key={rec.ngay}
+                                                onClick={() => setSelectedAttendanceDay({ date: rec.ngay, day: parseInt(rec.ngay.slice(8), 10), rec, leaveInfo })}
+                                                style={{
+                                                   padding: '12px 14px',
+                                                   background: isPhep ? '#fffdf7' : '#fff5f5',
+                                                   border: `1px solid ${isPhep ? '#fef3c7' : '#fee2e2'}`,
+                                                   borderRadius: '14px',
+                                                   display: 'flex',
+                                                   flexDirection: 'column',
+                                                   gap: '6px',
+                                                   cursor: 'pointer',
+                                                   transition: 'all 0.15s ease'
+                                                }}
+                                             >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                      <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b' }}>
+                                                         Ngày {formatDateStringVi(rec.ngay)}
+                                                      </span>
+                                                      <span style={{
+                                                         fontSize: '0.72rem',
+                                                         fontWeight: 800,
+                                                         padding: '2px 8px',
+                                                         borderRadius: '6px',
+                                                         background: isPhep ? '#fef3c7' : '#fee2e2',
+                                                         color: isPhep ? '#b45309' : '#dc2626'
+                                                      }}>
+                                                         {rec.trangthai}
+                                                      </span>
+                                                   </div>
+
+                                                   {leaveInfo.requestTime && (
+                                                      <div style={{
+                                                         fontSize: '0.78rem',
+                                                         color: isPhep ? '#b45309' : '#b91c1c',
+                                                         background: isPhep ? '#fef9c3' : '#fee2e2',
+                                                         padding: '3px 8px',
+                                                         borderRadius: '8px',
+                                                         fontWeight: 700,
+                                                         display: 'flex',
+                                                         alignItems: 'center',
+                                                         gap: '4px'
+                                                      }}>
+                                                         <span>⏰ Đã xin nghỉ lúc:</span>
+                                                         <span style={{ fontWeight: 800 }}>{leaveInfo.requestTime}</span>
+                                                      </div>
+                                                   )}
+                                                </div>
+
+                                                {leaveInfo.cleanReason && (
+                                                   <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                                                      <strong style={{ color: '#1e293b' }}>Lý do:</strong> {leaveInfo.cleanReason}
+                                                   </div>
+                                                )}
+
+                                                {leaveInfo.requestRange && (
+                                                   <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                                                      Đợt nghỉ: Từ {formatDateStringVi(leaveInfo.requestRange.from)} đến {formatDateStringVi(leaveInfo.requestRange.to)}
+                                                   </div>
+                                                )}
+                                             </div>
+                                          );
+                                       })}
+                                    </div>
+                                 );
+                              })()}
+                           </div>
                         </div>
+
+                        {/* Modal Chi tiết ngày điểm danh / xin nghỉ */}
+                        {selectedAttendanceDay && (
+                           <div
+                              className="modal-overlay-premium"
+                              style={{
+                                 position: 'fixed',
+                                 top: 0,
+                                 left: 0,
+                                 right: 0,
+                                 bottom: 0,
+                                 background: 'rgba(15, 23, 42, 0.65)',
+                                 zIndex: 1100,
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 padding: '16px'
+                              }}
+                              onClick={() => setSelectedAttendanceDay(null)}
+                           >
+                              <div
+                                 style={{
+                                    background: 'white',
+                                    borderRadius: '20px',
+                                    width: '100%',
+                                    maxWidth: '420px',
+                                    padding: '24px',
+                                    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+                                    animation: 'slideUp 0.2s ease'
+                                 }}
+                                 onClick={e => e.stopPropagation()}
+                              >
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                       <CalendarCheck size={20} color="#0284c7" />
+                                       <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
+                                          Chi tiết ngày {formatDateStringVi(selectedAttendanceDay.date)}
+                                       </h4>
+                                    </div>
+                                    <button
+                                       onClick={() => setSelectedAttendanceDay(null)}
+                                       style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}
+                                    >
+                                       <X size={18} />
+                                    </button>
+                                 </div>
+
+                                 {selectedAttendanceDay.rec ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                       <div>
+                                          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Trạng thái điểm danh:</div>
+                                          <span style={{
+                                             display: 'inline-block',
+                                             padding: '4px 12px',
+                                             borderRadius: '8px',
+                                             fontWeight: 800,
+                                             fontSize: '0.85rem',
+                                             background: selectedAttendanceDay.rec.trangthai === 'Có mặt' ? '#dcfce7' : (selectedAttendanceDay.rec.trangthai === 'Nghỉ phép' ? '#fef3c7' : '#fee2e2'),
+                                             color: selectedAttendanceDay.rec.trangthai === 'Có mặt' ? '#16a34a' : (selectedAttendanceDay.rec.trangthai === 'Nghỉ phép' ? '#d97706' : '#dc2626')
+                                          }}>
+                                             {selectedAttendanceDay.rec.trangthai}
+                                          </span>
+                                       </div>
+
+                                       {selectedAttendanceDay.leaveInfo?.requestTime && (
+                                          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '12px 14px' }}>
+                                             <div style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                ⏰ Thời gian đã xin nghỉ:
+                                             </div>
+                                             <div style={{ fontSize: '0.95rem', color: '#b45309', fontWeight: 800 }}>
+                                                {selectedAttendanceDay.leaveInfo.requestTime}
+                                             </div>
+                                             {selectedAttendanceDay.leaveInfo.requestRange && (
+                                                <div style={{ fontSize: '0.75rem', color: '#78350f', marginTop: '4px' }}>
+                                                   Đợt xin nghỉ: Từ {formatDateStringVi(selectedAttendanceDay.leaveInfo.requestRange.from)} đến {formatDateStringVi(selectedAttendanceDay.leaveInfo.requestRange.to)}
+                                                </div>
+                                             )}
+                                          </div>
+                                       )}
+
+                                       {selectedAttendanceDay.leaveInfo?.cleanReason && (
+                                          <div>
+                                             <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Lý do / Ghi chú:</div>
+                                             <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '10px', fontSize: '0.85rem', color: '#334155', border: '1px solid #e2e8f0', lineHeight: 1.4 }}>
+                                                {selectedAttendanceDay.leaveInfo.cleanReason}
+                                             </div>
+                                          </div>
+                                       )}
+                                    </div>
+                                 ) : selectedAttendanceDay.leaveInfo?.hasLeaveInfo ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                       <div>
+                                          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Trạng thái:</div>
+                                          <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '0.85rem', background: '#fef3c7', color: '#d97706' }}>
+                                             Đã gửi đơn xin nghỉ
+                                          </span>
+                                       </div>
+                                       {selectedAttendanceDay.leaveInfo.requestTime && (
+                                          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '12px 14px' }}>
+                                             <div style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 700, marginBottom: '4px' }}>
+                                                ⏰ Thời gian đã xin nghỉ:
+                                             </div>
+                                             <div style={{ fontSize: '0.95rem', color: '#b45309', fontWeight: 800 }}>
+                                                {selectedAttendanceDay.leaveInfo.requestTime}
+                                             </div>
+                                          </div>
+                                       )}
+                                       {selectedAttendanceDay.leaveInfo.cleanReason && (
+                                          <div>
+                                             <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Lý do:</div>
+                                             <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '10px', fontSize: '0.85rem', color: '#334155', border: '1px solid #e2e8f0' }}>
+                                                {selectedAttendanceDay.leaveInfo.cleanReason}
+                                             </div>
+                                          </div>
+                                       )}
+                                    </div>
+                                 ) : (
+                                    <div style={{ padding: '20px 0', textAlign: 'center', color: '#94a3b8', fontSize: '0.88rem' }}>
+                                       Chưa có dữ liệu điểm danh cho ngày này.
+                                    </div>
+                                 )}
+
+                                 <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                       onClick={() => setSelectedAttendanceDay(null)}
+                                       style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '8px 18px', borderRadius: '10px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                                    >
+                                       Đóng
+                                    </button>
+                                 </div>
+                              </div>
+                           </div>
+                        )}
                      </div>
                   )}
 
