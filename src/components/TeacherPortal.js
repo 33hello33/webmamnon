@@ -9,7 +9,7 @@ import { saveImageToDevice } from '../utils/mobileImageSave';
 import FileDropZone from './FileDropZone';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
-import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell, Download } from 'lucide-react';
+import { Loader2, Key, X, LogOut, Image, FileText, CalendarCheck, Paperclip, Send, ArrowLeft, Phone, Search, MessageSquare, Heart, Bell, Download, History, Eye, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { mergeFileLists, splitFilesByKind, toFileArray, uploadManagedFile } from '../utils/managedUploads';
 import { buildGroupedMessageDescription, createMessageGroupId, groupAnnouncementsForDisplay, groupMessagesForDisplay } from '../utils/chatMessageGrouping';
 import { getActiveNgoaiKhoaAnnouncements } from '../utils/ngoaiKhoaUtils';
@@ -345,8 +345,20 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
    const [changePassLoading, setChangePassLoading] = useState(false);
    const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
 
+   // ----- Attendance History States (View Only) -----
+   const [historyDate, setHistoryDate] = useState(() => {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().split('T')[0];
+   });
+   const [historySelectedClass, setHistorySelectedClass] = useState('');
+   const [historyStudents, setHistoryStudents] = useState([]);
+   const [historyRecords, setHistoryRecords] = useState({});
+   const [historyLoading, setHistoryLoading] = useState(false);
+   const [historySearch, setHistorySearch] = useState('');
+
    // ----- Teacher Chat States -----
-   const [attTab, setAttTab] = useState('menu'); // 'menu' | 'attendance' | 'chat' | 'health' | 'notices' | 'curriculum'
+   const [attTab, setAttTab] = useState('menu'); // 'menu' | 'attendance' | 'attendance-history' | 'chat' | 'health' | 'notices' | 'curriculum'
    const [attChatSelectedStudent, setAttChatSelectedStudent] = useState(null);
    const [attUnreadCounts, setAttUnreadCounts] = useState({});
    const [attLatestMessages, setAttLatestMessages] = useState([]);
@@ -676,15 +688,196 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    useEffect(() => {
       const loadHolidayDates = async () => {
-         const year = parseInt(String(attDate || '').slice(0, 4), 10) || new Date().getFullYear();
-         const dates = await fetchHolidayDates(year);
-         setAttHolidayDates(dates);
+         const y1 = parseInt(String(attDate || '').slice(0, 4), 10) || new Date().getFullYear();
+         const y2 = parseInt(String(historyDate || '').slice(0, 4), 10) || new Date().getFullYear();
+         const years = Array.from(new Set([y1, y2]));
+         const allDates = [];
+         for (const y of years) {
+            const d = await fetchHolidayDates(y);
+            allDates.push(...(d || []));
+         }
+         setAttHolidayDates(allDates);
       };
 
       loadHolidayDates();
-   }, [attDate]);
+   }, [attDate, historyDate]);
+
+   useEffect(() => {
+      if (!historySelectedClass && attClasses.length > 0) {
+         setHistorySelectedClass(attSelectedClass || attClasses[0].malop);
+      }
+   }, [attClasses, attSelectedClass, historySelectedClass]);
+
+   useEffect(() => {
+      const loadHistoryData = async () => {
+         if (!historySelectedClass || !historyDate) {
+            setHistoryStudents([]);
+            setHistoryRecords({});
+            return;
+         }
+
+         setHistoryLoading(true);
+         try {
+            const { data: stFound, error: stError } = await supabase
+               .from('tbl_hv')
+               .select('mahv, tenhv, trangthai, imgpath')
+               .eq('malop', historySelectedClass);
+            if (stError) console.error('Error fetching history students:', stError);
+
+            const activeStudents = (stFound || []).filter(s => s.trangthai !== 'Đã Nghỉ');
+            setHistoryStudents(activeStudents);
+
+            const { data: rec, error: recError } = await supabase
+               .from('tbl_diemdanh')
+               .select('*')
+               .eq('malop', historySelectedClass)
+               .eq('ngay', historyDate);
+            if (recError) console.error('Error fetching history attendance:', recError);
+
+            const rMap = {};
+            (rec || []).forEach(r => {
+               if (r.mahv) {
+                  rMap[r.mahv] = r;
+               }
+            });
+            setHistoryRecords(rMap);
+         } catch (err) {
+            console.error('Error loading attendance history:', err);
+         } finally {
+            setHistoryLoading(false);
+         }
+      };
+
+      if (attendanceUser && attTab === 'attendance-history') {
+         loadHistoryData();
+      }
+   }, [historySelectedClass, historyDate, attendanceUser, attTab]);
 
    const isAttendanceHoliday = isHoliday(attDate, attHolidayDates);
+   const isHistoryDateHoliday = isHoliday(historyDate, attHolidayDates);
+
+   const handlePrevHistoryDay = () => {
+      if (!historyDate) return;
+      const d = new Date(historyDate + 'T00:00:00');
+      d.setDate(d.getDate() - 1);
+      const prevStr = d.toISOString().split('T')[0];
+      setHistoryDate(prevStr);
+   };
+
+   const handleNextHistoryDay = () => {
+      if (!historyDate) return;
+      const d = new Date(historyDate + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      const nextStr = d.toISOString().split('T')[0];
+      setHistoryDate(nextStr);
+   };
+
+   const handleTodayHistory = () => {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      setHistoryDate(d.toISOString().split('T')[0]);
+   };
+
+   const formatHistoryDateLabel = (dateStr) => {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00');
+      if (Number.isNaN(d.getTime())) return dateStr;
+      const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+      const dayName = days[d.getDay()];
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dayName}, ${dd}/${mm}/${yyyy}`;
+   };
+
+   const historyStats = React.useMemo(() => {
+      let present = 0;
+      let excused = 0;
+      let unexcused = 0;
+      let late = 0;
+      let unrecorded = 0;
+
+      historyStudents.forEach(st => {
+         const rec = historyRecords[st.mahv];
+         if (!rec || !rec.trangthai) {
+            unrecorded++;
+            return;
+         }
+         const tt = (rec.trangthai || '').trim().toLowerCase();
+         if (tt === 'có mặt') present++;
+         else if (tt === 'nghỉ phép') excused++;
+         else if (tt === 'nghỉ không phép') unexcused++;
+         else if (tt.includes('trả trễ') || tt.includes('về trễ')) late++;
+         else present++;
+      });
+
+      return {
+         total: historyStudents.length,
+         present,
+         excused,
+         unexcused,
+         late,
+         unrecorded,
+         hasAnyRecord: Object.keys(historyRecords).length > 0
+      };
+   }, [historyStudents, historyRecords]);
+
+   const renderHistoryStatusBadge = (trangthai) => {
+      const tt = (trangthai || '').trim();
+      const lower = tt.toLowerCase();
+
+      if (lower === 'có mặt') {
+         return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 700, fontSize: '0.88rem' }}>
+               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+               Có mặt
+            </span>
+         );
+      }
+      if (lower === 'nghỉ phép') {
+         return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 700, fontSize: '0.88rem' }}>
+               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }}></span>
+               Nghỉ phép
+            </span>
+         );
+      }
+      if (lower === 'nghỉ không phép') {
+         return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', fontWeight: 700, fontSize: '0.88rem' }}>
+               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
+               Nghỉ không phép
+            </span>
+         );
+      }
+      if (lower.includes('trả trễ') || lower.includes('về trễ')) {
+         return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', fontWeight: 700, fontSize: '0.88rem' }}>
+               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f97316' }}></span>
+               {tt}
+            </span>
+         );
+      }
+      if (!tt) {
+         return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: '0.88rem' }}>
+               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#94a3b8' }}></span>
+               Chưa điểm danh
+            </span>
+         );
+      }
+      return (
+         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '999px', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', fontWeight: 600, fontSize: '0.88rem' }}>
+            {tt}
+         </span>
+      );
+   };
+
+   const filteredHistoryStudents = historyStudents.filter(st => {
+      if (!historySearch.trim()) return true;
+      const q = historySearch.toLowerCase();
+      return (st.tenhv?.toLowerCase() || '').includes(q) || (st.mahv?.toLowerCase() || '').includes(q);
+   });
 
    const handleUpdateRecord = (mahv, field, value) => {
       setAttRecords(prev => ({ ...prev, [mahv]: { ...(prev[mahv] || {}), [field]: value } }));
@@ -2095,11 +2288,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   <h2 style={{ fontSize: isMobileChatView ? '1.2rem' : '1.4rem', margin: 0, lineHeight: 1.25 }}>
                      {attTab === 'menu' ? 'Cổng Giáo Viên'
                         : attTab === 'attendance' ? 'Điểm Danh Lớp Học'
-                           : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
-                              : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
-                                 : attTab === 'ngoaikhoa' ? 'Ngoại Khóa'
-                                    : attTab === 'curriculum' ? 'Chương Trình Học'
-                                       : 'Trung Tâm Tin Nhắn'}
+                           : attTab === 'attendance-history' ? 'Xem Lại Điểm Danh'
+                              : attTab === 'health' ? 'Hồ Sơ Sức Khỏe'
+                                 : attTab === 'notices' ? 'Bảng Tin Nhà Trường'
+                                    : attTab === 'ngoaikhoa' ? 'Ngoại Khóa'
+                                       : attTab === 'curriculum' ? 'Chương Trình Học'
+                                          : 'Trung Tâm Tin Nhắn'}
                   </h2>
                   <p style={{ color: '#64748b', margin: 0, marginTop: '5px', lineHeight: 1.4, wordBreak: 'break-word' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
                </div>
@@ -2127,6 +2321,15 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            <CalendarCheck size={24} />
                         </div>
                         <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Điểm danh</div>
+                     </div>
+                  )}
+
+                  {!isBoMonTeacher && (
+                     <div onClick={() => setAttTab('attendance-history')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
+                        <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#f0fdfa', border: '3px solid #99f6e4', color: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                           <History size={24} />
+                        </div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Xem lại<br />điểm danh</div>
                      </div>
                   )}
 
@@ -2191,11 +2394,12 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                </button>
                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
                   {attTab === 'attendance' ? 'Điểm danh'
-                     : attTab === 'health' ? 'Sức khỏe'
-                        : attTab === 'notices' ? 'Bảng tin'
-                           : attTab === 'ngoaikhoa' ? 'Ngoại khóa'
-                              : attTab === 'curriculum' ? 'Chương trình học'
-                                 : 'Liên lạc PH'}
+                     : attTab === 'attendance-history' ? 'Xem lại điểm danh'
+                        : attTab === 'health' ? 'Sức khỏe'
+                           : attTab === 'notices' ? 'Bảng tin'
+                              : attTab === 'ngoaikhoa' ? 'Ngoại khóa'
+                                 : attTab === 'curriculum' ? 'Chương trình học'
+                                    : 'Liên lạc PH'}
                </div>
             </div>
          )}
@@ -2332,6 +2536,167 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         </button>
                      )}
                   </>
+               )}
+            </div>
+         )}
+
+         {attTab === 'attendance-history' && (
+            <div className="attendance-tab-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+               {/* Controls Bar */}
+               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: '1 1 200px' }}>
+                     <label style={{ display: 'block', fontWeight: 700, marginBottom: '0.4rem', color: '#334155', fontSize: '0.9rem' }}>Chọn Lớp</label>
+                     <select value={historySelectedClass} onChange={e => setHistorySelectedClass(e.target.value)} style={{ width: '100%', padding: '0.65rem 0.85rem', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '0.95rem', background: 'white', fontWeight: 600, outline: 'none' }}>
+                        <option value="">-- {attClasses.length > 0 ? 'Chọn Lớp' : 'Không có lớp phân công'} --</option>
+                        {attClasses.map(c => <option key={c.malop} value={c.malop}>{c.tenlop || c.malop}</option>)}
+                     </select>
+                     {historySelectedClass && (
+                        <div style={{ marginTop: '0.35rem', fontSize: '0.82rem', color: '#2563eb', fontWeight: 600 }}>
+                           Lịch học: {attClasses.find(c => c.malop === historySelectedClass)?.thoigianbieu || 'Chưa cập nhật'}
+                        </div>
+                     )}
+                  </div>
+
+                  <div style={{ flex: '2 1 300px' }}>
+                     <label style={{ display: 'block', fontWeight: 700, marginBottom: '0.4rem', color: '#334155', fontSize: '0.9rem' }}>Chọn Ngày Xem Lịch Sử</label>
+                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button type="button" onClick={handlePrevHistoryDay} title="Ngày trước đó" style={{ width: '38px', height: '38px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                           <ChevronLeft size={18} />
+                        </button>
+                        <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} style={{ flex: 1, padding: '0.6rem 0.85rem', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '0.95rem', fontWeight: 600, outline: 'none' }} />
+                        <button type="button" onClick={handleNextHistoryDay} title="Ngày tiếp theo" style={{ width: '38px', height: '38px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                           <ChevronRight size={18} />
+                        </button>
+                        <button type="button" onClick={handleTodayHistory} style={{ padding: '0.6rem 0.9rem', borderRadius: '10px', border: '1px solid #0d9488', background: '#f0fdfa', color: '#0d9488', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                           Hôm nay
+                        </button>
+                     </div>
+                  </div>
+
+                  {historyStudents.length > 0 && (
+                     <div style={{ flex: '1 1 200px' }}>
+                        <label style={{ display: 'block', fontWeight: 700, marginBottom: '0.4rem', color: '#334155', fontSize: '0.9rem' }}>Tìm Kiếm Bé</label>
+                        <div style={{ position: 'relative' }}>
+                           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                           <input type="text" placeholder="Tên hoặc mã..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} style={{ width: '100%', padding: '0.65rem 0.85rem 0.65rem 2.2rem', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '0.9rem', outline: 'none' }} />
+                        </div>
+                     </div>
+                  )}
+               </div>
+
+               {/* Notice Banner: Read-only */}
+               <div style={{ marginBottom: '1.25rem', padding: '0.75rem 1rem', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f766e', fontWeight: 700, fontSize: '0.9rem' }}>
+                     <Eye size={18} />
+                     <span>Chế độ xem lại lịch sử điểm danh (chỉ xem, không được chỉnh sửa hoặc điểm danh lại)</span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: 600 }}>
+                     {formatHistoryDateLabel(historyDate)}
+                  </div>
+               </div>
+
+               {isHistoryDateHoliday && (
+                  <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '12px', background: '#fff7ed', border: '1px solid #fdba74', color: '#c2410c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                     <AlertCircle size={18} />
+                     <span>Ngày {formatHistoryDateLabel(historyDate)} là ngày nghỉ theo lịch của nhà trường.</span>
+                  </div>
+               )}
+
+               {historySelectedClass ? (
+                  <>
+                     {/* Summary Statistics Card */}
+                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '1.25rem' }}>
+                        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 14px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Sĩ số</div>
+                           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>{historyStats.total}</div>
+                        </div>
+                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>Có mặt</div>
+                           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>{historyStats.present}</div>
+                        </div>
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Nghỉ phép</div>
+                           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b45309', marginTop: '2px' }}>{historyStats.excused}</div>
+                        </div>
+                        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase' }}>Nghỉ KP</div>
+                           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b91c1c', marginTop: '2px' }}>{historyStats.unexcused}</div>
+                        </div>
+                        {historyStats.late > 0 && (
+                           <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>Trả trễ</div>
+                              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#c2410c', marginTop: '2px' }}>{historyStats.late}</div>
+                           </div>
+                        )}
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Chưa ghi</div>
+                           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#64748b', marginTop: '2px' }}>{historyStats.unrecorded}</div>
+                        </div>
+                     </div>
+
+                     {!isHistoryDateHoliday && historyStudents.length > 0 && !historyStats.hasAnyRecord && !historyLoading && (
+                        <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '12px', background: '#f8fafc', border: '1px dashed #cbd5e1', color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                           <Eye size={18} />
+                           <span>Lớp chưa được điểm danh vào ngày {formatHistoryDateLabel(historyDate)}.</span>
+                        </div>
+                     )}
+
+                     {historyLoading ? (
+                        <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b' }}>
+                           <Loader2 size={32} className="spinner" style={{ margin: '0 auto 10px', color: '#0d9488' }} />
+                           <p style={{ fontWeight: 600 }}>Đang tải dữ liệu điểm danh...</p>
+                        </div>
+                     ) : (
+                        <div className="attendance-portal-list">
+                           {filteredHistoryStudents.length > 0 ? filteredHistoryStudents.map(st => {
+                              const rec = historyRecords[st.mahv];
+                              return (
+                                 <div
+                                    key={st.mahv}
+                                    className="attendance-portal-card"
+                                    style={{
+                                       borderLeft: rec?.trangthai
+                                          ? (rec.trangthai === 'Có mặt'
+                                             ? '4px solid #10b981'
+                                             : rec.trangthai === 'Nghỉ phép'
+                                                ? '4px solid #f59e0b'
+                                                : '4px solid #ef4444')
+                                          : '4px solid #cbd5e1',
+                                       background: 'white'
+                                    }}
+                                 >
+                                    <div>
+                                       <strong style={{ fontSize: '1.05rem', color: '#0f172a', display: 'block' }}>{st.tenhv}</strong>
+                                       <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>Mã: {st.mahv}</div>
+                                    </div>
+                                    <div>
+                                       <span className="portal-att-label">Trạng thái điểm danh</span>
+                                       <div style={{ marginTop: '0.2rem' }}>
+                                          {renderHistoryStatusBadge(rec?.trangthai)}
+                                       </div>
+                                    </div>
+                                    <div>
+                                       <span className="portal-att-label">Ghi chú / Nhận xét</span>
+                                       <div style={{ padding: '0.65rem 0.85rem', borderRadius: '10px', background: rec?.ghichu ? '#f8fafc' : '#fafafa', border: '1px solid #e2e8f0', minHeight: '38px', fontSize: '0.9rem', color: rec?.ghichu ? '#1e293b' : '#94a3b8', fontStyle: rec?.ghichu ? 'normal' : 'italic', wordBreak: 'break-word', display: 'flex', alignItems: 'center' }}>
+                                          {rec?.ghichu || 'Không có ghi chú'}
+                                       </div>
+                                    </div>
+                                 </div>
+                              );
+                           }) : (
+                              <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
+                                 <p style={{ fontWeight: 600, fontSize: '1rem' }}>
+                                    {historyStudents.length === 0 ? 'Lớp không có học sinh đang kích hoạt.' : 'Không tìm thấy học sinh phù hợp với tìm kiếm.'}
+                                 </p>
+                              </div>
+                           )}
+                        </div>
+                     )}
+                  </>
+               ) : (
+                  <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
+                     <p style={{ fontWeight: 600, fontSize: '1rem' }}>Vui lòng chọn lớp để xem lại lịch sử điểm danh.</p>
+                  </div>
                )}
             </div>
          )}
