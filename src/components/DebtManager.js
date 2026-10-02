@@ -4,16 +4,39 @@ import { supabase } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { BadgeDollarSign, Clock, CheckCircle, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
+import { generateVietQRUrl } from '../utils/qrHelper';
 import './DebtManager.css';
 
 export default function DebtManager() {
   const { config } = useConfig();
   const walletsConfig = (config ? [
-    { id: 'vi1', name: config.vi1?.name || '' },
-    { id: 'vi2', name: config.vi2?.name || '' },
-    { id: 'vi3', name: config.vi3?.name || '' },
-    { id: 'vi4', name: config.vi4?.name || '' }
+    { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
+    { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
+    { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
+    { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
   ].filter(w => w.name && w.name.trim() !== '') : []);
+
+  const getDebtQRUrl = (debt, amountVal, walletName) => {
+    if (!debt || !walletName) return null;
+    const matched = walletsConfig.find(w => String(w.name).trim() === String(walletName).trim());
+    if (!matched || !matched.bankId || !matched.accNo) return null;
+    return generateVietQRUrl({
+      bankId: matched.bankId,
+      accNo: matched.accNo,
+      accName: matched.accName || '',
+      amount: amountVal || debt.conno || '0',
+      template: config?.qr_template,
+      data: {
+        mahv: debt.mahv,
+        tenhv: debt.tenhv,
+        tenlop: debt.tenlop || '',
+        mahd: debt.mahd,
+        thang: debt.thang || '',
+        thoiluong: debt.thoiluong || '',
+        ngaybatdau: debt.ngaybatdau || ''
+      }
+    });
+  };
 
   const [classes, setClasses] = useState([]);
   const [debtList, setDebtList] = useState([]);
@@ -610,6 +633,17 @@ export default function DebtManager() {
                 ))}
               </select>
             </div>
+
+            {(() => {
+              const modalQrUrl = getDebtQRUrl(selectedDebt, paymentAmount, paymentMethod);
+              if (!modalQrUrl) return null;
+              return (
+                <div style={{ textAlign: 'center', marginBottom: '16px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>Quét mã QR để thanh toán</div>
+                  <img src={modalQrUrl} alt="QR thanh toán" style={{ width: '180px', height: '180px', borderRadius: '8px', border: '2px solid #000' }} />
+                </div>
+              );
+            })()}
 
             {paymentError && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '0.9rem' }}>{paymentError}</div>}
             {paymentSuccess && <div style={{ color: '#10b981', marginBottom: '16px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}><CheckCircle size={16} /> {paymentSuccess}</div>}

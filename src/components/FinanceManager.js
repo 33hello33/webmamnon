@@ -11,6 +11,7 @@ import {
 import { toPng } from 'html-to-image';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
+import { generateVietQRUrl } from '../utils/qrHelper';
 import './FinanceManager.css';
 
 const pCur = (val) => {
@@ -183,13 +184,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const hinhThucTrim = String(notice.hinhthuc).trim();
       const matchedWallet = walletsConfigForQR.find(w => String(w.name).trim() === hinhThucTrim);
       if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-         const amountStr = (notice.tongcong || "0").toString().replace(/\D/g, "");
-         const mahv = notice.mahv || '';
-         const rawName = String(notice.tenhv || '').trim().replace(/\s+/g, ' ');
-         const nameParts = rawName ? rawName.split(' ') : [];
-         const shortName = nameParts.length <= 2 ? rawName : nameParts.slice(-2).join(' ');
-         const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
-         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+         return generateVietQRUrl({
+            bankId: matchedWallet.bankId,
+            accNo: matchedWallet.accNo,
+            accName: matchedWallet.accName || '',
+            amount: notice.tongcong || '0',
+            template: config?.qr_template,
+            data: notice
+         });
       }
       return null;
    };

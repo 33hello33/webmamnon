@@ -11,6 +11,7 @@ import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, ded
 import { buildLateFeeSurcharges, getLateAttendanceCounts, mergeLateFeeSurcharges, stripAutoLateFeeSurcharges } from '../utils/lateFeeConfig';
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
+import { generateVietQRUrl } from '../utils/qrHelper';
 
 
 
@@ -103,20 +104,20 @@ const getShortStudentName = (name) => {
    return parts.slice(-2).join(' ');
 };
 
-const getQRUrl = (hoaDon, walletsConfig, cacheBust = false) => {
+const getQRUrl = (hoaDon, walletsConfig, cacheBust = false, qrTemplate = '') => {
    if (!walletsConfig || !hoaDon.hinhthuc) return null;
    const hinhThucTrim = String(hoaDon.hinhthuc).trim();
    const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-      const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-
-      // Nội dung chuyển khoản: mã học viên + tên rút gọn
-      const mahv = hoaDon.mahv || '';
-      const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || '');
-      const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
-      const base = `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
-      // Thêm cache-buster để tránh trình duyệt cache ảnh QR của học sinh khác
-      return cacheBust ? `${base}&_cb=${Date.now()}_${Math.random().toString(36).slice(2)}` : base;
+      return generateVietQRUrl({
+         bankId: matchedWallet.bankId,
+         accNo: matchedWallet.accNo,
+         accName: matchedWallet.accName || '',
+         amount: hoaDon.tongcong || '0',
+         template: qrTemplate,
+         data: hoaDon,
+         cacheBust
+      });
    }
    return null;
 };
@@ -510,7 +511,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                const node = document.getElementById('download-notice-node');
                if (node) {
                   const expectedNoticeId = downloadingNotice.mahd;
-                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig, true);
+                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig, true, config?.qr_template);
 
                   // Capture setup
                   node.style.position = 'fixed';
@@ -1616,11 +1617,13 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                return getQRUrl({
                   mahv: selectedStudent.mahv,
                   tenhv: selectedStudent.tenhv,
+                  tenlop: selectedStudent.tenlop || selectedStudent.malop || '',
                   tongcong: formatCurrency(tongCong),
                   hinhthuc: invoiceData.hinhThuc,
                   thoiluong: currentTimePeriod,
-                  ngaybatdau: invoiceData.ngayBatDau || null
-               }, walletsConfig, true);
+                  ngaybatdau: invoiceData.ngayBatDau || null,
+                  mahd: newMaTB
+               }, walletsConfig, true, config?.qr_template);
             })(),
             diemDanhInfo: studySummary ? {
                diHoc: studySummary.daHoc || 0,
@@ -2853,7 +2856,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   {/* QR SECTION */}
                   {(() => {
                      // Dùng qrUrl đã cache-busted khi tạo notice; fallback cũng bật cacheBust
-                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig, true) : null);
+                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig, true, config?.qr_template) : null);
                      if (!qrUrl) return (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
                         </div>
