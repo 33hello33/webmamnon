@@ -13,6 +13,7 @@ import { compressImage } from '../utils/imageUtils';
 import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, dedupeAttendanceRecordsByDay, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
+import { generateVietQRUrl } from '../utils/qrHelper';
 import './ClassManager.css';
 
 const INITIAL_FORM = {
@@ -34,7 +35,7 @@ const getShortStudentName = (name) => {
   return parts.slice(-2).join(' ');
 };
 
-const getQRUrl = (hoaDon, walletsConfig) => {
+const getQRUrl = (hoaDon, walletsConfig, qrTemplate = '') => {
   if (!walletsConfig || !hoaDon.hinhthuc) {
     return null;
   }
@@ -42,12 +43,14 @@ const getQRUrl = (hoaDon, walletsConfig) => {
   const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
 
   if (!matchedWallet || !matchedWallet.bankId || !matchedWallet.accNo) return null;
-  const amountStr = (hoaDon.tongcong || "0").toString().replace(/\D/g, "");
-
-  const mahv = String(hoaDon.mahv || '').trim();
-  const shortName = getShortStudentName(hoaDon.tenhv || hoaDon.hoten || hoaDon.hoten || '');
-  const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
-  return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+  return generateVietQRUrl({
+    bankId: matchedWallet.bankId,
+    accNo: matchedWallet.accNo,
+    accName: matchedWallet.accName || '',
+    amount: hoaDon.tongcong || '0',
+    template: qrTemplate,
+    data: hoaDon
+  });
 };
 const formatTuition = (val) => {
   if (!val && val !== 0) return '';
@@ -1032,8 +1035,13 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             const base = getQRUrl({
               ...row,
               mahv: studentId,
-              tenhv: masterStudent.tenhv || row.tenhv
-            }, walletsConfig);
+              tenhv: masterStudent.tenhv || row.tenhv,
+              tenlop: selectedClass?.tenlop || '',
+              malop: selectedClass?.malop || '',
+              thoiluong: tl,
+              ngaybatdau: row.ngaybatdau,
+              mahd: newMaHD
+            }, walletsConfig, config?.qr_template);
             const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
             return finalUrl;
           })(),

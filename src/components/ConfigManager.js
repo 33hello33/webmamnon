@@ -28,8 +28,10 @@ import {
   BarChart3,
   Briefcase,
   Users,
-  CalendarDays
+  CalendarDays,
+  QrCode
 } from 'lucide-react';
+import { formatQRTransferContent } from '../utils/qrHelper';
 import './ConfigManager.css';
 
 const formatCurrency = (val) => {
@@ -83,7 +85,8 @@ const ConfigManager = () => {
         trutienan: typeof config.trutienan === 'string' && config.trutienan.trim().startsWith('{') ? JSON.parse(config.trutienan) : config.trutienan,
         tiendangoai: config.tiendangoai || '0',
         tienhoct7: config.tienhoct7 || '0',
-        xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00'
+        xinnghitruocmaygio: config.xinnghitruocmaygio || '08:00',
+        qr_template: config.qr_template || '[mahv] Dong HP thang [ngaybatdau]'
       });
     }
   }, [config]);
@@ -103,7 +106,8 @@ const ConfigManager = () => {
       hangmucchi: formData.hangmucchi.split('\n').map(s => s.trim()).filter(s => s),
       sonhanvientrogiang: Math.max(0, Math.min(3, parseInt(formData.sonhanvientrogiang) || 0)),
       ngayquahan: Math.max(0, parseInt(formData.ngayquahan) || 0),
-      nghilientiep: normalizeConsecutiveRefundConfig(formData.nghilientiep, formData)
+      nghilientiep: normalizeConsecutiveRefundConfig(formData.nghilientiep, formData),
+      qr_template: (formData.qr_template || '').trim()
     };
 
     try {
@@ -120,7 +124,7 @@ const ConfigManager = () => {
 
 
       setMsg({ type: 'success', text: 'Đã lưu cấu hình hệ thống thành công!' });
-      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tencongty || '_'}, SĐT: ${formData.sdt || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'})`);
+      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tencongty || '_'}, QR Template: ${formData.qr_template || '_'}, SĐT: ${formData.sdtcongty || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'})`);
       refreshConfig();
     } catch (err) {
       console.error(err);
@@ -592,6 +596,81 @@ const ConfigManager = () => {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="qr-template-config-box" style={{ marginTop: '1.5rem', background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <QrCode size={20} style={{ color: '#2563eb' }} />
+                <h4 style={{ margin: 0, fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>Cấu hình nội dung chuyển khoản QR (qr_template)</h4>
+              </div>
+              <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#64748b' }}>
+                Cú pháp nội dung chuyển khoản tự động áp dụng khi xuất thông báo thu học phí và mã QR thanh toán.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={formData.qr_template || ''}
+                  onChange={e => setFormData({ ...formData, qr_template: e.target.value })}
+                  placeholder="VD: [mahv] Dong HP thang [ngaybatdau]"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: 600, outline: 'none', background: '#fff' }}
+                />
+              </div>
+
+              {/* Tag suggestions */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>Thêm nhanh:</span>
+                {[
+                  { tag: '[mahv]', desc: 'Mã học viên' },
+                  { tag: '[tenrutgon]', desc: 'Tên rút gọn' },
+                  { tag: '[tenhv]', desc: 'Họ tên đầy đủ' },
+                  { tag: '[ngaybatdau]', desc: 'Tháng/kỳ học' },
+                  { tag: '[thoiluong]', desc: 'Thời lượng' },
+                  { tag: '[tenlop]', desc: 'Tên lớp' },
+                  { tag: '[mahd]', desc: 'Mã hóa đơn/thông báo' }
+                ].map(item => (
+                  <button
+                    key={item.tag}
+                    type="button"
+                    title={item.desc}
+                    onClick={() => {
+                      const current = formData.qr_template || '';
+                      const next = current ? `${current} ${item.tag}` : item.tag;
+                      setFormData({ ...formData, qr_template: next });
+                    }}
+                    style={{
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      color: '#1d4ed8',
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <span>+ {item.tag}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b' }}>({item.desc})</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Live Preview */}
+              <div style={{ background: '#ffffff', padding: '12px 14px', borderRadius: '8px', border: '1px dashed #3b82f6', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#2563eb' }}>👁️ Xem trước nội dung QR:</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px' }}>
+                  {formatQRTransferContent(formData.qr_template, {
+                    mahv: 'HV00021',
+                    tenhv: 'Trần Bảo An',
+                    tenlop: 'Lớp Mầm 1',
+                    ngaybatdau: new Date().toISOString(),
+                    mahd: 'TB00045',
+                    thoiluong: '10/2026'
+                  }) || '(Mặc định: HV00021 Bảo An)'}
+                </span>
+              </div>
             </div>
           </section>
         )}
