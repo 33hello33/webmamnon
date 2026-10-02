@@ -7,6 +7,8 @@ import {
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
    Printer, History, Clock, Edit2, Receipt
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
+import { getQRUrl, fetchQrAsBase64 } from '../utils/qrHelper';
 
 import './FinanceManager.css';
 
@@ -502,54 +504,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
    ].filter(w => w.name.trim() !== '') : []), [config]);
 
-   const getQRUrl = (hoaDon, wConfig, qrTemplate = '') => {
-      if (!wConfig || wConfig.length === 0 || !hoaDon?.hinhthuc) return null;
-      const hinhThucTrim = String(hoaDon.hinhthuc).trim().toLowerCase();
-
-      // Không hiển thị mã QR nếu là hình thức Tiền mặt
-      if (hinhThucTrim.includes('tiền mặt') || hinhThucTrim.includes('tien mat')) {
-         return null;
-      }
-
-      // Chỉ hiển thị mã QR khi hình thức thanh toán khớp với ví/tài khoản có STK ngân hàng
-      let matchedWallet = wConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim && w.bankId && w.accNo);
-      if (!matchedWallet) {
-         matchedWallet = wConfig.find(w => {
-            const wName = String(w.name || '').trim().toLowerCase();
-            return wName && (hinhThucTrim.includes(wName) || wName.includes(hinhThucTrim)) && w.bankId && w.accNo;
-         });
-      }
-
-      if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-         const amountStr = (hoaDon.tongcong || hoaDon.conno || hoaDon.hocphi || "0").toString().replace(/\D/g, "");
-
-         let shortName = '';
-         if (hoaDon.tenhv) {
-            const parts = hoaDon.tenhv.trim().split(' ');
-            shortName = parts.length >= 2 ? parts.slice(-2).join(' ') : hoaDon.tenhv;
-         }
-
-         let addInfoText = '';
-         if (qrTemplate && qrTemplate.trim()) {
-            addInfoText = qrTemplate
-               .replace(/\{mahv\}/gi, hoaDon.mahv || '')
-               .replace(/\{tenhv\}/gi, hoaDon.tenhv || '')
-               .replace(/\{ten\}/gi, shortName)
-               .replace(/\{mahd\}/gi, hoaDon.mahd || '')
-               .replace(/\{tenlop\}/gi, hoaDon.tenlop || '')
-               .replace(/\{sdt\}/gi, hoaDon.sdt || '')
-               .replace(/\{thoiluong\}/gi, hoaDon.thoiluong || '')
-               .trim().replace(/\s+/g, ' ');
-         } else {
-            addInfoText = `${hoaDon.mahv || ''}${shortName ? ' ' + shortName : ''}`.trim();
-         }
-
-         const info = encodeURIComponent(addInfoText);
-         const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
-         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
-      }
-      return null;
-   };
+   // getQRUrl is imported from ../utils/qrHelper
    const [data, setData] = useState([]);
    const [loading, setLoading] = useState(false);
    const [searchTerm, setSearchTerm] = useState('');
@@ -590,6 +545,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [printLuong, setPrintLuong] = useState(null);
    const [printHoaDon, setPrintHoaDon] = useState(null);
    const [printBill, setPrintBill] = useState(null);
+   const [downloadingNotice, setDownloadingNotice] = useState(null);
+   const [isDownloading, setIsDownloading] = useState(false);
+   const [previewImg, setPreviewImg] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', actionType: '', payload: null });
    const [editInvoiceModal, setEditInvoiceModal] = useState({ isOpen: false, data: null, password: '' });
    const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
@@ -756,17 +714,171 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       const enriched = {
          ...record,
-         tenhv: hv.tenhv,
-         sdt: hv.sdt,
+         tenhv: hv.tenhv || record.tenhv,
+         sdt: hv.sdt || record.sdt,
          nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_',
          attendanceStats
       };
+
+      const qrUrl = getQRUrl(enriched, walletsConfig, config?.qr_template);
+      if (qrUrl) {
+         try {
+            enriched.qrBase64 = await fetchQrAsBase64(qrUrl);
+         } catch (e) { }
+      }
+      enriched.qrUrl = qrUrl;
+
       setPrintHoaDon(enriched);
 
       setTimeout(() => {
          window.print();
       }, 500);
    };
+
+   const handleDownloadNoticePng = async (record) => {
+      setIsDownloading(true);
+      try {
+         const hv = hvMap[record.mahv] || {};
+         let attendanceStats = null;
+
+         if (record.ghichu && record.ghichu.includes('Điểm danh:')) {
+            const m = record.ghichu.match(/Có mặt\s*(\d+).*?Phép\s*(\d+).*?KP\s*(\d+)(?:.*?Liên tiếp\s*(\d+))?/i);
+            if (m) {
+               attendanceStats = {
+                  daHoc: parseInt(m[1], 10),
+                  nghiPhep: parseInt(m[2], 10),
+                  nghiKhongPhep: parseInt(m[3], 10),
+                  maxConsecutive: m[4] ? parseInt(m[4], 10) : 0,
+                  tongBuoi: parseInt(m[1], 10) + parseInt(m[2], 10) + parseInt(m[3], 10)
+               };
+            }
+         }
+
+         if (!attendanceStats && record.mahv) {
+            try {
+               let sDate = '';
+               let eDate = '';
+               if (record.thoiluong && record.thoiluong.includes('/')) {
+                  const parts = record.thoiluong.match(/(\d{1,2})\/(\d{4})/);
+                  if (parts) {
+                     const m = parseInt(parts[1], 10);
+                     const y = parseInt(parts[2], 10);
+                     sDate = new Date(y, m - 1, 1).toISOString().split('T')[0];
+                     eDate = new Date(y, m, 0).toISOString().split('T')[0];
+                  }
+               }
+               if (!sDate) {
+                  const baseDate = new Date(record.ngaylap || new Date());
+                  sDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - 1, 1).toISOString().split('T')[0];
+                  eDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 0).toISOString().split('T')[0];
+               }
+               const { data: attData } = await supabase.from('tbl_diemdanh')
+                  .select('ngay, trangthai')
+                  .eq('mahv', record.mahv)
+                  .gte('ngay', sDate)
+                  .lte('ngay', eDate);
+               if (attData && attData.length > 0) {
+                  const normalizeStatus = (st) => (st || '').trim().toLowerCase();
+                  const uniqueDayRecords = Array.from(new Map(attData.map(r => [r.ngay, r])).values());
+                  const coMat = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('có mặt')).length;
+                  const nghiPhep = uniqueDayRecords.filter(r => {
+                     const s = normalizeStatus(r.trangthai);
+                     return s.includes('nghỉ phép') && !s.includes('không');
+                  }).length;
+                  const nghiKP = uniqueDayRecords.filter(r => normalizeStatus(r.trangthai).includes('không phép')).length;
+                  attendanceStats = {
+                     daHoc: coMat,
+                     nghiPhep,
+                     nghiKhongPhep: nghiKP,
+                     tongBuoi: uniqueDayRecords.length
+                  };
+               }
+            } catch (e) {
+               console.error('Lỗi lấy dữ liệu điểm danh:', e);
+            }
+         }
+
+         const enriched = {
+            ...record,
+            tenhv: hv.tenhv || record.tenhv,
+            sdt: hv.sdt || record.sdt,
+            nhanvien: nvMap[record.manv] || record.nhanvien || record.manv || '_',
+            attendanceStats
+         };
+
+         const qrUrl = getQRUrl(enriched, walletsConfig, config?.qr_template);
+         let qrBase64 = '';
+         if (qrUrl) {
+            qrBase64 = await fetchQrAsBase64(qrUrl);
+         }
+
+         setDownloadingNotice({
+            ...enriched,
+            qrUrl,
+            qrBase64
+         });
+      } catch (err) {
+         console.error('Lỗi chuẩn bị tải thông báo:', err);
+         alert('Không thể tạo file ảnh thông báo: ' + err.message);
+         setIsDownloading(false);
+      }
+   };
+
+   useEffect(() => {
+      if (downloadingNotice) {
+         const processPng = async () => {
+            try {
+               await new Promise(r => setTimeout(r, 600));
+               const node = document.getElementById('fm-download-notice-node');
+               if (node) {
+                  node.style.position = 'fixed';
+                  node.style.top = '0';
+                  node.style.left = '0';
+                  node.style.zIndex = '9999';
+                  node.style.opacity = '1';
+                  node.style.visibility = 'visible';
+
+                  const images = node.querySelectorAll('img');
+                  await Promise.all(Array.from(images).map(img => {
+                     if (img.complete && img.naturalWidth !== 0) return Promise.resolve();
+                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 4000); });
+                  }));
+                  await new Promise(r => setTimeout(r, 300));
+
+                  const dataUrl = await toPng(node, {
+                     cacheBust: true,
+                     includeQueryParams: true,
+                     backgroundColor: '#ffffff',
+                     pixelRatio: 2
+                  });
+
+                  node.style.position = 'fixed';
+                  node.style.top = '-9999px';
+                  node.style.left = '-9999px';
+                  node.style.opacity = '0.01';
+
+                  if (window.innerWidth <= 991) {
+                     setPreviewImg(dataUrl);
+                  } else {
+                     const link = document.createElement('a');
+                     link.download = `ThongBao_${downloadingNotice.tenhv || downloadingNotice.mahv}_${downloadingNotice.mahd}.png`;
+                     link.href = dataUrl;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                  }
+               }
+            } catch (err) {
+               console.error('Lỗi xuất PNG thông báo:', err);
+               alert('Lỗi xuất file ảnh PNG: ' + err.message);
+            } finally {
+               setIsDownloading(false);
+               setDownloadingNotice(null);
+            }
+         };
+         processPng();
+      }
+   }, [downloadingNotice]);
 
    const handlePrintBill = (record) => {
       const hv = hvMap[record.mahv] || {};
@@ -1877,7 +1989,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                        {!deleted ? (
                                           <>
-                                             <button title="Tải thông báo" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><DownloadCloud size={16} /></button>
+                                             <button title="Tải ảnh PNG" className="btn-blue" onClick={() => handleDownloadNoticePng(r)}><DownloadCloud size={16} /></button>
+                                             <button title="In thông báo" style={{ background: '#475569', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
                                              <button title="Xác nhận tạo hóa đơn" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleConfirmCreateInvoice(r)}><CheckCircle2 size={16} /></button>
                                              <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /></button>
                                           </>
@@ -1911,7 +2024,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                  <div className="fm-card-actions">
                                     {!deleted ? (
                                        <>
-                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><DownloadCloud size={16} /> Tải</button>
+                                          <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handleDownloadNoticePng(r)}><DownloadCloud size={16} /> Tải</button>
+                                           <button className="btn-blue-sm" style={{ background: '#475569' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmCreateInvoice(r)}><CheckCircle2 size={14} /> Tạo HĐ</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
                                        </>
@@ -2800,11 +2914,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                         {/* Mã QR Thanh toán VietQR - Chỉ mỗi hình mã QR */}
                         {(() => {
-                           const qrUrl = getQRUrl(printHoaDon, walletsConfig, config?.qr_template);
-                           if (!qrUrl) return null;
+                           const qrSrc = printHoaDon.qrBase64 || printHoaDon.qrUrl || getQRUrl(printHoaDon, walletsConfig, config?.qr_template);
+                           if (!qrSrc) return null;
                            return (
                               <div style={{ textAlign: 'center', margin: '6px 0' }}>
-                                 <img crossOrigin="anonymous" src={qrUrl} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                                 <img crossOrigin="anonymous" src={qrSrc} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
                               </div>
                            );
                         })()}
@@ -3077,6 +3191,209 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             onClose={() => setEditBillModal({ isOpen: false, data: null, password: '' })}
             onSave={handleSaveEditBill}
          />
+
+         {/* HIDDEN TEMPLATE FOR NOTICE PNG DOWNLOAD */}
+         {downloadingNotice && document.body && createPortal(
+            <div
+               id="fm-download-notice-node"
+               className="print-a5-receipt"
+               style={{
+                  position: 'fixed',
+                  top: '-9999px',
+                  left: '-9999px',
+                  width: '148.5mm',
+                  height: 'auto',
+                  padding: 0,
+                  margin: 0,
+                  background: '#fff',
+                  display: 'flex',
+                  opacity: 0.01,
+                  overflow: 'hidden',
+                  zIndex: -1000
+               }}
+            >
+               <div className="receipt-copy" style={{ borderRight: 'none', height: 'auto', padding: '8mm', boxSizing: 'border-box', width: '100%' }}>
+                  <div className="p-header">
+                     <div style={{ width: '80px' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '70px', maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png"; }} />
+                     </div>
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '14pt', margin: 0, textTransform: 'uppercase', fontWeight: 900 }}>{config?.tencongty || 'Tên Công Ty'}</h3>
+                        <p style={{ fontSize: '10pt', margin: '2px 0' }}>ĐC: {config?.diachicongty}</p>
+                        <p style={{ fontSize: '10pt', margin: '2px 0' }}>SĐT: {config?.sdtcongty}</p>
+                     </div>
+                     <div style={{ width: '100px', textAlign: 'right', fontSize: '9pt' }}>
+                        <div style={{ fontWeight: 800 }}>Mã TB: {downloadingNotice.mahd}</div>
+                        <div style={{ fontSize: '8pt', opacity: 0.8 }}>{new Date(downloadingNotice.ngaylap).toLocaleDateString("vi-VN")}</div>
+                     </div>
+                  </div>
+
+                  <div className="p-title-area">
+                     <h2 style={{ fontSize: '14pt' }}>THÔNG BÁO THU HỌC PHÍ</h2>
+                  </div>
+
+                  <div className="p-content">
+                     <div className="p-row">
+                        <span className="p-label">Họ và tên:</span>
+                        <span className="p-value" style={{ fontSize: '11pt', fontWeight: 700 }}>{downloadingNotice.tenhv || '_'}</span>
+                        <span className="p-label" style={{ minWidth: '40px' }}>Lớp:</span>
+                        <span className="p-value">{downloadingNotice.tenlop}</span>
+                     </div>
+                     <div className="p-row">
+                        <span className="p-label">SĐT liên hệ:</span>
+                        <span className="p-value">{downloadingNotice.sdt || ""}</span>
+                        <span className="p-label" style={{ minWidth: '60px' }}>Đóng cho:</span>
+                        <span className="p-value">{downloadingNotice.thoiluong}</span>
+                     </div>
+
+                     <div style={{ marginTop: '8px', borderTop: '1px solid #000', paddingTop: '6px' }}>
+                        {(() => {
+                           const hocV = pCur(downloadingNotice.hocphi);
+                           const giamV = pCur(downloadingNotice.giamhocphi);
+                           const tongV = pCur(downloadingNotice.tongcong);
+                           let ptS = 0;
+                           try {
+                              const pts = typeof downloadingNotice.phuthu === 'string' ? JSON.parse(downloadingNotice.phuthu) : downloadingNotice.phuthu;
+                              if (Array.isArray(pts)) ptS = pts.reduce((s, it) => s + (it.amount || 0), 0);
+                           } catch (e) { }
+                           let taS = 0;
+                           try {
+                              const ta = typeof downloadingNotice.tienan === 'string' ? JSON.parse(downloadingNotice.tienan) : downloadingNotice.tienan;
+                              if (ta && ta.amount) taS = ta.amount;
+                           } catch (e) { }
+                           const rM = pCur(downloadingNotice.trutienan);
+                           const rT = pCur(downloadingNotice.tiennghiphep);
+                           const calcNocu = tongV - hocV - taS - ptS + giamV + rM + rT;
+                           return (
+                              <div className="p-row">
+                                 <span style={{ flex: 1 }}>- Học phí: <b>{fCur(downloadingNotice.hocphi)} đ</b></span>
+                                 <span style={{ flex: 1, textAlign: 'right' }}>- Nợ cũ: <b>{fCur(calcNocu)} đ</b></span>
+                              </div>
+                           );
+                        })()}
+                        <div className="p-row">
+                           <span style={{ flex: 1 }}>- Ưu đãi: <b>{fCur(downloadingNotice.giamhocphi)} đ</b></span>
+                           {downloadingNotice.tienan && (() => {
+                              try {
+                                 const ta = typeof downloadingNotice.tienan === 'string' ? JSON.parse(downloadingNotice.tienan) : downloadingNotice.tienan;
+                                 if (ta && ta.amount > 0) return <span style={{ flex: 1, textAlign: 'right' }}>- Tiền ăn: <b>{fCur(ta.amount)} đ</b></span>;
+                              } catch (e) { } return null;
+                           })()}
+                        </div>
+                        {downloadingNotice.phuthu && (() => {
+                           try {
+                              const pts = typeof downloadingNotice.phuthu === 'string' ? JSON.parse(downloadingNotice.phuthu) : downloadingNotice.phuthu;
+                              if (Array.isArray(pts) && pts.length > 0) {
+                                 return (
+                                    <div style={{ margin: '4px 0', padding: '4px 8px', background: '#f9fafb', borderRadius: '4px', border: '1px solid #eee' }}>
+                                       {pts.map((pt, i) => (
+                                          <div key={i} className="p-row" style={{ marginBottom: 0 }}>
+                                             <span>+ {pt.name || 'Phụ thu'}:</span>
+                                             <span style={{ marginLeft: 'auto' }}><b>{fCur(pt.amount)} đ</b></span>
+                                          </div>
+                                       ))}
+                                    </div>
+                                 );
+                              }
+                           } catch (e) { } return null;
+                        })()}
+                        {pCur(downloadingNotice.trutienan) > 0 && (
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span style={{ marginLeft: 'auto' }}>Trừ tiền ăn: <b>-{fCur(downloadingNotice.trutienan)} đ</b></span>
+                              </div>
+                           </div>
+                        )}
+                        {pCur(downloadingNotice.tiennghiphep) > 0 && (
+                           <div style={{ margin: '2px 0', borderTop: '1px dashed #ddd', paddingTop: '4px' }}>
+                              <div className="p-row" style={{ fontSize: '8.5pt' }}>
+                                 <span style={{ marginLeft: 'auto' }}>Trừ HP nghỉ: <b>-{fCur(downloadingNotice.tiennghiphep)} đ</b></span>
+                              </div>
+                           </div>
+                        )}
+                     </div>
+
+                     {/* Thống kê điểm danh */}
+                     {downloadingNotice.attendanceStats && (
+                        <div className="p-row" style={{ fontSize: '8.5pt', margin: '3px 0' }}>
+                           <span>- Điểm danh: Có mặt <b>{downloadingNotice.attendanceStats.daHoc || 0}</b> | Phép <b>{downloadingNotice.attendanceStats.nghiPhep || 0}</b> | Không phép <b>{downloadingNotice.attendanceStats.nghiKhongPhep || 0}</b>{downloadingNotice.attendanceStats.maxConsecutive > 0 ? <> | Nghỉ liên tiếp <b>{downloadingNotice.attendanceStats.maxConsecutive}</b></> : ''} (Tổng <b>{downloadingNotice.attendanceStats.tongBuoi || (Number(downloadingNotice.attendanceStats.daHoc || 0) + Number(downloadingNotice.attendanceStats.nghiPhep || 0) + Number(downloadingNotice.attendanceStats.nghiKhongPhep || 0))}</b> buổi)</span>
+                        </div>
+                     )}
+
+                     <div className="p-row" style={{ marginTop: '8px', padding: '5px 8px', border: '2px solid #000', borderRadius: '4px' }}>
+                        <span style={{ fontWeight: 900, fontSize: '10pt' }}>TỔNG CỘNG:</span>
+                        <span style={{ marginLeft: 'auto', fontWeight: 950, fontSize: '12pt' }}>{fCur(downloadingNotice.tongcong)} đ</span>
+                     </div>
+
+                     <div className="p-row" style={{ fontSize: '8.5pt', marginTop: '4px' }}>
+                        <span>HÌNH THỨC:</span>
+                        <span className="p-value">{downloadingNotice.hinhthuc}</span>
+                     </div>
+                     {downloadingNotice.ghichu && (
+                        <div className="p-row" style={{ fontSize: '8pt', fontStyle: 'italic' }}>
+                           <span>Ghi chú: {downloadingNotice.ghichu}</span>
+                        </div>
+                     )}
+
+                     {/* Mã QR Thanh toán VietQR */}
+                     {(() => {
+                        const qrSrc = downloadingNotice.qrBase64 || downloadingNotice.qrUrl || getQRUrl(downloadingNotice, walletsConfig, config?.qr_template);
+                        if (!qrSrc) return null;
+                        return (
+                           <div style={{ textAlign: 'center', margin: '6px 0' }}>
+                              <img crossOrigin="anonymous" src={qrSrc} alt="VietQR" style={{ width: '210px', height: '210px', objectFit: 'contain', background: '#fff', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                           </div>
+                        );
+                     })()}
+
+                     <div style={{ fontSize: '7.5pt', marginTop: '4px', color: '#ef4444', fontWeight: 600, textAlign: 'center' }}>
+                        * Quý phụ huynh vui lòng hoàn thành học phí trước ngày 10 hàng tháng. Trân trọng!
+                     </div>
+                  </div>
+
+                  <div className="p-signatures">
+                     <div className="sig-box">
+                        <h4>Người nộp tiền</h4>
+                        <p>(Ký, họ tên)</p>
+                     </div>
+                     <div className="sig-box">
+                        <h4>Người lập phiếu</h4>
+                        <p>(Ký, họ tên)</p>
+                        <div className="sig-name">{downloadingNotice.nhanvien}</div>
+                     </div>
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
+
+         {/* MODAL PREVIEW DÀNH CHO MOBILE */}
+         {previewImg && (
+            <div className="fm-modal-overlay" onClick={() => setPreviewImg(null)} style={{ zIndex: 10000, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '15px' }}>
+               <div className="fm-modal-content animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '16px', position: 'relative', textAlign: 'center' }}>
+                  <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 12, top: 12, border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}><X size={22} /></button>
+                  <p style={{ fontWeight: 800, marginBottom: '12px', color: '#0369a1', fontSize: '1rem' }}>
+                     NHẤN GIỮ HÌNH ĐỂ LƯU HOẶC CHIA SẺ
+                  </p>
+                  <img src={previewImg} alt="Preview Thông Báo" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  <div style={{ marginTop: '16px' }}>
+                     <button style={{ width: '100%', height: '44px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }} onClick={() => setPreviewImg(null)}>HOÀN TẤT</button>
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {/* SPINNER LOADING KHI ĐANG TẠO ẢNH */}
+         {isDownloading && (
+            <div style={{ zIndex: 10001, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.85)' }}>
+               <div style={{ padding: '20px 40px', background: 'white', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ border: '4px solid #e2e8f0', borderTop: '4px solid #0284c7', borderRadius: '50%', width: '36px', height: '36px', animation: 'fm-spin 1s linear infinite' }}></div>
+                  <p style={{ fontWeight: 800, color: '#0f172a', margin: 0, fontSize: '1rem' }}>Đang xuất hình ảnh thông báo...</p>
+                  <p style={{ color: '#64748b', margin: 0, fontSize: '0.85rem' }}>Đang kết nối mã QR VietQR, vui lòng đợi giây lát</p>
+               </div>
+               <style>{`@keyframes fm-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+            </div>
+         )}
 
       </div>
    );
