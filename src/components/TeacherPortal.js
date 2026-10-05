@@ -888,71 +888,46 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       if (isAttendanceHoliday) return window.alert('Ngày này là ngày nghỉ, không thể điểm danh.');
       setLoading(true);
       try {
-         const existingAttendanceMap = new Map();
-         const studentIds = attStudents.map(st => st.mahv).filter(Boolean);
-
-         if (studentIds.length > 0) {
-            const { data: existingRecords, error: existingError } = await supabase
-               .from('tbl_diemdanh')
-               .select('id, mahv, malop, ngay')
-               .eq('malop', attSelectedClass)
-               .eq('ngay', attDate)
-               .in('mahv', studentIds)
-               .order('id', { ascending: true });
-
-            if (existingError) throw existingError;
-
-            (existingRecords || []).forEach((record) => {
-               const key = `${record.mahv}__${record.malop}__${record.ngay}`;
-               if (!existingAttendanceMap.has(key)) {
-                  existingAttendanceMap.set(key, record.id);
-               }
-            });
-         }
-
+         const payloads = [];
          for (const st of attStudents) {
             const rec = attRecords[st.mahv];
             if (!rec || !rec.trangthai) continue;
-            const payload = {
-               mahv: st.mahv, malop: attSelectedClass, ngay: attDate,
-               trangthai: rec.trangthai, ghichu: rec.ghichu || '',
+            payloads.push({
+               mahv: st.mahv,
+               malop: attSelectedClass,
+               ngay: attDate,
+               trangthai: rec.trangthai,
+               ghichu: rec.ghichu || '',
                manv: attendanceUser.manv || attendanceUser.username
-            };
-            const recordKey = `${st.mahv}__${attSelectedClass}__${attDate}`;
-            const existingId = rec.id || existingAttendanceMap.get(recordKey);
+            });
+         }
 
-            if (existingId) {
-               await supabase.from('tbl_diemdanh').update(payload).eq('id', existingId);
-            } else {
-               const { data: insertedRecords, error: insertError } = await supabase
-                  .from('tbl_diemdanh')
-                  .insert([payload])
-                  .select('id, mahv, malop, ngay');
+         if (payloads.length > 0) {
+            const { data: savedRecords, error: upsertError } = await supabase
+               .from('tbl_diemdanh')
+               .upsert(payloads, { onConflict: 'mahv,malop,ngay' })
+               .select('id, mahv, malop, ngay');
 
-               if (insertError) throw insertError;
+            if (upsertError) throw upsertError;
 
-               const insertedRecord = insertedRecords?.[0];
-               if (insertedRecord?.id) {
-                  existingAttendanceMap.set(recordKey, insertedRecord.id);
-               }
+            if (savedRecords && savedRecords.length > 0) {
+               setAttRecords(prev => {
+                  const next = { ...prev };
+                  savedRecords.forEach((saved) => {
+                     if (next[saved.mahv]) {
+                        next[saved.mahv] = { ...next[saved.mahv], id: saved.id };
+                     }
+                  });
+                  return next;
+               });
             }
          }
 
-         setAttRecords(prev => {
-            const next = { ...prev };
-            attStudents.forEach((st) => {
-               const recordKey = `${st.mahv}__${attSelectedClass}__${attDate}`;
-               const existingId = existingAttendanceMap.get(recordKey);
-               if (existingId && next[st.mahv]) {
-                  next[st.mahv] = { ...next[st.mahv], id: existingId };
-               }
-            });
-            return next;
-         });
-
-
          window.alert('Lưu điểm danh thành công!');
-      } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
+      } catch (err) {
+         console.error(err);
+         window.alert('Lỗi lưu điểm danh');
+      }
       setLoading(false);
    };
 
