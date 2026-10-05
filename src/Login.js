@@ -275,16 +275,39 @@ function Login() {
       if (!attSelectedClass) return window.alert('Chưa chọn lớp!');
       setLoading(true);
       try {
+         const payloads = [];
          for (const st of attStudents) {
             const rec = attRecords[st.mahv];
             if (!rec || !rec.trangthai) continue;
-            const payload = {
-               mahv: st.mahv, malop: attSelectedClass, ngay: attDate,
-               trangthai: rec.trangthai, ghichu: rec.ghichu || '',
+            payloads.push({
+               mahv: st.mahv,
+               malop: attSelectedClass,
+               ngay: attDate,
+               trangthai: rec.trangthai,
+               ghichu: rec.ghichu || '',
                manv: attendanceUser.manv || attendanceUser.username
-            };
-            if (rec.id) await supabase.from('tbl_diemdanh').update(payload).eq('id', rec.id);
-            else await supabase.from('tbl_diemdanh').insert([payload]);
+            });
+         }
+
+         if (payloads.length > 0) {
+            const { data: savedRecords, error: upsertError } = await supabase
+               .from('tbl_diemdanh')
+               .upsert(payloads, { onConflict: 'mahv,malop,ngay' })
+               .select('id, mahv, malop, ngay');
+
+            if (upsertError) throw upsertError;
+
+            if (savedRecords && savedRecords.length > 0) {
+               setAttRecords(prev => {
+                  const next = { ...prev };
+                  savedRecords.forEach((saved) => {
+                     if (next[saved.mahv]) {
+                        next[saved.mahv] = { ...next[saved.mahv], id: saved.id };
+                     }
+                  });
+                  return next;
+               });
+            }
          }
 
          // Lưu nội dung dạy
@@ -296,7 +319,10 @@ function Login() {
          }
 
          window.alert('Lưu điểm danh & nội dung dạy thành công!');
-      } catch (err) { console.error(err); window.alert('Lỗi lưu điểm danh'); }
+      } catch (err) {
+         console.error(err);
+         window.alert('Lỗi lưu điểm danh');
+      }
       setLoading(false);
    };
 
