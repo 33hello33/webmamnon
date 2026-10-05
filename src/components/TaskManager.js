@@ -53,7 +53,7 @@ export default function TaskManager() {
      e.preventDefault();
      if (!formData.noidung.trim() || !formData.manv) return window.alert("Vui lòng nhập nội dung và gán nhân viên!");
 
-     const localNow = new Date().toISOString();
+     const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
      if (isEdit) {
         await supabase.from('tbl_ghichu').update({

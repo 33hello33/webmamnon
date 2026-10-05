@@ -1276,7 +1276,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
 
          // Local tz for ngaylap
-         const localNow = new Date().toISOString();
+         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
          const billNote = unpaidBills.length > 0 ? `(Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
          const combinedNote = buildCombinedNote(invoiceData.ghiChu, ngoaiKhoaAutoNote, billNote);
@@ -1394,7 +1394,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       try {
          const nextNum = await getNextNoticeNumber();
          const newMaTB = `TB${String(nextNum).padStart(5, '0')}`;
-         const localNow = new Date().toISOString();
+         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
          const currentTimePeriod = calculateThoiluong(invoiceData);
          const billNote = unpaidBills.length > 0 ? `(Gộp POS: ${unpaidBills.map(b => `${b.mabill}${b.noidung ? ` - ${b.noidung}` : ''}`).join('; ')})` : '';
          const combinedNote = buildCombinedNote(invoiceData.ghiChu, ngoaiKhoaAutoNote, billNote);
@@ -2245,6 +2245,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      {downloadingNotice?.diemDanhInfo && (
                         <div style={{ opacity: 0.9 }}>
                            Điểm danh ({downloadingNotice.diemDanhInfo.statsPeriod}):
+                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.diHoc}</b></span>,
                            <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiPhep}</b></span>,
                            <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingNotice.diemDanhInfo.nghiKP || 0}</b></span>
                         </div>

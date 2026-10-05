@@ -157,7 +157,7 @@ export default function DebtManager() {
       }
       const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
 
-      const localNow = new Date().toISOString();
+      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
       let malop = '';
       const stClass = classes.find(c => c.tenlop === selectedDebt.tenlop);
