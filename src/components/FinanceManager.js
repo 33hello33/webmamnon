@@ -905,12 +905,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    useEffect(() => {
       const fetchDicts = async () => {
-         const { data: hvs } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme');
+         const { data: hvs } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme, cccd, diachi');
          const hVM = {};
          (hvs || []).forEach(h => {
             hVM[h.mahv] = {
                tenhv: h.tenhv,
-               sdt: h.sdtba || h.sdtme || ''
+               sdt: h.sdtba || h.sdtme || '',
+               cccd: h.cccd || '',
+               diachi: h.diachi || ''
             };
          });
          setHvMap(hVM);
@@ -1175,15 +1177,86 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
    };
 
-   const handleExportExcel = () => {
+   const handleExportExcel = async () => {
       let headers = [];
       let mappedData = [];
       if (activeSubTab === 'phieuchi') {
          headers = ['Mã phiếu', 'Ngày lập', 'Loại', 'Hạng mục', 'Mô tả', 'Số tiền', 'Hình thức', 'Nhân viên'];
          mappedData = data.map(i => [i.maphieuchi, formatDate(i.ngaylap), i.loaiphieu || 'Chi', i.hangmucchi, i.mota, fCur(i.chiphi), i.hinhthuc, nvMap[i.manv] || i.manv || i.nhanvien]);
       } else if (activeSubTab === 'hoadon') {
-         headers = ['Số phiếu', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Trừ tiền ăn', 'Trừ HP nghỉ', 'Trừ tiền dã ngoại', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ'];
-         mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.trutienan), fCur(i.tiennghiphep), fCur(i.trutiendangoai), fCur(i.dadong), fCur(i.thukhac), fCur(i.dadong), fCur(i.conno)]);
+         // Collect unique mahv and the previous month range for each invoice
+         // For each invoice, "tháng trước đó" = the month before the invoice's ngaylap
+         // We batch-fetch all attendance in one query then compute per-student-per-month
+         const uniqueMahvs = [...new Set(data.map(i => i.mahv).filter(Boolean))];
+
+         // Determine the full date range needed: min prevMonthStart to max prevMonthEnd across all invoices
+         let attStartDate = null, attEndDate = null;
+         data.forEach(i => {
+            if (!i.ngaylap) return;
+            const d = new Date(i.ngaylap);
+            const prevMonthStart = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+            const prevMonthEnd = new Date(d.getFullYear(), d.getMonth(), 0);
+            if (!attStartDate || prevMonthStart < attStartDate) attStartDate = prevMonthStart;
+            if (!attEndDate || prevMonthEnd > attEndDate) attEndDate = prevMonthEnd;
+         });
+
+         let attendanceByMahv = {};
+         if (attStartDate && attEndDate && uniqueMahvs.length > 0) {
+            const startStr = `${attStartDate.getFullYear()}-${String(attStartDate.getMonth() + 1).padStart(2, '0')}-01`;
+            const endStr = `${attEndDate.getFullYear()}-${String(attEndDate.getMonth() + 1).padStart(2, '0')}-${String(attEndDate.getDate()).padStart(2, '0')}`;
+            const { data: attRows } = await supabase
+               .from('tbl_diemdanh')
+               .select('mahv, ngay, trangthai')
+               .in('mahv', uniqueMahvs)
+               .gte('ngay', startStr)
+               .lte('ngay', endStr);
+            (attRows || []).forEach(att => {
+               if (!attendanceByMahv[att.mahv]) attendanceByMahv[att.mahv] = [];
+               attendanceByMahv[att.mahv].push(att);
+            });
+         }
+
+         const countAttPrevMonth = (mahv, invoiceDate) => {
+            if (!invoiceDate || !mahv) return 0;
+            const d = new Date(invoiceDate);
+            const prevYear = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
+            const prevMonth = d.getMonth() === 0 ? 12 : d.getMonth(); // 1-indexed
+            const recs = attendanceByMahv[mahv] || [];
+            return recs.filter(att => {
+               if ((att.trangthai || '').trim().toLowerCase() !== 'có mặt') return false;
+               const attD = new Date(att.ngay);
+               return attD.getFullYear() === prevYear && (attD.getMonth() + 1) === prevMonth;
+            }).length;
+         };
+
+         headers = ['Số phiếu', 'Ngày lập', 'Tên học sinh', 'CCCD', 'Địa chỉ', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Trừ tiền ăn', 'Trừ HP nghỉ', 'Trừ tiền dã ngoại', 'Đã đóng', 'Phụ thu', 'Đã thu', 'Còn nợ', 'Số buổi đã học (tháng trước)', 'Học phí HD'];
+         mappedData = data.map(i => {
+            const hv = hvMap[i.mahv] || {};
+            const sobuoiThangTruoc = countAttPrevMonth(i.mahv, i.ngaylap);
+            const hocphiHD = pCur(i.tongcong) - 600000 - sobuoiThangTruoc * 30000;
+            return [
+               i.mahd,
+               formatDate(i.ngaylap),
+               hv.tenhv || i.tenhv || i.mahv,
+               hv.cccd || '',
+               hv.diachi || '',
+               i.tenlop,
+               nvMap[i.manv] || i.nhanvien,
+               i.thoiluong,
+               i.hinhthuc,
+               fCur(i.tongcong),
+               fCur(i.giamhocphi),
+               fCur(i.trutienan),
+               fCur(i.tiennghiphep),
+               fCur(i.trutiendangoai),
+               fCur(i.dadong),
+               fCur(i.thukhac),
+               fCur(i.dadong),
+               fCur(i.conno),
+               sobuoiThangTruoc,
+               fCur(hocphiHD)
+            ];
+         });
       } else if (activeSubTab === 'nhapkho') {
          headers = ['Mã nhập', 'Ngày nhập', 'Sản phẩm', 'Nhà cung cấp', 'Nhân viên', 'Hình thức', 'Số lượng', 'Giá nhập', 'Thành tiền'];
          mappedData = data.map(i => [i.manhapkho, formatDate(i.ngaynhap), hhMap[i.mahang] || i.mahang, i.nhacungcap, nvMap[i.manv] || i.manv, i.hinhthuc, i.soluong, fCur(i.gianhap), fCur(i.thanhtien)]);
@@ -1202,10 +1275,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }
 
       if (activeSubTab === 'doanhthudukien') {
-         headers = ['S\u1ed1 th\u00f4ng b\u00e1o', 'Ng\u00e0y l\u1eadp', 'T\u00ean h\u1ecdc sinh', 'L\u1edbp', 'Ng\u01b0\u1eddi l\u1eadp', 'Th\u1eddi l\u01b0\u1ee3ng', 'H\u00ecnh th\u1ee9c', 'T\u1ed5ng c\u1ed9ng', 'Gi\u1ea3m h\u1ecdc ph\u00ed', 'C\u00f2n d\u1ef1 ki\u1ebfn'];
+         headers = ['Số thông báo', 'Ngày lập', 'Tên học sinh', 'Lớp', 'Người lập', 'Thời lượng', 'Hình thức', 'Tổng cộng', 'Giảm học phí', 'Còn dự kiến'];
          mappedData = data.map(i => [i.mahd, formatDate(i.ngaylap), hvMap[i.mahv]?.tenhv || i.tenhv || i.mahv, i.tenlop, nvMap[i.manv] || i.nhanvien || i.manv, i.thoiluong, i.hinhthuc, fCur(i.tongcong), fCur(i.giamhocphi), fCur(i.conno || i.tongcong)]);
       } else if (!headers.length) {
-         alert('Ch\u01b0a h\u1ed7 tr\u1ee3 xu\u1ea5t cho tab n\u00e0y'); return;
+         alert('Chưa hỗ trợ xuất cho tab này'); return;
       }
 
       const csvContent = '\uFEFF' + [headers.join(',')].concat(mappedData.map(row => row.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(','))).join('\n');
