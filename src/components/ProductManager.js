@@ -167,7 +167,7 @@ export default function ProductManager({ currentUser }) {
          }
          const newMaNK = `NK${String(nextNum).padStart(5, '0')}`;
 
-         const localNow = new Date().toISOString();
+         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
          const thanhtien = (rawSoluongThem * parseInt(rawGianhap || 0)).toString();
 
          await supabase.from('tbl_nhapkho').insert([{
@@ -224,7 +224,7 @@ export default function ProductManager({ currentUser }) {
 
    const handleSaveBatchImport = async (e) => {
       e.preventDefault();
-      const localNow = new Date().toISOString();
+      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
       const validRows = batchImportData.rows.filter(r => r.mahang && parseInt(r.soluongThem) > 0);
 
       if (validRows.length === 0) {

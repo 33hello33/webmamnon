@@ -171,7 +171,7 @@ export default function SalesPOS() {
             if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
          }
          const newMaBill = `BH${String(nextNum).padStart(5, '0')}`;
-         const localNow = new Date().toISOString();
+         const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
 
          const calcLoiNhuan = cart.reduce((sum, item) => sum + ((pCur(item.giaban) - pCur(item.gianhap || 0)) * item.qty), 0) - pCur(giamGia);
 
