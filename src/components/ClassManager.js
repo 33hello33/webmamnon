@@ -998,7 +998,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const handleConfirmBatchExport = async () => {
     setIsGenerating(true);
     try {
-      const localNow = new Date().toISOString();
+      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
       const nextNum = await getNextNoticeNumber();
 
       const filteredExport = (batchStudentsData || []).filter(row => batchHinhThucFilter === 'Tất cả' || row.hinhthuc === batchHinhThucFilter);
@@ -2715,6 +2715,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               {exportingNotice.diemDanhInfo && (
                 <div style={{ opacity: 0.9 }}>
                   Điểm danh ({exportingNotice.diemDanhInfo.statsPeriod}):
+                  <span> Đi học: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.diHoc}</b></span>,
                   <span> Nghỉ phép: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.nghiPhep}</b></span>,
                   <span> Nghỉ KP: <b style={{ fontWeight: 900, color: '#000' }}>{exportingNotice.diemDanhInfo.nghiKP || 0}</b></span>
                 </div>

@@ -1285,7 +1285,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       const finalMota = phieuData.nguoinhan ? `[Người giao dịch: ${phieuData.nguoinhan}] ${phieuData.mota}` : phieuData.mota;
 
-      const localNow = new Date().toISOString();
+      const now = new Date();
+      const localNow = new Date(now - now.getTimezoneOffset() * 60000).toISOString().replace('Z', '+07:00');
 
       const { error } = await supabase.from('tbl_phieuchi').insert([{
          maphieuchi: maphieuchi,
@@ -1345,7 +1346,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleSaveBatchImport = async (e) => {
       e.preventDefault();
-      const localNow = new Date().toISOString();
+      const localNow = new Date(new Date() - new Date().getTimezoneOffset() * 60000).toISOString();
       const validRows = batchImportData.rows.filter(r => r.mahang && parseInt(r.soluongThem) > 0);
 
       if (validRows.length === 0) {
