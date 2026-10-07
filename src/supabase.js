@@ -8,16 +8,35 @@ export const baseSupabase = createClient(
    supabaseKey || 'placeholder-key'
 );
 
-export const SCHEMA_CS1 = process.env.REACT_APP_SUPABASE_SCHEMA_CS1 || 'anchau';
-export const SCHEMA_CS2 = process.env.REACT_APP_SUPABASE_SCHEMA_CS2 || 'golden';
-export const SUPABASE_SCHEMA = process.env.REACT_APP_SUPABASE_SCHEMA || SCHEMA_CS1;
+const rawSchema = process.env.REACT_APP_SUPABASE_SCHEMA || '';
+const rawCs1 = process.env.REACT_APP_SUPABASE_SCHEMA_CS1 || process.env.REACT_APP_SUPABASE_CS1 || '';
+const rawCs2 = process.env.REACT_APP_SUPABASE_SCHEMA_CS2 || process.env.REACT_APP_SUPABASE_CS2 || '';
+
+// Đa cơ sở chỉ kích hoạt nếu người dùng cấu hình _CS1 hoặc _CS2 trong .env
+export const HAS_MULTI_BRANCH = Boolean((rawCs1 || rawSchema) && rawCs2);
+
+export const SCHEMA_CS1 = rawCs1 || rawSchema || '';
+export const SCHEMA_CS2 = rawCs2 || '';
+export const SUPABASE_SCHEMA = rawSchema || SCHEMA_CS1 || '';
 
 export const getActiveSchema = () => {
-   return localStorage.getItem('selected_schema') || SCHEMA_CS1;
+   if (!HAS_MULTI_BRANCH || !SCHEMA_CS2) {
+      return SUPABASE_SCHEMA || SCHEMA_CS1 || '';
+   }
+   const saved = localStorage.getItem('selected_schema');
+   if (saved && (saved === SCHEMA_CS1 || saved === SCHEMA_CS2)) {
+      return saved;
+   }
+   return SCHEMA_CS1 || SUPABASE_SCHEMA || '';
 };
 
 export const setActiveSchema = (schema) => {
-   if (schema === SCHEMA_CS1 || schema === SCHEMA_CS2 || schema === 'anchau' || schema === 'golden') {
+   if (!HAS_MULTI_BRANCH || !SCHEMA_CS2) {
+      const singleSchema = SUPABASE_SCHEMA || SCHEMA_CS1 || '';
+      localStorage.setItem('selected_schema', singleSchema);
+      return;
+   }
+   if (schema && (schema === SCHEMA_CS1 || schema === SCHEMA_CS2)) {
       const prevSchema = localStorage.getItem('selected_schema');
       localStorage.setItem('selected_schema', schema);
       if (prevSchema !== schema) {
@@ -26,20 +45,28 @@ export const setActiveSchema = (schema) => {
    }
 };
 
-export const supabaseCs1 = baseSupabase.schema(SCHEMA_CS1);
-export const supabaseCs2 = baseSupabase.schema(SCHEMA_CS2);
+export const getSchemaClient = (schemaName) => {
+   const schema = schemaName !== undefined ? schemaName : getActiveSchema();
+   if (schema && typeof schema === 'string' && schema.trim() !== '') {
+      return baseSupabase.schema(schema.trim());
+   }
+   return baseSupabase;
+};
+
+export const supabaseCs1 = getSchemaClient(SCHEMA_CS1);
+export const supabaseCs2 = SCHEMA_CS2 ? getSchemaClient(SCHEMA_CS2) : supabaseCs1;
 
 export const SHARED_WAREHOUSE_TABLES = ['tbl_hanghoa', 'tbl_nhapkho', 'tbl_billhanghoa'];
 
 export const getSupabaseForSchema = (schemaName) => {
-   const schema = schemaName || getActiveSchema();
-   const client = baseSupabase.schema(schema);
+   const schema = schemaName !== undefined ? schemaName : getActiveSchema();
+   const client = getSchemaClient(schema);
    return new Proxy(client, {
       get(target, prop) {
          if (prop === 'from') {
             return (tableName) => {
-               if (SHARED_WAREHOUSE_TABLES.includes(tableName)) {
-                  return baseSupabase.schema(SCHEMA_CS1).from(tableName);
+               if (HAS_MULTI_BRANCH && SCHEMA_CS1 && SHARED_WAREHOUSE_TABLES.includes(tableName)) {
+                  return getSchemaClient(SCHEMA_CS1).from(tableName);
                }
                return target.from(tableName);
             };
@@ -56,11 +83,11 @@ export const getSupabaseForSchema = (schemaName) => {
 export const supabase = new Proxy({}, {
    get(target, prop) {
       const activeSchema = getActiveSchema();
-      const schemaClient = baseSupabase.schema(activeSchema);
+      const schemaClient = getSchemaClient(activeSchema);
       if (prop === 'from') {
          return (tableName) => {
-            if (SHARED_WAREHOUSE_TABLES.includes(tableName)) {
-               return baseSupabase.schema(SCHEMA_CS1).from(tableName);
+            if (HAS_MULTI_BRANCH && SCHEMA_CS1 && SHARED_WAREHOUSE_TABLES.includes(tableName)) {
+               return getSchemaClient(SCHEMA_CS1).from(tableName);
             }
             return schemaClient.from(tableName);
          };

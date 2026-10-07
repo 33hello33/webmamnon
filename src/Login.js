@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './App.css';
 import './components/ParentPremiumUI.css';
 import './components/ChatManager.css';
-import { supabase, supabaseCs1, supabaseCs2, setActiveSchema, getActiveSchema } from './supabase';
+import { supabase, supabaseCs1, supabaseCs2, setActiveSchema, getActiveSchema, SCHEMA_CS1, SCHEMA_CS2, HAS_MULTI_BRANCH } from './supabase';
 import { useConfig } from './ConfigContext';
 import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Building } from 'lucide-react';
 import ParentPortal from './components/ParentPortal';
@@ -109,6 +109,21 @@ function Login() {
    };
 
    const authenticateStaff = async (loginUsername, loginPassword) => {
+      if (!HAS_MULTI_BRANCH || !SCHEMA_CS2) {
+         const res = await supabase.from('tbl_nv').select('*').eq('username', loginUsername).eq('password', loginPassword).maybeSingle();
+         if (res.error) throw new Error('Lỗi kết nối cơ sở dữ liệu.');
+
+         const user = res.data && res.data.trangthai !== 'Đã Nghỉ' ? res.data : null;
+         if (!user) {
+            if (res.data?.trangthai === 'Đã Nghỉ') {
+               return { ok: false, reason: 'inactive' };
+            }
+            return { ok: false, reason: 'invalid' };
+         }
+         setActiveSchema(SCHEMA_CS1 || '');
+         return { ok: true, isManager: false, user, schema: SCHEMA_CS1 || '' };
+      }
+
       const [res1, res2] = await Promise.all([
          supabaseCs1.from('tbl_nv').select('*').eq('username', loginUsername).eq('password', loginPassword).maybeSingle(),
          supabaseCs2.from('tbl_nv').select('*').eq('username', loginUsername).eq('password', loginPassword).maybeSingle()
@@ -133,7 +148,7 @@ function Login() {
          return { ok: true, isManager: true, user, user1, user2 };
       }
 
-      const matchedSchema = user1 ? 'anchau' : 'golden';
+      const matchedSchema = user1 ? SCHEMA_CS1 : SCHEMA_CS2;
       setActiveSchema(matchedSchema);
       return { ok: true, isManager: false, user, schema: matchedSchema };
    };
@@ -195,6 +210,17 @@ function Login() {
    };
 
    const authenticateParent = async (loginUsername, loginPassword) => {
+      if (!HAS_MULTI_BRANCH || !SCHEMA_CS2) {
+         const res = await supabase.from('tbl_hv').select('*').eq('username', loginUsername).eq('password', loginPassword).order('tenhv', { ascending: true });
+         if (res.error) throw new Error('Lỗi hệ thống khi tra cứu dữ liệu.');
+
+         const students = (res.data || []).filter((student) => student?.trangthai !== 'Đã Nghỉ');
+         if (students.length === 0) return { ok: false };
+
+         setActiveSchema(SCHEMA_CS1 || '');
+         return { ok: true, students, schema: SCHEMA_CS1 || '' };
+      }
+
       const [res1, res2] = await Promise.all([
          supabaseCs1.from('tbl_hv').select('*').eq('username', loginUsername).eq('password', loginPassword).order('tenhv', { ascending: true }),
          supabaseCs2.from('tbl_hv').select('*').eq('username', loginUsername).eq('password', loginPassword).order('tenhv', { ascending: true })
@@ -207,7 +233,7 @@ function Login() {
 
       if (students1.length === 0 && students2.length === 0) return { ok: false };
 
-      const matchedSchema = students1.length > 0 ? 'anchau' : 'golden';
+      const matchedSchema = students1.length > 0 ? SCHEMA_CS1 : SCHEMA_CS2;
       const matchedStudents = students1.length > 0 ? students1 : students2;
 
       setActiveSchema(matchedSchema);
@@ -492,24 +518,24 @@ function Login() {
                               className="submit-btn"
                               style={{ background: '#3b82f6', justifyContent: 'center', padding: '0.85rem' }}
                               onClick={async () => {
-                                 setActiveSchema('anchau');
+                                 setActiveSchema(SCHEMA_CS1);
                                  await completeStaffLogin(pendingManagerUser);
                                  setPendingManagerUser(null);
                               }}
                            >
-                              🏢 Cơ Sở An Châu
+                              🏢 Cơ Sở 1 {SCHEMA_CS1 ? `(${SCHEMA_CS1})` : ''}
                            </button>
                            <button
                               type="button"
                               className="submit-btn"
                               style={{ background: '#8b5cf6', justifyContent: 'center', padding: '0.85rem' }}
                               onClick={async () => {
-                                 setActiveSchema('golden');
+                                 setActiveSchema(SCHEMA_CS2);
                                  await completeStaffLogin(pendingManagerUser);
                                  setPendingManagerUser(null);
                               }}
                            >
-                              🏢 Cơ Sở Golden
+                              🏢 Cơ Sở 2 {SCHEMA_CS2 ? `(${SCHEMA_CS2})` : ''}
                            </button>
                            <button
                               type="button"
