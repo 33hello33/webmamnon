@@ -41,8 +41,8 @@ import TaskManager from './components/TaskManager';
 import FinanceManager from './components/FinanceManager';
 import ConfigManager from './components/ConfigManager';
 import Statistics from './components/Statistics';
-import ChatManager from './components/ChatManager';
 import SystemLogs from './components/SystemLogs';
+import ZaloManager from './components/ZaloManager';
 import TimesheetManager from './components/TimesheetManager';
 
 const ALL_TABS = [
@@ -90,7 +90,7 @@ const ALL_TABS = [
     ]
   },
   { id: 'debts', label: 'Quản lý nợ', icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2' },
-  { id: 'chat', label: 'Phụ huynh', icon: MessageSquare, color: '#0068ff', bg: '#e6f0ff' },
+  { id: 'zalo_chat', label: 'Chat Zalo', icon: MessageSquare, color: '#059669', bg: '#d1fae5' },
   { id: 'timesheet', label: 'Chấm công', icon: Clock, color: '#f59e0b', bg: '#fef3c7' },
   { id: 'employees', label: 'Nhân viên', icon: Users, color: '#14b8a6', bg: '#ccfbf1' },
   { id: 'tasks', label: 'Công việc', icon: Briefcase, color: '#f97316', bg: '#ffedd5' },
@@ -123,7 +123,6 @@ function Dashboard() {
   const [changePassData, setChangePassData] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [changePassLoading, setChangePassLoading] = useState(false);
   const [changePassMessage, setChangePassMessage] = useState({ type: '', text: '' });
-  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
   const [selectedApprovalImage, setSelectedApprovalImage] = useState(null);
@@ -141,7 +140,6 @@ function Dashboard() {
     if (config) {
       if (config.giaoviec === false) filtered = filtered.filter(t => t.id !== 'tasks');
       if (config.thongke === false) filtered = filtered.filter(t => t.id !== 'statistics');
-      if (config.chat === false) filtered = filtered.filter(t => t.id !== 'chat');
     }
 
     if (user.role === 'Quản lý') return filtered;
@@ -466,97 +464,6 @@ function Dashboard() {
         .subscribe();
     }
 
-    // Fetch unread messages count globally for sidebar
-    const fetchUnreadChatCount = async () => {
-      if (!user) return;
-
-      let studentIds = null;
-      if (user.role === 'Giáo viên') {
-        // Fetch teacher's classes first
-        const { data: teacherClasses } = await supabase
-          .from('tbl_lop')
-          .select('malop')
-          .or(`manv.eq.${user.manv},manv.eq.${user.username},manv.eq.${user.tennv}`);
-
-        if (teacherClasses && teacherClasses.length > 0) {
-          const classIds = teacherClasses.map(c => c.malop);
-          const { data: myStudents } = await supabase
-            .from('tbl_hv')
-            .select('mahv')
-            .in('malop', classIds);
-          if (myStudents) {
-            studentIds = myStudents.map(s => s.mahv);
-          }
-        } else {
-          // Teacher has no classes
-          setUnreadChatCount(0);
-          if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(console.error);
-          return;
-        }
-      }
-
-      let query = supabase
-        .from('hv_messages')
-        .select('content, manv, description, mahv')
-        .is('is_read', false);
-
-      if (studentIds) {
-        query = query.in('mahv', studentIds);
-      }
-
-      const { data } = await query;
-
-      if (data) {
-        let count = 0;
-        data.forEach(d => {
-          const isPH = d.description === 'PH' || (!d.manv);
-          if (isPH) {
-            const isGopY = d.content?.includes('📬 [HÒM THƯ GÓP Ý - GỬI HIỆU TRƯỞNG]');
-            if (isGopY && user.role !== 'Quản lý' && user.role !== 'Hiệu trưởng') return;
-            count++;
-          }
-        });
-        setUnreadChatCount(count);
-
-        if ('setAppBadge' in navigator) {
-          if (count > 0) navigator.setAppBadge(count).catch(console.error);
-          else navigator.clearAppBadge().catch(console.error);
-        }
-      }
-    };
-
-    if (user) {
-      fetchUnreadChatCount();
-
-      const chatChannel = supabase.channel('global_chat_unread')
-        .on('postgres_changes', { event: 'INSERT', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, (payload) => {
-          const isPH = payload.new.description === 'PH' || (!payload.new.manv);
-          if (isPH) {
-            if (Notification.permission === 'granted') {
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                  registration.showNotification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
-                }).catch(() => {
-                  new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
-                });
-              } else {
-                new Notification('Tin nhắn mới từ phụ huynh', { body: payload.new.content || 'Bạn có một tệp đính kèm mới', icon: '/appleicon.png' });
-              }
-            }
-          }
-          fetchUnreadChatCount();
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, () => fetchUnreadChatCount())
-        .on('postgres_changes', { event: 'DELETE', schema: SUPABASE_SCHEMA, table: 'hv_messages' }, () => fetchUnreadChatCount())
-        .subscribe();
-
-      return () => {
-        window.removeEventListener('app_log_inserted', handleLog);
-        if (channel) supabase.removeChannel(channel);
-        supabase.removeChannel(chatChannel);
-      };
-    }
-
     return () => {
       window.removeEventListener('app_log_inserted', handleLog);
       if (channel) supabase.removeChannel(channel);
@@ -831,22 +738,14 @@ function Dashboard() {
         </div>
         <div className="card-container">
           <div className="placeholder-card" style={{
-            padding: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? '0' : '0',
-            background: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'transparent' : 'white',
-            boxShadow: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
-            border: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
+            padding: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config', 'zalo_chat'].includes(currentTab?.id) ? '0' : '0',
+            background: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config', 'zalo_chat'].includes(currentTab?.id) ? 'transparent' : 'white',
+            boxShadow: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config', 'zalo_chat'].includes(currentTab?.id) ? 'none' : '0 4px 20px rgba(0,0,0,0.03)',
+            border: ['finances', 'timesheet', 'students', 'student_list', 'debts', 'employees', 'overview', 'invoices', 'sales', 'tasks', 'config', 'zalo_chat'].includes(currentTab?.id) ? 'none' : '1px solid #f1f5f9'
           }}>
             {currentTab?.id === 'overview' && <Overview setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'statistics' && <Statistics />}
-            {currentTab?.id === 'chat' && (
-              <ChatManager
-                currentUser={user}
-                onOpenInvoiceForStudent={(studentId) => {
-                  setInvoiceFocusStudentId(studentId || null);
-                  setActiveTab('invoices');
-                }}
-              />
-            )}
+            {currentTab?.id === 'zalo_chat' && <ZaloManager />}
             {currentTab?.id === 'finances' && <FinanceManager activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} currentUser={user} />}
             {currentTab?.id === 'invoices' && (
               <InvoiceManager
@@ -989,11 +888,6 @@ function Dashboard() {
                       <Icon size={18} className="nav-icon" style={{ color: isActive ? '#ffffff' : tab.color }} />
                     </div>
                     {!collapsed && <span className="nav-label">{tab.label}</span>}
-                    {!collapsed && tab.id === 'chat' && unreadChatCount > 0 && (
-                      <div style={{ marginLeft: 'auto', background: '#ef4444', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>
-                        +{unreadChatCount}
-                      </div>
-                    )}
                   </button>
 
                   {/* Render SubTabs */}
@@ -1032,9 +926,6 @@ function Dashboard() {
               const disabledTabs = [];
               if (config?.hientabthongke === false) {
                 disabledTabs.push({ id: 'disabled_statistics', label: 'Thống kê', icon: BarChart3 });
-              }
-              if (config?.hientabphuhuynh === false) {
-                disabledTabs.push({ id: 'disabled_phuhuynh', label: 'Truy cập Phụ huynh', icon: Users });
               }
               if (config?.hientabchamcong === false) {
                 disabledTabs.push({ id: 'disabled_chamcong', label: 'Chấm công', icon: Clock });
