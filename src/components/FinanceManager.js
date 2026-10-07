@@ -342,7 +342,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
       try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
-      
+
       const mealRefund = pCur(r.trutienan);
       const tuitionRefund = pCur(r.tiennghiphep);
       const ngoaiKhoaRefund = pCur(r.trutiendangoai);
@@ -1349,7 +1349,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    const handleConfirmThongBao = async (r) => {
       if (!window.confirm(`Bạn có chắc chắn muốn chuyển thông báo ${r.mahd} thành hóa đơn chính thức không?`)) return;
-      
+
       try {
          const { data: recentHD } = await supabase.from('tbl_hd').select('mahd').order('mahd', { ascending: false }).limit(1);
          let nextNum = 1;
@@ -1358,7 +1358,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             if (!isNaN(parseInt(numPart, 10))) nextNum = parseInt(numPart, 10) + 1;
          }
          const newMaHD = `HD${String(nextNum).padStart(5, '0')}`;
-         
+
          const localNow = createLocalDateTime();
          const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
          const cashier = auth.user?.username || auth.user?.tennv || 'Thu Ngân';
@@ -1375,7 +1375,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             giamhocphi: r.giamhocphi,
             tongcong: r.tongcong,
             dadong: r.tongcong,
-            conno: '0', 
+            conno: '0',
             hinhthuc: r.hinhthuc,
             ghichu: r.ghichu,
             phuthu: r.phuthu,
@@ -1874,30 +1874,31 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            {filteredData.map(r => {
                               const deleted = isDeleted(r);
                               return (
-                              <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
-                                 <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
-                                 <td>{formatDate(r.ngaylap)}</td>
-                                 <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
-                                 <td>{r.tenlop}</td>
-                                 <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
-                                 <td>{r.thoiluong || '_'}</td>
-                                 <td>{r.hinhthuc}</td>
-                                 <td className="text-right">{fCur(r.tongcong)}</td>
-                                 <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
-                                 <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
-                                 <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                    {!deleted ? (
-                                       <>
-                                          <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
-                                          <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
-                                          <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
-                                       </>
-                                    ) : (
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
-                                    )}
-                                 </td>
-                              </tr>
-                              )})}
+                                 <tr key={r.mahd} style={deleted ? { opacity: 0.6, background: '#f1f5f9', color: '#64748b' } : {}}>
+                                    <td className="fm-code font-semibold" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</td>
+                                    <td>{formatDate(r.ngaylap)}</td>
+                                    <td className="font-semibold text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</td>
+                                    <td>{r.tenlop}</td>
+                                    <td>{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</td>
+                                    <td>{r.thoiluong || '_'}</td>
+                                    <td>{r.hinhthuc}</td>
+                                    <td className="text-right">{fCur(r.tongcong)}</td>
+                                    <td className="text-right font-bold" style={{ color: '#f97316' }}>{pCur(r.giamhocphi) > 0 ? `-${fCur(r.giamhocphi)}` : ''}</td>
+                                    <td className="text-right font-bold" style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)}</td>
+                                    <td className="fm-actions-td" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                       {!deleted ? (
+                                          <>
+                                             <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
+                                             <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
+                                             <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
+                                          </>
+                                       ) : (
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>ĐÃ XÓA</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              )
+                           })}
                         </tbody>
                      </table>
                   </div>
@@ -1906,43 +1907,44 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      {filteredData.map(r => {
                         const deleted = isDeleted(r);
                         return (
-                        <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
-                           <div className="fm-card-header">
-                              <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
-                              <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
-                           </div>
-                           <div className="fm-card-body">
-                              <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
-                              <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
-                              <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
-                              <div className="fm-card-row">
-                                 <span>Tổng cộng:</span>
-                                 <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
+                           <div key={r.mahd} className="fm-card" style={deleted ? { opacity: 0.6, background: '#f1f5f9', border: '1px dashed #cbd5e1' } : { border: '1px solid #99f6e4', background: '#f0fdfa' }}>
+                              <div className="fm-card-header">
+                                 <span className="fm-card-code" style={deleted ? { color: '#64748b' } : {}}>{r.mahd}</span>
+                                 <span className="text-muted">{formatDateRaw(r.ngaylap)}</span>
                               </div>
-                              {pCur(r.giamhocphi) > 0 && (
+                              <div className="fm-card-body">
+                                 <div className="fm-card-row"><span>Học sinh:</span> <strong className="text-primary">{hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || '_'}</strong></div>
+                                 <div className="fm-card-row"><span>Nhân viên:</span> <strong className="text-slate-600">{nvMap[r.manv] || r.nhanvien || r.manv || '_'}</strong></div>
+                                 <div className="fm-card-row"><span>Thời lượng:</span> <span>{r.thoiluong || '_'}</span></div>
                                  <div className="fm-card-row">
-                                    <span>Giảm học phí:</span>
-                                    <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
+                                    <span>Tổng cộng:</span>
+                                    <strong className="text-slate-800">{fCur(r.tongcong)} ₫</strong>
                                  </div>
-                              )}
-                              <div className="fm-card-row price-row">
-                                 <span>Còn dự kiến:</span>
-                                 <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
-                              </div>
-                              <div className="fm-card-actions">
-                                 {!deleted ? (
-                                    <>
-                                       <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
-                                       <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
-                                       <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
-                                    </>
-                                 ) : (
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                 {pCur(r.giamhocphi) > 0 && (
+                                    <div className="fm-card-row">
+                                       <span>Giảm học phí:</span>
+                                       <strong style={{ color: '#f97316' }}>-{fCur(r.giamhocphi)} ₫</strong>
+                                    </div>
                                  )}
+                                 <div className="fm-card-row price-row">
+                                    <span>Còn dự kiến:</span>
+                                    <strong style={{ color: '#0f766e' }}>{fCur(r.conno || r.tongcong)} ₫</strong>
+                                 </div>
+                                 <div className="fm-card-actions">
+                                    {!deleted ? (
+                                       <>
+                                          <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
+                                          <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
+                                          <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
+                                       </>
+                                    ) : (
+                                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: 'auto' }}>ĐÃ XÓA</span>
+                                    )}
+                                 </div>
                               </div>
                            </div>
-                        </div>
-                     )})}
+                        )
+                     })}
                   </div>
                </>
             );
@@ -2770,11 +2772,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.chuyencan)} ₫</td></tr>
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_bhxh)} ₫</td></tr>
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_trachnhiem)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_dilai)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_chuyenmon)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_khac)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.thuongle)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tangluong)} ₫</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KIDS CAMP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_kidscamp)} ₫</td></tr>
                         <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(printLuong.tongthunhap)} ₫</td></tr>
 
                         <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
@@ -3571,7 +3569,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-      
+
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
             <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
                <div style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.2, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`, backgroundRepeat: 'repeat' }} />
@@ -3600,7 +3598,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                      <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
                      <div>Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b></div>
-                     
+
                      <div style={{ marginTop: '5px' }}>Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b></div>
                      <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
                      <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -3747,141 +3745,141 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </div>
                   </div>
 
-                   <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
-                      <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
-                      <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || '...'}</b></div>
-                      {downloadingNotice?.ghichu && (
-                         <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
-                      )}
-                   </div>
+                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
+                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingNotice?.tenlop}</b></div>
+                     <div style={{ marginBottom: '5px' }}>Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingNotice?.thoiluong || '...'}</b></div>
+                     {downloadingNotice?.ghichu && (
+                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingNotice?.ghichu}</b></div>
+                     )}
+                  </div>
 
-                   {/* QR SECTION */}
-                   {downloadingNotice?.qrUrl && (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
-                         <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
-                         <div style={{ textAlign: 'center' }}>
-                            <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
-                            <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
-                         </div>
-                      </div>
-                   )}
-                </div>
+                  {/* QR SECTION */}
+                  {downloadingNotice?.qrUrl && (
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
+                        <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
+                        <div style={{ textAlign: 'center' }}>
+                           <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                           <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
+                        </div>
+                     </div>
+                  )}
+               </div>
 
-                {/* FOOTER */}
-                <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                   <div style={{ lineHeight: '1.6' }}>
-                      Facebook: {config?.tencongty}<br />
-                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                      Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien}</b>
-                   </div>
-                   <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
-                      (Xác nhận)
-                   </div>
-                </div>
-             </div>
-          </div>
+               {/* FOOTER */}
+               <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <div style={{ lineHeight: '1.6' }}>
+                     Facebook: {config?.tencongty}<br />
+                     Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingNotice?.nhanvien}</b>
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
+                     (Xác nhận)
+                  </div>
+               </div>
+            </div>
+         </div>
 
-          {/* APPROVE SALARY MODAL */}
-          {approveSalaryModal.isOpen && approveSalaryModal.item && createPortal(
-             <div className="fm-modal-overlay">
-                <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#fff' }}>
-                   <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Duyệt Chi Lương Nhân Viên</h3>
-                      <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
-                   </div>
-                   <div className="fm-modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1 }}>
-                      <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <span style={{ color: '#64748b' }}>Nhân viên:</span>
-                            <span style={{ fontWeight: 800, color: '#0f172a' }}>{approveSalaryModal.item.tennv} ({approveSalaryModal.item.manv})</span>
-                         </div>
-                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <span style={{ color: '#64748b' }}>Kỳ lương:</span>
-                            <span style={{ fontWeight: 700 }}>Tháng {approveSalaryModal.item.thang}</span>
-                         </div>
-                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <span style={{ color: '#64748b' }}>Tổng thu nhập:</span>
-                            <span style={{ fontWeight: 700, color: '#10b981' }}>{fCur(approveSalaryModal.item.tongthunhap)} ₫</span>
-                         </div>
-                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <span style={{ color: '#64748b' }}>Tổng khấu trừ:</span>
-                            <span style={{ fontWeight: 700, color: '#ef4444' }}>{fCur(approveSalaryModal.item.tongkhautru)} ₫</span>
-                         </div>
-                         <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: 800, color: '#0f172a' }}>Thực nhận chi trả:</span>
-                            <span style={{ fontWeight: 900, color: '#2563eb', fontSize: '1.2rem' }}>{fCur(approveSalaryModal.item.thucnhan)} ₫</span>
-                         </div>
-                      </div>
+         {/* APPROVE SALARY MODAL */}
+         {approveSalaryModal.isOpen && approveSalaryModal.item && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '500px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#fff' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Duyệt Chi Lương Nhân Viên</h3>
+                     <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+                  </div>
+                  <div className="fm-modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1 }}>
+                     <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                           <span style={{ color: '#64748b' }}>Nhân viên:</span>
+                           <span style={{ fontWeight: 800, color: '#0f172a' }}>{approveSalaryModal.item.tennv} ({approveSalaryModal.item.manv})</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                           <span style={{ color: '#64748b' }}>Kỳ lương:</span>
+                           <span style={{ fontWeight: 700 }}>Tháng {approveSalaryModal.item.thang}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                           <span style={{ color: '#64748b' }}>Tổng thu nhập:</span>
+                           <span style={{ fontWeight: 700, color: '#10b981' }}>{fCur(approveSalaryModal.item.tongthunhap)} ₫</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                           <span style={{ color: '#64748b' }}>Tổng khấu trừ:</span>
+                           <span style={{ fontWeight: 700, color: '#ef4444' }}>{fCur(approveSalaryModal.item.tongkhautru)} ₫</span>
+                        </div>
+                        <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                           <span style={{ fontWeight: 800, color: '#0f172a' }}>Thực nhận chi trả:</span>
+                           <span style={{ fontWeight: 900, color: '#2563eb', fontSize: '1.2rem' }}>{fCur(approveSalaryModal.item.thucnhan)} ₫</span>
+                        </div>
+                     </div>
 
-                      <div>
-                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Chọn nguồn quỹ / Ví thanh toán:</label>
-                         <select
-                            value={approveSalaryModal.wallet}
-                            onChange={(e) => setApproveSalaryModal(prev => ({ ...prev, wallet: e.target.value }))}
-                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem' }}
-                         >
-                            {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                            {walletsConfig.map(w => (
-                               <option key={w.id} value={w.name}>{w.name}</option>
-                            ))}
-                         </select>
-                      </div>
-                   </div>
-                   <div className="fm-modal-footer" style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#f8fafc', flexShrink: 0 }}>
-                      <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Hủy</button>
-                      <button onClick={async () => {
-                         try {
-                            setLoading(true);
-                            const slip = approveSalaryModal.item;
-                            const targetWallet = approveSalaryModal.wallet || walletsConfig[0]?.name || 'Tiền mặt';
-                            const idField = slip.maphieuluong ? 'maphieuluong' : 'id';
-                            const idVal = slip.maphieuluong || slip.id;
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Chọn nguồn quỹ / Ví thanh toán:</label>
+                        <select
+                           value={approveSalaryModal.wallet}
+                           onChange={(e) => setApproveSalaryModal(prev => ({ ...prev, wallet: e.target.value }))}
+                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem' }}
+                        >
+                           {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                           {walletsConfig.map(w => (
+                              <option key={w.id} value={w.name}>{w.name}</option>
+                           ))}
+                        </select>
+                     </div>
+                  </div>
+                  <div className="fm-modal-footer" style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#f8fafc', flexShrink: 0 }}>
+                     <button onClick={() => setApproveSalaryModal({ isOpen: false, item: null, wallet: '' })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Hủy</button>
+                     <button onClick={async () => {
+                        try {
+                           setLoading(true);
+                           const slip = approveSalaryModal.item;
+                           const targetWallet = approveSalaryModal.wallet || walletsConfig[0]?.name || 'Tiền mặt';
+                           const idField = slip.maphieuluong ? 'maphieuluong' : 'id';
+                           const idVal = slip.maphieuluong || slip.id;
 
-                            let luongRes = await supabase
-                               .from('tbl_luong')
-                               .update({
-                                  trangthai: 'Đã chi',
-                                  hinhthuc: targetWallet,
-                                  ngayduyet: new Date().toISOString(),
-                                  nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
-                               })
-                               .eq(idField, idVal);
+                           let luongRes = await supabase
+                              .from('tbl_luong')
+                              .update({
+                                 trangthai: 'Đã chi',
+                                 hinhthuc: targetWallet,
+                                 ngayduyet: new Date().toISOString(),
+                                 nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
+                              })
+                              .eq(idField, idVal);
 
-                            if (luongRes.error && (luongRes.error.message || '').toLowerCase().includes('schema cache')) {
-                               luongRes = await baseSupabase
-                                  .from('tbl_luong')
-                                  .update({
-                                     trangthai: 'Đã chi',
-                                     hinhthuc: targetWallet,
-                                     ngayduyet: new Date().toISOString(),
-                                     nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
-                                  })
-                                  .eq(idField, idVal);
-                            }
+                           if (luongRes.error && (luongRes.error.message || '').toLowerCase().includes('schema cache')) {
+                              luongRes = await baseSupabase
+                                 .from('tbl_luong')
+                                 .update({
+                                    trangthai: 'Đã chi',
+                                    hinhthuc: targetWallet,
+                                    ngayduyet: new Date().toISOString(),
+                                    nguoiduyet: currentUser?.tennv || currentUser?.manv || 'Quản lý'
+                                 })
+                                 .eq(idField, idVal);
+                           }
 
-                            if (luongRes.error) throw luongRes.error;
+                           if (luongRes.error) throw luongRes.error;
 
 
-                            await insertLog(`[DUYỆT CHI LƯƠNG] Mã phiếu: ${idVal} | NV: ${slip.tennv} | Số tiền: ${fCur(slip.thucnhan)}đ | Ví chi: ${targetWallet}`);
-                            alert(`Đã duyệt chi lương thành công cho NV ${slip.tennv}!`);
+                           await insertLog(`[DUYỆT CHI LƯƠNG] Mã phiếu: ${idVal} | NV: ${slip.tennv} | Số tiền: ${fCur(slip.thucnhan)}đ | Ví chi: ${targetWallet}`);
+                           alert(`Đã duyệt chi lương thành công cho NV ${slip.tennv}!`);
 
-                            setApproveSalaryModal({ isOpen: false, item: null, wallet: '' });
-                            fetchData();
-                         } catch (err) {
-                            console.error('Lỗi duyệt chi lương:', err);
-                            alert('Lỗi duyệt chi lương: ' + (err.message || 'Lỗi không xác định'));
-                         } finally {
-                            setLoading(false);
-                         }
-                      }} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Xác nhận Duyệt Chi</button>
-                   </div>
-                </div>
-             </div>,
-             document.body
-          )}
+                           setApproveSalaryModal({ isOpen: false, item: null, wallet: '' });
+                           fetchData();
+                        } catch (err) {
+                           console.error('Lỗi duyệt chi lương:', err);
+                           alert('Lỗi duyệt chi lương: ' + (err.message || 'Lỗi không xác định'));
+                        } finally {
+                           setLoading(false);
+                        }
+                     }} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Xác nhận Duyệt Chi</button>
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
 
-          {/* VIEW / PRINT SALARY SLIP MODAL */}
-          {viewSalarySlipModal.isOpen && viewSalarySlipModal.item && createPortal(
+         {/* VIEW / PRINT SALARY SLIP MODAL */}
+         {viewSalarySlipModal.isOpen && viewSalarySlipModal.item && createPortal(
             <div className="fm-modal-overlay print-salary-slip-modal" style={{ zIndex: 3000 }}>
                <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '750px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#ffffff', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)' }}>
                   <div className="fm-modal-header no-print" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#ffffff' }}>
@@ -3905,11 +3903,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.chuyencan)} ₫</td></tr>
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_bhxh)} ₫</td></tr>
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_trachnhiem)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_dilai)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_chuyenmon)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_khac)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.thuongle)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tangluong)} ₫</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KIDS CAMP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_kidscamp)} ₫</td></tr>
                               <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(viewSalarySlipModal.item.tongthunhap)} ₫</td></tr>
 
                               <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
@@ -3942,7 +3936,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                templates={matbaoTemplates}
                onOpenConfig={() => setMatbaoConfigModal({ isOpen: true, data: getMatBaoConfig(config) })}
                onSuccess={(mahd) => {
-                  setData(prevData => prevData.map(item => 
+                  setData(prevData => prevData.map(item =>
                      item.mahd === mahd ? { ...item, daxuathddo: true } : item
                   ));
                }}
@@ -4005,6 +3999,6 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             document.body
          )}
 
-</div>
+      </div>
    );
 }
