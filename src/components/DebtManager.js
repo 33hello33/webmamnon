@@ -20,6 +20,7 @@ export default function DebtManager() {
     if (!debt || !walletName) return null;
     const matched = walletsConfig.find(w => String(w.name).trim() === String(walletName).trim());
     if (!matched || !matched.bankId || !matched.accNo) return null;
+    const matchedClass = (classes || []).find(c => c && (c.malop === debt.malop || c.malop === debt.tenlop || c.tenlop === debt.tenlop));
     return generateVietQRUrl({
       bankId: matched.bankId,
       accNo: matched.accNo,
@@ -29,11 +30,13 @@ export default function DebtManager() {
       data: {
         mahv: debt.mahv,
         tenhv: debt.tenhv,
-        tenlop: debt.tenlop || '',
+        tenlop: matchedClass?.tenlop || debt.tenlop || '',
+        malop: debt.malop || matchedClass?.malop || '',
         mahd: debt.mahd,
         thang: debt.thang || '',
         thoiluong: debt.thoiluong || '',
-        ngaybatdau: debt.ngaybatdau || ''
+        ngaybatdau: debt.ngaybatdau || '',
+        classes: classes
       }
     });
   };
@@ -678,7 +681,7 @@ export default function DebtManager() {
               <img crossOrigin="anonymous" src={config?.logo || '/logo.png'} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = '/logo.png'; }} />
             </div>
             <div style={{ flex: 1, textAlign: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'TRƯỜNG MẦM NON DOREMI'}</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'TRƯỜNG MẦM NON'}</h3>
               <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
               <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
             </div>
@@ -732,7 +735,7 @@ export default function DebtManager() {
           {/* FOOTER */}
           <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <div style={{ lineHeight: '1.6' }}>
-              Facebook: {config?.tencongty || 'Doremi Preschool'}<br />
+              Facebook: {config?.tencongty || ''}<br />
               Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
               Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingPayment?.nhanvien}</b>
             </div>

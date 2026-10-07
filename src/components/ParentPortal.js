@@ -1366,8 +1366,8 @@ function ParentPortal({ parentData, setParentData }) {
          data: {
             mahv: parentData.student?.mahv,
             tenhv: parentData.student?.tenhv,
-            tenlop: parentData.student?.tenlop || parentData.student?.malop || fee.tenlop || '',
-            malop: parentData.student?.malop || '',
+            tenlop: fee.tenlop || parentData.student?.tenlop || '',
+            malop: fee.malop || parentData.student?.malop || '',
             mahd: fee.mahd,
             thang: fee.thang,
             thoiluong: fee.thoiluong,

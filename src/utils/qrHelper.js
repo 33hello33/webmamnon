@@ -42,8 +42,28 @@ export const formatQRTransferContent = (template, data = {}) => {
   const mahv = String(data.mahv || '').trim();
   const tenhv = String(data.tenhv || data.hoten || '').trim();
   const shortName = getShortStudentName(tenhv);
-  const tenlop = String(data.tenlop || data.lop || '').trim();
   const malop = String(data.malop || '').trim();
+  let tenlop = String(data.tenlop || '').trim();
+
+  // Nếu tenlop chưa có, kiểm tra data.lop (chỉ lấy nếu data.lop không phải là mã lớp malop)
+  if (!tenlop && data.lop && String(data.lop).trim() !== malop) {
+    tenlop = String(data.lop).trim();
+  }
+
+  // Tra cứu tên lớp từ classes / classMap / lopMap nếu tenlop bị rỗng hoặc bị gán nhầm thành mã lớp
+  if ((!tenlop || (malop && tenlop === malop)) && (data.classes || data.classMap || data.lopMap)) {
+    const map = data.classMap || data.lopMap;
+    const lookupKey = malop || tenlop;
+    if (map && map[lookupKey]) {
+      tenlop = map[lookupKey];
+    } else if (Array.isArray(data.classes)) {
+      const found = data.classes.find(c => c && (c.malop === lookupKey || c.id === lookupKey));
+      if (found && found.tenlop) {
+        tenlop = found.tenlop;
+      }
+    }
+  }
+
   const mahd = String(data.mahd || data.mabill || data.sophieu || '').trim();
   const thoiluong = String(data.thoiluong || '').trim();
 

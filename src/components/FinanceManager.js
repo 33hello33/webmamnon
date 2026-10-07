@@ -266,7 +266,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const noticeObj = {
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
          tenhv: studentName, sdt: hvMap[r.mahv]?.sdt || r.sdt || '',
-         tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
+         tenlop: r.tenlop || hvMap[r.mahv]?.tenlop || '',
+         malop: r.malop || hvMap[r.mahv]?.malop || '',
+         ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
          hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
          tongcong: fCur(r.tongcong), conno: fCur(r.conno || r.tongcong), nocu: fCur(r.nocu || 0),
          hinhthuc: r.hinhthuc, ghichu: r.ghichu,
@@ -3495,7 +3497,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <img crossOrigin="anonymous" src={config?.logo || '/logo.png'} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = '/logo.png'; }} />
                   </div>
                   <div style={{ flex: 1, textAlign: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'TRƯỜNG MẦM NON DOREMI'}</h3>
+                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{config?.tencongty || 'TRƯỜNG MẦM NON'}</h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
                   </div>
@@ -3539,7 +3541,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         } else if (typeof downloadingInvoice.phuthu === 'string') {
                            try {
                               phuThuList = JSON.parse(downloadingInvoice.phuthu);
-                           } catch (_) {}
+                           } catch (_) { }
                         }
                         if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
 
@@ -3621,7 +3623,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: '15pt', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: {config?.tencongty || 'Doremi Preschool'}<br />
+                     Facebook: {config?.tencongty || ''}<br />
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
                      Nhân viên: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.nhanvien}</b>
                   </div>

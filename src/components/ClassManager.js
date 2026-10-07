@@ -959,7 +959,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               malop: selectedClass?.malop || '',
               thoiluong: tl,
               ngaybatdau: row.ngaybatdau,
-              mahd: newMaHD
+              mahd: newMaHD,
+              classes: classes
             }, walletsConfig, config?.qr_template);
             const finalUrl = base ? `${base}&t=${Date.now()}-${i}` : null;
             return finalUrl;

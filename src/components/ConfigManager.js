@@ -683,6 +683,7 @@ const ConfigManager = () => {
                   { tag: '[ngaybatdau]', desc: 'Tháng/kỳ học' },
                   { tag: '[thoiluong]', desc: 'Thời lượng' },
                   { tag: '[tenlop]', desc: 'Tên lớp' },
+                  { tag: '[malop]', desc: 'Mã lớp' },
                   { tag: '[mahd]', desc: 'Mã hóa đơn/thông báo' }
                 ].map(item => (
                   <button
@@ -722,6 +723,7 @@ const ConfigManager = () => {
                     mahv: 'HV00021',
                     tenhv: 'Trần Bảo An',
                     tenlop: 'Lớp Mầm 1',
+                    malop: 'ML01',
                     ngaybatdau: new Date().toISOString(),
                     mahd: 'TB00045',
                     thoiluong: '10/2026'

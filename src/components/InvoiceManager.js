@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, SUPABASE_SCHEMA } from '../supabase';
-import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, List, Edit2, Trash2 } from 'lucide-react';
+import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, dedupeAttendanceRecordsByDay, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
-import { buildLateFeeSurcharges, getLateAttendanceCounts, mergeLateFeeSurcharges, stripAutoLateFeeSurcharges } from '../utils/lateFeeConfig';
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
@@ -243,7 +242,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const [classes, setClasses] = useState([]);
    const [employees, setEmployees] = useState([]);
    const [searchTerm, setSearchTerm] = useState('');
-   const [sortState, setSortState] = useState({ field: null, dir: 'asc' }); // field: 'ten' | 'lop' | 'mahv', dir: 'asc' | 'desc'
    const [selectedStudent, setSelectedStudent] = useState(null);
    const [activeClass, setActiveClass] = useState(null);
    const [classTeacher, setClassTeacher] = useState(null);
@@ -252,7 +250,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
    const [isSaving, setIsSaving] = useState(false);
    const [message, setMessage] = useState({ type: '', text: '' });
-   const [warningModal, setWarningModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+   const [warningModal, setWarningModal] = useState({ isOpen: false, title: '', message: '' });
    const [successModal, setSuccessModal] = useState({ isOpen: false, title: '', message: '' });
    const [downloadingInvoice, setDownloadingInvoice] = useState(null);
    const [downloadingNotice, setDownloadingNotice] = useState(null);
@@ -300,114 +298,24 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const [unpaidBills, setUnpaidBills] = useState([]);
    const [unpaidBillsTotal, setUnpaidBillsTotal] = useState(0);
 
-   const [phuPhiList, setPhuPhiList] = useState([]);
-   const [selectedPhuPhiIds, setSelectedPhuPhiIds] = useState([]);
-   const [phuPhiQuantities, setPhuPhiQuantities] = useState({});
-   const [showPhuPhiTable, setShowPhuPhiTable] = useState(true);
-   const [showPhuPhiModal, setShowPhuPhiModal] = useState(false);
-   const [phuPhiForm, setPhuPhiForm] = useState({ name: '', amount: 0 });
-   const [editingPhuPhiId, setEditingPhuPhiId] = useState(null);
-
-   const fetchPhuPhiData = async () => {
-      try {
-         const { data, error } = await supabase.from('tbl_phuphi').select('*').order('id', { ascending: true });
-         if (!error && data) {
-            setPhuPhiList(data);
-         }
-      } catch (err) {
-         console.error('Lỗi lấy bảng phụ phí:', err);
-      }
-   };
-
-   const toggleSelectPhuPhi = (id) => {
-      setSelectedPhuPhiIds(prev =>
-         prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-      );
-   };
-
-   const handlePhuPhiQuantityChange = (id, value) => {
-      const qty = Math.max(1, parseInt(value, 10) || 1);
-      setPhuPhiQuantities(prev => ({
-         ...prev,
-         [id]: qty
-      }));
-   };
-
-   const handleSavePhuPhiItem = async () => {
-      if (!phuPhiForm.name.trim()) {
-         showMessage('error', 'Vui lòng nhập tên khoản phụ phí');
-         return;
-      }
-      try {
-         const payload = {
-            tenpp: phuPhiForm.name.trim(),
-            dongia: String(phuPhiForm.amount)
-         };
-         if (editingPhuPhiId) {
-            const { error } = await supabase
-               .from('tbl_phuphi')
-               .update(payload)
-               .eq('id', editingPhuPhiId);
-            if (error) throw error;
-            showMessage('success', 'Đã cập nhật phụ phí thành công');
-         } else {
-            const { error } = await supabase
-               .from('tbl_phuphi')
-               .insert([payload]);
-            if (error) throw error;
-            showMessage('success', 'Đã thêm phụ phí mới thành công');
-         }
-         setPhuPhiForm({ name: '', amount: 0 });
-         setEditingPhuPhiId(null);
-         await fetchPhuPhiData();
-      } catch (err) {
-         console.error('Lỗi lưu khoản phụ phí:', err);
-         showMessage('error', 'Lỗi lưu phụ phí: ' + err.message);
-      }
-   };
-
-   const startEditPhuPhi = (item) => {
-      setEditingPhuPhiId(item.id);
-      const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-      const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-      const amount = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-      setPhuPhiForm({ name, amount });
-   };
-
-   const cancelEditPhuPhi = () => {
-      setEditingPhuPhiId(null);
-      setPhuPhiForm({ name: '', amount: 0 });
-   };
-
-   const handleDeletePhuPhi = async (id) => {
-      if (!window.confirm('Bạn có chắc chắn muốn xóa khoản phụ phí này không?')) return;
-      try {
-         const { error } = await supabase.from('tbl_phuphi').delete().eq('id', id);
-         if (error) throw error;
-         showMessage('success', 'Đã xóa phụ phí thành công');
-         setSelectedPhuPhiIds(prev => prev.filter(pId => pId !== id));
-         await fetchPhuPhiData();
-      } catch (err) {
-         console.error('Lỗi xóa khoản phụ phí:', err);
-         showMessage('error', 'Lỗi xóa phụ phí: ' + err.message);
-      }
-   };
-
    const fetchBaseData = async () => {
       try {
          const { data: stRaw } = await supabase.from('tbl_hv').select('*').or('trangthai.is.null,trangthai.neq.Đã Nghỉ').order('tenhv', { ascending: true });
          const { data: cls } = await supabase.from('tbl_lop').select('*').or('daxoa.is.null,daxoa.neq.Đã Xóa');
          const { data: emp } = await supabase.from('tbl_nv').select('*');
 
+         const classMap = {};
+         (cls || []).forEach(c => { if (c.malop) classMap[c.malop] = c.tenlop || c.malop; });
+
          const st = (stRaw || []).map(s => ({
             ...s,
+            tenlop: classMap[s.malop] || s.tenlop || '',
             malop_list: s.malop ? [s.malop] : []
          }));
 
          setStudents(st || []);
          setClasses(cls || []);
          setEmployees(emp || []);
-         fetchPhuPhiData();
       } catch (err) {
          console.error(err);
       }
@@ -438,7 +346,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   node.style.visibility = 'visible';
 
                   for (let retry = 0; retry < 20; retry++) {
-                     const invoiceId = node.dataset.invoiceId;
+                     const invoiceId = downloadingInvoice.mahd;
                      if (invoiceId === expectedInvoiceId) {
                         break;
                      }
@@ -452,9 +360,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }));
                   await new Promise(requestAnimationFrame);
                   await new Promise(requestAnimationFrame);
-                  await new Promise(r => setTimeout(r, 400));
+                  await new Promise(r => setTimeout(r, 600));
 
-                  const dataUrl = await toPng(node, { cacheBust: false, backgroundColor: '#ffffff' });
+                  const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
 
                   // Restore hide
                   node.style.position = 'static';
@@ -464,7 +372,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      setPreviewImg(dataUrl);
                   } else {
                      const link = document.createElement('a');
-                     link.download = `${sanitizeFileSegment(`BienLai_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'BienLai')}.png`;
+                     link.download = `${sanitizeFileSegment(`HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'HoaDon')}.png`;
                      link.href = dataUrl;
                      document.body.appendChild(link);
                      link.click();
@@ -472,7 +380,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   }
 
                   try {
-                     const fileName = `${sanitizeFileSegment(`BienLai_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'BienLai')}.png`;
+                     const fileName = `${sanitizeFileSegment(`HoaDon_${downloadingInvoice.tenhv}_${downloadingInvoice.mahd}`, 'HoaDon')}.png`;
                      const blob = dataUrlToBlob(dataUrl);
                      const pngFile = new File([blob], fileName, { type: 'image/png' });
                      const file = await compressImage(pngFile, 150);
@@ -670,8 +578,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       });
 
       setSelectedStudent(st);
-      setSelectedPhuPhiIds([]);
-      setPhuPhiQuantities({});
       setShowMobileDetails(true);
       setMessage({ type: '', text: '' });
       setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
@@ -811,8 +717,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             }
 
             // Lấy các khoản giảm trừ hoàn toàn từ chứng từ gần nhất
-            setRefundOverrides({
-               meal: parseCur(recentDoc.trutienan),
+            setRefundOverrides({ 
+               meal: parseCur(recentDoc.trutienan), 
                tuition: parseCur(recentDoc.tiennghiphep),
                ngoaiKhoa: parseCur(recentDoc.trutiendangoai)
             });
@@ -860,47 +766,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
             if (recentDoc.phuthu) {
                try {
-                  const rawPhuThu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
-                  const cleanPhuThu = stripAutoLateFeeSurcharges(rawPhuThu);
-
-                  const loadedPresetIds = [];
-                  const loadedQuantities = {};
-                  const remainingCustomPhuThu = [];
-
-                  const currentPhuPhiList = phuPhiList.length > 0
-                     ? phuPhiList
-                     : ((await supabase.from('tbl_phuphi').select('*').order('id', { ascending: true })).data || []);
-
-                  cleanPhuThu.forEach(pt => {
-                     if (!pt || !pt.name) return;
-                     
-                     let matched = currentPhuPhiList.find(p => p.id === pt.presetId);
-                     if (!matched) {
-                        const ptNameClean = String(pt.baseName || pt.name || '').replace(/\s*\(x\d+\)\s*$/i, '').trim().toLowerCase();
-                        matched = currentPhuPhiList.find(p => {
-                           const pNameClean = String(p.tenpp || p.tenphuphi || p.ten || p.name || '').trim().toLowerCase();
-                           return pNameClean === ptNameClean;
-                        });
-                     }
-
-                     if (matched) {
-                        loadedPresetIds.push(matched.id);
-                        let qty = pt.soluong;
-                        if (!qty) {
-                           const matchQty = String(pt.name).match(/\(x(\d+)\)/i);
-                           if (matchQty && matchQty[1]) {
-                              qty = parseInt(matchQty[1], 10);
-                           }
-                        }
-                        loadedQuantities[matched.id] = Math.max(1, parseInt(qty, 10) || 1);
-                     } else {
-                        remainingCustomPhuThu.push(pt);
-                     }
-                  });
-
-                  setSelectedPhuPhiIds(loadedPresetIds);
-                  setPhuPhiQuantities(loadedQuantities);
-                  phuthu = remainingCustomPhuThu;
+                  phuthu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
+                  if (!Array.isArray(phuthu)) phuthu = [];
                } catch (e) {
                   console.error('Error parsing phuthu:', e);
                   phuthu = [];
@@ -1034,11 +901,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
             const uniqueAttendance = dedupeAttendanceRecordsByDay(attendance || []);
             const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-            const lateCounts = getLateAttendanceCounts(uniqueAttendance);
             let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
             uniqueAttendance.forEach(att => {
                const s = normalizeStatus(att.trangthai);
-               if (s === 'có mặt' || s.includes('trả trễ')) daHoc++;
+               if (s === 'có mặt') daHoc++;
                else if (s === 'nghỉ phép') nghiPhep++;
                else if (s === 'nghỉ không phép') nghiKhongPhep++;
             });
@@ -1052,7 +918,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                daHoc,
                nghiPhep,
                nghiKhongPhep,
-               ...lateCounts,
                tongBuoi,
                consecutiveLeave,
                maxConsecutive,
@@ -1338,11 +1203,10 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
 
          const uniqueAttendance = dedupeAttendanceRecordsByDay(attendance || []);
          const normalizeStatus = (s) => (s || '').trim().toLowerCase();
-         const lateCounts = getLateAttendanceCounts(uniqueAttendance);
          let daHoc = 0, nghiPhep = 0, nghiKhongPhep = 0;
          uniqueAttendance.forEach(att => {
             const s = normalizeStatus(att.trangthai);
-            if (s === 'có mặt' || s.includes('trả trễ')) daHoc++;
+            if (s === 'có mặt') daHoc++;
             else if (s === 'nghỉ phép') nghiPhep++;
             else if (s === 'nghỉ không phép') nghiKhongPhep++;
          });
@@ -1357,7 +1221,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             daHoc,
             nghiPhep,
             nghiKhongPhep,
-            ...lateCounts,
             tongBuoi,
             consecutiveLeave,
             maxConsecutive,
@@ -1380,13 +1243,12 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       await loadAttendanceForMonth(newStart);
    };
 
-   const handleSaveInvoice = async (bypassDuplicateCheck = false) => {
-      const isBypass = bypassDuplicateCheck === true;
+   const handleSaveInvoice = async () => {
       setIsSaving(true);
       try {
          const currentTimePeriod = calculateThoiluong(invoiceData);
 
-         if (!isBypass && currentTimePeriod) {
+         if (currentTimePeriod) {
             const { data: allDocs, error: dupErr } = await supabase.from('tbl_hd')
                .select('mahd, daxoa, thoiluong')
                .eq('mahv', selectedStudent.mahv)
@@ -1402,8 +1264,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                setWarningModal({
                   isOpen: true,
                   title: 'Cảnh Báo Đóng Trùng Học Phí',
-                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Bạn có chắc chắn vẫn muốn tiếp tục xuất hóa đơn?`,
-                  onConfirm: () => handleSaveInvoice(true)
+                  message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Để tránh tính nhầm tiền, hệ thống sẽ từ chối xuất hóa đơn. Vui lòng kiểm tra lại các Hóa Đơn cũ!`
                });
                setIsSaving(false);
                return;
@@ -1439,7 +1300,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             conno: formatCurrency(conLai),
             hinhthuc: invoiceData.hinhThuc,
             ghichu: combinedNote,
-            phuthu: effectiveSurcharges.length > 0 ? JSON.stringify(effectiveSurcharges) : null,
+            phuthu: invoiceData.phuthu && invoiceData.phuthu.length > 0 ? JSON.stringify(invoiceData.phuthu) : null,
             daxoa: null,
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
@@ -1507,33 +1368,14 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             ghichu: combinedNote,
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
-            phuthu: effectiveSurcharges,
+            phuthu: invoiceData.phuthu,
             studySummary: studySummary,
-            actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
-            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0)),
-            ngoaiKhoaDeduction: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
+            actualMealRefund,
+            actualTuitionRefund,
+            ngoaiKhoaDeduction,
             deductionSum,
             trutienan_val,
-            trutiennghi_val,
-            qrUrl: (() => {
-               return getQRUrl({
-                  mahv: selectedStudent.mahv,
-                  tenhv: selectedStudent.tenhv,
-                  tongcong: formatCurrency(tongCong),
-                  hinhthuc: invoiceData.hinhThuc,
-                  thoiluong: currentTimePeriod,
-                  ngaybatdau: invoiceData.ngayBatDau || null
-               }, walletsConfig, true);
-            })(),
-            diemDanhInfo: studySummary ? {
-               diHoc: studySummary.daHoc || 0,
-               nghiPhep: studySummary.nghiPhep || 0,
-               nghiKP: studySummary.nghiKhongPhep || 0,
-               traTre1: studySummary.traTre1 || 0,
-               traTre2: studySummary.traTre2 || 0,
-               traTre3: studySummary.traTre3 || 0,
-               statsPeriod: studySummary.period || currentTimePeriod
-            } : null
+            trutiennghi_val
          });
 
          // Reload old debt dynamically mimicking real-time refresh
@@ -1577,7 +1419,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             conno: formatCurrency(tongCong),
             hinhthuc: invoiceData.hinhThuc,
             ghichu: combinedNote,
-            phuthu: effectiveSurcharges.length > 0 ? JSON.stringify(effectiveSurcharges) : null,
             nocu: formatCurrency(noCu),
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
@@ -1598,7 +1439,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             mahv: selectedStudent.mahv,
             tenhv: selectedStudent.tenhv,
             sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
-            tenlop: activeClass?.tenlop || '',
+            tenlop: activeClass?.tenlop || selectedStudent.tenlop || '',
+            malop: activeClass?.malop || selectedStudent.malop || '',
+            classes: classes,
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
             hocphi: formatCurrency(invoiceData.hocphi),
@@ -1611,27 +1454,26 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             ghichu: combinedNote,
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
-            phuthu: effectiveSurcharges,
+            phuthu: normalizeSurcharges(invoiceData.phuthu),
             qrUrl: (() => {
                // cacheBust=true: mỗi lần xuất tạo URL duy nhất, tránh cache ảnh QR của học sinh khác
                return getQRUrl({
                   mahv: selectedStudent.mahv,
                   tenhv: selectedStudent.tenhv,
-                  tenlop: selectedStudent.tenlop || selectedStudent.malop || '',
+                  tenlop: activeClass?.tenlop || selectedStudent.tenlop || '',
+                  malop: activeClass?.malop || selectedStudent.malop || '',
                   tongcong: formatCurrency(tongCong),
                   hinhthuc: invoiceData.hinhThuc,
                   thoiluong: currentTimePeriod,
                   ngaybatdau: invoiceData.ngayBatDau || null,
-                  mahd: newMaTB
+                  mahd: newMaTB,
+                  classes: classes
                }, walletsConfig, true, config?.qr_template);
             })(),
             diemDanhInfo: studySummary ? {
                diHoc: studySummary.daHoc || 0,
                nghiPhep: studySummary.nghiPhep || 0,
                nghiKP: studySummary.nghiKhongPhep || 0,
-               traTre1: studySummary.traTre1 || 0,
-               traTre2: studySummary.traTre2 || 0,
-               traTre3: studySummary.traTre3 || 0,
                statsPeriod: studySummary.period || currentTimePeriod
             } : null,
             actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
@@ -1644,42 +1486,11 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       }
    };
 
-   const handleSort = (field) => {
-      setSortState(prev => {
-         if (prev.field === field) {
-            return { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
-         }
-         return { field, dir: 'asc' };
-      });
-   };
-
-   const filteredStudents = students
-      .filter(s =>
-         (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
-         (s.sdt && s.sdt.includes(searchTerm)) ||
-         (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
-      .sort((a, b) => {
-         if (!sortState.field) return 0;
-         let valA = '';
-         let valB = '';
-
-         if (sortState.field === 'ten') {
-            valA = (a.tenhv || '').trim();
-            valB = (b.tenhv || '').trim();
-         } else if (sortState.field === 'lop') {
-            const classNamesA = (a.malop_list || []).map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
-            const classNamesB = (b.malop_list || []).map(ml => classes.find(c => c.malop === ml)?.tenlop || ml).join(', ');
-            valA = classNamesA.trim();
-            valB = classNamesB.trim();
-         } else if (sortState.field === 'mahv') {
-            valA = (a.mahv || '').trim();
-            valB = (b.mahv || '').trim();
-         }
-
-         const cmp = valA.localeCompare(valB, 'vi', { sensitivity: 'base', numeric: true });
-         return sortState.dir === 'asc' ? cmp : -cmp;
-      });
+   const filteredStudents = students.filter(s =>
+      (s.tenhv && s.tenhv.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.sdt && s.sdt.includes(searchTerm)) ||
+      (s.mahv && s.mahv.toLowerCase().includes(searchTerm.toLowerCase()))
+   );
 
    useEffect(() => {
       if (!focusStudentId || students.length === 0) return;
@@ -1704,28 +1515,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       }
    }, [focusStudentId, students, onFocusStudentHandled]);
 
-   const selectedPresetSurcharges = phuPhiList
-      .filter(item => selectedPhuPhiIds.includes(item.id))
-      .map(item => {
-         const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-         const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-         const unitPrice = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-         const qty = Math.max(1, parseInt(phuPhiQuantities[item.id], 10) || 1);
-         const totalAmount = unitPrice * qty;
-         const displayName = qty > 1 ? `${name} (x${qty})` : name;
-         return {
-            name: displayName,
-            amount: totalAmount,
-            presetId: item.id,
-            baseName: name,
-            soluong: qty
-         };
-      });
 
-   const autoLateFeeSurcharges = buildLateFeeSurcharges(studySummary || {}, config?.tientratre);
-   const combinedCustomPhuThu = [...selectedPresetSurcharges, ...(invoiceData.phuthu || [])];
-   const effectiveSurcharges = mergeLateFeeSurcharges(combinedCustomPhuThu, studySummary || {}, config?.tientratre);
-   const surchargeSum = effectiveSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+   const surchargeSum = (invoiceData.phuthu || []).reduce((sum, item) => sum + (item.amount || 0), 0);
 
    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
    const tienAnConfig = getTienAnConfig?.(invoiceData.hocphi);
@@ -1734,10 +1526,19 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
-   // Logic hoàn trả tiền học & tiền ăn theo số ngày nghỉ phép:
-   // (Số ngày nghỉ phép * đơn giá cấu hình)
-   const mealRefund = (studySummary?.nghiPhep || 0) * trutienan_val;
-   const tuitionRefund = (studySummary?.nghiPhep || 0) * trutiennghi_val;
+   // Logic hoàn trả tiền học theo số ngày nghỉ liên tiếp (Cấu hình % từ tbl_config)
+   let tuitionRefund = 0;
+   let mealRefund = 0;
+   tuitionRefund = calculateConsecutiveTuitionRefund({
+      groups: studySummary?.consecutiveLeave || [],
+      dailyRefundAmount: trutiennghi_val,
+      config: consecutiveRefundConfig
+   });
+
+   // Hoàn trả tiền ăn: Tổng số ngày nghỉ phép >= 3 ngày
+   if (studySummary?.nghiPhep >= 3) {
+      mealRefund = studySummary.nghiPhep * trutienan_val;
+   }
 
    // Round to nearest 1000
    const roundedMealRefund = Math.round(mealRefund / 1000) * 1000;
@@ -1774,29 +1575,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                />
-            </div>
-            <div className="im-sort-bar">
-               <button
-                  type="button"
-                  className={`im-sort-btn ${sortState.field === 'ten' ? 'active' : ''}`}
-                  onClick={() => handleSort('ten')}
-               >
-                  Tên {sortState.field === 'ten' ? (sortState.dir === 'asc' ? '↑' : '↓') : ''}
-               </button>
-               <button
-                  type="button"
-                  className={`im-sort-btn ${sortState.field === 'lop' ? 'active' : ''}`}
-                  onClick={() => handleSort('lop')}
-               >
-                  Lớp {sortState.field === 'lop' ? (sortState.dir === 'asc' ? '↑' : '↓') : ''}
-               </button>
-               <button
-                  type="button"
-                  className={`im-sort-btn ${sortState.field === 'mahv' ? 'active' : ''}`}
-                  onClick={() => handleSort('mahv')}
-               >
-                  Mã HV {sortState.field === 'mahv' ? (sortState.dir === 'asc' ? '↑' : '↓') : ''}
-               </button>
             </div>
             <div className="im-student-list">
                {filteredStudents.length > 0 ? filteredStudents.map(st => {
@@ -1914,13 +1692,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                  <div className="ss-badge ss-present">
                                     <span className="ss-num">{studySummary.daHoc}</span>
                                     <span className="ss-txt">Đã học</span>
-                                    {((studySummary.traTre1 || 0) > 0 || (studySummary.traTre2 || 0) > 0 || (studySummary.traTre3 || 0) > 0) && (
-                                       <div style={{ fontSize: '0.7rem', marginTop: '4px', textAlign: 'center', lineHeight: '1.2', opacity: 0.9 }}>
-                                          {studySummary.traTre1 > 0 && <div>Trễ 1: {studySummary.traTre1}</div>}
-                                          {studySummary.traTre2 > 0 && <div>Trễ 2: {studySummary.traTre2}</div>}
-                                          {studySummary.traTre3 > 0 && <div>Trễ 3: {studySummary.traTre3}</div>}
-                                       </div>
-                                    )}
                                  </div>
                                  <div className="ss-badge ss-excused">
                                     <span className="ss-num">{studySummary.nghiPhep}</span>
@@ -1930,7 +1701,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     <span className="ss-num">{studySummary.nghiKhongPhep || 0}</span>
                                     <span className="ss-txt">Không phép</span>
                                  </div>
-
                                  <div className="ss-badge ss-total">
                                     <span className="ss-num">{studySummary.tongBuoi}</span>
                                     <span className="ss-txt">Tổng buổi</span>
@@ -1945,71 +1715,53 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     ⚠️ Có đợt nghỉ dài: {studySummary.consecutiveLeave.filter(l => l.so_ngay_nghi_lien_tuc >= 3).map(l => `${l.so_ngay_nghi_lien_tuc} ngày (${l.ngay_bat_dau_nghi} -> ${l.ngay_ket_thuc_nghi})`).join(', ')}
                                  </div>
                               )}
-                              {(deductionSum > 0 || (autoLateFeeSurcharges && autoLateFeeSurcharges.length > 0)) && (
+                              {deductionSum > 0 && (
                                  <div style={{ marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #10b981', color: '#065f46', fontSize: '0.9rem' }}>
-                                    {autoLateFeeSurcharges && autoLateFeeSurcharges.length > 0 && (
-                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: deductionSum > 0 ? '6px' : '0' }}>
-                                          <span style={{ color: '#b45309', fontWeight: 600 }}>Phụ thu trả trễ:</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                       <span>Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
+                                          <span style={{ fontWeight: 700 }}>-</span>
+                                          <input
+                                             type="text"
+                                             value={formatCurrency(actualMealRefund)}
+                                             onChange={(e) => {
+                                                const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                                setRefundOverrides(prev => ({ ...prev, meal: val }));
+                                             }}
+                                             style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
+                                          />
+                                          <span style={{ fontWeight: 700 }}>đ</span>
+                                       </div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
+                                       <span>Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
+                                          <span style={{ fontWeight: 700 }}>-</span>
+                                          <input
+                                             type="text"
+                                             value={formatCurrency(actualTuitionRefund)}
+                                             onChange={(e) => {
+                                                const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                                setRefundOverrides(prev => ({ ...prev, tuition: val }));
+                                             }}
+                                             style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
+                                          />
+                                          <span style={{ fontWeight: 700 }}>đ</span>
+                                       </div>
+                                    </div>
+                                    {ngoaiKhoaDeduction > 0 && (
+                                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
+                                          <span>Trừ tiền dã ngoại tháng trước:</span>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                             <span style={{ fontWeight: 700, color: '#b45309' }}>+</span>
-                                             <span style={{ fontWeight: 700, color: '#b45309' }}>{formatCurrency(autoLateFeeSurcharges.reduce((sum, fee) => sum + (Number(fee.amount) || 0), 0))}</span>
-                                             <span style={{ fontWeight: 700, color: '#b45309' }}>đ</span>
+                                             <span style={{ fontWeight: 700 }}>-</span>
+                                             <span style={{ fontWeight: 700 }}>{formatCurrency(ngoaiKhoaDeduction)}</span>
+                                             <span style={{ fontWeight: 700 }}>đ</span>
                                           </div>
                                        </div>
                                     )}
-                                    {deductionSum > 0 && (
-                                       <>
-                                          {actualMealRefund > 0 && (
-                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span>Hoàn trả tiền ăn nghỉ phép:</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
-                                                   <span style={{ fontWeight: 700 }}>-</span>
-                                                   <input
-                                                      type="text"
-                                                      value={formatCurrency(actualMealRefund)}
-                                                      onChange={(e) => {
-                                                         const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
-                                                         setRefundOverrides(prev => ({ ...prev, meal: val }));
-                                                      }}
-                                                      style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
-                                                   />
-                                                   <span style={{ fontWeight: 700 }}>đ</span>
-                                                </div>
-                                             </div>
-                                          )}
-                                          {actualTuitionRefund > 0 && (
-                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: actualMealRefund > 0 ? '6px' : '0', alignItems: 'center' }}>
-                                                <span>Hoàn trả học phí nghỉ phép:</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
-                                                   <span style={{ fontWeight: 700 }}>-</span>
-                                                   <input
-                                                      type="text"
-                                                      value={formatCurrency(actualTuitionRefund)}
-                                                      onChange={(e) => {
-                                                         const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
-                                                         setRefundOverrides(prev => ({ ...prev, tuition: val }));
-                                                      }}
-                                                      style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
-                                                   />
-                                                   <span style={{ fontWeight: 700 }}>đ</span>
-                                                </div>
-                                             </div>
-                                          )}
-                                          {ngoaiKhoaDeduction > 0 && (
-                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
-                                                <span>Trừ tiền dã ngoại tháng trước:</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                   <span style={{ fontWeight: 700 }}>-</span>
-                                                   <span style={{ fontWeight: 700 }}>{formatCurrency(ngoaiKhoaDeduction)}</span>
-                                                   <span style={{ fontWeight: 700 }}>đ</span>
-                                                </div>
-                                             </div>
-                                          )}
-                                          <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
-                                             Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
-                                          </div>
-                                       </>
-                                    )}
+                                    <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
+                                       Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
+                                    </div>
                                  </div>
                               )}
                            </>
@@ -2021,160 +1773,12 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      </div>
 
                      <div className="im-section">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
-                           <h3 className="im-section-title" style={{ marginBottom: 0 }}>
-                              <Receipt size={18} /> Phụ thu (Nếu có)
-                           </h3>
-                           <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                 type="button"
-                                 onClick={() => setShowPhuPhiTable(!showPhuPhiTable)}
-                                 style={{
-                                    padding: '6px 12px',
-                                    background: showPhuPhiTable ? '#e0e7ff' : '#f1f5f9',
-                                    color: showPhuPhiTable ? '#4338ca' : '#475569',
-                                    border: '1px solid #cbd5e1',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 600
-                                 }}
-                              >
-                                 <List size={15} /> {showPhuPhiTable ? 'Ẩn Bảng Phụ Thu' : 'Bảng Phụ Thu'}
-                              </button>
-                              <button
-                                 type="button"
-                                 className="btn-add-surcharge"
-                                 onClick={() => setShowPhuPhiModal(true)}
-                                 style={{
-                                    padding: '6px 12px',
-                                    background: '#f5f3ff',
-                                    color: '#7c3aed',
-                                    border: '1px solid #ddd6fe',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 600
-                                 }}
-                              >  
-                                 <Plus size={14} /> Thêm khoản phụ thu
-                              </button>
-                           </div>
-                        </div>
-
-                        {/* BẢNG PHỤ THU (tbl_phuphi) */}
-                        {showPhuPhiTable && (
-                           <div style={{ marginBottom: '1.25rem', border: '1px solid #cbd5e1', borderRadius: '10px', overflow: 'hidden', background: '#ffffff' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                 <thead>
-                                    <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', textTransform: 'uppercase', fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>
-                                       <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px' }}>Chọn</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'left' }}>Tên Khoản Phụ Phí</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Đơn giá (VNĐ)</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'center', width: '100px' }}>Số lượng</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Thành tiền (VNĐ)</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody>
-                                    {phuPhiList.length > 0 ? (
-                                       phuPhiList.map((item) => {
-                                          const isChecked = selectedPhuPhiIds.includes(item.id);
-                                          const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-                                          const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-                                          const unitPrice = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-                                          const qty = Math.max(1, parseInt(phuPhiQuantities[item.id], 10) || 1);
-                                          const totalAmount = unitPrice * qty;
-
-                                          return (
-                                             <tr
-                                                key={item.id}
-                                                onClick={() => toggleSelectPhuPhi(item.id)}
-                                                style={{
-                                                   cursor: 'pointer',
-                                                   borderBottom: '1px solid #e2e8f0',
-                                                   backgroundColor: isChecked ? '#dcfce7' : '#ffffff',
-                                                   color: isChecked ? '#15803d' : '#334155',
-                                                   fontWeight: isChecked ? '700' : '500',
-                                                   transition: 'background-color 0.15s ease, border-color 0.15s ease'
-                                                }}
-                                             >
-                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                   <input
-                                                      type="checkbox"
-                                                      checked={isChecked}
-                                                      onChange={() => { }} // Handled by row onClick
-                                                      style={{ accentColor: '#16a34a', width: '18px', height: '18px', cursor: 'pointer' }}
-                                                   />
-                                                </td>
-                                                <td style={{ padding: '10px 12px' }}>{name}</td>
-                                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                                                   {formatCurrency(unitPrice)} ₫
-                                                </td>
-                                                <td style={{ padding: '6px 12px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                                                   <input
-                                                      type="number"
-                                                      min="1"
-                                                      value={phuPhiQuantities[item.id] !== undefined ? phuPhiQuantities[item.id] : 1}
-                                                      onChange={(e) => handlePhuPhiQuantityChange(item.id, e.target.value)}
-                                                      style={{
-                                                         width: '60px',
-                                                         padding: '4px 6px',
-                                                         textAlign: 'center',
-                                                         borderRadius: '6px',
-                                                         border: '1px solid #cbd5e1',
-                                                         fontWeight: 'bold',
-                                                         color: isChecked ? '#15803d' : '#1e293b',
-                                                         background: isChecked ? '#ffffff' : '#f8fafc',
-                                                         outline: 'none'
-                                                      }}
-                                                   />
-                                                </td>
-                                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: isChecked ? 800 : 600 }}>
-                                                   {formatCurrency(totalAmount)} ₫
-                                                </td>
-                                             </tr>
-                                          );
-                                       })
-                                    ) : (
-                                       <tr>
-                                          <td colSpan={5} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                                             Chưa có dữ liệu phụ phí trong bảng tbl_phuphi. Bấm "Thêm khoản phụ thu" để thêm.
-                                          </td>
-                                       </tr>
-                                    )}
-                                 </tbody>
-                                 <tfoot>
-                                    <tr style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
-                                       <td colSpan={4} style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontSize: '0.9rem' }}>
-                                          Tổng tiền phụ thu chọn từ bảng:
-                                       </td>
-                                       <td style={{ padding: '10px 12px', textAlign: 'right', color: '#15803d', fontSize: '1rem', fontWeight: 900 }}>
-                                          {formatCurrency(selectedPresetSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0))} ₫
-                                       </td>
-                                    </tr>
-                                 </tfoot>
-                              </table>
-                           </div>
-                        )}
-
-                        {/* DÒNG PHỤ THU NHẬP TAY NẾU CÓ */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>Phụ thu khác (Nhập thủ công):</span>
-                           <button
-                              type="button"
-                              onClick={addSurcharge}
-                              style={{ border: 'none', background: 'transparent', color: '#3b82f6', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                           >
-                              <Plus size={14} /> Thêm dòng thủ công
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                           <h3 className="im-section-title" style={{ marginBottom: 0 }}><Receipt size={18} /> Phụ thu (Nếu có)</h3>
+                           <button className="btn-add-surcharge" onClick={addSurcharge} style={{ padding: '6px 12px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                              <Plus size={14} /> Thêm khoản phụ thu
                            </button>
                         </div>
-
                         {(invoiceData.phuthu && invoiceData.phuthu.length > 0) ? (
                            <div className="surcharge-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               {invoiceData.phuthu.map((pt, idx) => (
@@ -2182,7 +1786,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                                     <input
                                        className="im-input-text"
                                        type="text"
-                                       placeholder="Tên khoản phụ thu thủ công..."
+                                       placeholder="Tên khoản phụ thu..."
                                        value={pt.name}
                                        onChange={(e) => updateSurcharge(idx, 'name', e.target.value)}
                                        style={{ background: '#f1f5f9', border: 'none' }}
@@ -2205,13 +1809,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         ) : (
                            <div style={{ textAlign: 'center', padding: '15px', border: '1px dashed #e2e8f0', borderRadius: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
                               Chưa có khoản phụ thu nào được thêm.
-                           </div>
-                        )}
-
-                        {surchargeSum > 0 && (
-                           <div style={{ marginTop: '12px', padding: '10px 14px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 700, color: '#047857', fontSize: '0.92rem' }}>💰 Tổng cộng tất cả khoản phụ thu:</span>
-                              <span style={{ fontWeight: 900, color: '#047857', fontSize: '1.05rem' }}>+{formatCurrency(surchargeSum)} ₫</span>
                            </div>
                         )}
                      </div>
@@ -2379,7 +1976,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          {warningModal.isOpen && (
             <div className="im-modal-overlay">
                <div className="im-warning-modal animate-slide-up">
-                  <button className="im-close-btn" onClick={() => setWarningModal({ isOpen: false, title: '', message: '', onConfirm: null })}>
+                  <button className="im-close-btn" onClick={() => setWarningModal({ ...warningModal, isOpen: false })}>
                      <X size={20} />
                   </button>
                   <div className="im-warning-icon">
@@ -2388,21 +1985,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   <h3>{warningModal.title}</h3>
                   <p>{warningModal.message}</p>
                   <div className="im-warning-actions">
-                     <button
-                        className="im-btn-warn-confirm"
-                        onClick={() => {
-                           const cb = warningModal.onConfirm;
-                           setWarningModal({ isOpen: false, title: '', message: '', onConfirm: null });
-                           if (cb) cb();
-                        }}
-                     >
-                        Xác Nhận Xuất
-                     </button>
-                     <button
-                        className="im-btn-warn-cancel"
-                        onClick={() => setWarningModal({ isOpen: false, title: '', message: '', onConfirm: null })}
-                     >
-                        Không Xuất
+                     <button className="im-btn-warn-ok" onClick={() => setWarningModal({ ...warningModal, isOpen: false })}>
+                        Đã Hiểu & Kiểm Tra Lại
                      </button>
                   </div>
                </div>
@@ -2438,283 +2022,126 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             </div>
          )}
 
-         {/* MODAL QUẢN LÝ BẢNG PHỤ PHÍ (tbl_phuphi) */}
-         {showPhuPhiModal && (
-            <div className="im-modal-overlay">
-               <div className="im-warning-modal animate-slide-up" style={{ maxWidth: '650px', width: '90%', textAlign: 'left', background: '#ffffff', padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>
-                     <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Receipt size={22} color="#7c3aed" /> Quản Lý Bảng Phụ Phí (tbl_phuphi)
-                     </h3>
-                     <button className="im-close-btn" style={{ position: 'static' }} onClick={() => { setShowPhuPhiModal(false); cancelEditPhuPhi(); }}>
-                        <X size={20} />
-                     </button>
-                  </div>
-
-                  {/* FORM THÊM / SỬA HẠNG MỤC PHỤ PHÍ */}
-                  <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', marginBottom: '1.25rem', border: '1px solid #e2e8f0' }}>
-                     <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '10px', color: '#334155' }}>
-                        {editingPhuPhiId ? '✏️ Chỉnh sửa phụ phí' : '➕ Thêm khoản phụ phí mới'}
-                     </div>
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px auto', gap: '10px', alignItems: 'center' }}>
-                        <input
-                           type="text"
-                           placeholder="Tên phụ phí (VD: Tiền đồng phục, Dã ngoại...)"
-                           value={phuPhiForm.name}
-                           onChange={(e) => setPhuPhiForm({ ...phuPhiForm, name: e.target.value })}
-                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none' }}
-                        />
-                        <input
-                           type="text"
-                           placeholder="Số tiền"
-                           value={formatCurrency(phuPhiForm.amount)}
-                           onChange={(e) => {
-                              const num = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
-                              setPhuPhiForm({ ...phuPhiForm, amount: num });
-                           }}
-                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', textAlign: 'right', outline: 'none' }}
-                        />
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                           <button
-                              type="button"
-                              onClick={handleSavePhuPhiItem}
-                              style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}
-                           >
-                              {editingPhuPhiId ? 'Lưu' : 'Thêm'}
-                           </button>
-                           {editingPhuPhiId && (
-                              <button
-                                 type="button"
-                                 onClick={cancelEditPhuPhi}
-                                 style={{ padding: '8px 12px', background: '#94a3b8', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem' }}
-                              >
-                                 Hủy
-                              </button>
-                           )}
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* DANH SÁCH HẠNG MỤC PHỤ PHÍ TRONG DATABASE */}
-                  <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                        <thead>
-                           <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#475569', fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                              <th style={{ padding: '10px 12px', textAlign: 'left' }}>Tên Phụ Phí</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'right' }}>Số Tiền</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'center', width: '90px' }}>Thao tác</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {phuPhiList.length > 0 ? (
-                              phuPhiList.map((item) => {
-                                 const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-                                 const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-                                 const amount = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-                                 return (
-                                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                       <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e293b' }}>{name}</td>
-                                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>{formatCurrency(amount)} ₫</td>
-                                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                             <button
-                                                type="button"
-                                                onClick={() => startEditPhuPhi(item)}
-                                                style={{ background: '#e0f2fe', color: '#0284c7', border: 'none', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }}
-                                                title="Sửa"
-                                             >
-                                                <Edit2 size={14} />
-                                             </button>
-                                             <button
-                                                type="button"
-                                                onClick={() => handleDeletePhuPhi(item.id)}
-                                                style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }}
-                                                title="Xóa"
-                                             >
-                                                <Trash2 size={14} />
-                                             </button>
-                                          </div>
-                                       </td>
-                                    </tr>
-                                 );
-                              })
-                           ) : (
-                              <tr>
-                                 <td colSpan={3} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                                    Chưa có khoản phụ phí nào trong bảng tbl_phuphi.
-                                 </td>
-                              </tr>
-                           )}
-                        </tbody>
-                     </table>
-                  </div>
-               </div>
-            </div>
-         )}
-
          {/* HIDDEN TEMPLATE FOR INVOICE PNG EXPORT */}
          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: '100%', overflow: 'hidden', opacity: 0.01, zIndex: -100, pointerEvents: 'none', background: '#ffffff' }}>
-            <div id="download-invoice-node" data-invoice-id={downloadingInvoice?.mahd || ''} className="print-a5-receipt" style={{ width: '800px', background: '#fff', padding: '30px', boxSizing: 'border-box', display: 'block', opacity: 0.01 }}>
-               {/* HEADER */}
-               <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* LEFT: Logo */}
-                  <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
-                  </div>
-
-                  {/* CENTER: Info */}
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        {config?.tencongty || 'TRƯỜNG MẦM NON DOREMI'}
-                     </h3>
-                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
-                     <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
-                  </div>
-
-                  {/* RIGHT: Invoice info */}
-                  <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
-                     <div>Mã BL: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
-                     <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : "..."}</span></div>
-                  </div>
+            <div id="download-invoice-node" style={{ position: 'relative', overflow: 'hidden', padding: '30px', background: 'white', color: '#000', width: '800px', fontFamily: 'Arial, sans-serif' }}>
+               {/* Invoice Template Content ... (remains same) */}
+               <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 0,
+                  opacity: 0.2,
+                  pointerEvents: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q 25 20 50 10 T 100 10' fill='none' stroke='%230066cc' stroke-width='0.5'/%3E%3Cpath d='M0 5 Q 25 15 50 5 T 100 5' fill='none' stroke='%230066cc' stroke-width='0.3' opacity='0.5'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'repeat'
+               }} />
+               <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%) rotate(-30deg)',
+                  fontSize: '60pt',
+                  fontWeight: 'bold',
+                  color: 'rgba(0, 102, 204, 0.05)',
+                  zIndex: 0,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  textAlign: 'center',
+                  width: '150%'
+               }}>
+                  {config?.tencongty || 'ĐÃ THANH TOÁN'}
                </div>
-
-               {/* TITLE */}
-               <div style={{ textAlign: "center", fontWeight: "950", fontSize: "24pt", margin: "20px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
-                  BIÊN LAI THU HỌC PHÍ
-               </div>
-
-               {/* INFO */}
-               <div style={{ fontSize: "15pt", lineHeight: "1.9", color: '#000' }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                     <div>Họ và tên học sinh: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingInvoice?.tenhv}</b></div>
-                     <div>Mã HS: <b style={{ fontWeight: 950, fontSize: '18pt' }}>{downloadingInvoice?.mahv}</b></div>
-                  </div>
-
-                  {/* FEES BOX */}
-                  <div style={{
-                     background: '#f0f9ff',
-                     border: '1px solid #bae6fd',
-                     borderRadius: '16px',
-                     padding: '24px',
-                     marginTop: '15px',
-                     lineHeight: '1.6'
-                  }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
-                        <div style={{ fontWeight: 600 }}>Học phí:</div>
-                        <div style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi}</div>
+               <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     {/* LEFT: Logo */}
+                     <div style={{ width: '180px', textAlign: 'left' }}>
+                        <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '160px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
                      </div>
 
-                     {parseInt(String(downloadingInvoice?.giamhocphi).replace(/\D/g, '')) > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
-                           <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
-                           <div style={{ fontWeight: 900 }}>{downloadingInvoice?.giamhocphi}</div>
-                        </div>
-                     )}
+                     {/* CENTER: Info */}
+                     <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
+                           {config?.tencongty || 'Tên Công Ty'}
+                        </h2>
+                        <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
+                     </div>
 
-                     {(() => {
-                        if (!downloadingInvoice?.phuthu) return null;
-                        let phuThuList = [];
-                        if (Array.isArray(downloadingInvoice.phuthu)) {
-                           phuThuList = downloadingInvoice.phuthu;
-                        } else if (typeof downloadingInvoice.phuthu === 'string') {
-                           try {
-                              phuThuList = JSON.parse(downloadingInvoice.phuthu);
-                           } catch (_) {}
-                        }
-                        if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
-
-                        let lateFeeSum = 0;
-                        const otherFees = [];
-                        phuThuList.forEach(pt => {
-                           if (!pt) return;
-                           const name = pt.name || pt.tenpp || pt.ten || pt.baseName || 'Phụ thu';
-                           const amount = Number(pt.amount) || 0;
-                           if (amount <= 0) return;
-                           if (name.toLowerCase().includes('trả trễ')) {
-                              lateFeeSum += amount;
-                           } else {
-                              otherFees.push({ name, amount });
-                           }
-                        });
-                        if (otherFees.length === 0 && lateFeeSum === 0) return null;
-
-                        return (
-                           <>
-                              <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
-                              {otherFees.map((pt, i) => (
-                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ {pt.name}:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
-                                 </div>
-                              ))}
-                              {lateFeeSum > 0 && (
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)} đ</div>
-                                 </div>
-                              )}
-                           </>
-                        );
-                     })()}
-
-                     {(parseInt(String(downloadingInvoice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingInvoice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingInvoice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
-                        <>
-                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
-                           {parseInt(String(downloadingInvoice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualMealRefund} đ</div>
-                              </div>
-                           )}
-                           {parseInt(String(downloadingInvoice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
-                                 <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualTuitionRefund} đ</div>
-                              </div>
-                           )}
-                           {parseInt(String(downloadingInvoice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
-                                 <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.ngoaiKhoaDeduction} đ</div>
-                              </div>
-                           )}
-                        </>
-                     )}
-
-                     <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
-                        <div>TỔNG CỘNG:</div>
-                        <div>{downloadingInvoice?.tongcong} VNĐ</div>
+                     {/* RIGHT: Invoice info */}
+                     <div style={{ width: '150px', textAlign: 'right', fontSize: '14px' }}>
+                        <div>Mã HĐ: <b style={{ fontWeight: 950 }}>{downloadingInvoice?.mahd}</b></div>
+                        <div>Ngày lập: <span style={{ fontWeight: 600 }}>{downloadingInvoice ? new Date(downloadingInvoice.ngaylap).toLocaleDateString("vi-VN") : ""}</span></div>
                      </div>
                   </div>
-
-                  <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
-                     <div style={{ marginBottom: '5px' }}>Khóa học: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.tenlop}</b></div>
-                     <div style={{ marginBottom: '5px' }}>Tháng đóng học phí/Thời lượng: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.thoiluong || "..."}</b></div>
-                     <div style={{ marginBottom: '5px' }}>Hình thức thanh toán: <b style={{ fontWeight: 900 }}>{downloadingInvoice?.hinhthuc || "..."}</b></div>
-                     {downloadingInvoice?.diemDanhInfo && (
-                        <div style={{ opacity: 0.9 }}>
-                           Điểm danh ({downloadingInvoice.diemDanhInfo.statsPeriod}):
-                           <span> Đi học: <b style={{ fontWeight: 900 }}>{downloadingInvoice.diemDanhInfo.diHoc}</b></span>,
-                           <span> Nghỉ phép: <b style={{ fontWeight: 900 }}>{downloadingInvoice.diemDanhInfo.nghiPhep}</b></span>,
-                           <span> Nghỉ KP: <b style={{ fontWeight: 900 }}>{downloadingInvoice.diemDanhInfo.nghiKP || 0}</b></span>
+                  <div style={{ textAlign: "center", fontWeight: "950", fontSize: "20pt", margin: "15px 0", color: '#000', textTransform: 'uppercase', textDecoration: 'underline' }}>
+                     BIÊN LAI THU HỌC PHÍ
+                  </div>
+                  <div style={{ fontSize: "14pt", lineHeight: "1.8", margin: '20px 0' }}>
+                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: '5px' }}>
+                        <div>Họ và tên: <b>{downloadingInvoice?.tenhv}</b></div>
+                        <div>SĐT: <b>{downloadingInvoice?.sdt || ""}</b></div>
+                     </div>
+                     <div>Khóa học: <b>{downloadingInvoice?.tenlop}</b></div>
+                     <div>
+                        Tháng đóng học phí/Thời lượng: <b>{downloadingInvoice?.thoiluong || "..."}</b>
+                     </div>
+                     <div style={{ marginTop: '5px' }}>
+                        Hình thức đóng tiền: <b>{downloadingInvoice?.hinhthuc || "..."}</b>
+                     </div>
+                     <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+                     <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <div>Học phí: <b>{downloadingInvoice?.hocphi} đ</b></div>
+                        <div>Giảm HP: <b>{downloadingInvoice?.giamhocphi} đ</b></div>
+                        <div>{downloadingInvoice?.nocu && String(downloadingInvoice.nocu).startsWith('-') ? 'Tiền dư đối trừ' : 'Nợ cũ'}: <b>{downloadingInvoice?.nocu} đ</b></div>
+                     </div>
+                     {downloadingInvoice?.phuthu && downloadingInvoice.phuthu.length > 0 && (
+                        <div style={{ marginTop: '5px', padding: '5px', background: '#f9fafb', borderRadius: '4px' }}>
+                           {downloadingInvoice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12pt' }}>
+                                 <span>+ {pt.name || 'Phụ thu'}:</span>
+                                 <b>{formatCurrency(pt.amount)} đ</b>
+                              </div>
+                           ))}
                         </div>
                      )}
-                     {downloadingInvoice?.ghichu && (
-                        <div style={{ marginTop: '10px' }}>Ghi chú: <b style={{ fontWeight: 800 }}>{downloadingInvoice?.ghichu}</b></div>
+                     {downloadingInvoice?.deductionSum > 0 && (
+                        <div style={{ marginTop: '5px', padding: '8px', background: '#ecfdf5', borderRadius: '4px', color: '#065f46', fontSize: '11pt' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>- Hoàn trả tiền ăn (Nghỉ liên tiếp ≥3 ngày):</span>
+                              <b>-{formatCurrency(downloadingInvoice?.actualMealRefund || 0)} đ</b>
+                           </div>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                              <span>- Hoàn trả học phí (Nghỉ liên tiếp ≥6 ngày):</span>
+                              <b>-{formatCurrency(Math.round(downloadingInvoice?.actualTuitionRefund || 0))} đ</b>
+                           </div>
+                           {(Number(downloadingInvoice?.ngoaiKhoaDeduction) || 0) > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                 <span>- Trừ tiền dã ngoại tháng trước:</span>
+                                 <b>-{formatCurrency(downloadingInvoice?.ngoaiKhoaDeduction || 0)} đ</b>
+                              </div>
+                           )}
+                        </div>
                      )}
+                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: '5px' }}>
+                        <div>Tổng cộng: <b>{downloadingInvoice?.tongcong} đ</b></div>
+                        <div>Đã đóng: <b style={{ color: '#059669' }}>{downloadingInvoice?.dadong} đ</b></div>
+                        <div>Còn lại: <b style={{ color: '#dc2626' }}>{downloadingInvoice?.conno} đ</b></div>
+                     </div>
+                     <div style={{ marginTop: '10px' }}>
+                        Ghi chú: {downloadingInvoice?.ghichu || ""}
+                     </div>
                   </div>
-               </div>
-
-               {/* FOOTER */}
-               <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
-                  <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Doremi Preschool
-                     Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
+                  <div style={{ marginTop: 40, fontSize: "12pt", display: "flex", justifyContent: "space-between" }}>
+                     <div>
+                        Facebook: Trường Lá - E Skills School <br />
+                        SĐT/Zalo: {config?.sdtcongty}
+                     </div>
+                     <div style={{ textAlign: "center" }}>
+                        Nhân viên thu tiền <br /><br /><br />
+                        <b>{downloadingInvoice?.nhanvien}</b>
+                     </div>
                   </div>
-                  <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
-                     (Xác nhận)
+                  <div style={{ marginTop: "30px", textAlign: "center", fontStyle: "italic", borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '10pt' }}>
+                     Lưu ý: Hóa đơn này có giá trị xác nhận việc đóng phí. Vui lòng giữ lại để đối chiếu khi cần thiết.
                   </div>
                </div>
             </div>
@@ -2731,7 +2158,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   {/* CENTER: Info */}
                   <div style={{ flex: 1, textAlign: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        TRƯỜNG MẦM NON DOREMI
+                        TRƯỜNG LÁ TAM PHƯỚC
                      </h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
@@ -2777,35 +2204,17 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         </div>
                      )}
 
-                     {(() => {
-                        if (!downloadingNotice?.phuthu || downloadingNotice.phuthu.length === 0) return null;
-                        let lateFeeSum = 0;
-                        const otherFees = [];
-                        downloadingNotice.phuthu.forEach(pt => {
-                           if (pt.name && pt.name.toLowerCase().includes('trả trễ')) {
-                              lateFeeSum += Number(pt.amount) || 0;
-                           } else {
-                              otherFees.push(pt);
-                           }
-                        });
-                        return (
-                           <>
-                              <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
-                              {otherFees.map((pt, i) => (
-                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
-                                 </div>
-                              ))}
-                              {lateFeeSum > 0 && (
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                                    <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)} đ</div>
-                                 </div>
-                              )}
-                           </>
-                        );
-                     })()}
+                     {downloadingNotice?.phuthu && downloadingNotice.phuthu.length > 0 && (
+                        <>
+                           <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
+                           {downloadingNotice.phuthu.map((pt, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
+                                 <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
+                                 <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
+                              </div>
+                           ))}
+                        </>
+                     )}
 
                      {(parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 || parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0) && (
                         <>
@@ -2877,9 +2286,9 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Doremi Preschool
+                     Facebook: Trường Lá - Eskills School
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{cashier}</b>
                   </div>
                   <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                      (Xác nhận)
@@ -2898,7 +2307,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      `}
                   </style>
                   <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.1rem', fontWeight: 700 }}>
-                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh biên lai...'}
+                     {downloadingNotice ? 'Đang tạo ảnh thông báo...' : 'Đang tạo ảnh hóa đơn...'}
                   </h3>
                   <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Vui lòng đợi giây lát</p>
                </div>
@@ -2911,7 +2320,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                <div className="sp-success-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '20px', maxWidth: '100%', width: '450px', background: 'white', borderRadius: '12px', position: 'relative' }}>
                   <button onClick={() => setPreviewImg(null)} style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={20} /></button>
                   <p style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#0369a1', fontSize: '1rem' }}>
-                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ BIÊN LAI
+                     NHẤN GIỮ HÌNH ĐỂ LƯU / CHIA SẺ HÓA ĐƠN
                   </p>
                   <img src={previewImg} alt="Preview Invoice" style={{ width: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
                   <div style={{ marginTop: '15px', textAlign: 'center' }}>
