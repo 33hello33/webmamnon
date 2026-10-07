@@ -54,6 +54,225 @@ const TAB_OPTIONS = [
   { id: 'export_excel', label: 'Xuất Excel (Quyền)' }
 ];
 
+const TruTienAnModal = ({ isOpen, onClose, initialData, onSave }) => {
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      let dataObj = initialData;
+      if (typeof dataObj === 'string' && dataObj.trim().startsWith('{')) {
+        try {
+          dataObj = JSON.parse(dataObj);
+        } catch (e) {
+          dataObj = {};
+        }
+      }
+      if (!dataObj || typeof dataObj !== 'object') {
+        dataObj = {};
+      }
+      const list = Object.entries(dataObj).map(([k, v], idx) => ({
+        id: `tta_${idx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        amount: k,
+        truNghi: v?.tru_nghi !== undefined ? String(v.tru_nghi) : '0'
+      }));
+      setItems(list);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleUpdateItem = (id, field, value) => {
+    setItems(prev => prev.map(item => (item.id === id ? { ...item, [field]: value } : item)));
+  };
+
+  const handleAddItem = () => {
+    setItems(prev => [
+      ...prev,
+      {
+        id: `tta_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        amount: '',
+        truNghi: ''
+      }
+    ]);
+  };
+
+  const handleRemoveItem = (id) => {
+    setItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleClose = () => {
+    const resultObj = {};
+    items.forEach(item => {
+      const cleanAmt = String(item.amount).replace(/\D/g, '');
+      const amt = parseInt(cleanAmt, 10);
+      const cleanTru = String(item.truNghi).replace(/\D/g, '');
+      const tru = parseInt(cleanTru, 10) || 0;
+      if (cleanAmt !== '' && Number.isFinite(amt)) {
+        resultObj[String(amt)] = { tru_nghi: tru };
+      }
+    });
+    onSave(resultObj);
+    onClose();
+  };
+
+  return createPortal(
+    <div className="config-modal-overlay" onClick={handleClose}>
+      <div className="config-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Cấu hình mức trừ tiền ăn</h3>
+          <button type="button" className="btn-close" onClick={handleClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
+            Thiết lập số tiền hoàn trả (trừ) mỗi ngày nghỉ có phép dựa trên mức học phí tháng.
+            Ví dụ: Nếu tiền ăn là 650,000đ thì trừ 20,000đ/ngày.
+          </p>
+          <div className="tier-list">
+            <div className="tier-header">
+              <span>Mức tiền ăn (VNĐ)</span>
+              <span>Tiền trừ/ngày (VNĐ)</span>
+              <span></span>
+            </div>
+            {items.map(item => (
+              <div key={item.id} className="tier-item">
+                <input
+                  type="text"
+                  value={formatCurrency(item.amount)}
+                  onChange={(e) => handleUpdateItem(item.id, 'amount', e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
+                  placeholder="VD: 650000"
+                />
+                <input
+                  type="text"
+                  value={formatCurrency(item.truNghi)}
+                  onChange={(e) => handleUpdateItem(item.id, 'truNghi', e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
+                  placeholder="VD: 20000"
+                />
+                <button type="button" className="btn-remove-tier" onClick={() => handleRemoveItem(item.id)}>×</button>
+              </div>
+            ))}
+            <button type="button" className="btn-add-tier" onClick={handleAddItem}>
+              <Plus size={16} /> Thêm mức mới
+            </button>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn-confirm" onClick={handleClose}>Xong</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+const NghiLienTiepModal = ({ isOpen, onClose, initialData, onSave }) => {
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const dataObj = normalizeConsecutiveRefundConfig(initialData);
+      const list = Object.entries(dataObj).map(([k, v], idx) => ({
+        id: `nlt_${idx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        days: k,
+        tiengiam: v?.tiengiam !== undefined ? String(v.tiengiam) : '0'
+      }));
+      setItems(list);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleUpdateItem = (id, field, value) => {
+    setItems(prev => prev.map(item => (item.id === id ? { ...item, [field]: value } : item)));
+  };
+
+  const handleAddItem = () => {
+    setItems(prev => {
+      const existingDays = prev
+        .map(i => parseInt(String(i.days).replace(/\D/g, ''), 10))
+        .filter(d => Number.isFinite(d) && d > 0)
+        .sort((a, b) => a - b);
+      let nextDay = existingDays.length > 0 ? existingDays[existingDays.length - 1] + 1 : 6;
+      return [
+        ...prev,
+        {
+          id: `nlt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          days: String(nextDay),
+          tiengiam: '0'
+        }
+      ];
+    });
+  };
+
+  const handleRemoveItem = (id) => {
+    setItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleClose = () => {
+    const resultObj = {};
+    items.forEach(item => {
+      const cleanDays = String(item.days).replace(/\D/g, '');
+      const days = parseInt(cleanDays, 10);
+      const cleanTienGiam = String(item.tiengiam).replace(/\D/g, '');
+      const tiengiam = Math.max(0, parseInt(cleanTienGiam, 10) || 0);
+      if (cleanDays !== '' && Number.isFinite(days) && days > 0) {
+        resultObj[String(days)] = { tiengiam };
+      }
+    });
+    const finalConfig = Object.keys(resultObj).length > 0 ? resultObj : DEFAULT_CONSECUTIVE_REFUND_CONFIG;
+    onSave(normalizeConsecutiveRefundConfig(finalConfig));
+    onClose();
+  };
+
+  return createPortal(
+    <div className="config-modal-overlay" onClick={handleClose}>
+      <div className="config-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Cấu hình hoàn học phí</h3>
+          <button type="button" className="btn-close" onClick={handleClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
+            Thiết lập các mức hoàn học phí theo tổng số ngày nghỉ có phép.
+            Hệ thống sẽ chọn mức cao nhất phù hợp cho tổng ngày nghỉ và nhân với tổng số ngày đó.
+          </p>
+          <div className="tier-list">
+            <div className="tier-header">
+              <span>Tổng số ngày nghỉ</span>
+              <span>Số tiền giảm / ngày (VNĐ)</span>
+              <span></span>
+            </div>
+            {items.map(item => (
+              <div key={item.id} className="tier-item">
+                <input
+                  type="number"
+                  min="1"
+                  value={item.days}
+                  onChange={(e) => handleUpdateItem(item.id, 'days', e.target.value.replace(/\D/g, ''))}
+                  placeholder="VD: 6"
+                />
+                <input
+                  type="text"
+                  value={formatCurrency(item.tiengiam)}
+                  onChange={(e) => handleUpdateItem(item.id, 'tiengiam', e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
+                  placeholder="VD: 500000"
+                />
+                <button type="button" className="btn-remove-tier" onClick={() => handleRemoveItem(item.id)}>×</button>
+              </div>
+            ))}
+            <button type="button" className="btn-add-tier" onClick={handleAddItem}>
+              <Plus size={16} /> Thêm mức mới
+            </button>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn-confirm" onClick={handleClose}>Xong</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 const ConfigManager = () => {
   const { config, refreshConfig } = useConfig();
   const [formData, setFormData] = useState(null);
@@ -234,172 +453,6 @@ const ConfigManager = () => {
   const trutienanTiers = (typeof formData.trutienan === 'object' && formData.trutienan !== null) ? formData.trutienan : {};
   const consecutiveRefundConfig = normalizeConsecutiveRefundConfig(formData.nghilientiep, formData);
 
-  const handleAddConsecutiveRefundTier = () => {
-    const newTiers = { ...consecutiveRefundConfig };
-    const existingKeys = Object.keys(newTiers)
-      .map((key) => parseInt(key, 10))
-      .filter((key) => Number.isFinite(key) && key > 0)
-      .sort((left, right) => left - right);
-    let nextKey = existingKeys.length > 0 ? existingKeys[existingKeys.length - 1] + 1 : 6;
-    while (newTiers[String(nextKey)]) {
-      nextKey += 1;
-    }
-    newTiers[String(nextKey)] = { tiengiam: 0 };
-    setFormData({ ...formData, nghilientiep: newTiers });
-  };
-
-  const handleUpdateConsecutiveRefundTier = (oldKey, newKey, percent) => {
-    const newTiers = { ...consecutiveRefundConfig };
-    const previous = newTiers[oldKey];
-    const parsedNewKey = parseInt(String(newKey).replace(/\D/g, ''), 10);
-    const safeKey = Number.isFinite(parsedNewKey) && parsedNewKey > 0 ? String(parsedNewKey) : oldKey;
-    delete newTiers[oldKey];
-    newTiers[safeKey] = {
-      tiengiam: Math.max(0, parseInt(percent, 10) || 0),
-      ...(previous && typeof previous === 'object' ? previous : {})
-    };
-    newTiers[safeKey].tiengiam = Math.max(0, parseInt(percent, 10) || 0);
-    setFormData({
-      ...formData,
-      nghilientiep: newTiers
-    });
-  };
-
-  const handleRemoveConsecutiveRefundTier = (key) => {
-    const newTiers = { ...consecutiveRefundConfig };
-    delete newTiers[key];
-    setFormData({
-      ...formData,
-      nghilientiep: Object.keys(newTiers).length > 0 ? newTiers : DEFAULT_CONSECUTIVE_REFUND_CONFIG
-    });
-  };
-
-  const handleAddTier = () => {
-    const newTiers = { ...trutienanTiers };
-    newTiers["0"] = { tru_nghi: 0 };
-    setFormData({ ...formData, trutienan: newTiers });
-  };
-
-  const handleUpdateTier = (oldKey, newKey, truNghi) => {
-    const newTiers = { ...trutienanTiers };
-    const val = newTiers[oldKey];
-    delete newTiers[oldKey];
-    newTiers[newKey] = { tru_nghi: parseInt(truNghi) || 0 };
-    setFormData({ ...formData, trutienan: newTiers });
-  };
-
-  const handleRemoveTier = (key) => {
-    const newTiers = { ...trutienanTiers };
-    delete newTiers[key];
-    setFormData({ ...formData, trutienan: newTiers });
-  };
-
-
-
-  const renderTruTienAnModal = () => {
-    if (!isTruTienAnModalOpen) return null;
-
-    return createPortal(
-      <div className="config-modal-overlay">
-        <div className="config-modal">
-          <div className="modal-header">
-            <h3>Cấu hình mức trừ tiền ăn</h3>
-            <button type="button" className="btn-close" onClick={() => setIsTruTienAnModalOpen(false)}>×</button>
-          </div>
-          <div className="modal-body">
-            <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
-              Thiết lập số tiền hoàn trả (trừ) mỗi ngày nghỉ có phép dựa trên mức học phí tháng.
-              Ví dụ: Nếu tiền ăn là 650,000đ thì trừ 20,000đ/ngày.
-            </p>
-            <div className="tier-list">
-              <div className="tier-header">
-                <span>Mức tiền ăn (VNĐ)</span>
-                <span>Tiền trừ/ngày (VNĐ)</span>
-                <span></span>
-              </div>
-              {Object.entries(trutienanTiers).map(([key, val]) => (
-                <div key={key} className="tier-item">
-                  <input
-                    type="text"
-                    value={formatCurrency(key)}
-                    onChange={(e) => handleUpdateTier(key, e.target.value.replace(/,/g, ''), val.tru_nghi)}
-                    placeholder="VD: 650000"
-                  />
-                  <input
-                    type="text"
-                    value={formatCurrency(val.tru_nghi)}
-                    onChange={(e) => handleUpdateTier(key, key, e.target.value.replace(/,/g, ''))}
-                    placeholder="VD: 20000"
-                  />
-                  <button type="button" className="btn-remove-tier" onClick={() => handleRemoveTier(key)}>×</button>
-                </div>
-              ))}
-              <button type="button" className="btn-add-tier" onClick={handleAddTier}>
-                <Plus size={16} /> Thêm mức mới
-              </button>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn-confirm" onClick={() => setIsTruTienAnModalOpen(false)}>Xong</button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
-
-  const renderNghiLienTiepModal = () => {
-    if (!isNghiLienTiepModalOpen) return null;
-
-    return createPortal(
-      <div className="config-modal-overlay">
-        <div className="config-modal">
-          <div className="modal-header">
-            <h3>Cấu hình hoàn học phí</h3>
-            <button type="button" className="btn-close" onClick={() => setIsNghiLienTiepModalOpen(false)}>×</button>
-          </div>
-          <div className="modal-body">
-            <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
-              Thiết lập các mức hoàn học phí theo tổng số ngày nghỉ có phép.
-              Hệ thống sẽ chọn mức cao nhất phù hợp cho tổng ngày nghỉ và nhân với tổng số ngày đó.
-            </p>
-            <div className="tier-list">
-              <div className="tier-header">
-                <span>Tổng số ngày nghỉ</span>
-                <span>Số tiền giảm / ngày (VNĐ)</span>
-                <span></span>
-              </div>
-              {Object.entries(consecutiveRefundConfig).map(([key, val]) => (
-                <div key={key} className="tier-item">
-                  <input
-                    type="number"
-                    min="1"
-                    value={key}
-                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, e.target.value.replace(/\D/g, ''), val?.tiengiam)}
-                    placeholder="VD: 6"
-                  />
-                  <input
-                    type="text"
-                    value={formatCurrency(val?.tiengiam || 0)}
-                    onChange={(e) => handleUpdateConsecutiveRefundTier(key, key, e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
-                    placeholder="VD: 500000"
-                  />
-                  <button type="button" className="btn-remove-tier" onClick={() => handleRemoveConsecutiveRefundTier(key)}>×</button>
-                </div>
-              ))}
-              <button type="button" className="btn-add-tier" onClick={handleAddConsecutiveRefundTier}>
-                <Plus size={16} /> Thêm mức mới
-              </button>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn-confirm" onClick={() => setIsNghiLienTiepModalOpen(false)}>Xong</button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
 
   return (
     <div className="config-manager">
@@ -889,8 +942,18 @@ const ConfigManager = () => {
             </table>
           </div>
         </section>
-        {renderTruTienAnModal()}
-        {renderNghiLienTiepModal()}
+        <TruTienAnModal
+          isOpen={isTruTienAnModalOpen}
+          onClose={() => setIsTruTienAnModalOpen(false)}
+          initialData={formData.trutienan}
+          onSave={(newTiers) => setFormData(prev => ({ ...prev, trutienan: newTiers }))}
+        />
+        <NghiLienTiepModal
+          isOpen={isNghiLienTiepModalOpen}
+          onClose={() => setIsNghiLienTiepModalOpen(false)}
+          initialData={formData.nghilientiep}
+          onSave={(newTiers) => setFormData(prev => ({ ...prev, nghilientiep: newTiers }))}
+        />
       </form>
     </div>
   );
