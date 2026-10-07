@@ -1495,7 +1495,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   </div>
                 </div>
 
-                <div className="table-container inline-table">
+                <div className="table-container inline-table" style={{ overflowY: 'auto', overflowX: 'auto' }}>
                   <table className="data-table">
                     <thead>
                       <tr>

@@ -251,7 +251,6 @@ code {
 }
 
 [data-theme="kindergarten"] .placeholder-card, 
-[data-theme="kindergarten"] .table-container,
 [data-theme="kindergarten"] .card {
   border: 1px solid #e2e8f0 !important;
   border-radius: 24px !important;
@@ -259,6 +258,15 @@ code {
   box-shadow: 0 10px 25px rgba(0,0,0,0.03) !important;
   position: relative;
   overflow: hidden;
+}
+
+[data-theme="kindergarten"] .table-container {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 24px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.03) !important;
+  position: relative;
+  overflow: auto !important;
 }
 
 [data-theme="kindergarten"] .overview-stats-card:nth-child(4n+1) { background: #eff6ff !important; border-color: #dbeafe !important; }
@@ -805,7 +813,7 @@ code {
   }
 
   [data-theme="kindergarten"] .table-container {
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
     background: none !important;
     border: none !important;
     padding: 0 !important;
