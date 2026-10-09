@@ -65,7 +65,7 @@ const READ_NUMBER_VN = (number) => {
    if (!result) return 'Không đồng';
 
    // Capitalize first letter and append 'đồng'
-   return result.charAt(0).toUpperCase() + result.slice(1) + ' đồng';
+   return (result.charAt(0) || '').toUpperCase() + result.slice(1) + ' đồng';
 };
 
 const pCur = (val) => {
@@ -86,7 +86,7 @@ const fCur = (val) => {
 
 export default function TimesheetManager({ currentUser, setActiveTab, setActiveSubTab }) {
    const { config } = useConfig();
-   const schoolName = config?.tencongty || process.env.REACT_APP_COMPANY_NAME;
+   const schoolName = config?.tencongty || process.env.REACT_APP_COMPANY_NAME || 'TRƯỜNG MẦM NON';
 
    const walletOptions = useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '' },
@@ -192,6 +192,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                chuyencan: pCur(data.chuyencan),
                phucap_bhxh: pCur(data.phucap_bhxh),
                phucap_trachnhiem: pCur(data.phucap_trachnhiem),
+               phucap_kidscamp: pCur(data.phucap_kidscamp),
                phucap_dilai: pCur(data.phucap_dilai),
                phucap_chuyenmon: pCur(data.phucap_chuyenmon),
                phucap_khac: pCur(data.phucap_khac),
@@ -215,6 +216,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                chuyencan: 0,
                phucap_bhxh: 0,
                phucap_trachnhiem: 0,
+               phucap_kidscamp: 0,
                phucap_dilai: 0,
                phucap_chuyenmon: 0,
                phucap_khac: 0,
@@ -274,6 +276,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       pCur(formData.chuyencan) +
       pCur(formData.phucap_bhxh) +
       pCur(formData.phucap_trachnhiem) +
+      pCur(formData.phucap_kidscamp) +
       pCur(formData.phucap_dilai) +
       pCur(formData.phucap_chuyenmon) +
       pCur(formData.phucap_khac) +
@@ -318,6 +321,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             chuyencan: pCur(formData.chuyencan),
             phucap_bhxh: pCur(formData.phucap_bhxh),
             phucap_trachnhiem: pCur(formData.phucap_trachnhiem),
+            phucap_kidscamp: pCur(formData.phucap_kidscamp),
             phucap_dilai: pCur(formData.phucap_dilai),
             phucap_chuyenmon: pCur(formData.phucap_chuyenmon),
             phucap_khac: pCur(formData.phucap_khac),
@@ -384,27 +388,38 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
          [`Chức vụ: ${formData.chucvu}`],
          [''],
          ['DANH MỤC', 'SỐ TIỀN (VNĐ)'],
-         ['--- KHOẢN THU ---', ''],
-         ['LƯƠNG CƠ BẢN', fCur(formData.luongcoban)],
-         ['CHUYÊN CẦN', fCur(formData.chuyencan)],
-         ['PHỤ CẤP BHXH/BHYT/BHTN', fCur(formData.phucap_bhxh)],
-         ['PHỤ CẤP TRÁCH NHIỆM', fCur(formData.phucap_trachnhiem)],
-         ['PHỤ CẤP KIDS CAMP', fCur(formData.phucap_kidscamp)],
-         ['TỔNG THU NHẬP', fCur(tongThuNhap)],
-         [''],
-         ['--- KHOẢN KHẤU TRỪ ---', ''],
-         ['KHẤU TRỪ BHXH/BHYT/BHTN', fCur(formData.khautru_bhxh)],
-         ['Tạm ứng', fCur(formData.tamung)],
-         ['Khấu trừ khác', fCur(formData.khautru_khac)],
-         ['TỔNG KHẤU TRỪ', fCur(tongKhauTru)],
-         [''],
-         ['THỰC NHẬN', fCur(thucNhan)],
-         ['Bằng chữ', bangChuText],
-         ['Ghi chú', formData.ghichu || ''],
-         [''],
-         ['Người lập', 'Người nhận lương'],
-         [formData.nguoilap || '', formData.tennv || '']
+         ['--- KHOẢN THU ---', '']
       ];
+
+      if (pCur(formData.luongcoban) > 0) excelData.push(['LƯƠNG CƠ BẢN', fCur(formData.luongcoban)]);
+      if (pCur(formData.chuyencan) > 0) excelData.push(['CHUYÊN CẦN', fCur(formData.chuyencan)]);
+      if (pCur(formData.phucap_bhxh) > 0) excelData.push(['PHỤ CẤP BHXH/BHYT/BHTN', fCur(formData.phucap_bhxh)]);
+      if (pCur(formData.phucap_trachnhiem) > 0) excelData.push(['PHỤ CẤP TRÁCH NHIỆM', fCur(formData.phucap_trachnhiem)]);
+      if (pCur(formData.phucap_kidscamp) > 0) excelData.push(['PHỤ CẤP KIDS CAMP', fCur(formData.phucap_kidscamp)]);
+      if (pCur(formData.phucap_dilai) > 0) excelData.push(['PHỤ CẤP ĐI LẠI', fCur(formData.phucap_dilai)]);
+      if (pCur(formData.phucap_chuyenmon) > 0) excelData.push(['PHỤ CẤP CHUYÊN MÔN', fCur(formData.phucap_chuyenmon)]);
+      if (pCur(formData.phucap_khac) > 0) excelData.push(['PHỤ CẤP KHÁC', fCur(formData.phucap_khac)]);
+      if (pCur(formData.thuongle) > 0) excelData.push(['THƯỞNG LỄ/TẾT', fCur(formData.thuongle)]);
+      if (pCur(formData.tangluong) > 0) excelData.push(['TĂNG LƯƠNG', fCur(formData.tangluong)]);
+
+      excelData.push(['TỔNG THU NHẬP', fCur(tongThuNhap)]);
+      excelData.push(['']);
+
+      if (tongKhauTru > 0) {
+         excelData.push(['--- KHOẢN KHẤU TRỪ ---', '']);
+         if (pCur(formData.khautru_bhxh) > 0) excelData.push(['KHẤU TRỪ BHXH/BHYT/BHTN', fCur(formData.khautru_bhxh)]);
+         if (pCur(formData.tamung) > 0) excelData.push(['Tạm ứng', fCur(formData.tamung)]);
+         if (pCur(formData.khautru_khac) > 0) excelData.push(['Khấu trừ khác', fCur(formData.khautru_khac)]);
+         excelData.push(['TỔNG KHẤU TRỪ', fCur(tongKhauTru)]);
+         excelData.push(['']);
+      }
+
+      excelData.push(['THỰC NHẬN', fCur(thucNhan)]);
+      excelData.push(['Bằng chữ', bangChuText]);
+      if (formData.ghichu) excelData.push(['Ghi chú', formData.ghichu]);
+      excelData.push(['']);
+      excelData.push(['Người lập', 'Người nhận lương']);
+      excelData.push([formData.nguoilap || '', formData.tennv || '']);
 
       const ws = XLSX.utils.aoa_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
@@ -830,7 +845,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
          {createPortal(
             <div className="print-pay-slip-a4">
                <div className="p-header">
-                  <h3>{schoolName.toUpperCase()}</h3>
+                  <h3>{(schoolName || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
                   <p>BẢNG PHIẾU LƯƠNG NHÂN VIÊN - THÁNG {monthStr}</p>
                </div>
 
@@ -847,20 +862,30 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                      <tr className="p-section-header">
                         <td colSpan="2">KHOẢN THU</td>
                      </tr>
-                     <tr><td>LƯƠNG CƠ BẢN</td><td className="text-right">{fCur(formData.luongcoban)} ₫</td></tr>
-                     <tr><td>CHUYÊN CẦN</td><td className="text-right">{fCur(formData.chuyencan)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.phucap_bhxh)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP TRÁCH NHIỆM</td><td className="text-right">{fCur(formData.phucap_trachnhiem)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP KIDS CAMP</td><td className="text-right">{fCur(formData.phucap_kidscamp)} ₫</td></tr>
+                     {pCur(formData.luongcoban) > 0 && <tr><td>LƯƠNG CƠ BẢN</td><td className="text-right">{fCur(formData.luongcoban)} ₫</td></tr>}
+                     {pCur(formData.chuyencan) > 0 && <tr><td>CHUYÊN CẦN</td><td className="text-right">{fCur(formData.chuyencan)} ₫</td></tr>}
+                     {pCur(formData.phucap_bhxh) > 0 && <tr><td>PHỤ CẤP BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.phucap_bhxh)} ₫</td></tr>}
+                     {pCur(formData.phucap_trachnhiem) > 0 && <tr><td>PHỤ CẤP TRÁCH NHIỆM</td><td className="text-right">{fCur(formData.phucap_trachnhiem)} ₫</td></tr>}
+                     {pCur(formData.phucap_kidscamp) > 0 && <tr><td>PHỤ CẤP KIDS CAMP</td><td className="text-right">{fCur(formData.phucap_kidscamp)} ₫</td></tr>}
+                     {pCur(formData.phucap_dilai) > 0 && <tr><td>PHỤ CẤP ĐI LẠI</td><td className="text-right">{fCur(formData.phucap_dilai)} ₫</td></tr>}
+                     {pCur(formData.phucap_chuyenmon) > 0 && <tr><td>PHỤ CẤP CHUYÊN MÔN</td><td className="text-right">{fCur(formData.phucap_chuyenmon)} ₫</td></tr>}
+                     {pCur(formData.phucap_khac) > 0 && <tr><td>PHỤ CẤP KHÁC</td><td className="text-right">{fCur(formData.phucap_khac)} ₫</td></tr>}
+                     {pCur(formData.thuongle) > 0 && <tr><td>THƯỞNG LỄ/TẾT</td><td className="text-right">{fCur(formData.thuongle)} ₫</td></tr>}
+                     {pCur(formData.tangluong) > 0 && <tr><td>TĂNG LƯƠNG</td><td className="text-right">{fCur(formData.tangluong)} ₫</td></tr>}
 
                      <tr className="p-total-row"><td>TỔNG THU NHẬP</td><td className="text-right fw-bold">{fCur(tongThuNhap)} ₫</td></tr>
-                     <tr className="p-section-header">
-                        <td colSpan="2">KHOẢN KHẤU TRỪ</td>
-                     </tr>
-                     <tr><td>KHẤU TRỪ BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.khautru_bhxh)} ₫</td></tr>
-                     <tr><td>Tạm ứng</td><td className="text-right">{fCur(formData.tamung)} ₫</td></tr>
-                     <tr><td>Khấu trừ khác</td><td className="text-right">{fCur(formData.khautru_khac)} ₫</td></tr>
-                     <tr className="p-total-row"><td>TỔNG KHẤU TRỪ</td><td className="text-right fw-bold">{fCur(tongKhauTru)} ₫</td></tr>
+
+                     {tongKhauTru > 0 && (
+                        <>
+                           <tr className="p-section-header">
+                              <td colSpan="2">KHOẢN KHẤU TRỪ</td>
+                           </tr>
+                           {pCur(formData.khautru_bhxh) > 0 && <tr><td>KHẤU TRỪ BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.khautru_bhxh)} ₫</td></tr>}
+                           {pCur(formData.tamung) > 0 && <tr><td>Tạm ứng</td><td className="text-right">{fCur(formData.tamung)} ₫</td></tr>}
+                           {pCur(formData.khautru_khac) > 0 && <tr><td>Khấu trừ khác</td><td className="text-right">{fCur(formData.khautru_khac)} ₫</td></tr>}
+                           <tr className="p-total-row"><td>TỔNG KHẤU TRỪ</td><td className="text-right fw-bold">{fCur(tongKhauTru)} ₫</td></tr>
+                        </>
+                     )}
                      <tr className="p-net-row">
                         <td className="fw-bold fs-lg">THỰC NHẬN</td>
                         <td className="text-right fw-bold fs-lg">{fCur(thucNhan)} VNĐ</td>
