@@ -566,6 +566,89 @@
   justify-content: center;
 }
 
+/* Dynamic Custom Allowances & Deductions */
+.ts-dynamic-label-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ts-dynamic-name-input {
+  flex: 1;
+  font-weight: 600;
+  color: #334155;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  height: 28px;
+  padding: 2px 8px;
+  font-size: 0.88rem;
+}
+
+.ts-dynamic-name-input:focus {
+  border-style: solid;
+  border-color: #3b82f6;
+  background: #ffffff;
+}
+
+.ts-btn-remove-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fee2e2;
+  color: #ef4444;
+  border: none;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.ts-btn-remove-item:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.ts-row-add-action td {
+  padding: 6px 12px !important;
+  background: #f8fafc;
+}
+
+.ts-btn-add-dynamic {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px dashed #93c5fd;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ts-btn-add-dynamic:hover {
+  background: #2563eb;
+  color: white;
+  border-style: solid;
+}
+
+.ts-btn-add-danger {
+  background: #fff1f2;
+  color: #e11d48;
+  border-color: #fda4af;
+}
+
+.ts-btn-add-danger:hover {
+  background: #e11d48;
+  color: white;
+  border-style: solid;
+}
+
 /* Print Hide on Screen */
 .print-pay-slip-a4 {
   display: none;

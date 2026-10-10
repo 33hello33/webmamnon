@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, baseSupabase, generateId, insertLog } from '../supabase';
-import { Search, Save, Download, Users, ChevronLeft, ChevronRight, CheckCircle, AlertCircle, ArrowRight, Printer } from 'lucide-react';
+import { Search, Save, Download, Users, ChevronLeft, ChevronRight, CheckCircle, AlertCircle, ArrowRight, Printer, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './TimesheetManager.css';
 import { useConfig } from '../ConfigContext';
@@ -109,12 +109,19 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       manv: '',
       tennv: '',
       chucvu: '',
+      ngaycong: '',
+      ngaynghiphep: '',
       // Earnings
       luongcoban: 0,
       chuyencan: 0,
       phucap_bhxh: 0,
       phucap_trachnhiem: 0,
       phucap_kidscamp: 0,
+      phucap_dilai: 0,
+      phucap_chuyenmon: 0,
+      phucap_khac: 0,
+      thuongle: 0,
+      tangluong: 0,
       // Deductions
       khautru_bhxh: 0,
       tamung: 0,
@@ -125,6 +132,10 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       nguoiduyet: 'Người nhận lương',
       ghichu: ''
    });
+
+   // Dynamic lists for custom allowances and deductions
+   const [customAllowances, setCustomAllowances] = useState([]);
+   const [customDeductions, setCustomDeductions] = useState([]);
 
    const [existingRecord, setExistingRecord] = useState(null);
    const [successModal, setSuccessModal] = useState({ isOpen: false, message: '', recordId: '' });
@@ -184,10 +195,64 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
          if (!error && data) {
             setExistingRecord(data);
+
+            // Parse custom allowances from tbl_luong.phucap_khac (JSON)
+            let parsedAllowances = [];
+            let metaNgayCong = '';
+            let metaNgayNghiPhep = '';
+
+            if (data.phucap_khac) {
+               let raw = data.phucap_khac;
+               if (typeof raw === 'string') {
+                  try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+               }
+               if (Array.isArray(raw)) {
+                  raw.forEach((item, idx) => {
+                     if (item && item._meta) {
+                        metaNgayCong = item.ngaycong !== undefined ? item.ngaycong : '';
+                        metaNgayNghiPhep = item.ngaynghiphep !== undefined ? item.ngaynghiphep : '';
+                     } else if (item) {
+                        parsedAllowances.push({
+                           id: item.id || `pc_${Date.now()}_${idx}`,
+                           ten: item.ten || item.name || '',
+                           sotien: pCur(item.sotien || item.amount || 0)
+                        });
+                     }
+                  });
+               } else if (typeof raw === 'number' && raw > 0) {
+                  parsedAllowances.push({
+                     id: `pc_legacy`,
+                     ten: 'Phụ cấp khác',
+                     sotien: raw
+                  });
+               }
+            }
+
+            // Parse custom deductions from tbl_luong.khautru_khac2 (JSON)
+            let parsedDeductions = [];
+            if (data.khautru_khac2) {
+               let raw = data.khautru_khac2;
+               if (typeof raw === 'string') {
+                  try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+               }
+               if (Array.isArray(raw)) {
+                  parsedDeductions = raw.map((item, idx) => ({
+                     id: item.id || `kt_${Date.now()}_${idx}`,
+                     ten: item.ten || item.name || '',
+                     sotien: pCur(item.sotien || item.amount || 0)
+                  }));
+               }
+            }
+
+            setCustomAllowances(parsedAllowances);
+            setCustomDeductions(parsedDeductions);
+
             setFormData({
                manv: data.manv || emp.manv,
                tennv: data.tennv || emp.tennv,
                chucvu: data.chucvu || emp.role || 'Nhân viên',
+               ngaycong: data.ngaycong !== undefined && data.ngaycong !== null ? data.ngaycong : metaNgayCong,
+               ngaynghiphep: data.ngaynghiphep !== undefined && data.ngaynghiphep !== null ? data.ngaynghiphep : metaNgayNghiPhep,
                luongcoban: pCur(data.luongcoban),
                chuyencan: pCur(data.chuyencan),
                phucap_bhxh: pCur(data.phucap_bhxh),
@@ -195,7 +260,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                phucap_kidscamp: pCur(data.phucap_kidscamp),
                phucap_dilai: pCur(data.phucap_dilai),
                phucap_chuyenmon: pCur(data.phucap_chuyenmon),
-               phucap_khac: pCur(data.phucap_khac),
+               phucap_khac: 0,
                thuongle: pCur(data.thuongle),
                tangluong: pCur(data.tangluong),
                khautru_bhxh: pCur(data.khautru_bhxh),
@@ -208,10 +273,14 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             });
          } else {
             setExistingRecord(null);
+            setCustomAllowances([]);
+            setCustomDeductions([]);
             setFormData({
                manv: emp.manv,
                tennv: emp.tennv,
                chucvu: emp.role || 'Nhân viên',
+               ngaycong: '',
+               ngaynghiphep: '',
                luongcoban: pCur(emp.luongcoban || emp.luongtheobuoi || 0),
                chuyencan: 0,
                phucap_bhxh: 0,
@@ -270,7 +339,52 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       }));
    };
 
+   // Dynamic Allowance Handlers
+   const handleAddAllowance = () => {
+      setCustomAllowances(prev => [
+         ...prev,
+         { id: `pc_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, ten: '', sotien: 0 }
+      ]);
+   };
+
+   const handleUpdateAllowanceName = (id, newName) => {
+      setCustomAllowances(prev => prev.map(item => item.id === id ? { ...item, ten: newName } : item));
+   };
+
+   const handleUpdateAllowanceAmount = (id, rawVal) => {
+      const val = pCur(rawVal);
+      setCustomAllowances(prev => prev.map(item => item.id === id ? { ...item, sotien: val } : item));
+   };
+
+   const handleRemoveAllowance = (id) => {
+      setCustomAllowances(prev => prev.filter(item => item.id !== id));
+   };
+
+   // Dynamic Deduction Handlers
+   const handleAddDeduction = () => {
+      setCustomDeductions(prev => [
+         ...prev,
+         { id: `kt_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, ten: '', sotien: 0 }
+      ]);
+   };
+
+   const handleUpdateDeductionName = (id, newName) => {
+      setCustomDeductions(prev => prev.map(item => item.id === id ? { ...item, ten: newName } : item));
+   };
+
+   const handleUpdateDeductionAmount = (id, rawVal) => {
+      const val = pCur(rawVal);
+      setCustomDeductions(prev => prev.map(item => item.id === id ? { ...item, sotien: val } : item));
+   };
+
+   const handleRemoveDeduction = (id) => {
+      setCustomDeductions(prev => prev.filter(item => item.id !== id));
+   };
+
    // Calculations
+   const tongPhuCapKhac = customAllowances.reduce((acc, cur) => acc + pCur(cur.sotien), 0);
+   const tongKhauTruKhac2 = customDeductions.reduce((acc, cur) => acc + pCur(cur.sotien), 0);
+
    const tongThuNhap = (
       pCur(formData.luongcoban) +
       pCur(formData.chuyencan) +
@@ -279,7 +393,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       pCur(formData.phucap_kidscamp) +
       pCur(formData.phucap_dilai) +
       pCur(formData.phucap_chuyenmon) +
-      pCur(formData.phucap_khac) +
+      tongPhuCapKhac +
       pCur(formData.thuongle) +
       pCur(formData.tangluong)
    );
@@ -287,7 +401,8 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
    const tongKhauTru = (
       pCur(formData.khautru_bhxh) +
       pCur(formData.tamung) +
-      pCur(formData.khautru_khac)
+      pCur(formData.khautru_khac) +
+      tongKhauTruKhac2
    );
 
    const thucNhan = tongThuNhap - tongKhauTru;
@@ -311,6 +426,31 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             maphieuluong = await generateId('tbl_luong', 'maphieuluong', 'PL', 4);
          }
 
+         // Prepare custom allowances JSON payload
+         const phucapKhacPayload = customAllowances
+            .filter(item => (item.ten || '').trim() !== '' || pCur(item.sotien) > 0)
+            .map(item => ({
+               ten: (item.ten || '').trim() || 'Phụ cấp khác',
+               sotien: pCur(item.sotien)
+            }));
+
+         // Store ngaycong / ngaynghiphep in metadata to ensure persistence
+         if (formData.ngaycong !== '' || formData.ngaynghiphep !== '') {
+            phucapKhacPayload.push({
+               _meta: true,
+               ngaycong: formData.ngaycong,
+               ngaynghiphep: formData.ngaynghiphep
+            });
+         }
+
+         // Prepare custom deductions JSON payload (saved to tbl_luong.khautru_khac2)
+         const khautruKhac2Payload = customDeductions
+            .filter(item => (item.ten || '').trim() !== '' || pCur(item.sotien) > 0)
+            .map(item => ({
+               ten: (item.ten || '').trim() || 'Khấu trừ khác',
+               sotien: pCur(item.sotien)
+            }));
+
          const recordPayload = {
             maphieuluong,
             manv: formData.manv,
@@ -324,20 +464,21 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             phucap_kidscamp: pCur(formData.phucap_kidscamp),
             phucap_dilai: pCur(formData.phucap_dilai),
             phucap_chuyenmon: pCur(formData.phucap_chuyenmon),
-            phucap_khac: pCur(formData.phucap_khac),
+            phucap_khac: phucapKhacPayload,
             thuongle: pCur(formData.thuongle),
             tangluong: pCur(formData.tangluong),
             tongthunhap: tongThuNhap,
             khautru_bhxh: pCur(formData.khautru_bhxh),
             tamung: pCur(formData.tamung),
             khautru_khac: pCur(formData.khautru_khac),
+            khautru_khac2: khautruKhac2Payload,
             tongkhautru: tongKhauTru,
             thucnhan: thucNhan,
             bangchu: bangChuText,
             hinhthuc: formData.hinhthuc,
             nguoilap: formData.nguoilap || currentUser?.tennv || 'Hệ thống',
             nguoiduyet: formData.nguoiduyet || 'Người nhận lương',
-            ghichu: formData.ghichu,
+            ghichu: formData.ghichu || '',
             trangthai: existingRecord?.trangthai || 'Chờ duyệt',
             ngaylap: existingRecord?.ngaylap || new Date().toISOString()
          };
@@ -376,7 +517,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       }
    };
 
-   // Export to Excel
+   // Export to Excel (File name format: [tên nv] _ [tháng xuất])
    const handleExportExcel = () => {
       if (!formData.manv) return;
 
@@ -385,11 +526,19 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
          [`Tháng: ${monthStr}`],
          [`Mã nhân viên: ${formData.manv}`],
          [`Họ và tên: ${formData.tennv}`],
-         [`Chức vụ: ${formData.chucvu}`],
-         [''],
-         ['DANH MỤC', 'SỐ TIỀN (VNĐ)'],
-         ['--- KHOẢN THU ---', '']
+         [`Chức vụ: ${formData.chucvu}`]
       ];
+
+      if (formData.ngaycong !== '' && formData.ngaycong !== undefined && formData.ngaycong !== null) {
+         excelData.push([`Ngày công: ${formData.ngaycong}`]);
+      }
+      if (formData.ngaynghiphep !== '' && formData.ngaynghiphep !== undefined && formData.ngaynghiphep !== null) {
+         excelData.push([`Ngày nghỉ phép: ${formData.ngaynghiphep}`]);
+      }
+
+      excelData.push(['']);
+      excelData.push(['DANH MỤC', 'SỐ TIỀN (VNĐ)']);
+      excelData.push(['--- KHOẢN THU ---', '']);
 
       if (pCur(formData.luongcoban) > 0) excelData.push(['LƯƠNG CƠ BẢN', fCur(formData.luongcoban)]);
       if (pCur(formData.chuyencan) > 0) excelData.push(['CHUYÊN CẦN', fCur(formData.chuyencan)]);
@@ -398,7 +547,14 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       if (pCur(formData.phucap_kidscamp) > 0) excelData.push(['PHỤ CẤP KIDS CAMP', fCur(formData.phucap_kidscamp)]);
       if (pCur(formData.phucap_dilai) > 0) excelData.push(['PHỤ CẤP ĐI LẠI', fCur(formData.phucap_dilai)]);
       if (pCur(formData.phucap_chuyenmon) > 0) excelData.push(['PHỤ CẤP CHUYÊN MÔN', fCur(formData.phucap_chuyenmon)]);
-      if (pCur(formData.phucap_khac) > 0) excelData.push(['PHỤ CẤP KHÁC', fCur(formData.phucap_khac)]);
+
+      // Custom allowances
+      customAllowances.forEach(item => {
+         if (pCur(item.sotien) > 0) {
+            excelData.push([(item.ten || 'PHỤ CẤP KHÁC').toUpperCase(), fCur(item.sotien)]);
+         }
+      });
+
       if (pCur(formData.thuongle) > 0) excelData.push(['THƯỞNG LỄ/TẾT', fCur(formData.thuongle)]);
       if (pCur(formData.tangluong) > 0) excelData.push(['TĂNG LƯƠNG', fCur(formData.tangluong)]);
 
@@ -410,13 +566,23 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
          if (pCur(formData.khautru_bhxh) > 0) excelData.push(['KHẤU TRỪ BHXH/BHYT/BHTN', fCur(formData.khautru_bhxh)]);
          if (pCur(formData.tamung) > 0) excelData.push(['Tạm ứng', fCur(formData.tamung)]);
          if (pCur(formData.khautru_khac) > 0) excelData.push(['Khấu trừ khác', fCur(formData.khautru_khac)]);
+
+         // Custom deductions
+         customDeductions.forEach(item => {
+            if (pCur(item.sotien) > 0) {
+               excelData.push([(item.ten || 'KHẤU TRỪ KHÁC').toUpperCase(), fCur(item.sotien)]);
+            }
+         });
+
          excelData.push(['TỔNG KHẤU TRỪ', fCur(tongKhauTru)]);
          excelData.push(['']);
       }
 
       excelData.push(['THỰC NHẬN', fCur(thucNhan)]);
       excelData.push(['Bằng chữ', bangChuText]);
-      if (formData.ghichu) excelData.push(['Ghi chú', formData.ghichu]);
+      if (formData.ghichu && formData.ghichu.trim()) {
+         excelData.push(['Ghi chú', formData.ghichu]);
+      }
       excelData.push(['']);
       excelData.push(['Người lập', 'Người nhận lương']);
       excelData.push([formData.nguoilap || '', formData.tennv || '']);
@@ -424,12 +590,21 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       const ws = XLSX.utils.aoa_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "PhieuLuong");
-      XLSX.writeFile(wb, `PhieuLuong_${formData.manv}_${monthStr.replace('/', '_')}.xlsx`);
+      const safeEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
+      const safeMonthStr = monthStr.replace(/\//g, '_');
+      XLSX.writeFile(wb, `${safeEmpName}_${safeMonthStr}.xlsx`);
    };
 
-   // Print A4
+   // Print A4 / Save as PDF with format: [tên nv] _ [tháng xuất]
    const handlePrint = () => {
+      const originalTitle = document.title;
+      const safeEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
+      const safeMonthStr = monthStr.replace(/\//g, '_');
+      document.title = `${safeEmpName}_${safeMonthStr}`;
       window.print();
+      setTimeout(() => {
+         document.title = originalTitle;
+      }, 1500);
    };
 
    const filteredEmployees = employees.filter(e => {
@@ -596,6 +771,34 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                               </td>
                            </tr>
 
+                           {/* Ngày công */}
+                           <tr>
+                              <td className="ts-cell-label fw-bold">Ngày công</td>
+                              <td className="ts-cell-input-td" colSpan="3">
+                                 <input
+                                    type="text"
+                                    className="ts-input-raw"
+                                    placeholder="Nhập số ngày công (ví dụ: 26)..."
+                                    value={formData.ngaycong}
+                                    onChange={(e) => handleInputChange('ngaycong', e.target.value)}
+                                 />
+                              </td>
+                           </tr>
+
+                           {/* Ngày nghỉ phép */}
+                           <tr>
+                              <td className="ts-cell-label fw-bold">Ngày nghỉ phép</td>
+                              <td className="ts-cell-input-td" colSpan="3">
+                                 <input
+                                    type="text"
+                                    className="ts-input-raw"
+                                    placeholder="Nhập số ngày nghỉ phép (ví dụ: 0)..."
+                                    value={formData.ngaynghiphep}
+                                    onChange={(e) => handleInputChange('ngaynghiphep', e.target.value)}
+                                 />
+                              </td>
+                           </tr>
+
                            {/* HEADER SECTION 1: KHOẢN THU */}
                            <tr className="ts-section-header">
                               <td colSpan="4" className="fw-bold">KHOẢN THU</td>
@@ -666,6 +869,53 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                               </td>
                            </tr>
 
+                           {/* Các phụ cấp khác tự nhập (lưu vào tbl_luong.phucap_khac json) */}
+                           {customAllowances.map((item) => (
+                              <tr key={item.id} className="ts-dynamic-row">
+                                 <td className="ts-cell-label">
+                                    <div className="ts-dynamic-label-wrapper">
+                                       <input
+                                          type="text"
+                                          className="ts-input-raw ts-dynamic-name-input"
+                                          placeholder="Tên phụ cấp khác..."
+                                          value={item.ten}
+                                          onChange={(e) => handleUpdateAllowanceName(item.id, e.target.value)}
+                                       />
+                                       <button
+                                          type="button"
+                                          className="ts-btn-remove-item"
+                                          title="Xóa phụ cấp này"
+                                          onClick={() => handleRemoveAllowance(item.id)}
+                                       >
+                                          <Trash2 size={14} />
+                                       </button>
+                                    </div>
+                                 </td>
+                                 <td className="ts-cell-input-td" colSpan="3">
+                                    <input
+                                       type="text"
+                                       className="ts-input-num"
+                                       placeholder="0"
+                                       value={fCur(item.sotien)}
+                                       onChange={(e) => handleUpdateAllowanceAmount(item.id, e.target.value)}
+                                    />
+                                 </td>
+                              </tr>
+                           ))}
+
+                           {/* Nút thêm phụ cấp khác */}
+                           <tr className="ts-row-add-action">
+                              <td colSpan="4">
+                                 <button
+                                    type="button"
+                                    className="ts-btn-add-dynamic"
+                                    onClick={handleAddAllowance}
+                                 >
+                                    <Plus size={14} /> Thêm phụ cấp khác
+                                 </button>
+                              </td>
+                           </tr>
+
                            {/* TỔNG THU NHẬP */}
                            <tr className="ts-row-total">
                               <td className="ts-cell-label fw-bold text-uppercase">TỔNG THU NHẬP</td>
@@ -715,6 +965,53 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                                     value={fCur(formData.khautru_khac)}
                                     onChange={(e) => handleNumberChange('khautru_khac', e.target.value)}
                                  />
+                              </td>
+                           </tr>
+
+                           {/* Các khoản khấu trừ khác tự nhập (lưu vào tbl_luong.khautru_khac2 json) */}
+                           {customDeductions.map((item) => (
+                              <tr key={item.id} className="ts-dynamic-row">
+                                 <td className="ts-cell-label">
+                                    <div className="ts-dynamic-label-wrapper">
+                                       <input
+                                          type="text"
+                                          className="ts-input-raw ts-dynamic-name-input"
+                                          placeholder="Tên khoản khấu trừ..."
+                                          value={item.ten}
+                                          onChange={(e) => handleUpdateDeductionName(item.id, e.target.value)}
+                                       />
+                                       <button
+                                          type="button"
+                                          className="ts-btn-remove-item"
+                                          title="Xóa khoản khấu trừ này"
+                                          onClick={() => handleRemoveDeduction(item.id)}
+                                       >
+                                          <Trash2 size={14} />
+                                       </button>
+                                    </div>
+                                 </td>
+                                 <td className="ts-cell-input-td" colSpan="3">
+                                    <input
+                                       type="text"
+                                       className="ts-input-num text-danger"
+                                       placeholder="0"
+                                       value={fCur(item.sotien)}
+                                       onChange={(e) => handleUpdateDeductionAmount(item.id, e.target.value)}
+                                    />
+                                 </td>
+                              </tr>
+                           ))}
+
+                           {/* Nút thêm khoản khấu trừ khác */}
+                           <tr className="ts-row-add-action">
+                              <td colSpan="4">
+                                 <button
+                                    type="button"
+                                    className="ts-btn-add-dynamic ts-btn-add-danger"
+                                    onClick={handleAddDeduction}
+                                 >
+                                    <Plus size={14} /> Thêm khoản khấu trừ khác
+                                 </button>
                               </td>
                            </tr>
 
@@ -859,6 +1156,14 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                         <td className="fw-bold">Chức vụ:</td>
                         <td>{formData.chucvu}</td>
                      </tr>
+                     <tr>
+                        <td className="fw-bold">Ngày công:</td>
+                        <td>{formData.ngaycong !== '' && formData.ngaycong !== undefined && formData.ngaycong !== null ? formData.ngaycong : '—'}</td>
+                     </tr>
+                     <tr>
+                        <td className="fw-bold">Ngày nghỉ phép:</td>
+                        <td>{formData.ngaynghiphep !== '' && formData.ngaynghiphep !== undefined && formData.ngaynghiphep !== null ? formData.ngaynghiphep : '—'}</td>
+                     </tr>
                      <tr className="p-section-header">
                         <td colSpan="2">KHOẢN THU</td>
                      </tr>
@@ -869,7 +1174,13 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                      {pCur(formData.phucap_kidscamp) > 0 && <tr><td>PHỤ CẤP KIDS CAMP</td><td className="text-right">{fCur(formData.phucap_kidscamp)} ₫</td></tr>}
                      {pCur(formData.phucap_dilai) > 0 && <tr><td>PHỤ CẤP ĐI LẠI</td><td className="text-right">{fCur(formData.phucap_dilai)} ₫</td></tr>}
                      {pCur(formData.phucap_chuyenmon) > 0 && <tr><td>PHỤ CẤP CHUYÊN MÔN</td><td className="text-right">{fCur(formData.phucap_chuyenmon)} ₫</td></tr>}
-                     {pCur(formData.phucap_khac) > 0 && <tr><td>PHỤ CẤP KHÁC</td><td className="text-right">{fCur(formData.phucap_khac)} ₫</td></tr>}
+                     {/* Các phụ cấp khác tự nhập */}
+                     {customAllowances.filter(item => pCur(item.sotien) > 0).map((item, idx) => (
+                        <tr key={`print-pc-${idx}`}>
+                           <td>{(item.ten || 'PHỤ CẤP KHÁC').toUpperCase()}</td>
+                           <td className="text-right">{fCur(item.sotien)} ₫</td>
+                        </tr>
+                     ))}
                      {pCur(formData.thuongle) > 0 && <tr><td>THƯỞNG LỄ/TẾT</td><td className="text-right">{fCur(formData.thuongle)} ₫</td></tr>}
                      {pCur(formData.tangluong) > 0 && <tr><td>TĂNG LƯƠNG</td><td className="text-right">{fCur(formData.tangluong)} ₫</td></tr>}
 
@@ -883,6 +1194,13 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                            {pCur(formData.khautru_bhxh) > 0 && <tr><td>KHẤU TRỪ BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.khautru_bhxh)} ₫</td></tr>}
                            {pCur(formData.tamung) > 0 && <tr><td>Tạm ứng</td><td className="text-right">{fCur(formData.tamung)} ₫</td></tr>}
                            {pCur(formData.khautru_khac) > 0 && <tr><td>Khấu trừ khác</td><td className="text-right">{fCur(formData.khautru_khac)} ₫</td></tr>}
+                           {/* Các khoản khấu trừ khác tự nhập */}
+                           {customDeductions.filter(item => pCur(item.sotien) > 0).map((item, idx) => (
+                              <tr key={`print-kt-${idx}`}>
+                                 <td>{(item.ten || 'KHẤU TRỪ KHÁC').toUpperCase()}</td>
+                                 <td className="text-right">{fCur(item.sotien)} ₫</td>
+                              </tr>
+                           ))}
                            <tr className="p-total-row"><td>TỔNG KHẤU TRỪ</td><td className="text-right fw-bold">{fCur(tongKhauTru)} ₫</td></tr>
                         </>
                      )}
@@ -894,12 +1212,12 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                         <td className="fw-bold">Bằng chữ:</td>
                         <td className="fst-italic">{bangChuText}</td>
                      </tr>
-                     {formData.ghichu && (
-                        <tr>
-                           <td className="fw-bold">Ghi chú:</td>
-                           <td>{formData.ghichu}</td>
-                        </tr>
-                     )}
+                     <tr>
+                        <td className="fw-bold" style={{ verticalAlign: 'top' }}>Ghi chú:</td>
+                        <td style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                           {formData.ghichu && formData.ghichu.trim() ? formData.ghichu : 'Không có'}
+                        </td>
+                     </tr>
                   </tbody>
                </table>
 

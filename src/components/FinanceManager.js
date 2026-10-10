@@ -2766,6 +2766,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{printLuong.manv}</td></tr>
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{printLuong.tennv}</td></tr>
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.chucvu}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Ngày công</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.ngaycong || (Array.isArray(printLuong.phucap_khac) ? printLuong.phucap_khac.find(i => i && i._meta)?.ngaycong : '') || '—'}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Ngày nghỉ phép</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.ngaynghiphep || (Array.isArray(printLuong.phucap_khac) ? printLuong.phucap_khac.find(i => i && i._meta)?.ngaynghiphep : '') || '—'}</td></tr>
 
                         <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
                         {pCur(printLuong.luongcoban) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.luongcoban)} ₫</td></tr>}
@@ -2775,7 +2777,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         {pCur(printLuong.phucap_kidscamp) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KIDS CAMP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_kidscamp)} ₫</td></tr>}
                         {pCur(printLuong.phucap_dilai) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_dilai)} ₫</td></tr>}
                         {pCur(printLuong.phucap_chuyenmon) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_chuyenmon)} ₫</td></tr>}
-                        {pCur(printLuong.phucap_khac) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_khac)} ₫</td></tr>}
+                        {Array.isArray(printLuong.phucap_khac) ? (
+                           printLuong.phucap_khac.filter(i => i && !i._meta && pCur(i.sotien) > 0).map((i, idx) => (
+                              <tr key={`pl-pc-${idx}`}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{(i.ten || 'PHỤ CẤP KHÁC').toUpperCase()}</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(i.sotien)} ₫</td></tr>
+                           ))
+                        ) : (
+                           pCur(printLuong.phucap_khac) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_khac)} ₫</td></tr>
+                        )}
                         {pCur(printLuong.thuongle) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ/TẾT</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.thuongle)} ₫</td></tr>}
                         {pCur(printLuong.tangluong) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tangluong)} ₫</td></tr>}
                         <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(printLuong.tongthunhap)} ₫</td></tr>
@@ -2786,12 +2794,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               {pCur(printLuong.khautru_bhxh) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_bhxh)} ₫</td></tr>}
                               {pCur(printLuong.tamung) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tamung)} ₫</td></tr>}
                               {pCur(printLuong.khautru_khac) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_khac)} ₫</td></tr>}
+                              {Array.isArray(printLuong.khautru_khac2) && (
+                                 printLuong.khautru_khac2.filter(i => i && pCur(i.sotien) > 0).map((i, idx) => (
+                                    <tr key={`pl-kt-${idx}`}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{(i.ten || 'KHẤU TRỪ KHÁC').toUpperCase()}</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(i.sotien)} ₫</td></tr>
+                                 ))
+                              )}
                               <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(printLuong.tongkhautru)} ₫</td></tr>
                            </>
                         )}
 
                         <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(printLuong.thucnhan)} ₫</td></tr>
                         <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{printLuong.bangchu || (READ_NUMBER_VN(pCur(printLuong.thucnhan)) + ' đồng')}</td></tr>
+                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', verticalAlign: 'top' }}>Ghi chú</td><td style={{ border: '1px solid #000', padding: '6px 10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{printLuong.ghichu && printLuong.ghichu.trim() ? printLuong.ghichu : 'Không có'}</td></tr>
                      </tbody>
                   </table>
                </div>
@@ -3906,6 +3920,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{viewSalarySlipModal.item.manv}</td></tr>
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{viewSalarySlipModal.item.tennv}</td></tr>
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.chucvu}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Ngày công</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.ngaycong || (Array.isArray(viewSalarySlipModal.item.phucap_khac) ? viewSalarySlipModal.item.phucap_khac.find(i => i && i._meta)?.ngaycong : '') || '—'}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Ngày nghỉ phép</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.ngaynghiphep || (Array.isArray(viewSalarySlipModal.item.phucap_khac) ? viewSalarySlipModal.item.phucap_khac.find(i => i && i._meta)?.ngaynghiphep : '') || '—'}</td></tr>
 
                               <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
                               {pCur(viewSalarySlipModal.item.luongcoban) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.luongcoban)} ₫</td></tr>}
@@ -3915,7 +3931,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                               {pCur(viewSalarySlipModal.item.phucap_kidscamp) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KIDS CAMP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_kidscamp)} ₫</td></tr>}
                               {pCur(viewSalarySlipModal.item.phucap_dilai) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_dilai)} ₫</td></tr>}
                               {pCur(viewSalarySlipModal.item.phucap_chuyenmon) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_chuyenmon)} ₫</td></tr>}
-                              {pCur(viewSalarySlipModal.item.phucap_khac) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_khac)} ₫</td></tr>}
+                              {Array.isArray(viewSalarySlipModal.item.phucap_khac) ? (
+                                 viewSalarySlipModal.item.phucap_khac.filter(i => i && !i._meta && pCur(i.sotien) > 0).map((i, idx) => (
+                                    <tr key={`v-pc-${idx}`}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{(i.ten || 'PHỤ CẤP KHÁC').toUpperCase()}</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(i.sotien)} ₫</td></tr>
+                                 ))
+                              ) : (
+                                 pCur(viewSalarySlipModal.item.phucap_khac) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_khac)} ₫</td></tr>
+                              )}
                               {pCur(viewSalarySlipModal.item.thuongle) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ/TẾT</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.thuongle)} ₫</td></tr>}
                               {pCur(viewSalarySlipModal.item.tangluong) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tangluong)} ₫</td></tr>}
                               <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(viewSalarySlipModal.item.tongthunhap)} ₫</td></tr>
@@ -3926,12 +3948,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     {pCur(viewSalarySlipModal.item.khautru_bhxh) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_bhxh)} ₫</td></tr>}
                                     {pCur(viewSalarySlipModal.item.tamung) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tamung)} ₫</td></tr>}
                                     {pCur(viewSalarySlipModal.item.khautru_khac) > 0 && <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_khac)} ₫</td></tr>}
+                                    {Array.isArray(viewSalarySlipModal.item.khautru_khac2) && (
+                                       viewSalarySlipModal.item.khautru_khac2.filter(i => i && pCur(i.sotien) > 0).map((i, idx) => (
+                                          <tr key={`v-kt-${idx}`}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{(i.ten || 'KHẤU TRỪ KHÁC').toUpperCase()}</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(i.sotien)} ₫</td></tr>
+                                       ))
+                                    )}
                                     <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(viewSalarySlipModal.item.tongkhautru)} ₫</td></tr>
                                  </>
                               )}
 
                               <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(viewSalarySlipModal.item.thucnhan)} ₫</td></tr>
                               <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{viewSalarySlipModal.item.bangchu || (READ_NUMBER_VN(pCur(viewSalarySlipModal.item.thucnhan)) + ' đồng')}</td></tr>
+                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', verticalAlign: 'top' }}>Ghi chú</td><td style={{ border: '1px solid #000', padding: '6px 10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{viewSalarySlipModal.item.ghichu && viewSalarySlipModal.item.ghichu.trim() ? viewSalarySlipModal.item.ghichu : 'Không có'}</td></tr>
                            </tbody>
                         </table>
                      </div>
