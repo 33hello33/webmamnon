@@ -84,6 +84,19 @@ const fCur = (val) => {
    return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
 
+// Helper xóa dấu tiếng Việt và ký tự không hợp lệ cho tên file
+const removeVietnameseTones = (str) => {
+   if (!str) return '';
+   return String(str)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .replace(/[/\\?%*:|"<>]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim();
+};
+
 export default function TimesheetManager({ currentUser, setActiveTab, setActiveSubTab }) {
    const { config } = useConfig();
    const schoolName = config?.tencongty || process.env.REACT_APP_COMPANY_NAME || 'TRƯỜNG MẦM NON';
@@ -538,7 +551,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
       excelData.push(['']);
       excelData.push(['DANH MỤC', 'SỐ TIỀN (VNĐ)']);
-      excelData.push(['--- KHOẢN THU ---', '']);
+      excelData.push(['--- KHOẢN THU NHẬP ---', '']);
 
       if (pCur(formData.luongcoban) > 0) excelData.push(['LƯƠNG CƠ BẢN', fCur(formData.luongcoban)]);
       if (pCur(formData.chuyencan) > 0) excelData.push(['CHUYÊN CẦN', fCur(formData.chuyencan)]);
@@ -590,16 +603,18 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       const ws = XLSX.utils.aoa_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "PhieuLuong");
-      const safeEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
-      const safeMonthStr = monthStr.replace(/\//g, '_');
+      const rawEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
+      const safeEmpName = removeVietnameseTones(rawEmpName) || 'NhanVien';
+      const safeMonthStr = removeVietnameseTones(monthStr).replace(/\//g, '_');
       XLSX.writeFile(wb, `${safeEmpName}_${safeMonthStr}.xlsx`);
    };
 
-   // Print A4 / Save as PDF with format: [tên nv] _ [tháng xuất]
+   // Print A4 / Save as PDF with format: [tên nv] _ [tháng xuất] (không dấu)
    const handlePrint = () => {
       const originalTitle = document.title;
-      const safeEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
-      const safeMonthStr = monthStr.replace(/\//g, '_');
+      const rawEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
+      const safeEmpName = removeVietnameseTones(rawEmpName) || 'NhanVien';
+      const safeMonthStr = removeVietnameseTones(monthStr).replace(/\//g, '_');
       document.title = `${safeEmpName}_${safeMonthStr}`;
       window.print();
       setTimeout(() => {
@@ -801,7 +816,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
                            {/* HEADER SECTION 1: KHOẢN THU */}
                            <tr className="ts-section-header">
-                              <td colSpan="4" className="fw-bold">KHOẢN THU</td>
+                              <td colSpan="4" className="fw-bold">KHOẢN THU NHẬP</td>
                            </tr>
 
                            {/* LƯƠNG CƠ BẢN */}
@@ -1165,7 +1180,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                         <td>{formData.ngaynghiphep !== '' && formData.ngaynghiphep !== undefined && formData.ngaynghiphep !== null ? formData.ngaynghiphep : '—'}</td>
                      </tr>
                      <tr className="p-section-header">
-                        <td colSpan="2">KHOẢN THU</td>
+                        <td colSpan="2">KHOẢN THU NHẬP</td>
                      </tr>
                      {pCur(formData.luongcoban) > 0 && <tr><td>LƯƠNG CƠ BẢN</td><td className="text-right">{fCur(formData.luongcoban)} ₫</td></tr>}
                      {pCur(formData.chuyencan) > 0 && <tr><td>CHUYÊN CẦN</td><td className="text-right">{fCur(formData.chuyencan)} ₫</td></tr>}
