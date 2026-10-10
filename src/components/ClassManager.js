@@ -14,6 +14,7 @@ import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, ded
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import SurchargeRegistration from './SurchargeRegistration';
 import './ClassManager.css';
 
 const INITIAL_FORM = {
@@ -198,6 +199,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [subTab, setSubTab] = useState('classes');
 
   const [teachers, setTeachers] = useState([]);
   const [subjectTeachers, setSubjectTeachers] = useState([]);
@@ -1577,7 +1579,33 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   return (
     <div className="class-manager animate-fade-in">
-      <div className="class-layout">
+      {/* Top Subtab Bar */}
+      <div className="class-top-subtabs" style={{ display: 'flex', gap: '8px', marginBottom: '14px', background: '#ffffff', padding: '8px 12px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <button
+          className={`btn ${subTab === 'classes' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setSubTab('classes')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+        >
+          <Users size={16} /> Danh sách lớp học
+        </button>
+        <button
+          className={`btn ${subTab === 'phuphi' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setSubTab('phuphi')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700,
+            background: subTab === 'phuphi' ? '#ec4899' : 'transparent',
+            borderColor: subTab === 'phuphi' ? '#ec4899' : '#cbd5e1',
+            color: subTab === 'phuphi' ? '#ffffff' : '#475569'
+          }}
+        >
+          <DollarSign size={16} /> Đăng ký phụ phí
+        </button>
+      </div>
+
+      {subTab === 'phuphi' ? (
+        <SurchargeRegistration initialClassId={selectedClassId} currentUser={auth?.user} />
+      ) : (
+        <div className="class-layout">
         {/* Left Pane - List of classes */}
         <div className="class-list-pane">
           <div className="class-pane-header">
@@ -1723,6 +1751,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <div className="section-head">
                   <h3>Danh sách học sinh ({classStudents.length})</h3>
                   <div className="student-actions">
+                    <button
+                      className="btn"
+                      style={{ background: '#ec4899', color: '#ffffff', border: 'none' }}
+                      onClick={() => setSubTab('phuphi')}
+                      title="Mở bảng đăng ký phụ phí của lớp này"
+                    >
+                      <DollarSign size={16} /> Đăng ký phụ phí
+                    </button>
                     {config?.xuatthongbaohangloat !== false && (
                       <button className="btn" style={{ background: '#f59e0b', color: '#ffffff', border: 'none' }} onClick={handleOpenBatchNotice}>
                         <MessageSquare size={16} /> Xuất thông báo hàng loạt
@@ -1906,6 +1942,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           )}
         </div>
       </div>
+      )}
 
       {/* Student Detail Modal (Read-only) */}
       {isViewStudentOpen && viewStudentData && (

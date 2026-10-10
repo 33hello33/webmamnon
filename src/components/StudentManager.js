@@ -10,6 +10,7 @@ import AttendanceManager from './AttendanceManager';
 import LeaveManager from './LeaveManager';
 import AttendanceToday from './AttendanceToday';
 import NgoaiKhoaManager from './NgoaiKhoaManager';
+import SurchargeRegistration from './SurchargeRegistration';
 import './StudentManager.css';
 import { compressImage } from '../utils/imageUtils';
 import { toLocalISODate } from '../utils/localDate';
@@ -924,6 +925,7 @@ export default function StudentManager({ activeSubTab, currentUser }) {
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}
         {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager currentUser={currentUser} />}
+        {activeSubTab === 'phuphi_reg' && <SurchargeRegistration currentUser={currentUser} />}
       </div>
 
       {/* Form Modal */}

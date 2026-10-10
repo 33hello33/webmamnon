@@ -72,7 +72,8 @@ const ALL_TABS = [
       { id: 'attendance_today', label: 'Danh sách đi học', dotColor: '#3b82f6' },
       { id: 'attendance', label: 'Điểm danh', dotColor: '#10b981' },
       { id: 'leave_list', label: 'Danh sách nghỉ', dotColor: '#ef4444' },
-      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa', dotColor: '#f59e0b' }
+      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa', dotColor: '#f59e0b' },
+      { id: 'phuphi_reg', label: 'Đăng ký phụ phí', dotColor: '#ec4899' }
     ]
   },
   { id: 'invoices', label: 'Thu học phí', icon: Receipt, color: '#ec4899', bg: '#fce7f3' },
@@ -856,7 +857,7 @@ function Dashboard() {
             {currentTab?.id === 'tasks' && <TaskManager />}
             {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" currentUser={user} />}
             {currentTab?.id === 'students_list' && <StudentManager activeSubTab="students" currentUser={user} />}
-            {currentTab?.id === 'students' && <StudentManager activeSubTab={['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg'].includes(activeSubTab) ? activeSubTab : 'classes'} currentUser={user} />}
+            {currentTab?.id === 'students' && <StudentManager activeSubTab={['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg', 'phuphi_reg'].includes(activeSubTab) ? activeSubTab : 'classes'} currentUser={user} />}
             {currentTab?.id === 'attendance_menu' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}
