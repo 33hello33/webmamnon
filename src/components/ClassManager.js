@@ -276,6 +276,66 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     return { period: prevMonthKey, byStudent };
   }, [config?.tiendangoai]);
 
+  const loadBatchRegisteredSurcharges = useCallback(async (studentIds, billingStartDate, soLuong = 1, loaiDong = 'Tháng') => {
+    if (!Array.isArray(studentIds) || studentIds.length === 0 || !billingStartDate) {
+      return {};
+    }
+
+    const d = new Date(billingStartDate);
+    if (isNaN(d.getTime())) return {};
+
+    const numMonths = (loaiDong || '').toLowerCase().includes('tháng') ? Math.max(1, parseInt(soLuong, 10) || 1) : 1;
+    const targetMonths = [];
+    for (let i = 0; i < numMonths; i++) {
+      const cur = new Date(d);
+      cur.setMonth(d.getMonth() + i);
+      const m = cur.getMonth() + 1;
+      const y = cur.getFullYear();
+      targetMonths.push({ month: m, year: y });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('tbl_dangky_phuphi')
+        .select('*')
+        .in('mahv', studentIds);
+
+      if (error) {
+        console.warn('Lỗi lấy dữ liệu tbl_dangky_phuphi:', error);
+        return {};
+      }
+
+      const res = {};
+      studentIds.forEach(id => { res[id] = []; });
+
+      (data || []).forEach(item => {
+        const itemThangNam = String(item.thang_nam || '').trim();
+        const itemThang = Number(item.thang);
+        const itemNam = Number(item.nam);
+        const isMatch = targetMonths.some(tm => {
+          const padM = String(tm.month).padStart(2, '0');
+          return itemThangNam === `${padM}/${tm.year}` ||
+            itemThangNam === `${tm.month}/${tm.year}` ||
+            (itemThang === tm.month && itemNam === tm.year);
+        });
+
+        if (isMatch && res[item.mahv]) {
+          res[item.mahv].push({
+            name: item.tenpp || item.ten || 'Phụ phí',
+            amount: Number(item.dongia) || 0,
+            presetId: item.id_phuphi || item.id,
+            ghichu: item.ghichu || ''
+          });
+        }
+      });
+
+      return res;
+    } catch (err) {
+      console.error('Lỗi loadBatchRegisteredSurcharges:', err);
+      return {};
+    }
+  }, []);
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM);
@@ -548,18 +608,28 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const statsPeriod = `${String(statsMonth.getMonth() + 1).padStart(2, '0')}/${statsMonth.getFullYear()}`;
       const studentIds = activeStudents.map(s => s.mahv);
 
-      const { data: attData } = await supabase
-        .from('tbl_diemdanh')
-        .select('*')
-        .in('mahv', studentIds)
-        .gte('ngay', statsStart)
-        .lte('ngay', statsEnd);
+      const [
+        { data: attData },
+        { data: allHdsDebt },
+        { data: allBillsDebt },
+        ngoaiKhoaAdjustments,
+        regSurchargesMap
+      ] = await Promise.all([
+        supabase
+          .from('tbl_diemdanh')
+          .select('*')
+          .in('mahv', studentIds)
+          .gte('ngay', statsStart)
+          .lte('ngay', statsEnd),
+        supabase.from('tbl_hd').select('mahv, conno, daxoa').in('mahv', studentIds),
+        supabase.from('tbl_billhanghoa').select('mahv, conno, dadong, daxoa').in('mahv', studentIds),
+        loadBatchNgoaiKhoaAdjustments(studentIds, startStr),
+        loadBatchRegisteredSurcharges(studentIds, startStr, initSoLuong, initLoaiDong)
+      ]);
+
       const attendance = attData || [];
 
       // Fetch Old Debt in bulk for all students
-      const { data: allHdsDebt } = await supabase.from('tbl_hd').select('mahv, conno, daxoa').in('mahv', studentIds);
-      const { data: allBillsDebt } = await supabase.from('tbl_billhanghoa').select('mahv, conno, dadong, daxoa').in('mahv', studentIds);
-
       const debtMap = {};
       studentIds.forEach(id => { debtMap[id] = 0; });
 
@@ -569,8 +639,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       (allBillsDebt || []).filter(x => (x.daxoa || '').toLowerCase() !== 'đã xóa' && parseFormattedNumber(x.dadong) === 0).forEach(x => {
         debtMap[x.mahv] += parseFormattedNumber(x.conno);
       });
-
-      const ngoaiKhoaAdjustments = await loadBatchNgoaiKhoaAdjustments(studentIds, startStr);
 
       setBatchNoticeData({
         loaiDong: initLoaiDong,
@@ -643,7 +711,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const totalRefund = mealRefund + tuitionRefund + truTienDaNgoai;
         const stHinhThuc = studentRaw.hinhthucdong || walletsConfig[0]?.name || 'Tiền mặt';
         const stNoCu = debtMap[currentMahv] || 0;
-        const phuthu = normalizeSurcharges(studentRaw.phuthu);
+        const phuthu = regSurchargesMap[currentMahv] || [];
         const surchargeSum = sumSurcharges(phuthu);
 
         let giamhocphi = 0;
@@ -750,14 +818,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
       const activeStudents = classStudents.filter(s => (s.trangthai || '').trim().toLowerCase().includes('đang học'));
       const studentIds = activeStudents.map(s => s.mahv);
-      const ngoaiKhoaAdjustments = await loadBatchNgoaiKhoaAdjustments(studentIds, startStr);
-
-      const { data: attData } = await supabase
-        .from('tbl_diemdanh')
-        .select('*')
-        .in('mahv', studentIds)
-        .gte('ngay', sStart)
-        .lte('ngay', sEnd);
+      const [ngoaiKhoaAdjustments, regSurchargesMap, { data: attData }] = await Promise.all([
+        loadBatchNgoaiKhoaAdjustments(studentIds, startStr),
+        loadBatchRegisteredSurcharges(studentIds, startStr, batchNoticeData.soLuong || 1, batchNoticeData.loaiDong || 'Tháng'),
+        supabase
+          .from('tbl_diemdanh')
+          .select('*')
+          .in('mahv', studentIds)
+          .gte('ngay', sStart)
+          .lte('ngay', sEnd)
+      ]);
       const attendance = attData || [];
       const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
@@ -804,7 +874,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const ghp = parseInt(row.giamhocphi || 0);
         const nocu = parseInt(row.noCu || 0);
 
-        const surchargeSum = sumSurcharges(row.phuthu);
+        const studentPhuThu = regSurchargesMap[row.mahv] || [];
+        const surchargeSum = sumSurcharges(studentPhuThu);
 
         return {
           ...row,
@@ -814,6 +885,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           ngoaiKhoaAutoNote,
           nghiLienTiep: maxLeave,
           diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod: sPeriod },
+          phuthu: studentPhuThu,
           ghichu: buildCombinedNote(batchNoticeData.ghiChu, ngoaiKhoaAutoNote),
           tongcong: Math.max(0, hp - ghp + nocu + surchargeSum - totalRefund),
           ngaybatdau: startStr
@@ -884,9 +956,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
            if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
            newItem.phuthu[0].name = cleanVal;
         } else if (field === 'phuthu_amount') {
-           if (!newItem.phuthu) newItem.phuthu = [];
-           if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
-           newItem.phuthu[0].amount = cleanVal;
+           const cleanNum = parseInt(cleanVal) || 0;
+           if (!newItem.phuthu || newItem.phuthu.length === 0) {
+             newItem.phuthu = cleanNum > 0 ? [{ name: 'Phụ thu', amount: cleanNum }] : [];
+           } else if (newItem.phuthu.length === 1) {
+             newItem.phuthu = [{ ...newItem.phuthu[0], amount: cleanNum }];
+           } else {
+             const combinedName = newItem.phuthu.map(p => p.name).filter(Boolean).join(', ') || 'Phụ thu';
+             newItem.phuthu = [{ name: combinedName, amount: cleanNum }];
+           }
         } else {
            newItem[field] = cleanVal;
         }
@@ -2356,7 +2434,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '130px' }}>Trừ Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Trừ Học Phí</th>
                           <th style={{ minWidth: '130px' }}>Trừ Dã Ngoại</th>
-                          <th style={{ minWidth: '130px' }}>Lý Do Phụ Thu</th>
                           <th style={{ minWidth: '130px' }}>Tiền Phụ Thu</th>
                           <th style={{ minWidth: '130px' }}>TỔNG THU</th>
                           <th style={{ width: '130px' }}>Hình thức</th>
@@ -2439,21 +2516,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               <td>
                                 <input
                                   type="text"
-                                  value={(row.phuthu && row.phuthu.length > 0) ? row.phuthu[0].name : ''}
-                                  onChange={e => handleBatchStudentChange(row.mahv, 'phuthu_name', e.target.value)}
-                                  className="td-input"
-                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', fontWeight: 600 }}
-                                  placeholder="Nhập lý do..."
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="text"
-                                  value={formatTuition((row.phuthu && row.phuthu.length > 0) ? row.phuthu[0].amount : '')}
+                                  value={sumSurcharges(row.phuthu) ? formatTuition(sumSurcharges(row.phuthu)) : ''}
                                   onChange={e => handleBatchStudentChange(row.mahv, 'phuthu_amount', e.target.value)}
                                   className="td-input"
                                   style={{ width: '100%', border: 'none', background: '#fef3c7', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#d97706' }}
                                   placeholder="0"
+                                  title={(row.phuthu && row.phuthu.length > 0) ? row.phuthu.map(p => `${p.name}: ${formatTuition(p.amount)}đ`).join('\n') : ''}
                                 />
                               </td>
                               <td style={{ fontWeight: 800, color: '#16a34a', whiteSpace: 'nowrap' }}>{formatTuition(row.tongcong)}</td>
