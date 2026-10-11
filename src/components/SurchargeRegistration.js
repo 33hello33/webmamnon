@@ -3,7 +3,7 @@ import { supabase, insertLog } from '../supabase';
 import {
   Check, Copy, PlusCircle, Edit3, Trash2, Download,
   RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
-  Database, X, Info, Search
+  X, Info, Search
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './SurchargeRegistration.css';
@@ -17,56 +17,6 @@ const formatNumberOnly = (val) => {
   const num = Number(val) || 0;
   return num.toLocaleString('vi-VN');
 };
-
-const SQL_CREATE_TABLES = `-- Chạy script này trong Supabase -> SQL Editor:
--- 1. Bảng danh mục phụ phí (nếu chưa có)
-CREATE TABLE IF NOT EXISTS truongla.tbl_phuphi (
-    id BIGSERIAL PRIMARY KEY,
-    tenpp TEXT NOT NULL,
-    dongia NUMERIC DEFAULT 0,
-    ghichu TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Thêm một số khoản phụ phí mẫu nếu bảng trống
-INSERT INTO truongla.tbl_phuphi (tenpp, dongia)
-SELECT 'Phụ phí 1', 50000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Phụ phí 1')
-UNION ALL
-SELECT 'Phụ phí 2', 100000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Phụ phí 2')
-UNION ALL
-SELECT 'Học võ thuật', 100000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Học võ thuật')
-UNION ALL
-SELECT 'Học tiếng anh', 200000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Học tiếng anh')
-UNION ALL
-SELECT 'Nhảy - múa', 100000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Nhảy - múa')
-UNION ALL
-SELECT 'Lập trình robot', 100000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Lập trình robot')
-UNION ALL
-SELECT 'Đầu vào', 500000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Đầu vào')
-UNION ALL
-SELECT 'Đồng phục mùa hè', 150000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Đồng phục mùa hè')
-UNION ALL
-SELECT 'Đồng phục mùa đông', 250000 WHERE NOT EXISTS (SELECT 1 FROM truongla.tbl_phuphi WHERE tenpp = 'Đồng phục mùa đông');
-
--- 2. Bảng lưu vết đăng ký phụ phí học sinh theo tháng
-CREATE TABLE IF NOT EXISTS truongla.tbl_dangky_phuphi (
-    id BIGSERIAL PRIMARY KEY,
-    mahv TEXT NOT NULL,
-    malop TEXT NOT NULL,
-    thang INTEGER NOT NULL,
-    nam INTEGER NOT NULL,
-    thang_nam TEXT NOT NULL,
-    id_phuphi BIGINT NOT NULL,
-    tenpp TEXT,
-    dongia NUMERIC DEFAULT 0,
-    ghichu TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_hv_thang_phuphi UNIQUE (mahv, thang, nam, id_phuphi)
-);
-
-CREATE INDEX IF NOT EXISTS idx_dk_phuphi_thang_lop ON truongla.tbl_dangky_phuphi (thang_nam, malop);
-CREATE INDEX IF NOT EXISTS idx_dk_phuphi_mahv ON truongla.tbl_dangky_phuphi (mahv, thang_nam);
-`;
 
 export default function SurchargeRegistration({
   currentUser,
@@ -96,9 +46,6 @@ export default function SurchargeRegistration({
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState(null); // Key being toggled
   const [searchTerm, setSearchTerm] = useState('');
-  const [dbError, setDbError] = useState(null);
-  const [showSqlModal, setShowSqlModal] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
 
   // Manage Phu Phi Modal
   const [isPhuphiModalOpen, setIsPhuphiModalOpen] = useState(false);
@@ -147,14 +94,8 @@ export default function SurchargeRegistration({
         .select('*')
         .order('id', { ascending: true });
 
-      if (error) {
-        if (error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-          setDbError('Bảng tbl_phuphi hoặc tbl_dangky_phuphi chưa được tạo trong cơ sở dữ liệu Supabase.');
-        }
-        throw error;
-      }
+      if (error) throw error;
       setPhuphiList(data || []);
-      setDbError(null);
     } catch (err) {
       console.warn('Cannot fetch tbl_phuphi:', err.message);
     }
@@ -195,12 +136,7 @@ export default function SurchargeRegistration({
         .eq('malop', selectedClassId)
         .eq('thang_nam', currentThangNam);
 
-      if (error) {
-        if (error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-          setDbError('Bảng tbl_dangky_phuphi chưa được tạo trong Supabase.');
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       const map = {};
       (data || []).forEach(item => {
@@ -208,7 +144,6 @@ export default function SurchargeRegistration({
         map[key] = item;
       });
       setRegisteredMap(map);
-      setDbError(null);
     } catch (err) {
       console.warn('Cannot fetch registrations:', err.message);
     }
@@ -280,9 +215,6 @@ export default function SurchargeRegistration({
     } catch (err) {
       console.error('Error updating registration:', err);
       showAlert('error', 'Lỗi lưu đăng ký phụ phí: ' + (err.message || ''));
-      if (err.message?.includes('schema cache') || err.message?.includes('does not exist')) {
-        setShowSqlModal(true);
-      }
     } finally {
       setSavingKey(null);
     }
@@ -375,9 +307,6 @@ export default function SurchargeRegistration({
     } catch (err) {
       console.error('Error saving phuphi:', err);
       showAlert('error', 'Lỗi lưu phụ phí: ' + err.message);
-      if (err.message?.includes('schema cache') || err.message?.includes('does not exist')) {
-        setShowSqlModal(true);
-      }
     }
   };
 
@@ -502,12 +431,6 @@ export default function SurchargeRegistration({
     XLSX.writeFile(wb, `Danh_Sach_Phu_Phi_Thang_${selectedMonth}_${selectedYear}_${selectedClass?.tenlop || selectedClassId}.xlsx`);
   };
 
-  const copySqlToClipboard = () => {
-    navigator.clipboard.writeText(SQL_CREATE_TABLES);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
-
   return (
     <div className="surcharge-reg-container animate-fade-in">
       {/* Alert toast */}
@@ -524,42 +447,21 @@ export default function SurchargeRegistration({
         </div>
       )}
 
-      {/* SQL Setup Notice if table missing */}
-      {dbError && (
-        <div className="sql-guide-banner">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800 }}>
-              <AlertCircle size={20} color="#dc2626" />
-              <span>Chưa tìm thấy bảng đăng ký phụ phí trong Supabase!</span>
-            </div>
-            <button className="btn btn-primary" onClick={() => setShowSqlModal(true)} style={{ fontSize: '0.85rem' }}>
-              <Database size={16} /> Xem & Sao chép mã SQL tạo bảng
-            </button>
-          </div>
-          <div style={{ fontSize: '0.88rem', color: '#1e3a8a' }}>
-            Để lưu trữ và sao chép phụ phí theo từng tháng, bạn cần khởi tạo 2 bảng <code>tbl_phuphi</code> và <code>tbl_dangky_phuphi</code> trong Supabase.
-          </div>
-        </div>
-      )}
-
       {/* Top Toolbar */}
       <div className="surcharge-toolbar">
         <div className="surcharge-toolbar-left">
-          {/* Active Class Highlight Badge (matches yellow tag in user image) */}
-          <div className="class-badge-btn" title="Lớp đang xem phụ phí">
-            <span>{selectedClass ? selectedClass.tenlop : 'CHỌN LỚP'}</span>
+          {/* Class Dropdown Selector - only select kept */}
+          <div className="class-select-container">
+            <select
+              className="class-select-dropdown"
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+            >
+              {classes.map(c => (
+                <option key={c.malop} value={c.malop}>{c.tenlop}</option>
+              ))}
+            </select>
           </div>
-
-          {/* Class Dropdown Selector */}
-          <select
-            className="class-select-dropdown"
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-          >
-            {classes.map(c => (
-              <option key={c.malop} value={c.malop}>{c.tenlop}</option>
-            ))}
-          </select>
 
           {/* Month Navigator */}
           <div className="month-nav-group">
@@ -575,20 +477,14 @@ export default function SurchargeRegistration({
           </div>
 
           {/* Search box for students */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <Search size={15} style={{ position: 'absolute', left: '10px', color: '#94a3b8' }} />
+          <div className="search-box-wrapper">
+            <Search size={15} className="search-box-icon" />
             <input
               type="text"
               placeholder="Tìm học viên..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                padding: '6px 12px 6px 32px',
-                borderRadius: '8px',
-                border: '1.5px solid #cbd5e1',
-                fontSize: '0.85rem',
-                width: '160px'
-              }}
+              className="search-box-input"
             />
           </div>
         </div>
@@ -597,29 +493,16 @@ export default function SurchargeRegistration({
           {onReturnToInvoice && (
             <button
               type="button"
-              className="btn"
+              className="btn-back-invoice"
               onClick={onReturnToInvoice}
               title="Quay lại giao diện Thu học phí"
-              style={{
-                background: '#fce7f3',
-                color: '#db2777',
-                border: '1px solid #fbcfe8',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
             >
               <ChevronLeft size={16} />
               <span>Quay lại Thu học phí</span>
             </button>
           )}
 
-          {/* Cyan Copy to Next Month Button (matches image) */}
+          {/* Copy to Next Month Button */}
           <button
             className="btn-copy-next"
             onClick={() => setIsCopyModalOpen(true)}
@@ -630,7 +513,7 @@ export default function SurchargeRegistration({
             <span>SAO CHÉP QUA THÁNG TIẾP THEO</span>
           </button>
 
-          {/* Green Surcharge Management Button (matches image) */}
+          {/* Surcharge Management Button */}
           <button
             className="btn-manage-phuphi"
             onClick={() => {
@@ -648,41 +531,19 @@ export default function SurchargeRegistration({
             <Download size={16} />
             <span>Xuất Excel</span>
           </button>
-
-          {/* SQL Setup Button */}
-          <button
-            className="btn btn-outline"
-            onClick={() => setShowSqlModal(true)}
-            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-            title="Xem hướng dẫn cấu hình bảng SQL"
-          >
-            <Database size={15} />
-            <span>Mã SQL</span>
-          </button>
         </div>
-      </div>
-
-      {/* Class Quick Selection Pills */}
-      <div className="class-tabs-bar">
-        {classes.map(c => {
-          const isActive = c.malop === selectedClassId;
-          return (
-            <button
-              key={c.malop}
-              className={`class-tab-chip ${isActive ? 'active' : ''}`}
-              onClick={() => setSelectedClassId(c.malop)}
-            >
-              {c.tenlop}
-            </button>
-          );
-        })}
       </div>
 
       {/* Main Spreadsheet Grid */}
       <div className="spreadsheet-card">
-        {/* Pink Banner Header Title (matches user image) */}
+        {/* Modern Banner Header Title */}
         <div className="sheet-title-banner">
-          DANH SÁCH PHỤ PHÍ THÁNG {selectedMonth}
+          <span>DANH SÁCH PHỤ PHÍ THÁNG {selectedMonth}/{selectedYear}</span>
+          {selectedClass && (
+            <span className="sheet-banner-class">
+              • {selectedClass.tenlop}
+            </span>
+          )}
         </div>
 
         {/* Scrollable table container */}
@@ -979,60 +840,6 @@ export default function SurchargeRegistration({
                   type="button"
                   className="btn btn-primary"
                   onClick={() => setIsPhuphiModalOpen(false)}
-                >
-                  Đóng
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SQL Script Guide Modal */}
-      {showSqlModal && (
-        <div className="phuphi-modal-overlay">
-          <div className="phuphi-modal" style={{ maxWidth: '650px' }}>
-            <div className="phuphi-modal-header">
-              <h3>
-                <Database size={20} color="#6366f1" />
-                Hướng Dẫn Tạo Bảng Supabase
-              </h3>
-              <button className="close-btn" onClick={() => setShowSqlModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="phuphi-modal-body">
-              <div style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.6 }}>
-                Để có thể truy xuất lại các tháng trước học viên đã đăng ký phụ phí nào và hỗ trợ tính năng <b>sao chép qua tháng sau</b>, bạn chỉ cần thực hiện 2 bước đơn giản:
-                <ol style={{ paddingLeft: '20px', marginTop: '8px' }}>
-                  <li>Mở bảng điều khiển <b>Supabase ➔ SQL Editor</b></li>
-                  <li>Dán đoạn mã bên dưới và bấm nút <b>RUN</b>:</li>
-                </ol>
-              </div>
-
-              <pre style={{
-                background: '#0f172a', color: '#38bdf8', padding: '14px',
-                borderRadius: '8px', fontSize: '0.8rem', maxHeight: '220px',
-                overflowY: 'auto', lineHeight: 1.5
-              }}>
-                {SQL_CREATE_TABLES}
-              </pre>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className="btn btn-success"
-                  onClick={copySqlToClipboard}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Copy size={16} />
-                  <span>{copiedSql ? '✓ Đã sao chép vào bộ nhớ tạm!' : 'Sao chép toàn bộ mã SQL'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setShowSqlModal(false)}
                 >
                   Đóng
                 </button>

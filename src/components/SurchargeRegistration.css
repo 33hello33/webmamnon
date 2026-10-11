@@ -1,4 +1,4 @@
-/* SurchargeRegistration.css - Excel-like table design matching user request */
+/* SurchargeRegistration.css - Modern Dashboard-like theme */
 
 .surcharge-reg-container {
   display: flex;
@@ -6,22 +6,24 @@
   gap: 16px;
   padding: 16px;
   background: #f8fafc;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 110px);
   font-family: inherit;
 }
 
-/* Top toolbar */
+/* ========================================================
+   TOP TOOLBAR
+   ======================================================== */
 .surcharge-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   background: #ffffff;
-  padding: 12px 18px;
-  border-radius: 12px;
+  padding: 14px 20px;
+  border-radius: 16px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.04);
 }
 
 .surcharge-toolbar-left,
@@ -29,42 +31,36 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-/* Yellow Class Badge / Selector (as in image) */
-.class-badge-btn {
-  background: #fef08a;
-  color: #713f12;
-  border: 2px solid #eab308;
-  font-weight: 800;
-  font-size: 0.95rem;
-  padding: 6px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: inline-flex;
+/* Class dropdown */
+.class-select-container {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(234, 179, 8, 0.2);
-  transition: all 0.2s ease;
-}
-
-.class-badge-btn:hover {
-  background: #fde047;
-  transform: translateY(-1px);
 }
 
 .class-select-dropdown {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
   border: 1.5px solid #cbd5e1;
-  background: white;
+  background: #ffffff;
   font-weight: 700;
   color: #1e293b;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.class-select-dropdown:hover {
+  border-color: #94a3b8;
+}
+
+.class-select-dropdown:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
 /* Month navigation */
@@ -74,203 +70,218 @@
   gap: 6px;
   background: #f1f5f9;
   padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
 }
 
 .month-nav-btn {
-  background: white;
+  background: #ffffff;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  width: 28px;
-  height: 28px;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 900;
+  font-weight: 800;
   cursor: pointer;
-  color: #334155;
-  transition: all 0.15s;
+  color: #475569;
+  transition: all 0.2s;
 }
 
 .month-nav-btn:hover {
   background: #e2e8f0;
+  color: #1e293b;
 }
 
 .month-nav-label {
-  font-weight: 800;
-  color: #0f172a;
-  min-width: 100px;
+  font-weight: 700;
+  color: #1e293b;
+  min-width: 110px;
   text-align: center;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+  user-select: none;
 }
 
-/* Action Buttons */
-.btn-copy-next {
-  background: #06b6d4;
-  color: #ffffff;
-  border: 1px solid #0891b2;
-  font-weight: 800;
-  font-size: 0.85rem;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+/* Student Search Box */
+.search-box-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-box-icon {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-box-input {
+  padding: 8px 14px 8px 36px;
+  border-radius: 10px;
+  border: 1.5px solid #cbd5e1;
+  font-size: 0.88rem;
+  width: 170px;
+  background: #f8fafc;
+  color: #1e293b;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-box-input:focus {
+  background: #ffffff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  width: 210px;
+}
+
+/* ========================================================
+   ACTION BUTTONS
+   ======================================================== */
+.btn-back-invoice {
+  background: #fdf2f8;
+  color: #db2777;
+  border: 1px solid #fbcfe8;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  box-shadow: 0 2px 4px rgba(6, 182, 212, 0.25);
-  transition: all 0.2s;
-}
-
-.btn-copy-next:hover:not(:disabled) {
-  background: #0891b2;
-  transform: translateY(-1px);
-}
-
-.btn-copy-next:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-manage-phuphi {
-  background: #16a34a;
-  color: #ffffff;
-  border: 1px solid #15803d;
   font-weight: 700;
   font-size: 0.85rem;
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
-.btn-manage-phuphi:hover {
-  background: #15803d;
+.btn-back-invoice:hover {
+  background: #fce7f3;
+  border-color: #f472b6;
   transform: translateY(-1px);
 }
 
-.btn-export-excel {
-  background: #0284c7;
+.btn-copy-next {
+  background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
   color: #ffffff;
   border: none;
   font-weight: 700;
   font-size: 0.85rem;
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-copy-next:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.35);
+}
+
+.btn-copy-next:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-manage-phuphi {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 9px 16px;
+  border-radius: 10px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
+  gap: 7px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-manage-phuphi:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+.btn-export-excel {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 9px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+  transition: all 0.2s ease;
 }
 
 .btn-export-excel:hover {
-  background: #0369a1;
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
 }
 
-/* Class Selection Tabs */
-.class-tabs-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 6px 4px;
-  scrollbar-width: thin;
-}
-
-.class-tab-chip {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  border: 1px solid #cbd5e1;
-  background: white;
-  color: #475569;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-
-.class-tab-chip:hover {
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
-.class-tab-chip.active {
-  background: #fef08a;
-  color: #854d0e;
-  border-color: #eab308;
-  font-weight: 800;
-  box-shadow: 0 2px 6px rgba(234, 179, 8, 0.25);
-}
-
-/* Notice Banner */
-.sql-guide-banner {
-  background: #eff6ff;
-  border: 1.5px solid #93c5fd;
-  border-radius: 12px;
-  padding: 16px;
-  color: #1e3a8a;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sql-guide-banner pre {
-  background: #1e293b;
-  color: #f8fafc;
-  padding: 12px;
-  border-radius: 8px;
-  overflow-x: auto;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  margin: 0;
-}
-
-/* MAIN SPREADSHEET WRAPPER */
+/* ========================================================
+   SPREADSHEET CARD & TITLE BANNER
+   ======================================================== */
 .spreadsheet-card {
   background: #ffffff;
-  border: 1.5px solid #94a3b8;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-/* Banner Title (Pink row matching user image) */
+/* Title banner matching modern dashboard aesthetic */
 .sheet-title-banner {
-  background: #e88d8d;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #8b5cf6 100%);
   color: #ffffff;
-  font-weight: 900;
-  font-size: 1.25rem;
-  letter-spacing: 1px;
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   text-align: center;
-  padding: 12px 16px;
-  border-bottom: 2px solid #713f12;
-  border-bottom: 2px solid #b91c1c;
+  padding: 13px 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  gap: 12px;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15);
 }
 
-/* Table scrollable area */
+.sheet-banner-class {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+}
+
+/* Scrollable container */
 .sheet-table-wrapper {
   overflow-x: auto;
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 270px);
   position: relative;
 }
 
-/* Excel Grid Table */
+/* ========================================================
+   MODERN EXCEL GRID TABLE
+   ======================================================== */
 .excel-table {
   width: 100%;
   border-collapse: collapse;
@@ -280,34 +291,47 @@
 
 .excel-table th,
 .excel-table td {
-  border: 1px solid #64748b;
-  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  padding: 9px 12px;
   vertical-align: middle;
 }
 
-/* Header Cells */
+/* Sticky Headers */
 .excel-table thead tr th {
-  background: #ffffff;
-  color: #0f172a;
-  font-weight: 800;
+  background: #f8fafc;
+  color: #1e293b;
+  font-weight: 700;
   position: sticky;
   top: 0;
   z-index: 5;
+  border-bottom: 2px solid #cbd5e1;
 }
 
 .excel-table thead tr.sub-header th {
-  top: 38px;
-  font-weight: 700;
-  color: #334155;
+  top: 42px;
+  font-weight: 600;
+  color: #475569;
   font-size: 0.8rem;
-  background: #f8fafc;
+  background: #f1f5f9;
+  border-bottom: 2px solid #cbd5e1;
 }
 
-/* Sticky columns */
+/* Sub-header unit price badge */
+.sub-header .price-label {
+  font-weight: 700;
+  color: #4f46e5;
+  background: #eef2ff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  font-size: 0.8rem;
+}
+
+/* Sticky column: STT */
 .excel-table .col-stt {
-  width: 45px;
-  min-width: 45px;
-  max-width: 50px;
+  width: 50px;
+  min-width: 50px;
+  max-width: 55px;
   text-align: center;
   position: sticky;
   left: 0;
@@ -317,69 +341,69 @@
 
 .excel-table thead tr th.col-stt {
   z-index: 8;
+  background: #f8fafc;
 }
 
+/* Sticky column: Họ và tên */
 .excel-table .col-name {
   min-width: 200px;
   max-width: 260px;
   text-align: left;
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: 600;
+  color: #1e293b;
   position: sticky;
-  left: 45px;
+  left: 50px;
   background: #ffffff;
   z-index: 6;
+  box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.04);
 }
 
 .excel-table thead tr th.col-name {
   z-index: 8;
   text-align: left;
+  background: #f8fafc;
 }
 
+/* Surcharge column */
 .excel-table .col-phuphi {
   min-width: 130px;
   max-width: 180px;
 }
 
+/* Sticky column: Tổng cộng */
 .excel-table .col-total {
-  min-width: 130px;
-  width: 140px;
+  min-width: 140px;
+  width: 150px;
   font-weight: 800;
-  color: #dc2626;
+  color: #6d28d9;
   text-align: right;
-  padding-right: 14px;
-  background: #fffbeb;
+  padding-right: 16px;
+  background: #faf5ff;
   position: sticky;
   right: 0;
   z-index: 6;
+  box-shadow: -2px 0 6px -2px rgba(0, 0, 0, 0.04);
 }
 
 .excel-table thead tr th.col-total {
   z-index: 8;
-  background: #fef3c7;
-  color: #92400e;
+  background: #f3e8ff;
+  color: #5b21b6;
   text-align: right;
 }
 
-/* Sub-header unit price */
-.sub-header .price-label {
-  font-weight: 700;
-  color: #1e293b;
-  display: block;
-}
-
-/* Table body rows */
+/* Row Hover States */
 .excel-table tbody tr:hover td {
-  background: #f1f5f9;
+  background: #f8fafc;
 }
 
 .excel-table tbody tr:hover td.col-stt,
 .excel-table tbody tr:hover td.col-name {
-  background: #e2e8f0;
+  background: #f1f5f9;
 }
 
 .excel-table tbody tr:hover td.col-total {
-  background: #fef08a;
+  background: #ede9fe;
 }
 
 /* Checkbox Cell */
@@ -387,47 +411,48 @@
   text-align: center;
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s;
+  transition: background 0.15s ease;
 }
 
 .checkbox-cell:hover {
-  background: #e0f2fe !important;
+  background: #f0fdf4 !important;
 }
 
 .checkbox-cell.is-checked {
-  background: #ecfdf5;
+  background: #f0fdf4;
 }
 
-/* Custom Large Checkbox (Like Excel) */
+/* Custom Modern Checkbox */
 .excel-checkbox {
   width: 22px;
   height: 22px;
-  border: 2px solid #334155;
-  border-radius: 4px;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: white;
+  background: #ffffff;
   cursor: pointer;
-  transition: all 0.1s ease-in-out;
+  transition: all 0.15s ease-in-out;
 }
 
 .excel-checkbox.checked {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: white;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
 }
 
 .excel-checkbox:hover {
-  border-color: #2563eb;
-  transform: scale(1.08);
+  border-color: #10b981;
+  transform: scale(1.1);
 }
 
-/* Footer summary row */
+/* Footer summary */
 .excel-table tfoot tr td {
   background: #f8fafc;
-  font-weight: 800;
-  border-top: 2px solid #334155;
+  font-weight: 700;
+  border-top: 2px solid #cbd5e1;
   position: sticky;
   bottom: 0;
   z-index: 7;
@@ -437,37 +462,42 @@
 .excel-table tfoot td.col-name {
   z-index: 8;
   background: #f1f5f9;
+  font-weight: 700;
 }
 
 .excel-table tfoot td.col-total {
   z-index: 8;
-  background: #fef08a;
-  color: #b45309;
+  background: #ede9fe;
+  color: #4f46e5;
   font-size: 0.95rem;
+  font-weight: 800;
 }
 
-/* Modal styles */
+/* ========================================================
+   MODALS
+   ======================================================== */
 .phuphi-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(15, 23, 42, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
 .phuphi-modal {
-  background: white;
-  border-radius: 14px;
+  background: #ffffff;
+  border-radius: 16px;
   width: 95%;
-  max-width: 580px;
+  max-width: 560px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.2);
   overflow: hidden;
+  border: 1px solid #e2e8f0;
 }
 
 .phuphi-modal-header {
@@ -481,7 +511,7 @@
 
 .phuphi-modal-header h3 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: #0f172a;
   display: flex;
@@ -504,7 +534,13 @@
   padding: 10px 14px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
+  transition: all 0.15s ease;
+}
+
+.phuphi-item-row:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .phuphi-item-info {
@@ -528,15 +564,16 @@
   gap: 6px;
 }
 
-/* Empty & Loading state */
+/* Empty & Loading states */
 .sheet-empty-state,
 .sheet-loading-state {
-  padding: 40px 20px;
+  padding: 48px 20px;
   text-align: center;
   color: #64748b;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 0.95rem;
+  font-weight: 500;
 }
