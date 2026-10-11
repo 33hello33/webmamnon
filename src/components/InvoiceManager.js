@@ -1122,6 +1122,26 @@ export default function InvoiceManager({
                sourceHd: recentDoc?.mahd || null,
                period: `${mm}/${yyyy}`
             });
+
+            // Logic giảm học phí theo số ngày đi học:
+            // - Nếu >= 10 ngày: giữ nguyên logic cũ
+            // - Nếu từ 5-9 buổi: chỉ đóng 50% học phí (tự điền vào ô giảm học phí 50%)
+            // - Nếu < 5 buổi: chỉ đóng 30% học phí (tự điền vào ô giảm học phí 70%)
+            if (daHoc >= 10) {
+               // giữ nguyên logic cũ đã tính ở trên
+            } else if (daHoc >= 5 && daHoc <= 9) {
+               setInvoiceData(prev => ({
+                  ...prev,
+                  discountPercent: 50,
+                  giamHocphi: Math.round((Number(prev.hocphi) || hocphi) * 0.5)
+               }));
+            } else {
+               setInvoiceData(prev => ({
+                  ...prev,
+                  discountPercent: 70,
+                  giamHocphi: Math.round((Number(prev.hocphi) || hocphi) * 0.7)
+               }));
+            }
          }
       } catch (err) {
          console.error('Lỗi tính thống kê điểm danh:', err);
@@ -1429,6 +1449,31 @@ export default function InvoiceManager({
          });
          // Reset hoàn trả để tính lại từ điểm danh mới
          setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
+
+         // Cập nhật giảm học phí theo số ngày đi học của tháng mới
+         setInvoiceData(prev => {
+            const hp = Number(prev.hocphi) || 0;
+            let nextGiamHocphi = prev.giamHocphi;
+            let nextDiscountPercent = prev.discountPercent;
+            if (daHoc >= 10) {
+               const basePercent = parseFloat(selectedStudent?.['giamhp%']) || 0;
+               if (basePercent > 0) {
+                  nextDiscountPercent = basePercent;
+                  nextGiamHocphi = Math.round((hp * basePercent) / 100);
+               }
+            } else if (daHoc >= 5 && daHoc <= 9) {
+               nextDiscountPercent = 50;
+               nextGiamHocphi = Math.round(hp * 0.5);
+            } else {
+               nextDiscountPercent = 70;
+               nextGiamHocphi = Math.round(hp * 0.7);
+            }
+            return {
+               ...prev,
+               giamHocphi: nextGiamHocphi,
+               discountPercent: nextDiscountPercent
+            };
+         });
       } catch (err) {
          console.error('Lỗi tải điểm danh khi chuyển tháng:', err);
       }

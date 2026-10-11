@@ -677,7 +677,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let diHoc = 0, nghiPhep = 0, nghiKP = 0;
         uniqueDayRecords.forEach(att => {
           const s = normalizeStatus(att.trangthai);
-          if (s === 'có mặt') diHoc++;
+          if (s === 'có mặt' || s.includes('trả trễ')) diHoc++;
           else if (s === 'nghỉ phép') nghiPhep++;
           else if (s === 'nghỉ không phép') nghiKP++;
         });
@@ -717,9 +717,21 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const surchargeSum = sumSurcharges(phuthu);
 
         let giamhocphi = 0;
-        const giamhp_percent = parseFloat(studentRaw['giamhp%']) || 0;
-        if (giamhp_percent > 0) {
-          giamhocphi = Math.round((initHocPhi * giamhp_percent) / 100);
+        const base_giamhp_percent = parseFloat(studentRaw['giamhp%']) || 0;
+        let giamhp_percent = base_giamhp_percent;
+        if (diHoc >= 10) {
+          // >= 10 ngày: giữ nguyên logic cũ
+          if (giamhp_percent > 0) {
+            giamhocphi = Math.round((initHocPhi * giamhp_percent) / 100);
+          }
+        } else if (diHoc >= 5 && diHoc <= 9) {
+          // 5-9 buổi: chỉ đóng 50% học phí (tự điền vào ô giảm học phí 50%)
+          giamhp_percent = 50;
+          giamhocphi = Math.round(initHocPhi * 0.5);
+        } else {
+          // < 5 buổi: chỉ đóng 30% học phí (tự điền vào ô giảm học phí 70%)
+          giamhp_percent = 70;
+          giamhocphi = Math.round(initHocPhi * 0.7);
         }
 
         return {
@@ -729,6 +741,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           mucTienAn: studentMealAmount,
           giamhocphi,
           giamhp_percent,
+          base_giamhp_percent,
           noCu: stNoCu,
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
@@ -844,7 +857,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let diHoc = 0, nghiPhep = 0, nghiKP = 0;
         uniqueDayRecords.forEach(att => {
           const s = normalizeStatus(att.trangthai);
-          if (s === 'có mặt') diHoc++;
+          if (s === 'có mặt' || s.includes('trả trễ')) diHoc++;
           else if (s === 'nghỉ phép') nghiPhep++;
           else if (s === 'nghỉ không phép') nghiKP++;
         });
@@ -875,14 +888,29 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const totalRefund = mealRefund + tuitionRefund + truTienDaNgoai;
 
         const hp = parseInt(row.hocphi || 0);
-        const ghp = parseInt(row.giamhocphi || 0);
         const nocu = parseInt(row.noCu || 0);
 
         const studentPhuThu = regSurchargesMap[row.mahv] || [];
         const surchargeSum = sumSurcharges(studentPhuThu);
 
+        let ghp = 0;
+        let giamhp_percent = row.base_giamhp_percent || 0;
+        if (diHoc >= 10) {
+          if (giamhp_percent > 0) {
+            ghp = Math.round((hp * giamhp_percent) / 100);
+          }
+        } else if (diHoc >= 5 && diHoc <= 9) {
+          giamhp_percent = 50;
+          ghp = Math.round(hp * 0.5);
+        } else {
+          giamhp_percent = 70;
+          ghp = Math.round(hp * 0.7);
+        }
+
         return {
           ...row,
+          giamhocphi: ghp,
+          giamhp_percent,
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
