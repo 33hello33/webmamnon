@@ -238,12 +238,12 @@ export default function InvoiceManager({
 }) {
    const { config, getTienAnConfig, getTienAnTiers } = useConfig();
    const mealTiers = React.useMemo(() => (getTienAnTiers ? getTienAnTiers() : []), [config, getTienAnTiers]);
-   const walletsConfig = (config ? [
+   const walletsConfig = React.useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
       { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
       { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
       { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
-   ].filter(w => w.name && w.name.trim() !== '') : []);
+   ].filter(w => w.name && w.name.trim() !== '') : []), [config]);
 
    const [students, setStudents] = useState([]);
    const [classes, setClasses] = useState([]);
@@ -270,6 +270,7 @@ export default function InvoiceManager({
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
    const invoiceExportLockRef = useRef(null);
+   const noticeExportLockRef = useRef(null);
    const initialInvoiceData = {
       loaiDong: 'Tháng',
       soLuong: 1,
@@ -526,6 +527,9 @@ export default function InvoiceManager({
 
    useEffect(() => {
       if (downloadingNotice) {
+         if (noticeExportLockRef.current === downloadingNotice.mahd) return;
+         noticeExportLockRef.current = downloadingNotice.mahd;
+
          const processPng = async () => {
             try {
                await new Promise(r => setTimeout(r, 1500));
@@ -634,12 +638,15 @@ export default function InvoiceManager({
             } catch (err) {
                console.error('Notice capture error:', err);
             } finally {
+               if (noticeExportLockRef.current === downloadingNotice.mahd) {
+                  noticeExportLockRef.current = null;
+               }
                setDownloadingNotice(null);
             }
          };
          processPng();
       }
-   }, [downloadingNotice, walletsConfig]);
+   }, [downloadingNotice]);
 
    const calculateOldDebt = async (mahv) => {
       try {
