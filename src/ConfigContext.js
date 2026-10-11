@@ -146,10 +146,34 @@ export const ConfigProvider = ({ children }) => {
     return parseInt(String(trutienanConfig).replace(/\D/g, '')) || 0;
   };
 
-  const getTienAnConfig = (hocphiInput) => {
+  const getTienAnTiers = () => {
+    if (!config || !config.trutienan) return [];
+    let trutienanConfig = config.trutienan;
+
+    if (typeof trutienanConfig === 'string' && trutienanConfig.startsWith('{')) {
+      try {
+        trutienanConfig = JSON.parse(trutienanConfig);
+      } catch (e) {
+        trutienanConfig = null;
+      }
+    }
+
+    if (trutienanConfig && typeof trutienanConfig === 'object') {
+      return Object.entries(trutienanConfig).map(([k, v]) => ({
+        amount: parseInt(String(k).replace(/\D/g, ''), 10) || 0,
+        tru_nghi: parseInt(String(v?.tru_nghi || '0').replace(/\D/g, ''), 10) || 0
+      })).filter(t => t.amount > 0 || t.tru_nghi > 0);
+    }
+
+    const val = parseInt(String(config.trutienan || '0').replace(/\D/g, ''), 10) || 0;
+    if (val > 0) return [{ amount: 0, tru_nghi: val }];
+    return [];
+  };
+
+  const getTienAnConfig = (mealTierInput) => {
     if (!config || !config.trutienan) return { amount: 0, tru_nghi: 0 };
 
-    const hocphi = parseInt(String(hocphiInput || '0').replace(/\D/g, ''));
+    const mealTier = parseInt(String(mealTierInput || '0').replace(/\D/g, ''));
     let trutienanConfig = config.trutienan;
 
     if (typeof trutienanConfig === 'string' && trutienanConfig.startsWith('{')) {
@@ -165,13 +189,15 @@ export const ConfigProvider = ({ children }) => {
       if (keys.length === 0) return { amount: 0, tru_nghi: 0 };
 
       // Find match exactly
-      if (trutienanConfig[hocphi]) {
-        return { amount: hocphi, tru_nghi: parseInt(trutienanConfig[hocphi].tru_nghi) || 0 };
+      if (mealTier > 0 && trutienanConfig[mealTier]) {
+        return { amount: mealTier, tru_nghi: parseInt(trutienanConfig[mealTier].tru_nghi) || 0 };
       }
 
       // Fallback matching
-      const match = Object.entries(trutienanConfig).find(([k]) => parseInt(k) === hocphi);
-      if (match) return { amount: parseInt(match[0]), tru_nghi: parseInt(match[1].tru_nghi) || 0 };
+      if (mealTier > 0) {
+        const match = Object.entries(trutienanConfig).find(([k]) => parseInt(k) === mealTier);
+        if (match) return { amount: parseInt(match[0]), tru_nghi: parseInt(match[1].tru_nghi) || 0 };
+      }
 
       // Default to first tier if no match
       const firstKey = keys[0];
@@ -183,7 +209,7 @@ export const ConfigProvider = ({ children }) => {
   };
 
   return (
-    <ConfigContext.Provider value={{ config, setConfig, refreshConfig: fetchConfig, loading, getTruTienAn, getTienAnConfig }}>
+    <ConfigContext.Provider value={{ config, setConfig, refreshConfig: fetchConfig, loading, getTruTienAn, getTienAnConfig, getTienAnTiers }}>
       {children}
     </ConfigContext.Provider>
   );

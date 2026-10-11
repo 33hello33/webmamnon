@@ -183,7 +183,8 @@ const getNextNoticeNumber = async () => {
 };
 
 export default function ClassManager({ students, showMessage, fetchStudents }) {
-  const { config, getTienAnConfig } = useConfig();
+  const { config, getTienAnConfig, getTienAnTiers } = useConfig();
+  const mealTiers = React.useMemo(() => (getTienAnTiers ? getTienAnTiers() : []), [config, getTienAnTiers]);
   const consecutiveRefundConfig = React.useMemo(
     () => normalizeConsecutiveRefundConfig(config?.nghilientiep, config),
     [config]
@@ -208,8 +209,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
   const auth = JSON.parse(localStorage.getItem('auth_session') || '{}');
   const cashier = auth.user?.tennv || auth.user?.username || 'Thu Ngân';
 
-  const getMealRefundRate = useCallback((hocphiAmount) => {
-    const tier = getTienAnConfig?.(hocphiAmount);
+  const getMealRefundRate = useCallback((mucTienAn) => {
+    const tier = getTienAnConfig?.(mucTienAn);
     if (tier && Number(tier.tru_nghi) > 0) {
       return Number(tier.tru_nghi);
     }
@@ -640,10 +641,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         debtMap[x.mahv] += parseFormattedNumber(x.conno);
       });
 
+      const defaultMealTier = mealTiers.length > 0 ? mealTiers[0].amount : 0;
       setBatchNoticeData({
         loaiDong: initLoaiDong,
         soLuong: initSoLuong,
         hocPhiOpt: initHocPhiOpt,
+        mucTienAnOpt: defaultMealTier,
         hinhThuc: walletsConfig[0]?.name || 'Tiền mặt',
         ngayBatDau: startStr,
         ngayKetThuc: '',
@@ -682,7 +685,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const groups = calculateConsecutiveLeaveGroups(uniqueDayRecords);
         let mealRefund = 0;
         let maxLeave = 0;
-        const mealRefundRate = getMealRefundRate(initHocPhi);
+        const studentMealAmount = defaultMealTier;
+        const mealRefundRate = getMealRefundRate(studentMealAmount);
         const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
         groups.forEach(g => {
@@ -696,9 +700,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           config: consecutiveRefundConfig
         });
 
-        if (nghiPhep >= 3) {
-          mealRefund = nghiPhep * mealRefundRate;
-        }
+        mealRefund = (nghiPhep || 0) * mealRefundRate;
 
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
@@ -724,6 +726,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           mahv: currentMahv,
           tenhv: currentTenhv,
           hocphi: initHocPhi,
+          mucTienAn: studentMealAmount,
           giamhocphi,
           giamhp_percent,
           noCu: stNoCu,
@@ -849,7 +852,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         // Tính lại hoàn tiền
         const groups = calculateConsecutiveLeaveGroups(uniqueDayRecords);
         let mealRefund = 0, maxLeave = 0;
-        const mealRefundRate = getMealRefundRate(row.hocphi || 0);
+        const studentMealAmount = row.mucTienAn || (mealTiers.length > 0 ? mealTiers[0].amount : 0);
+        const mealRefundRate = getMealRefundRate(studentMealAmount);
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
@@ -859,7 +863,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           dailyRefundAmount: tuitionRefundRate,
           config: consecutiveRefundConfig
         });
-        if (nghiPhep >= 3) mealRefund = nghiPhep * mealRefundRate;
+        mealRefund = (nghiPhep || 0) * mealRefundRate;
 
         mealRefund = Math.round(mealRefund / 1000) * 1000;
         tuitionRefund = Math.round(tuitionRefund / 1000) * 1000;
@@ -913,12 +917,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       }
     }
 
+    const appliedMealAmount = batchNoticeData.mucTienAnOpt || (mealTiers.length > 0 ? mealTiers[0].amount : 0);
+    const mealRefundRate = getMealRefundRate(appliedMealAmount);
+
     setBatchStudentsData(prev => (prev || []).map(item => {
       const currentNoCu = parseInt(item.noCu || 0);
-      const mealRefundRate = getMealRefundRate(hpNumber);
-      const recalculatedMealRefund = (item.diemDanhInfo?.nghiPhep || 0) >= 3
-        ? Math.round((((item.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
-        : 0;
+      const recalculatedMealRefund = Math.round(((((item.diemDanhInfo?.nghiPhep || 0) * mealRefundRate)) / 1000)) * 1000;
       const surchargeSum = sumSurcharges(item.phuthu);
       const truTienDaNgoai = parseInt(item.truTienDaNgoai || 0);
 
@@ -932,6 +936,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       return {
         ...item,
         hocphi: hpNumber,
+        mucTienAn: appliedMealAmount,
         giamhocphi: calculatedGiamHocPhi,
         truTienAn: recalculatedMealRefund,
         ngaybatdau: batchNoticeData.ngayBatDau,
@@ -945,7 +950,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         
@@ -969,16 +974,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
            newItem[field] = cleanVal;
         }
 
+        if (field === 'mucTienAn') {
+          const mealRate = getMealRefundRate(cleanVal);
+          newItem.mucTienAn = cleanVal;
+          newItem.truTienAn = Math.round(((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRate)) / 1000)) * 1000;
+        }
+
         if (field === 'hocphi') {
-          const mealRefundRate = getMealRefundRate(cleanVal);
-          newItem.truTienAn = (newItem.diemDanhInfo?.nghiPhep || 0) >= 3
-            ? Math.round((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRefundRate) / 1000)) * 1000
-            : 0;
           if (newItem.giamhp_percent > 0) {
             newItem.giamhocphi = Math.round((cleanVal * newItem.giamhp_percent) / 100);
           }
         }
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount'].includes(field)) {
+        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
           const nocu = parseInt(newItem.noCu || 0);
@@ -1089,6 +1096,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         "Tháng": n.thoiluong,
         "CM/P/KP": `${n.diemDanhInfo?.diHoc || 0}/${n.diemDanhInfo?.nghiPhep || 0}/${n.diemDanhInfo?.nghiKP || 0}`,
         "Học phí": n.hocphi || 0,
+        "Mức tiền ăn": n.mucTienAn || 0,
         "Giảm học phí": n.giamhocphi || 0,
         "Nợ cũ": n.noCu || 0,
         "Hoàn tiền Ăn": n.truTienAn || 0,
@@ -2339,8 +2347,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   </div>
                 </div>
 
-                {/* Dòng 2: Gói HP | Giảm HP | Ghi chú | Nút Áp dụng */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) 140px 1fr 180px', gap: '10px', alignItems: 'end' }}>
+                {/* Dòng 2: Gói HP | Mức tiền ăn mẫu | Giảm HP | Ghi chú | Nút Áp dụng */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1.1fr) minmax(160px, 1.2fr) 130px 1fr 160px', gap: '10px', alignItems: 'end' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>GÓI HỌC PHÍ MẪU</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', background: '#f8fafc', padding: '6px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '42px', alignItems: 'center' }}>
@@ -2374,6 +2382,29 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           </span>
                         );
                       }) : <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>N/A</span>}
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '6px', display: 'block' }}>MỨC TIỀN ĂN MẪU</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', background: '#f8fafc', padding: '6px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '42px', alignItems: 'center' }}>
+                      {mealTiers.length > 0 ? mealTiers.map((tier) => {
+                        const isActive = Number(batchNoticeData.mucTienAnOpt) === Number(tier.amount);
+                        return (
+                          <span
+                            key={tier.amount}
+                            onClick={() => handleBatchNoticeFieldChange('mucTienAnOpt', tier.amount)}
+                            style={{
+                              padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', transition: '0.15s',
+                              background: isActive ? '#059669' : '#ffffff',
+                              color: isActive ? '#ffffff' : '#475569',
+                              border: `1px solid ${isActive ? '#047857' : '#cbd5e1'}`,
+                            }}
+                          >
+                            {formatTuition(tier.amount)} (-{formatTuition(tier.tru_nghi)}/n)
+                          </span>
+                        );
+                      }) : <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Mặc định</span>}
                     </div>
                   </div>
 
@@ -2431,6 +2462,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '130px' }}>Học phí</th>
                           <th style={{ minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '80px' }}>Nghỉ LT</th>
+                          <th style={{ minWidth: '150px' }}>Mức Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Trừ Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Trừ Học Phí</th>
                           <th style={{ minWidth: '130px' }}>Trừ Dã Ngoại</th>
@@ -2486,6 +2518,33 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 />
                               </td>
                               <td style={{ fontWeight: 700, color: '#f59e0b' }}>{row.nghiLienTiep || 0} n</td>
+                              <td>
+                                {mealTiers.length > 0 ? (
+                                  <select
+                                    value={row.mucTienAn || mealTiers[0]?.amount}
+                                    onChange={e => handleBatchStudentChange(row.mahv, 'mucTienAn', Number(e.target.value))}
+                                    style={{
+                                      width: '100%',
+                                      padding: '6px 8px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #cbd5e1',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 600,
+                                      background: '#f0fdf4',
+                                      color: '#166534',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {mealTiers.map(t => (
+                                      <option key={t.amount} value={t.amount}>
+                                        {formatTuition(t.amount)} (-{formatTuition(t.tru_nghi)}/n)
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Mặc định</span>
+                                )}
+                              </td>
                               <td>
                                 <input
                                   type="text"

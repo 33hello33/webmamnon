@@ -236,7 +236,8 @@ export default function InvoiceManager({
    onNavigateToSurchargeRegistration,
    currentUser
 }) {
-   const { config, getTienAnConfig } = useConfig();
+   const { config, getTienAnConfig, getTienAnTiers } = useConfig();
+   const mealTiers = React.useMemo(() => (getTienAnTiers ? getTienAnTiers() : []), [config, getTienAnTiers]);
    const walletsConfig = (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
       { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -279,6 +280,7 @@ export default function InvoiceManager({
       })(),
       ngayKetThuc: '',
       hocphi: 0,
+      mucTienAn: 0,
       donGia: 0,
       giamHocphi: 0,
       discountPercent: 0,
@@ -685,6 +687,7 @@ export default function InvoiceManager({
       setUnpaidBills([]);
       setInvoiceData({
          ...initialInvoiceData,
+         mucTienAn: mealTiers.length > 0 ? mealTiers[0].amount : 0,
          hinhThuc: (st.hinhthucdong || '').trim() || initialInvoiceData.hinhThuc
       });
 
@@ -743,6 +746,7 @@ export default function InvoiceManager({
       }
 
       let hocphi = defaultFee;
+      let loadedMucTienAn = mealTiers.length > 0 ? mealTiers[0].amount : 0;
       let giamHocphi = 0;
       let discountPercent = 0;
       let hinhThuc = (student.hinhthucdong || '').trim() || (walletsConfig.length > 0 ? walletsConfig[0].name : 'Tiền mặt');
@@ -823,6 +827,16 @@ export default function InvoiceManager({
                const n = parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
                return isNegative ? -n : n;
             };
+            let loadedMucTienAn = mealTiers.length > 0 ? mealTiers[0].amount : 0;
+            if (mealTiers.length > 0) {
+               const pastMealRefund = parseCur(recentDoc.trutienan);
+               const pastLeaveDays = Number(recentDoc.sobuoinghiphep) || 0;
+               if (pastMealRefund > 0 && pastLeaveDays > 0) {
+                  const dailyRate = Math.round(pastMealRefund / pastLeaveDays);
+                  const matchedTier = mealTiers.find(t => Math.abs(t.tru_nghi - dailyRate) < 1000);
+                  if (matchedTier) loadedMucTienAn = matchedTier.amount;
+               }
+            }
             const loadedHocPhi = parseCur(recentDoc.hocphi);
             if (loadedHocPhi > 0) {
                hocphi = loadedHocPhi;
@@ -972,7 +986,7 @@ export default function InvoiceManager({
       setInvoiceData(prev => ({
          ...prev,
          loaiDong, soLuong, ngayBatDau: startStr, ngayKetThuc: endMonthStr,
-         hocphi, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu,
+         hocphi, mucTienAn: loadedMucTienAn, donGia: hocphi / (soLuong || 1), giamHocphi, hinhThuc, ghiChu, phuthu,
          discountPercent
       }));
 
@@ -1694,8 +1708,14 @@ export default function InvoiceManager({
    const effectiveSurcharges = mergeLateFeeSurcharges(combinedCustomPhuThu, studySummary || {}, config?.tientratre);
    const surchargeSum = effectiveSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
+   const handleSelectMucTienAn = (amount) => {
+      setInvoiceData(prev => ({ ...prev, mucTienAn: amount }));
+      setRefundOverrides(prev => ({ ...prev, meal: null }));
+   };
+
    // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
-   const tienAnConfig = getTienAnConfig?.(invoiceData.hocphi);
+   const currentMealTierAmount = invoiceData.mucTienAn || (mealTiers.length > 0 ? mealTiers[0].amount : 0);
+   const tienAnConfig = getTienAnConfig?.(currentMealTierAmount);
    const trutienan_val = (tienAnConfig && Number(tienAnConfig.tru_nghi) > 0)
       ? Number(tienAnConfig.tru_nghi)
       : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
@@ -1866,6 +1886,39 @@ export default function InvoiceManager({
                                  </button>
                               </div>
                            </div>
+                           <div className="im-field-hz" style={{ marginTop: '12px', gridColumn: 'span 2' }}>
+                              <label style={{ color: '#0369a1', fontWeight: 700, fontSize: '0.95rem' }}>Mức tiền ăn:</label>
+                              <div className="val-text" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                 {mealTiers.length > 0 ? (
+                                    mealTiers.map(tier => {
+                                       const isSelected = Number(currentMealTierAmount) === Number(tier.amount);
+                                       return (
+                                          <button
+                                             key={tier.amount}
+                                             type="button"
+                                             onClick={() => handleSelectMucTienAn(tier.amount)}
+                                             style={{
+                                                padding: '7px 16px',
+                                                borderRadius: '8px',
+                                                fontSize: '0.95rem',
+                                                fontWeight: 700,
+                                                cursor: 'pointer',
+                                                border: isSelected ? '1.5px solid #0284c7' : '1px solid #cbd5e1',
+                                                background: isSelected ? '#0284c7' : '#ffffff',
+                                                color: isSelected ? '#ffffff' : '#334155',
+                                                boxShadow: isSelected ? '0 2px 6px rgba(2, 132, 199, 0.25)' : 'none',
+                                                transition: 'all 0.15s ease'
+                                             }}
+                                          >
+                                             {formatCurrency(tier.amount)} ₫ (-{formatCurrency(tier.tru_nghi)} ₫/n)
+                                          </button>
+                                       );
+                                    })
+                                 ) : (
+                                    <span style={{ fontSize: '0.95rem', color: '#64748b' }}>Trừ {formatCurrency(trutienan_val)} ₫/ngày</span>
+                                 )}
+                              </div>
+                           </div>
                         </div>
 
                      </div>
@@ -1927,8 +1980,36 @@ export default function InvoiceManager({
                                     {deductionSum > 0 && (
                                        <>
                                           {actualMealRefund > 0 && (
-                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span>Hoàn trả tiền ăn nghỉ phép:</span>
+                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                   <span>Hoàn trả tiền ăn nghỉ phép{studySummary?.nghiPhep ? ` (${studySummary.nghiPhep} ngày x ${formatCurrency(trutienan_val)}đ)` : ''}:</span>
+                                                   {mealTiers.length > 1 && (
+                                                      <div style={{ display: 'inline-flex', gap: '4px' }}>
+                                                         {mealTiers.map(tier => {
+                                                            const isSel = Number(currentMealTierAmount) === Number(tier.amount);
+                                                            return (
+                                                               <button
+                                                                  key={tier.amount}
+                                                                  type="button"
+                                                                  onClick={() => handleSelectMucTienAn(tier.amount)}
+                                                                  style={{
+                                                                     padding: '1px 6px',
+                                                                     borderRadius: '4px',
+                                                                     fontSize: '0.72rem',
+                                                                     fontWeight: 700,
+                                                                     cursor: 'pointer',
+                                                                     border: isSel ? '1px solid #059669' : '1px solid #a7f3d0',
+                                                                     background: isSel ? '#059669' : '#ffffff',
+                                                                     color: isSel ? '#ffffff' : '#047857'
+                                                                  }}
+                                                               >
+                                                                  {formatCurrency(tier.amount)} ₫
+                                                               </button>
+                                                            );
+                                                         })}
+                                                      </div>
+                                                   )}
+                                                </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px dashed #10b981' }}>
                                                    <span style={{ fontWeight: 700 }}>-</span>
                                                    <input
