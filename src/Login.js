@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './App.css';
-import './components/ParentPremiumUI.css';
 import './components/ChatManager.css';
 import { supabase, supabaseCs1, supabaseCs2, setActiveSchema, getActiveSchema, SCHEMA_CS1, SCHEMA_CS2, HAS_MULTI_BRANCH } from './supabase';
 import { useConfig } from './ConfigContext';
-import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Building } from 'lucide-react';
-import ParentPortal from './components/ParentPortal';
+import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Building } from 'lucide-react';
 import TeacherPortal from './components/TeacherPortal';
-import { enrichParentChildren, fetchParentStudentPortalData } from './utils/parentPortalData';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const ONE_MONTH_MS = 30 * ONE_DAY_MS;
 const TEACHER_PORTAL_ROLES = ['Giáo viên', 'Giáo viên BM'];
 
 function Login() {
@@ -22,8 +18,7 @@ function Login() {
    const { config } = useConfig();
    const navigate = useNavigate();
 
-   const [loginMode, setLoginMode] = useState('parent');
-   const [parentData, setParentData] = useState(null);
+   const [loginMode, setLoginMode] = useState('login');
 
    const [attendanceUser, setAttendanceUser] = useState(null);
    const [attClasses, setAttClasses] = useState([]);
@@ -32,6 +27,9 @@ function Login() {
    const [cs1Config, setCs1Config] = useState(null);
 
    useEffect(() => {
+      const theme = localStorage.getItem('app_theme') || 'kindergarten';
+      document.body.setAttribute('data-theme', theme);
+
       supabaseCs1.from('tbl_config').select('*').maybeSingle().then(({ data }) => {
          if (data) setCs1Config(data);
       });
@@ -39,10 +37,6 @@ function Login() {
 
    const clearAuthSession = () => {
       localStorage.removeItem('auth_session');
-   };
-
-   const clearParentSession = () => {
-      localStorage.removeItem('parent_session');
    };
 
    const buildAuthSession = (user) => ({
@@ -56,18 +50,6 @@ function Login() {
 
    const persistAuthSession = (user) => {
       localStorage.setItem('auth_session', JSON.stringify(buildAuthSession(user)));
-   };
-
-   const buildParentSession = (parentSessionData, loginUsername, loginPassword) => ({
-      data: parentSessionData,
-      username: loginUsername || '',
-      password: loginPassword || '',
-      loginTime: Date.now(),
-      schema: getActiveSchema()
-   });
-
-   const persistParentSession = (parentSessionData, loginUsername, loginPassword) => {
-      localStorage.setItem('parent_session', JSON.stringify(buildParentSession(parentSessionData, loginUsername, loginPassword)));
    };
 
    const preloadTeacherData = async (user) => {
@@ -209,138 +191,6 @@ function Login() {
       return true;
    };
 
-   const authenticateParent = async (loginUsername, loginPassword) => {
-      if (!HAS_MULTI_BRANCH || !SCHEMA_CS2) {
-         const res = await supabase.from('tbl_hv').select('*').eq('username', loginUsername).eq('password', loginPassword).order('tenhv', { ascending: true });
-         if (res.error) throw new Error('Lỗi hệ thống khi tra cứu dữ liệu.');
-
-         const students = (res.data || []).filter((student) => student?.trangthai !== 'Đã Nghỉ');
-         if (students.length === 0) return { ok: false };
-
-         setActiveSchema(SCHEMA_CS1 || '');
-         return { ok: true, students, schema: SCHEMA_CS1 || '' };
-      }
-
-      const [res1, res2] = await Promise.all([
-         supabaseCs1.from('tbl_hv').select('*').eq('username', loginUsername).eq('password', loginPassword).order('tenhv', { ascending: true }),
-         supabaseCs2.from('tbl_hv').select('*').eq('username', loginUsername).eq('password', loginPassword).order('tenhv', { ascending: true })
-      ]);
-
-      if (res1.error && res2.error) throw new Error('Lỗi hệ thống khi tra cứu dữ liệu.');
-
-      const students1 = (res1.data || []).filter((student) => student?.trangthai !== 'Đã Nghỉ');
-      const students2 = (res2.data || []).filter((student) => student?.trangthai !== 'Đã Nghỉ');
-
-      if (students1.length === 0 && students2.length === 0) return { ok: false };
-
-      const matchedSchema = students1.length > 0 ? SCHEMA_CS1 : SCHEMA_CS2;
-      const matchedStudents = students1.length > 0 ? students1 : students2;
-
-      setActiveSchema(matchedSchema);
-      return { ok: true, students: matchedStudents, schema: matchedSchema };
-   };
-
-   const completeParentLogin = async (studentRecords, loginUsername, loginPassword, options = {}) => {
-      const children = await enrichParentChildren(supabase, studentRecords);
-      const requestedStudentId = options.activeStudentId;
-      const activeStudent = children.find((student) => student.mahv === requestedStudentId) || children[0];
-      const parentDataObj = await fetchParentStudentPortalData(supabase, activeStudent);
-      parentDataObj.children = children;
-      parentDataObj.activeStudentId = parentDataObj.student?.mahv || activeStudent?.mahv || null;
-      setParentData(parentDataObj);
-      persistParentSession(parentDataObj, loginUsername, loginPassword);
-   };
-
-   const tryAutoParentReLogin = async (session) => {
-      const savedUsername = session?.username || session?.data?.student?.username || '';
-      const savedPassword = session?.password || session?.data?.student?.password || '';
-
-      if (!savedUsername) {
-         clearParentSession();
-         return false;
-      }
-
-      setUsername(savedUsername);
-      setPassword('');
-      setLoginMode('parent');
-
-      if (!savedPassword) {
-         clearParentSession();
-         return false;
-      }
-
-      if (session.schema) {
-         setActiveSchema(session.schema);
-      }
-
-      const result = await authenticateParent(savedUsername, savedPassword);
-      if (!result.ok) {
-         clearParentSession();
-         return false;
-      }
-
-      await completeParentLogin(result.students, savedUsername, savedPassword, {
-         activeStudentId: session?.data?.activeStudentId || session?.activeStudentId || session?.data?.student?.mahv || session?.student?.mahv
-      });
-      return true;
-   };
-
-   useEffect(() => {
-      const theme = localStorage.getItem('app_theme') || 'kindergarten';
-      document.body.setAttribute('data-theme', theme);
-
-      let isCancelled = false;
-
-      const restoreParentSession = async () => {
-         const savedSession = localStorage.getItem('parent_session');
-         if (!savedSession) return;
-
-         try {
-            const session = JSON.parse(savedSession);
-            const currentTime = Date.now();
-
-            if (session.schema) {
-               setActiveSchema(session.schema);
-            }
-
-            if (!session.loginTime || currentTime - session.loginTime < ONE_MONTH_MS) {
-               if (!isCancelled) {
-                  setParentData(session.data || session);
-               }
-
-               const savedUsername = session?.username || session?.data?.student?.username || '';
-               const savedPassword = session?.password || session?.data?.student?.password || '';
-               if (savedUsername && savedPassword) {
-                  try {
-                     const result = await authenticateParent(savedUsername, savedPassword);
-                     if (result.ok && !isCancelled) {
-                        await completeParentLogin(result.students, savedUsername, savedPassword, {
-                           activeStudentId: session?.data?.activeStudentId || session?.activeStudentId || session?.data?.student?.mahv || session?.student?.mahv
-                        });
-                     }
-                  } catch (refreshErr) {
-                     console.warn('Background refresh thất bại, giữ dữ liệu cache:', refreshErr);
-                  }
-               }
-               return;
-            }
-
-            const relogged = await tryAutoParentReLogin(session);
-            if (!relogged && !isCancelled) {
-               setMessage({ type: 'error', text: 'Phiên phụ huynh đã hết hạn. Vui lòng nhập lại mật khẩu.' });
-            }
-         } catch (e) {
-            clearParentSession();
-         }
-      };
-
-      restoreParentSession();
-
-      return () => {
-         isCancelled = true;
-      };
-   }, []);
-
    useEffect(() => {
       let isCancelled = false;
 
@@ -384,32 +234,6 @@ function Login() {
       };
    }, [navigate]);
 
-   const handleParentLogin = async (e) => {
-      e.preventDefault();
-      if (!username || !password) {
-         setMessage({ type: 'error', text: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.' });
-         return;
-      }
-
-      setLoading(true);
-      setMessage({ type: '', text: '' });
-      try {
-         const result = await authenticateParent(username, password);
-
-         if (!result.ok) {
-            setMessage({ type: 'error', text: 'Tên đăng nhập hoặc mật khẩu phụ huynh không đúng.' });
-            setLoading(false);
-            return;
-         }
-
-         await completeParentLogin(result.students, username, password);
-      } catch (err) {
-         console.error(err);
-         setMessage({ type: 'error', text: 'Lỗi hệ thống khi tra cứu dữ liệu.' });
-      }
-      setLoading(false);
-   };
-
    const handleLogin = async (e) => {
       e.preventDefault();
       if (!username || !password) {
@@ -449,39 +273,18 @@ function Login() {
    return (
       <div className="app-container">
          <div id="login-box-target" className="login-box" style={{
-            maxWidth: parentData || (loginMode === 'attendance' && attendanceUser) ? '1200px' : '400px',
+            maxWidth: loginMode === 'attendance' && attendanceUser ? '1200px' : '400px',
             width: '95%',
             transition: 'all 0.3s ease',
-            padding: parentData || (loginMode === 'attendance' && attendanceUser) ? '1rem' : '3rem',
-            margin: parentData || (loginMode === 'attendance' && attendanceUser) ? '1rem auto' : '2rem auto',
-            height: parentData || (loginMode === 'attendance' && attendanceUser) ? 'calc(100vh - 2rem)' : 'auto',
+            padding: loginMode === 'attendance' && attendanceUser ? '1rem' : '3rem',
+            margin: loginMode === 'attendance' && attendanceUser ? '1rem auto' : '2rem auto',
+            height: loginMode === 'attendance' && attendanceUser ? 'calc(100vh - 2rem)' : 'auto',
             display: 'flex',
             flexDirection: 'column',
-            overflow: parentData || (loginMode === 'attendance' && attendanceUser) ? 'auto' : 'visible'
+            overflow: loginMode === 'attendance' && attendanceUser ? 'auto' : 'visible'
          }}>
 
-            {!parentData && !(loginMode === 'attendance' && attendanceUser) && (
-               <div className="login-tabs" style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {config?.phuhuynh && (
-                     <button
-                        type="button"
-                        className={`login-tab-btn ${loginMode === 'parent' ? 'active' : ''}`}
-                        onClick={() => { setLoginMode('parent'); setMessage({ type: '', text: '' }); }}
-                        style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
-                        Phụ Huynh
-                     </button>
-                  )}
-                  <button
-                     type="button"
-                     className={`login-tab-btn ${loginMode === 'login' || loginMode === 'attendance' ? 'active' : ''}`}
-                     onClick={() => { setLoginMode('login'); setMessage({ type: '', text: '' }); }}
-                     style={{ flex: 1, minWidth: '90px', padding: '0.5rem 0', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.9rem' }}>
-                     Giáo Viên
-                  </button>
-               </div>
-            )}
-
-            {!(loginMode === 'attendance' && attendanceUser) && !parentData ? (
+            {!(loginMode === 'attendance' && attendanceUser) ? (
                <>
                   <div className="login-header">
                      <div className="logo-container" style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
@@ -493,7 +296,7 @@ function Login() {
                         />
                      </div>
                      <h2>{cs1Config?.tenweb || config?.tenweb || 'Hệ thống Quản lý'}</h2>
-                     <p>{loginMode === 'login' ? (cs1Config?.motaweb || config?.motaweb || 'Truy cập hệ thống quản lý cơ sở') : loginMode === 'attendance' ? 'Đăng nhập ghi danh học sinh' : 'Nhập mã học sinh xem học phí & điểm danh'}</p>
+                     <p>{cs1Config?.motaweb || config?.motaweb || 'Truy cập hệ thống quản lý cơ sở'}</p>
                   </div>
 
                   {message.text && (
@@ -547,10 +350,10 @@ function Login() {
                         </div>
                      </div>
                   ) : (
-                     <form onSubmit={loginMode === 'login' ? handleLogin : handleParentLogin} className="login-form">
+                     <form onSubmit={handleLogin} className="login-form">
                         <div className="input-group">
                            <div className="input-icon"><User size={18} /></div>
-                           <input type="text" placeholder={loginMode === 'login' ? 'Tên đăng nhập nhân viên' : 'Tên đăng nhập phụ huynh'} value={username} onChange={(e) => setUsername(e.target.value)} />
+                           <input type="text" placeholder="Tên đăng nhập nhân viên" value={username} onChange={(e) => setUsername(e.target.value)} />
                         </div>
 
                         <div className="input-group">
@@ -558,18 +361,18 @@ function Login() {
                            <input type="password" placeholder="Mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} />
                         </div>
 
-                        <button type="submit" className={`submit-btn ${loading ? 'loading' : ''}`} disabled={loading} style={loginMode === 'parent' ? { background: '#10b981' } : {}}>
+                        <button type="submit" className={`submit-btn ${loading ? 'loading' : ''}`} disabled={loading}>
                            {loading ? <Loader2 className="spinner" size={20} /> : (
                               <>
-                                 <span>{loginMode === 'parent' ? 'Vào Tra Cứu' : 'Đăng Nhập'}</span>
-                                 {loginMode === 'parent' ? <Search size={18} /> : <LogIn size={18} />}
+                                 <span>Đăng Nhập</span>
+                                 <LogIn size={18} />
                               </>
                            )}
                         </button>
                      </form>
                   )}
                </>
-            ) : loginMode === 'attendance' && attendanceUser ? (
+            ) : (
                <TeacherPortal
                   attendanceUser={attendanceUser}
                   initialClasses={attClasses}
@@ -585,17 +388,6 @@ function Login() {
                      setLoginMode('login');
                      setUsername('');
                      setPassword('');
-                  }}
-               />
-            ) : (
-               <ParentPortal
-                  parentData={parentData}
-                  setParentData={(data) => {
-                     if (!data && 'clearAppBadge' in navigator) {
-                        navigator.clearAppBadge().catch(console.error);
-                     }
-                     setParentData(data);
-                     if (!data) localStorage.removeItem('parent_session');
                   }}
                />
             )}

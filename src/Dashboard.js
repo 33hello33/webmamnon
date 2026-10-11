@@ -72,7 +72,6 @@ const ALL_TABS = [
       { id: 'attendance_today', label: 'Danh sách đi học', dotColor: '#3b82f6' },
       { id: 'attendance', label: 'Điểm danh', dotColor: '#10b981' },
       { id: 'leave_list', label: 'Danh sách nghỉ', dotColor: '#ef4444' },
-      { id: 'ngoaikhoa_reg', label: 'Đăng ký ngoại khóa', dotColor: '#f59e0b' },
       { id: 'phuphi_reg', label: 'Đăng ký phụ phí', dotColor: '#ec4899' }
     ]
   },
@@ -766,7 +765,7 @@ function Dashboard() {
             {currentTab?.id === 'students_list' && <StudentManager activeSubTab="students" currentUser={user} />}
             {(currentTab?.id === 'students' || currentTab?.id === 'phuphi_reg') && (
               <StudentManager
-                activeSubTab={currentTab?.id === 'phuphi_reg' ? 'phuphi_reg' : (['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg', 'phuphi_reg'].includes(activeSubTab) ? activeSubTab : 'classes')}
+                activeSubTab={currentTab?.id === 'phuphi_reg' ? 'phuphi_reg' : (['attendance_today', 'attendance', 'leave_list', 'phuphi_reg'].includes(activeSubTab) ? activeSubTab : 'classes')}
                 currentUser={user}
                 surchargeNavParams={surchargeNavParams}
                 onReturnToInvoice={() => {

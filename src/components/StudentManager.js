@@ -9,7 +9,6 @@ import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
 import LeaveManager from './LeaveManager';
 import AttendanceToday from './AttendanceToday';
-import NgoaiKhoaManager from './NgoaiKhoaManager';
 import SurchargeRegistration from './SurchargeRegistration';
 import './StudentManager.css';
 import { compressImage } from '../utils/imageUtils';
@@ -929,7 +928,6 @@ export default function StudentManager({
         {activeSubTab === 'attendance_today' && <AttendanceToday students={students} classes={classes} />}
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}
-        {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager currentUser={currentUser} />}
         {activeSubTab === 'phuphi_reg' && (
           <SurchargeRegistration
             currentUser={currentUser}
@@ -1048,16 +1046,6 @@ export default function StudentManager({
                 </div>
               </div>
 
-              <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#3b82f6' }}>TÀI KHOẢN PHỤ HUYNH (ĐỂ ĐĂNG NHẬP)</div>
-
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label style={{ fontWeight: 700, color: '#059669' }}>Tên đăng nhập (Username)</label>
-                <input type="text" name="username" value={formData.username || ''} onChange={handleChange} placeholder="VD: ph_nguyenvana" />
-              </div>
-              <div className="sm-form-group" style={{ gridColumn: 'span 1' }}>
-                <label style={{ fontWeight: 700, color: '#059669' }}>Mật khẩu (Password)</label>
-                <input type="text" name="password" value={formData.password || ''} onChange={handleChange} placeholder="Mật khẩu đăng nhập" />
-              </div>
 
               <div className="form-divider" style={{ gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', margin: '15px 0', paddingTop: '10px', fontWeight: 700, color: '#3b82f6' }}>THÔNG TIN GIA ĐÌNH</div>
 
