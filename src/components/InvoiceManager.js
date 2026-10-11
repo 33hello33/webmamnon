@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, SUPABASE_SCHEMA } from '../supabase';
-import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, List, Edit2, Trash2 } from 'lucide-react';
+import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, List, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
@@ -230,7 +230,12 @@ const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl)
    throw lastError || new Error(`Không cập nhật được image_url cho ${tableName}.`);
 };
 
-export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }) {
+export default function InvoiceManager({
+   focusStudentId,
+   onFocusStudentHandled,
+   onNavigateToSurchargeRegistration,
+   currentUser
+}) {
    const { config, getTienAnConfig } = useConfig();
    const walletsConfig = (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
@@ -300,96 +305,83 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    const [unpaidBills, setUnpaidBills] = useState([]);
    const [unpaidBillsTotal, setUnpaidBillsTotal] = useState(0);
 
-   const [phuPhiList, setPhuPhiList] = useState([]);
-   const [selectedPhuPhiIds, setSelectedPhuPhiIds] = useState([]);
-   const [phuPhiQuantities, setPhuPhiQuantities] = useState({});
-   const [showPhuPhiTable, setShowPhuPhiTable] = useState(true);
-   const [showPhuPhiModal, setShowPhuPhiModal] = useState(false);
-   const [phuPhiForm, setPhuPhiForm] = useState({ name: '', amount: 0 });
-   const [editingPhuPhiId, setEditingPhuPhiId] = useState(null);
+      const [registeredSurcharges, setRegisteredSurcharges] = useState([]);
+   const [isLoadingSurcharges, setIsLoadingSurcharges] = useState(false);
 
-   const fetchPhuPhiData = async () => {
-      try {
-         const { data, error } = await supabase.from('tbl_phuphi').select('*').order('id', { ascending: true });
-         if (!error && data) {
-            setPhuPhiList(data);
-         }
-      } catch (err) {
-         console.error('Lỗi lấy bảng phụ phí:', err);
-      }
-   };
-
-   const toggleSelectPhuPhi = (id) => {
-      setSelectedPhuPhiIds(prev =>
-         prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-      );
-   };
-
-   const handlePhuPhiQuantityChange = (id, value) => {
-      const qty = Math.max(1, parseInt(value, 10) || 1);
-      setPhuPhiQuantities(prev => ({
-         ...prev,
-         [id]: qty
-      }));
-   };
-
-   const handleSavePhuPhiItem = async () => {
-      if (!phuPhiForm.name.trim()) {
-         showMessage('error', 'Vui lòng nhập tên khoản phụ phí');
+   const fetchRegisteredSurcharges = useCallback(async (studentId, startDate, soLuong = 1, loaiDong = 'Tháng') => {
+      if (!studentId || !startDate) {
+         setRegisteredSurcharges([]);
          return;
       }
+      setIsLoadingSurcharges(true);
       try {
-         const payload = {
-            tenpp: phuPhiForm.name.trim(),
-            dongia: String(phuPhiForm.amount)
-         };
-         if (editingPhuPhiId) {
-            const { error } = await supabase
-               .from('tbl_phuphi')
-               .update(payload)
-               .eq('id', editingPhuPhiId);
-            if (error) throw error;
-            showMessage('success', 'Đã cập nhật phụ phí thành công');
-         } else {
-            const { error } = await supabase
-               .from('tbl_phuphi')
-               .insert([payload]);
-            if (error) throw error;
-            showMessage('success', 'Đã thêm phụ phí mới thành công');
+         const d = new Date(startDate);
+         if (isNaN(d.getTime())) {
+            setRegisteredSurcharges([]);
+            setIsLoadingSurcharges(false);
+            return;
          }
-         setPhuPhiForm({ name: '', amount: 0 });
-         setEditingPhuPhiId(null);
-         await fetchPhuPhiData();
+
+         const sl = parseInt(soLuong, 10) || 1;
+         const unit = String(loaiDong || '').toLowerCase();
+         const targetMonths = [];
+         const count = unit.includes('tháng') && sl > 1 ? sl : 1;
+         for (let i = 0; i < count; i++) {
+            const cur = new Date(d);
+            cur.setMonth(d.getMonth() + i);
+            const m = cur.getMonth() + 1;
+            const y = cur.getFullYear();
+            targetMonths.push({
+               month: m,
+               year: y
+            });
+         }
+
+         const { data, error } = await supabase
+            .from('tbl_dangky_phuphi')
+            .select('*')
+            .eq('mahv', studentId);
+
+         if (error) {
+            console.warn('Lỗi lấy dữ liệu tbl_dangky_phuphi:', error);
+            setRegisteredSurcharges([]);
+            return;
+         }
+
+         const matched = (data || []).filter(item => {
+            const itemThangNam = String(item.thang_nam || '').trim();
+            const itemThang = Number(item.thang);
+            const itemNam = Number(item.nam);
+            return targetMonths.some(tm => {
+               const padM = String(tm.month).padStart(2, '0');
+               return itemThangNam === (padM + '/' + tm.year) ||
+                  itemThangNam === (tm.month + '/' + tm.year) ||
+                  (itemThang === tm.month && itemNam === tm.year);
+            });
+         });
+
+         setRegisteredSurcharges(matched);
       } catch (err) {
-         console.error('Lỗi lưu khoản phụ phí:', err);
-         showMessage('error', 'Lỗi lưu phụ phí: ' + err.message);
+         console.error('Lỗi lấy phụ phí đã đăng ký:', err);
+         setRegisteredSurcharges([]);
+      } finally {
+         setIsLoadingSurcharges(false);
       }
-   };
+   }, []);
 
-   const startEditPhuPhi = (item) => {
-      setEditingPhuPhiId(item.id);
-      const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-      const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-      const amount = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-      setPhuPhiForm({ name, amount });
-   };
+   const handleNavigateToSurchargeRegistration = () => {
+      const d = new Date(invoiceData.ngayBatDau);
+      const month = !isNaN(d.getTime()) ? d.getMonth() + 1 : (new Date().getMonth() + 1);
+      const year = !isNaN(d.getTime()) ? d.getFullYear() : new Date().getFullYear();
+      const classId = activeClass?.malop || selectedStudent?.malop_list?.[0] || selectedStudent?.malop || '';
 
-   const cancelEditPhuPhi = () => {
-      setEditingPhuPhiId(null);
-      setPhuPhiForm({ name: '', amount: 0 });
-   };
-
-   const handleDeletePhuPhi = async (id) => {
-      if (!window.confirm('Bạn có chắc chắn muốn xóa khoản phụ phí này không?')) return;
-      try {
-         const { error } = await supabase.from('tbl_phuphi').delete().eq('id', id);
-         if (error) throw error;
-         showMessage('success', 'Đã xóa phụ phí thành công');
-         setSelectedPhuPhiIds(prev => prev.filter(pId => pId !== id));
-         await fetchPhuPhiData();
-      } catch (err) {
-         console.error('Lỗi xóa khoản phụ phí:', err);
-         showMessage('error', 'Lỗi xóa phụ phí: ' + err.message);
+      if (typeof onNavigateToSurchargeRegistration === 'function') {
+         onNavigateToSurchargeRegistration({
+            classId,
+            month,
+            year,
+            studentId: selectedStudent?.mahv
+         });
       }
    };
 
@@ -407,7 +399,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          setStudents(st || []);
          setClasses(cls || []);
          setEmployees(emp || []);
-         fetchPhuPhiData();
       } catch (err) {
          console.error(err);
       }
@@ -416,6 +407,34 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
    useEffect(() => {
       fetchBaseData();
    }, []);
+
+   useEffect(() => {
+      if (selectedStudent?.mahv && invoiceData.ngayBatDau) {
+         fetchRegisteredSurcharges(
+            selectedStudent.mahv,
+            invoiceData.ngayBatDau,
+            invoiceData.soLuong,
+            invoiceData.loaiDong
+         );
+      } else {
+         setRegisteredSurcharges([]);
+      }
+   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, invoiceData.soLuong, invoiceData.loaiDong, fetchRegisteredSurcharges]);
+
+   useEffect(() => {
+      const handleWindowFocus = () => {
+         if (selectedStudent?.mahv && invoiceData.ngayBatDau) {
+            fetchRegisteredSurcharges(
+               selectedStudent.mahv,
+               invoiceData.ngayBatDau,
+               invoiceData.soLuong,
+               invoiceData.loaiDong
+            );
+         }
+      };
+      window.addEventListener('focus', handleWindowFocus);
+      return () => window.removeEventListener('focus', handleWindowFocus);
+   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, invoiceData.soLuong, invoiceData.loaiDong, fetchRegisteredSurcharges]);
 
    useEffect(() => {
       if (downloadingInvoice) {
@@ -670,8 +689,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       });
 
       setSelectedStudent(st);
-      setSelectedPhuPhiIds([]);
-      setPhuPhiQuantities({});
+      setRegisteredSurcharges([]);
       setShowMobileDetails(true);
       setMessage({ type: '', text: '' });
       setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
@@ -858,54 +876,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                }
             }
 
-            if (recentDoc.phuthu) {
-               try {
-                  const rawPhuThu = Array.isArray(recentDoc.phuthu) ? recentDoc.phuthu : JSON.parse(recentDoc.phuthu);
-                  const cleanPhuThu = stripAutoLateFeeSurcharges(rawPhuThu);
-
-                  const loadedPresetIds = [];
-                  const loadedQuantities = {};
-                  const remainingCustomPhuThu = [];
-
-                  const currentPhuPhiList = phuPhiList.length > 0
-                     ? phuPhiList
-                     : ((await supabase.from('tbl_phuphi').select('*').order('id', { ascending: true })).data || []);
-
-                  cleanPhuThu.forEach(pt => {
-                     if (!pt || !pt.name) return;
-                     
-                     let matched = currentPhuPhiList.find(p => p.id === pt.presetId);
-                     if (!matched) {
-                        const ptNameClean = String(pt.baseName || pt.name || '').replace(/\s*\(x\d+\)\s*$/i, '').trim().toLowerCase();
-                        matched = currentPhuPhiList.find(p => {
-                           const pNameClean = String(p.tenpp || p.tenphuphi || p.ten || p.name || '').trim().toLowerCase();
-                           return pNameClean === ptNameClean;
-                        });
-                     }
-
-                     if (matched) {
-                        loadedPresetIds.push(matched.id);
-                        let qty = pt.soluong;
-                        if (!qty) {
-                           const matchQty = String(pt.name).match(/\(x(\d+)\)/i);
-                           if (matchQty && matchQty[1]) {
-                              qty = parseInt(matchQty[1], 10);
-                           }
-                        }
-                        loadedQuantities[matched.id] = Math.max(1, parseInt(qty, 10) || 1);
-                     } else {
-                        remainingCustomPhuThu.push(pt);
-                     }
-                  });
-
-                  setSelectedPhuPhiIds(loadedPresetIds);
-                  setPhuPhiQuantities(loadedQuantities);
-                  phuthu = remainingCustomPhuThu;
-               } catch (e) {
-                  console.error('Error parsing phuthu:', e);
-                  phuthu = [];
-               }
-            }
+            // Phụ thu theo tháng được nạp tự động từ tbl_dangky_phuphi của SurchargeRegistration
+            phuthu = [];
             if (recentDoc.sobuoihoc) {
                const text = recentDoc.sobuoihoc;
 
@@ -1704,26 +1676,21 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
       }
    }, [focusStudentId, students, onFocusStudentHandled]);
 
-   const selectedPresetSurcharges = phuPhiList
-      .filter(item => selectedPhuPhiIds.includes(item.id))
-      .map(item => {
-         const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-         const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-         const unitPrice = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-         const qty = Math.max(1, parseInt(phuPhiQuantities[item.id], 10) || 1);
-         const totalAmount = unitPrice * qty;
-         const displayName = qty > 1 ? `${name} (x${qty})` : name;
-         return {
-            name: displayName,
-            amount: totalAmount,
-            presetId: item.id,
-            baseName: name,
-            soluong: qty
-         };
-      });
+   const registeredPresetSurcharges = registeredSurcharges.map(item => {
+      const name = item.tenpp || item.ten || '';
+      const amount = Number(item.dongia) || 0;
+      return {
+         name,
+         amount,
+         presetId: item.id_phuphi || item.id,
+         baseName: name,
+         soluong: 1,
+         ghichu: item.ghichu || ''
+      };
+   });
 
    const autoLateFeeSurcharges = buildLateFeeSurcharges(studySummary || {}, config?.tientratre);
-   const combinedCustomPhuThu = [...selectedPresetSurcharges, ...(invoiceData.phuthu || [])];
+   const combinedCustomPhuThu = [...registeredPresetSurcharges, ...(invoiceData.phuthu || [])];
    const effectiveSurcharges = mergeLateFeeSurcharges(combinedCustomPhuThu, studySummary || {}, config?.tientratre);
    const surchargeSum = effectiveSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
@@ -2021,197 +1988,91 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      </div>
 
                      <div className="im-section">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
                            <h3 className="im-section-title" style={{ marginBottom: 0 }}>
-                              <Receipt size={18} /> Phụ thu (Nếu có)
+                              <Receipt size={18} /> Phụ thu ({formatMonthYear(invoiceData.ngayBatDau) || 'Kỳ đóng'})
                            </h3>
-                           <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                 type="button"
-                                 onClick={() => setShowPhuPhiTable(!showPhuPhiTable)}
-                                 style={{
-                                    padding: '6px 12px',
-                                    background: showPhuPhiTable ? '#e0e7ff' : '#f1f5f9',
-                                    color: showPhuPhiTable ? '#4338ca' : '#475569',
-                                    border: '1px solid #cbd5e1',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 600
-                                 }}
-                              >
-                                 <List size={15} /> {showPhuPhiTable ? 'Ẩn Bảng Phụ Thu' : 'Bảng Phụ Thu'}
-                              </button>
-                              <button
-                                 type="button"
-                                 className="btn-add-surcharge"
-                                 onClick={() => setShowPhuPhiModal(true)}
-                                 style={{
-                                    padding: '6px 12px',
-                                    background: '#f5f3ff',
-                                    color: '#7c3aed',
-                                    border: '1px solid #ddd6fe',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 600
-                                 }}
-                              >  
-                                 <Plus size={14} /> Thêm khoản phụ thu
-                              </button>
-                           </div>
+                           <button
+                              type="button"
+                              onClick={handleNavigateToSurchargeRegistration}
+                              style={{
+                                 padding: '6px 14px',
+                                 background: '#fdf2f8',
+                                 color: '#db2777',
+                                 border: '1.5px solid #fbcfe8',
+                                 borderRadius: '8px',
+                                 cursor: 'pointer',
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 gap: '6px',
+                                 fontSize: '0.85rem',
+                                 fontWeight: 700
+                              }}
+                           >
+                              <Edit2 size={14} /> Chuyển qua tab Đăng ký phụ phí
+                           </button>
                         </div>
 
-                        {/* BẢNG PHỤ THU (tbl_phuphi) */}
-                        {showPhuPhiTable && (
-                           <div style={{ marginBottom: '1.25rem', border: '1px solid #cbd5e1', borderRadius: '10px', overflow: 'hidden', background: '#ffffff' }}>
+                        {/* CHỈ HIỆN CÁC PHỤ PHÍ ĐÃ ĐĂNG KÝ CỦA HỌC VIÊN */}
+                        {isLoadingSurcharges ? (
+                           <div style={{ padding: '12px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
+                              Đang tải dữ liệu phụ phí...
+                           </div>
+                        ) : registeredSurcharges.length > 0 ? (
+                           <div style={{ border: '1px solid #cbd5e1', borderRadius: '10px', overflow: 'hidden', background: '#ffffff' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                                  <thead>
                                     <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', textTransform: 'uppercase', fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>
-                                       <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px' }}>Chọn</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'left' }}>Tên Khoản Phụ Phí</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Đơn giá (VNĐ)</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'center', width: '100px' }}>Số lượng</th>
-                                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Thành tiền (VNĐ)</th>
+                                       <th style={{ padding: '10px 14px', textAlign: 'left' }}>Khoản Phụ Phí Đã Đăng Ký</th>
+                                       <th style={{ padding: '10px 14px', textAlign: 'center', width: '120px' }}>Tháng</th>
+                                       <th style={{ padding: '10px 14px', textAlign: 'right', width: '150px' }}>Số Tiền</th>
                                     </tr>
                                  </thead>
                                  <tbody>
-                                    {phuPhiList.length > 0 ? (
-                                       phuPhiList.map((item) => {
-                                          const isChecked = selectedPhuPhiIds.includes(item.id);
-                                          const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-                                          const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-                                          const unitPrice = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-                                          const qty = Math.max(1, parseInt(phuPhiQuantities[item.id], 10) || 1);
-                                          const totalAmount = unitPrice * qty;
-
-                                          return (
-                                             <tr
-                                                key={item.id}
-                                                onClick={() => toggleSelectPhuPhi(item.id)}
-                                                style={{
-                                                   cursor: 'pointer',
-                                                   borderBottom: '1px solid #e2e8f0',
-                                                   backgroundColor: isChecked ? '#dcfce7' : '#ffffff',
-                                                   color: isChecked ? '#15803d' : '#334155',
-                                                   fontWeight: isChecked ? '700' : '500',
-                                                   transition: 'background-color 0.15s ease, border-color 0.15s ease'
-                                                }}
-                                             >
-                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                   <input
-                                                      type="checkbox"
-                                                      checked={isChecked}
-                                                      onChange={() => { }} // Handled by row onClick
-                                                      style={{ accentColor: '#16a34a', width: '18px', height: '18px', cursor: 'pointer' }}
-                                                   />
-                                                </td>
-                                                <td style={{ padding: '10px 12px' }}>{name}</td>
-                                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                                                   {formatCurrency(unitPrice)} ₫
-                                                </td>
-                                                <td style={{ padding: '6px 12px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                                                   <input
-                                                      type="number"
-                                                      min="1"
-                                                      value={phuPhiQuantities[item.id] !== undefined ? phuPhiQuantities[item.id] : 1}
-                                                      onChange={(e) => handlePhuPhiQuantityChange(item.id, e.target.value)}
-                                                      style={{
-                                                         width: '60px',
-                                                         padding: '4px 6px',
-                                                         textAlign: 'center',
-                                                         borderRadius: '6px',
-                                                         border: '1px solid #cbd5e1',
-                                                         fontWeight: 'bold',
-                                                         color: isChecked ? '#15803d' : '#1e293b',
-                                                         background: isChecked ? '#ffffff' : '#f8fafc',
-                                                         outline: 'none'
-                                                      }}
-                                                   />
-                                                </td>
-                                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: isChecked ? 800 : 600 }}>
-                                                   {formatCurrency(totalAmount)} ₫
-                                                </td>
-                                             </tr>
-                                          );
-                                       })
-                                    ) : (
-                                       <tr>
-                                          <td colSpan={5} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                                             Chưa có dữ liệu phụ phí trong bảng tbl_phuphi. Bấm "Thêm khoản phụ thu" để thêm.
-                                          </td>
-                                       </tr>
-                                    )}
+                                    {registeredSurcharges.map((item, idx) => {
+                                       const name = item.tenpp || item.ten || '';
+                                       const amount = Number(item.dongia) || 0;
+                                       return (
+                                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                             <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                   <CheckCircle size={15} color="#16a34a" />
+                                                   <span>{name}</span>
+                                                   {item.ghichu && <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>({item.ghichu})</span>}
+                                                </div>
+                                             </td>
+                                             <td style={{ padding: '10px 14px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                                                {item.thang_nam || `${item.thang}/${item.nam}`}
+                                             </td>
+                                             <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>
+                                                {formatCurrency(amount)} ₫
+                                             </td>
+                                          </tr>
+                                       );
+                                    })}
                                  </tbody>
                                  <tfoot>
-                                    <tr style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
-                                       <td colSpan={4} style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontSize: '0.9rem' }}>
-                                          Tổng tiền phụ thu chọn từ bảng:
+                                    <tr style={{ background: '#f8fafc', borderTop: '1.5px solid #e2e8f0', fontWeight: 800 }}>
+                                       <td colSpan={2} style={{ padding: '10px 14px', textAlign: 'right', color: '#334155', fontSize: '0.88rem' }}>
+                                          Tổng phụ phí ({formatMonthYear(invoiceData.ngayBatDau)}):
                                        </td>
-                                       <td style={{ padding: '10px 12px', textAlign: 'right', color: '#15803d', fontSize: '1rem', fontWeight: 900 }}>
-                                          {formatCurrency(selectedPresetSurcharges.reduce((sum, item) => sum + (Number(item.amount) || 0), 0))} ₫
+                                       <td style={{ padding: '10px 14px', textAlign: 'right', color: '#15803d', fontSize: '0.95rem', fontWeight: 900 }}>
+                                          {formatCurrency(surchargeSum)} ₫
                                        </td>
                                     </tr>
                                  </tfoot>
                               </table>
                            </div>
-                        )}
-
-                        {/* DÒNG PHỤ THU NHẬP TAY NẾU CÓ */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>Phụ thu khác (Nhập thủ công):</span>
-                           <button
-                              type="button"
-                              onClick={addSurcharge}
-                              style={{ border: 'none', background: 'transparent', color: '#3b82f6', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                           >
-                              <Plus size={14} /> Thêm dòng thủ công
-                           </button>
-                        </div>
-
-                        {(invoiceData.phuthu && invoiceData.phuthu.length > 0) ? (
-                           <div className="surcharge-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {invoiceData.phuthu.map((pt, idx) => (
-                                 <div key={idx} className="surcharge-item" style={{ display: 'grid', gridTemplateColumns: '1fr 150px 40px', gap: '10px', alignItems: 'center' }}>
-                                    <input
-                                       className="im-input-text"
-                                       type="text"
-                                       placeholder="Tên khoản phụ thu thủ công..."
-                                       value={pt.name}
-                                       onChange={(e) => updateSurcharge(idx, 'name', e.target.value)}
-                                       style={{ background: '#f1f5f9', border: 'none' }}
-                                    />
-                                    <div className="fi-input-wrapper" style={{ maxWidth: 'unset', height: '38px' }}>
-                                       <input
-                                          type="text"
-                                          value={formatCurrency(pt.amount)}
-                                          onChange={(e) => updateSurcharge(idx, 'amount', e.target.value)}
-                                          style={{ padding: '4px 8px', fontSize: '0.9rem' }}
-                                       />
-                                       <span className="unit"></span>
-                                    </div>
-                                    <button onClick={() => removeSurcharge(idx)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', borderRadius: '6px', height: '38px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                       <X size={16} />
-                                    </button>
-                                 </div>
-                              ))}
-                           </div>
                         ) : (
-                           <div style={{ textAlign: 'center', padding: '15px', border: '1px dashed #e2e8f0', borderRadius: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
-                              Chưa có khoản phụ thu nào được thêm.
-                           </div>
-                        )}
-
-                        {surchargeSum > 0 && (
-                           <div style={{ marginTop: '12px', padding: '10px 14px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 700, color: '#047857', fontSize: '0.92rem' }}>💰 Tổng cộng tất cả khoản phụ thu:</span>
-                              <span style={{ fontWeight: 900, color: '#047857', fontSize: '1.05rem' }}>+{formatCurrency(surchargeSum)} ₫</span>
+                           <div style={{
+                              padding: '14px 18px',
+                              background: '#f8fafc',
+                              border: '1px dashed #cbd5e1',
+                              borderRadius: '10px',
+                              color: '#64748b',
+                              fontSize: '0.88rem'
+                           }}>
+                              Học viên chưa có phụ phí đăng ký trong tháng <b>{formatMonthYear(invoiceData.ngayBatDau)}</b>.
                            </div>
                         )}
                      </div>
@@ -2433,120 +2294,6 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      >
                         OK
                      </button>
-                  </div>
-               </div>
-            </div>
-         )}
-
-         {/* MODAL QUẢN LÝ BẢNG PHỤ PHÍ (tbl_phuphi) */}
-         {showPhuPhiModal && (
-            <div className="im-modal-overlay">
-               <div className="im-warning-modal animate-slide-up" style={{ maxWidth: '650px', width: '90%', textAlign: 'left', background: '#ffffff', padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>
-                     <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Receipt size={22} color="#7c3aed" /> Quản Lý Bảng Phụ Phí (tbl_phuphi)
-                     </h3>
-                     <button className="im-close-btn" style={{ position: 'static' }} onClick={() => { setShowPhuPhiModal(false); cancelEditPhuPhi(); }}>
-                        <X size={20} />
-                     </button>
-                  </div>
-
-                  {/* FORM THÊM / SỬA HẠNG MỤC PHỤ PHÍ */}
-                  <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', marginBottom: '1.25rem', border: '1px solid #e2e8f0' }}>
-                     <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '10px', color: '#334155' }}>
-                        {editingPhuPhiId ? '✏️ Chỉnh sửa phụ phí' : '➕ Thêm khoản phụ phí mới'}
-                     </div>
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px auto', gap: '10px', alignItems: 'center' }}>
-                        <input
-                           type="text"
-                           placeholder="Tên phụ phí (VD: Tiền đồng phục, Dã ngoại...)"
-                           value={phuPhiForm.name}
-                           onChange={(e) => setPhuPhiForm({ ...phuPhiForm, name: e.target.value })}
-                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none' }}
-                        />
-                        <input
-                           type="text"
-                           placeholder="Số tiền"
-                           value={formatCurrency(phuPhiForm.amount)}
-                           onChange={(e) => {
-                              const num = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
-                              setPhuPhiForm({ ...phuPhiForm, amount: num });
-                           }}
-                           style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', textAlign: 'right', outline: 'none' }}
-                        />
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                           <button
-                              type="button"
-                              onClick={handleSavePhuPhiItem}
-                              style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}
-                           >
-                              {editingPhuPhiId ? 'Lưu' : 'Thêm'}
-                           </button>
-                           {editingPhuPhiId && (
-                              <button
-                                 type="button"
-                                 onClick={cancelEditPhuPhi}
-                                 style={{ padding: '8px 12px', background: '#94a3b8', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem' }}
-                              >
-                                 Hủy
-                              </button>
-                           )}
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* DANH SÁCH HẠNG MỤC PHỤ PHÍ TRONG DATABASE */}
-                  <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                        <thead>
-                           <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#475569', fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                              <th style={{ padding: '10px 12px', textAlign: 'left' }}>Tên Phụ Phí</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'right' }}>Số Tiền</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'center', width: '90px' }}>Thao tác</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {phuPhiList.length > 0 ? (
-                              phuPhiList.map((item) => {
-                                 const name = item.tenpp || item.tenphuphi || item.ten || item.name || '';
-                                 const rawAmount = item.dongia !== undefined ? item.dongia : (item.sotien !== undefined ? item.sotien : (item.amount || 0));
-                                 const amount = parseInt(String(rawAmount).replace(/\D/g, ''), 10) || 0;
-                                 return (
-                                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                       <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e293b' }}>{name}</td>
-                                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>{formatCurrency(amount)} ₫</td>
-                                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                             <button
-                                                type="button"
-                                                onClick={() => startEditPhuPhi(item)}
-                                                style={{ background: '#e0f2fe', color: '#0284c7', border: 'none', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }}
-                                                title="Sửa"
-                                             >
-                                                <Edit2 size={14} />
-                                             </button>
-                                             <button
-                                                type="button"
-                                                onClick={() => handleDeletePhuPhi(item.id)}
-                                                style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }}
-                                                title="Xóa"
-                                             >
-                                                <Trash2 size={14} />
-                                             </button>
-                                          </div>
-                                       </td>
-                                    </tr>
-                                 );
-                              })
-                           ) : (
-                              <tr>
-                                 <td colSpan={3} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                                    Chưa có khoản phụ phí nào trong bảng tbl_phuphi.
-                                 </td>
-                              </tr>
-                           )}
-                        </tbody>
-                     </table>
                   </div>
                </div>
             </div>

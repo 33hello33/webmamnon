@@ -101,6 +101,7 @@ function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSubTab, setActiveSubTab] = useState('classes');
   const [invoiceFocusStudentId, setInvoiceFocusStudentId] = useState(null);
+  const [surchargeNavParams, setSurchargeNavParams] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(null);
@@ -850,6 +851,12 @@ function Dashboard() {
               <InvoiceManager
                 focusStudentId={invoiceFocusStudentId}
                 onFocusStudentHandled={() => setInvoiceFocusStudentId(null)}
+                currentUser={user}
+                onNavigateToSurchargeRegistration={(params) => {
+                  setSurchargeNavParams(params);
+                  setActiveTab('students');
+                  setActiveSubTab('phuphi_reg');
+                }}
               />
             )}
             {currentTab?.id === 'sales' && activeSubTab === 'pos' && <SalesPOS />}
@@ -857,7 +864,19 @@ function Dashboard() {
             {currentTab?.id === 'tasks' && <TaskManager />}
             {currentTab?.id === 'student_list' && <StudentManager activeSubTab="students" currentUser={user} />}
             {currentTab?.id === 'students_list' && <StudentManager activeSubTab="students" currentUser={user} />}
-            {currentTab?.id === 'students' && <StudentManager activeSubTab={['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg', 'phuphi_reg'].includes(activeSubTab) ? activeSubTab : 'classes'} currentUser={user} />}
+            {(currentTab?.id === 'students' || currentTab?.id === 'phuphi_reg') && (
+              <StudentManager
+                activeSubTab={currentTab?.id === 'phuphi_reg' ? 'phuphi_reg' : (['attendance_today', 'attendance', 'leave_list', 'ngoaikhoa_reg', 'phuphi_reg'].includes(activeSubTab) ? activeSubTab : 'classes')}
+                currentUser={user}
+                surchargeNavParams={surchargeNavParams}
+                onReturnToInvoice={() => {
+                  if (surchargeNavParams?.studentId) {
+                    setInvoiceFocusStudentId(surchargeNavParams.studentId);
+                  }
+                  setActiveTab('invoices');
+                }}
+              />
+            )}
             {currentTab?.id === 'attendance_menu' && <StudentManager activeSubTab={activeSubTab} currentUser={user} />}
             {currentTab?.id === 'debts' && <DebtManager />}
             {currentTab?.id === 'employees' && <EmployeeManager currentUser={user} />}

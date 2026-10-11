@@ -68,16 +68,30 @@ CREATE INDEX IF NOT EXISTS idx_dk_phuphi_thang_lop ON truongla.tbl_dangky_phuphi
 CREATE INDEX IF NOT EXISTS idx_dk_phuphi_mahv ON truongla.tbl_dangky_phuphi (mahv, thang_nam);
 `;
 
-export default function SurchargeRegistration({ currentUser, initialClassId }) {
+export default function SurchargeRegistration({
+  currentUser,
+  initialClassId,
+  initialMonth,
+  initialYear,
+  initialStudentId,
+  onReturnToInvoice
+}) {
   const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1); // 1 - 12
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth || (currentDate.getMonth() + 1)); // 1 - 12
+  const [selectedYear, setSelectedYear] = useState(initialYear || currentDate.getFullYear());
 
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState(initialClassId || '');
   const [students, setStudents] = useState([]);
   const [phuphiList, setPhuphiList] = useState([]);
   const [registeredMap, setRegisteredMap] = useState({}); // Key: `${mahv}_${id_phuphi}` -> record
+
+  useEffect(() => {
+    if (initialClassId) setSelectedClassId(initialClassId);
+    if (initialMonth) setSelectedMonth(initialMonth);
+    if (initialYear) setSelectedYear(initialYear);
+    if (initialStudentId) setSearchTerm(initialStudentId);
+  }, [initialClassId, initialMonth, initialYear, initialStudentId]);
 
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState(null); // Key being toggled
@@ -580,6 +594,31 @@ export default function SurchargeRegistration({ currentUser, initialClassId }) {
         </div>
 
         <div className="surcharge-toolbar-right">
+          {onReturnToInvoice && (
+            <button
+              type="button"
+              className="btn"
+              onClick={onReturnToInvoice}
+              title="Quay lại giao diện Thu học phí"
+              style={{
+                background: '#fce7f3',
+                color: '#db2777',
+                border: '1px solid #fbcfe8',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              <ChevronLeft size={16} />
+              <span>Quay lại Thu học phí</span>
+            </button>
+          )}
+
           {/* Cyan Copy to Next Month Button (matches image) */}
           <button
             className="btn-copy-next"

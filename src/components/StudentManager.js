@@ -31,7 +31,12 @@ const INITIAL_FORM = {
   'giamhp%': 0
 };
 
-export default function StudentManager({ activeSubTab, currentUser }) {
+export default function StudentManager({
+  activeSubTab,
+  currentUser,
+  surchargeNavParams,
+  onReturnToInvoice
+}) {
   const { config } = useConfig();
   const walletsConfig = React.useMemo(() => (config ? [
     { id: 'vi1', name: config.vi1?.name || '' },
@@ -925,7 +930,16 @@ export default function StudentManager({ activeSubTab, currentUser }) {
         {activeSubTab === 'attendance' && <AttendanceManager students={students} showMessage={showMessage} />}
         {activeSubTab === 'leave_list' && <LeaveManager students={students} />}
         {activeSubTab === 'ngoaikhoa_reg' && <NgoaiKhoaManager currentUser={currentUser} />}
-        {activeSubTab === 'phuphi_reg' && <SurchargeRegistration currentUser={currentUser} />}
+        {activeSubTab === 'phuphi_reg' && (
+          <SurchargeRegistration
+            currentUser={currentUser}
+            initialClassId={surchargeNavParams?.classId}
+            initialMonth={surchargeNavParams?.month}
+            initialYear={surchargeNavParams?.year}
+            initialStudentId={surchargeNavParams?.studentId}
+            onReturnToInvoice={onReturnToInvoice}
+          />
+        )}
       </div>
 
       {/* Form Modal */}
