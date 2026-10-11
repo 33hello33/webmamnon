@@ -99,10 +99,10 @@ export default function DebtManager() {
     setSendingZaloMahv(debtItem.mahv);
     try {
       // 1. Lấy sdt học viên & lịch sử đóng tiền gần nhất
-      const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdt, sdtphuhuynh').eq('mahv', debtItem.mahv).single();
-      let phone = (hvInfo?.sdt || debtItem.sdt || '').trim();
-      let sdtphuhuynh = (hvInfo?.sdtphuhuynh || debtItem.sdtphuhuynh || '').trim();
-      if (!phone && !sdtphuhuynh && !debtItem.mahv) {
+      const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdtme, sdtba').eq('mahv', debtItem.mahv).single();
+      let sdtme = (hvInfo?.sdtme || debtItem.sdtme || '').trim();
+      let sdtba = (hvInfo?.sdtba || debtItem.sdtba || '').trim();
+      if (!sdtme && !sdtba && !debtItem.mahv) {
         alert(`Học viên ${debtItem.tenhv} (${debtItem.mahv}) chưa có Số điện thoại hoặc mã học viên!`);
         return;
       }
@@ -128,12 +128,7 @@ export default function DebtManager() {
         .replace(/\[sotiencanno\]/g, pCur(debtItem.conno).toLocaleString('vi-VN'));
 
       // 3. Tìm Zalo user ID từ SĐT, nếu không được thì tìm alias theo mã học viên
-      const zaloRecipient = await findZaloRecipient({
-        phone,
-        sdtphuhuynh,
-        mahv: debtItem.mahv,
-        zaloBackendUrl: ZALO_BACKEND_URL
-      });
+      const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: debtItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
       if (!zaloRecipient.found || !zaloRecipient.targetId) {
         alert(zaloRecipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${debtItem.tenhv} (${debtItem.mahv})!`);
         return;
@@ -168,10 +163,10 @@ export default function DebtManager() {
     setSendingZaloMahv(overdueItem.mahv);
     try {
       // 1. Lấy sdt học viên
-      const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdt, sdtphuhuynh').eq('mahv', overdueItem.mahv).single();
-      let phone = (hvInfo?.sdt || overdueItem.sdt || '').trim();
-      let sdtphuhuynh = (hvInfo?.sdtphuhuynh || overdueItem.sdtphuhuynh || '').trim();
-      if (!phone && !sdtphuhuynh && !overdueItem.mahv) {
+      const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdtme, sdtba').eq('mahv', overdueItem.mahv).single();
+      let sdtme = (hvInfo?.sdtme || overdueItem.sdtme || '').trim();
+      let sdtba = (hvInfo?.sdtba || overdueItem.sdtba || '').trim();
+      if (!sdtme && !sdtba && !overdueItem.mahv) {
         alert(`Học viên ${overdueItem.tenhv} (${overdueItem.mahv}) chưa có Số điện thoại hoặc mã học viên!`);
         return;
       }
@@ -187,12 +182,7 @@ export default function DebtManager() {
         .replace(/\[ngayketthuc\]/g, ngayketthucFormatted);
 
       // 3. Tìm Zalo user ID từ SĐT, nếu không được thì tìm alias theo mã học viên
-      const zaloRecipient = await findZaloRecipient({
-        phone,
-        sdtphuhuynh,
-        mahv: overdueItem.mahv,
-        zaloBackendUrl: ZALO_BACKEND_URL
-      });
+      const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: overdueItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
       if (!zaloRecipient.found || !zaloRecipient.targetId) {
         alert(zaloRecipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${overdueItem.tenhv} (${overdueItem.mahv})!`);
         return;
@@ -254,10 +244,10 @@ export default function DebtManager() {
         setBulkDebtProgress({ current: i + 1, total: targets.length });
 
         try {
-          const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdt, sdtphuhuynh').eq('mahv', debtItem.mahv).single();
-          let phone = (hvInfo?.sdt || debtItem.sdt || '').trim();
-          let sdtphuhuynh = (hvInfo?.sdtphuhuynh || debtItem.sdtphuhuynh || '').trim();
-          if (!phone && !sdtphuhuynh && !debtItem.mahv) {
+          const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdtme, sdtba').eq('mahv', debtItem.mahv).single();
+          let sdtme = (hvInfo?.sdtme || debtItem.sdtme || '').trim();
+      let sdtba = (hvInfo?.sdtba || debtItem.sdtba || '').trim();
+          if (!sdtme && !sdtba && !debtItem.mahv) {
             noPhoneCount++;
             continue;
           }
@@ -280,12 +270,7 @@ export default function DebtManager() {
             .replace(/\[ngaydonggannhat\]/g, ngaydonggannhat)
             .replace(/\[sotiencanno\]/g, pCur(debtItem.conno).toLocaleString('vi-VN'));
 
-          const zaloRecipient = await findZaloRecipient({
-            phone,
-            sdtphuhuynh,
-            mahv: debtItem.mahv,
-            zaloBackendUrl: ZALO_BACKEND_URL
-          });
+          const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: debtItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
           if (!zaloRecipient.found || !zaloRecipient.targetId) {
             failCount++;
             continue;
@@ -355,10 +340,10 @@ export default function DebtManager() {
         setBulkOverdueProgress({ current: i + 1, total: targets.length });
 
         try {
-          const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdt, sdtphuhuynh').eq('mahv', overdueItem.mahv).single();
-          let phone = (hvInfo?.sdt || overdueItem.sdt || '').trim();
-          let sdtphuhuynh = (hvInfo?.sdtphuhuynh || overdueItem.sdtphuhuynh || '').trim();
-          if (!phone && !sdtphuhuynh && !overdueItem.mahv) {
+          const { data: hvInfo } = await supabase.from('tbl_hv').select('tenhv, sdtme, sdtba').eq('mahv', overdueItem.mahv).single();
+          let sdtme = (hvInfo?.sdtme || overdueItem.sdtme || '').trim();
+      let sdtba = (hvInfo?.sdtba || overdueItem.sdtba || '').trim();
+          if (!sdtme && !sdtba && !overdueItem.mahv) {
             noPhoneCount++;
             continue;
           }
@@ -370,12 +355,7 @@ export default function DebtManager() {
             .replace(/\[lop\]/g, overdueItem.tenlop || '')
             .replace(/\[ngayketthuc\]/g, ngayketthucFormatted);
 
-          const zaloRecipient = await findZaloRecipient({
-            phone,
-            sdtphuhuynh,
-            mahv: overdueItem.mahv,
-            zaloBackendUrl: ZALO_BACKEND_URL
-          });
+          const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: overdueItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
           if (!zaloRecipient.found || !zaloRecipient.targetId) {
             failCount++;
             continue;
@@ -576,7 +556,7 @@ export default function DebtManager() {
         const cMap = classData || [];
         setClasses(cMap);
 
-        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, trangthai, malop, sdt, sdtphuhuynh');
+        const { data: stdRaw } = await supabase.from('tbl_hv').select('mahv, tenhv, trangthai, malop, sdtme, sdtba');
         const students = (stdRaw || []).map(s => ({
           ...s,
           malop_list: s.malop ? [s.malop] : []
@@ -604,8 +584,8 @@ export default function DebtManager() {
             mergedTemp.push({
               mahv: hd.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              sdt: std.sdt || '',
-              sdtphuhuynh: std.sdtphuhuynh || '',
+              sdtme: std.sdtme || '',
+        sdtba: std.sdtba || '',
               conno: hd.conno,
               tenlop: hd.tenlop || '',
               loai: 'Học Phí',
@@ -622,8 +602,8 @@ export default function DebtManager() {
             mergedTemp.push({
               mahv: bill.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              sdt: std.sdt || '',
-              sdtphuhuynh: std.sdtphuhuynh || '',
+              sdtme: std.sdtme || '',
+        sdtba: std.sdtba || '',
               conno: bill.conno,
               tenlop: stClass ? stClass.tenlop : '',
               loai: 'Bill Hàng',
@@ -671,8 +651,8 @@ export default function DebtManager() {
             overdueTemp.push({
               mahv: std.mahv,
               tenhv: std.tenhv || 'Không rõ',
-              sdt: std.sdt || '',
-              sdtphuhuynh: std.sdtphuhuynh || '',
+              sdtme: std.sdtme || '',
+        sdtba: std.sdtba || '',
               ngayketthuc: latestHd.ngayketthuc,
               ngaylap: latestHd.ngaylap,
               tenlop: latestHd.tenlop

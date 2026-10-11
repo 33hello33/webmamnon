@@ -5,14 +5,19 @@ import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import {
    Search, Plus, TrendingDown, Users, Package, ShoppingCart,
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
-   Printer, History, Clock, Edit2, Calendar
+   Printer, History, Clock, Edit2, Calendar, MessageSquare, Loader2
 } from 'lucide-react';
+import axios from 'axios';
+import { findZaloRecipient } from '../services/zaloHelper';
+import '../services/zaloSocketClient';
 
 import { toPng } from 'html-to-image';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
 import './FinanceManager.css';
+
+const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
 const pCur = (val) => {
    if (val === undefined || val === null || val === '') return 0;
@@ -167,6 +172,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [downloadingInvoice, setDownloadingInvoice] = useState(null);
    const [downloadingNotice, setDownloadingNotice] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
+   const [sendingZaloId, setSendingZaloId] = useState(null);
    const configRef = React.useRef(config);
    configRef.current = config;
    const invoiceExportLockRef = React.useRef(null);
@@ -227,15 +233,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
                   node.style.position = 'static';
                   node.style.opacity = '0.01';
-                  if (window.innerWidth <= 991) {
-                     setPreviewImg(dataUrl);
-                  } else {
-                     const link = document.createElement('a');
-                     link.download = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
-                     link.href = dataUrl;
-                     document.body.appendChild(link);
-                     link.click();
-                     document.body.removeChild(link);
+                  if (!downloadingNotice.skipDownload) {
+                     if (window.innerWidth <= 991) {
+                        setPreviewImg(dataUrl);
+                     } else {
+                        const link = document.createElement('a');
+                        link.download = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
+                        link.href = dataUrl;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                     }
                   }
                   try {
                      const fileName = `ThongBao_${sanitizeFileSegment(downloadingNotice.tenhv, 'Student')}_${downloadingNotice.mahd}.png`;
@@ -245,11 +253,41 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      const storedImageKey = buildStoredImageKey('notice-images', downloadingNotice.mahv, downloadingNotice.mahd, file.name.split('.').pop() || 'jpg');
                      const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
                      await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
+
+                     if (downloadingNotice.sendZalo) {
+                        try {
+                           const recipient = await findZaloRecipient({
+                              sdtme: downloadingNotice.sdtme,
+                              sdtba: downloadingNotice.sdtba,
+                              mahv: downloadingNotice.mahv,
+                              zaloBackendUrl: ZALO_BACKEND_URL
+                           });
+                           if (recipient.found && recipient.targetId) {
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('threadId', recipient.targetId);
+                              formData.append('threadType', 'user');
+                              formData.append('caption', `Thông báo thu học phí ${downloadingNotice.tenhv} - Số phiếu ${downloadingNotice.mahd}`);
+                              await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
+                                 headers: { 'Content-Type': 'multipart/form-data' },
+                                 timeout: 30000
+                              });
+                              insertLog(`[THÔNG BÁO] Đã gửi thông báo ${downloadingNotice.mahd} qua Zalo cho học viên ${downloadingNotice.tenhv} (${downloadingNotice.mahv})`);
+                              alert(`Đã gửi hình ảnh thông báo qua Zalo cho học viên ${downloadingNotice.tenhv} thành công!`);
+                           } else {
+                              alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${downloadingNotice.tenhv} (${downloadingNotice.mahv})`);
+                           }
+                        } catch (zaloErr) {
+                           console.error('[Zalo] Lỗi gửi ảnh thông báo qua Zalo:', zaloErr);
+                           alert('Lỗi gửi ảnh qua Zalo: ' + (zaloErr.response?.data?.error || zaloErr.message));
+                        }
+                     }
                   } catch (err) { console.error('Lỗi upload PNG thông báo:', err); }
                }
             } catch (err) { console.error('Lỗi xuất PNG thông báo:', err); }
             finally {
                if (noticeExportLockRef.current === downloadingNotice.mahd) noticeExportLockRef.current = null;
+               setSendingZaloId(null);
                setDownloadingNotice(null);
             }
          };
@@ -265,7 +303,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       const noticeObj = {
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
-         tenhv: studentName, sdt: hvMap[r.mahv]?.sdt || r.sdt || '',
+         tenhv: studentName,
+         sdt: hvMap[r.mahv]?.sdt || r.sdt || '',
+         sdtphuhuynh: hvMap[r.mahv]?.sdtphuhuynh || r.sdtphuhuynh || '',
          tenlop: r.tenlop || hvMap[r.mahv]?.tenlop || '',
          malop: r.malop || hvMap[r.mahv]?.malop || '',
          ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
@@ -275,6 +315,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
          thoiluong: r.thoiluong, phuthu: parsedPt,
          actualMealRefund: fCur(r.trutienan || 0), actualTuitionRefund: fCur(r.tiennghiphep || 0), ngoaiKhoaDeduction: fCur(r.trutiendangoai || 0),
+         sendZalo: !!r.sendZalo,
+         skipDownload: !!r.skipDownload
       };
       noticeObj.qrUrl = getNoticeQRUrl(noticeObj);
       setDownloadingNotice(noticeObj);
@@ -305,15 +347,17 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
                   node.style.position = 'static';
                   node.style.opacity = '0.01';
-                  if (window.innerWidth <= 991) {
-                     setPreviewImg(dataUrl);
-                  } else {
-                     const link = document.createElement('a');
-                     link.download = `BienLai_${sanitizeFileSegment(downloadingInvoice.tenhv, 'Student')}_${downloadingInvoice.mahd}.png`;
-                     link.href = dataUrl;
-                     document.body.appendChild(link);
-                     link.click();
-                     document.body.removeChild(link);
+                  if (!downloadingInvoice.skipDownload) {
+                     if (window.innerWidth <= 991) {
+                        setPreviewImg(dataUrl);
+                     } else {
+                        const link = document.createElement('a');
+                        link.download = `BienLai_${sanitizeFileSegment(downloadingInvoice.tenhv, 'Student')}_${downloadingInvoice.mahd}.png`;
+                        link.href = dataUrl;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                     }
                   }
                   try {
                      const fileName = `BienLai_${sanitizeFileSegment(downloadingInvoice.tenhv, 'Student')}_${downloadingInvoice.mahd}.png`;
@@ -323,11 +367,41 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      const storedImageKey = buildStoredImageKey('invoice-images', downloadingInvoice.mahv, downloadingInvoice.mahd, file.name.split('.').pop() || 'jpg');
                      const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
                      await updateGeneratedImageUrl('tbl_hd', downloadingInvoice.mahv, downloadingInvoice.mahd, imageUrl);
+
+                     if (downloadingInvoice.sendZalo) {
+                        try {
+                           const recipient = await findZaloRecipient({
+                              sdtme: downloadingInvoice.sdtme,
+                              sdtba: downloadingInvoice.sdtba,
+                              mahv: downloadingInvoice.mahv,
+                              zaloBackendUrl: ZALO_BACKEND_URL
+                           });
+                           if (recipient.found && recipient.targetId) {
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('threadId', recipient.targetId);
+                              formData.append('threadType', 'user');
+                              formData.append('caption', `Biên lai thu học phí ${downloadingInvoice.tenhv} - Số phiếu ${downloadingInvoice.mahd}`);
+                              await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
+                                 headers: { 'Content-Type': 'multipart/form-data' },
+                                 timeout: 30000
+                              });
+                              insertLog(`[HÓA ĐƠN] Đã gửi biên lai ${downloadingInvoice.mahd} qua Zalo cho học viên ${downloadingInvoice.tenhv} (${downloadingInvoice.mahv})`);
+                              alert(`Đã gửi hình ảnh biên lai qua Zalo cho học viên ${downloadingInvoice.tenhv} thành công!`);
+                           } else {
+                              alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${downloadingInvoice.tenhv} (${downloadingInvoice.mahv})`);
+                           }
+                        } catch (zaloErr) {
+                           console.error('[Zalo] Lỗi gửi ảnh biên lai qua Zalo:', zaloErr);
+                           alert('Lỗi gửi ảnh qua Zalo: ' + (zaloErr.response?.data?.error || zaloErr.message));
+                        }
+                     }
                   } catch (err) { console.error('Lỗi upload PNG:', err); }
                }
             } catch (err) { console.error('Lỗi xuất PNG:', err); }
             finally {
                if (invoiceExportLockRef.current === downloadingInvoice.mahd) invoiceExportLockRef.current = null;
+               setSendingZaloId(null);
                setDownloadingInvoice(null);
             }
          };
@@ -338,6 +412,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const triggerDownloadInvoice = (r) => {
       const studentName = hvMap[r.mahv]?.tenhv || (typeof r.mahv === 'object' ? r.mahv?.tenhv : '') || r.tenhv || '';
       const phone = hvMap[r.mahv]?.sdt || (typeof r.mahv === 'object' ? r.mahv?.sdt : '') || r.sdt || '';
+      const sdtphuhuynh = hvMap[r.mahv]?.sdtphuhuynh || (typeof r.mahv === 'object' ? r.mahv?.sdtphuhuynh : '') || r.sdtphuhuynh || '';
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
       try { parsedPt = JSON.parse(phuthuStr); } catch (e) { }
@@ -349,7 +424,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
       setDownloadingInvoice({
          mahd: r.mahd, mahv: r.mahv, ngaylap: r.ngaylap,
-         tenhv: studentName, sdt: phone,
+         tenhv: studentName, sdt: phone, sdtphuhuynh: sdtphuhuynh,
          tenlop: r.tenlop, ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
          hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
          tongcong: fCur(r.tongcong), dadong: fCur(r.dadong), conno: fCur(r.conno), nocu: '0',
@@ -360,7 +435,37 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          actualTuitionRefund: fCur(tuitionRefund || 0),
          ngoaiKhoaDeduction: fCur(ngoaiKhoaRefund || 0),
          deductionSum: mealRefund + tuitionRefund + ngoaiKhoaRefund,
-         hasDeduction: hasDeduction
+         hasDeduction: hasDeduction,
+         sendZalo: !!r.sendZalo,
+         skipDownload: !!r.skipDownload
+      });
+   };
+
+   const handleSendZaloInvoice = (r) => {
+      const hv = hvMap[r.mahv] || {};
+      setSendingZaloId(r.mahd);
+      triggerDownloadInvoice({
+         ...r,
+         tenhv: hv.tenhv,
+         sdt: hv.sdt,
+         sdtphuhuynh: hv.sdtphuhuynh,
+         nhanvien: nvMap[r.manv] || r.nhanvien,
+         sendZalo: true,
+         skipDownload: true
+      });
+   };
+
+   const handleSendZaloNotice = (r) => {
+      const hv = hvMap[r.mahv] || {};
+      setSendingZaloId(r.mahd);
+      triggerDownloadNotice({
+         ...r,
+         tenhv: hv.tenhv,
+         sdt: hv.sdt,
+         sdtphuhuynh: hv.sdtphuhuynh,
+         nhanvien: nvMap[r.manv] || r.nhanvien,
+         sendZalo: true,
+         skipDownload: true
       });
    };
 
@@ -954,7 +1059,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    useEffect(() => {
       const fetchDicts = async () => {
          const [{ data: hvs }, { data: lops }] = await Promise.all([
-            supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme, malop'),
+            supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme, sdt, malop'),
             supabase.from('tbl_lop').select('malop, tenlop')
          ]);
          const lopMap = {};
@@ -963,7 +1068,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          (hvs || []).forEach(h => {
             hVM[h.mahv] = {
                tenhv: h.tenhv,
-               sdt: h.sdtba || h.sdtme || '',
+               sdt: h.sdt || h.sdtba || h.sdtme || '',
+               sdtphuhuynh: h.sdtba || h.sdtme || '',
+               sdtba: h.sdtba || '',
+               sdtme: h.sdtme || '',
                malop: h.malop,
                tenlop: lopMap[h.malop] || ''
             };
@@ -1698,6 +1806,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                              <button title="In phiếu" className="btn-blue" onClick={() => handlePrintHoaDon(r)}><Printer size={16} /></button>
                                              <button title="Sửa phiếu thu" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={16} /></button>
                                              <button title="Tải ảnh Hóa Đơn" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadInvoice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={16} /></button>
+                                              <button title="Gửi Zalo cho học sinh/phụ huynh" onClick={() => handleSendZaloInvoice(r)} disabled={sendingZaloId === r.mahd} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}>{sendingZaloId === r.mahd ? <Loader2 size={16} className="animate-spin" /> : <MessageSquare size={16} />}</button>
                                              <button title="Hủy phiếu thu" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /></button>
                                           </>
                                        ) : (
@@ -1774,6 +1883,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                           <button className="btn-blue-sm" style={{ background: '#6366f1' }} onClick={() => handlePrintHoaDon(r)}><Printer size={16} /> In</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleOpenEditInvoice(r)}><Edit2 size={14} /> Sửa</button>
                                           <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadInvoice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải Ảnh</button>
+                                           <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleSendZaloInvoice(r)} disabled={sendingZaloId === r.mahd}>{sendingZaloId === r.mahd ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />} Gửi Zalo</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_hd')}><Trash2 size={16} /> Hủy</button>
                                        </>
                                     ) : (
@@ -1849,6 +1959,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                        {!deleted ? (
                                           <>
                                              <button title="Tải thông báo (PNG/Ảnh)" onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><DownloadCloud size={18} /></button>
+                                              <button title="Gửi Zalo thông báo cho học sinh/phụ huynh" onClick={() => handleSendZaloNotice(r)} disabled={sendingZaloId === r.mahd} style={{ color: '#0284c7', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}>{sendingZaloId === r.mahd ? <Loader2 size={18} className="animate-spin" /> : <MessageSquare size={18} />}</button>
                                              <button title="Xác nhận tạo hóa đơn" onClick={() => handleConfirmThongBao(r)} style={{ color: '#10b981', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><CheckCircle2 size={18} /></button>
                                              <button title="Xóa thông báo dự kiến" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
                                           </>
@@ -1894,6 +2005,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     {!deleted ? (
                                        <>
                                           <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => { const hv = hvMap[r.mahv] || {}; triggerDownloadNotice({ ...r, tenhv: hv.tenhv, sdt: hv.sdt, nhanvien: nvMap[r.manv] || r.nhanvien }); }}><DownloadCloud size={14} /> Tải TB</button>
+                                           <button className="btn-blue-sm" style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleSendZaloNotice(r)} disabled={sendingZaloId === r.mahd}>{sendingZaloId === r.mahd ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />} Gửi Zalo</button>
                                           <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => handleConfirmThongBao(r)}><CheckCircle2 size={14} /> Xác nhận</button>
                                           <button className="btn-danger-sm" onClick={() => handleDelete('mahd', r.mahd, 'tbl_thongbao')}><Trash2 size={16} /> Xóa</button>
                                        </>

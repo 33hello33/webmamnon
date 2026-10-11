@@ -1,14 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase';
-import { UserX, AlertTriangle, CalendarX, Calendar } from 'lucide-react';
+import axios from 'axios';
+import { supabase, insertLog } from '../supabase';
+import { useConfig } from '../ConfigContext';
+import { UserX, AlertTriangle, CalendarX, Calendar, MessageSquare, Loader2 } from 'lucide-react';
 import StudentAttendanceCalendar from './StudentAttendanceCalendar';
+import { findZaloRecipient } from '../services/zaloHelper';
+import '../services/zaloSocketClient';
 import './LeaveManager.css';
 
+const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
+
 export default function LeaveManager({ students }) {
+  const { config } = useConfig();
   const [classes, setClasses] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewCalendarStudent, setViewCalendarStudent] = useState(null);
+  const [sendingZaloMahv, setSendingZaloMahv] = useState(null);
+  const [isBulkSendingToday, setIsBulkSendingToday] = useState(false);
+  const [isBulkSendingConsecutive, setIsBulkSendingConsecutive] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -40,17 +50,22 @@ export default function LeaveManager({ students }) {
   };
 
   const getStudentPhone = (mahv) => {
-    const student = students.find(s => s.mahv === mahv);
-    return student?.sdtba || student?.sdtme || 'Chưa cập nhật';
+    const student = (students || []).find(s => s.mahv === mahv);
+    return student?.sdt || student?.sdtba || student?.sdtme || 'Chưa cập nhật';
+  };
+
+  const getStudentParentPhone = (mahv) => {
+    const student = (students || []).find(s => s.mahv === mahv);
+    return student?.sdtba || student?.sdtme || '';
   };
 
   const getStudentName = (mahv) => {
-    const student = students.find(s => s.mahv === mahv);
+    const student = (students || []).find(s => s.mahv === mahv);
     return student?.tenhv || 'Không rõ';
   };
 
   const getStudentMalopNames = (mahv) => {
-    const student = students.find(s => s.mahv === mahv);
+    const student = (students || []).find(s => s.mahv === mahv);
     if (!student) return '';
     
     // Support either malop_list array or the standard malop string
@@ -63,7 +78,6 @@ export default function LeaveManager({ students }) {
   };
 
   // Compute Today's Absences
-  // To handle timezone differences, we format today as YYYY-MM-DD local time
   const today = new Date();
   const tzOffset = today.getTimezoneOffset() * 60000; // offset in milliseconds
   const todayIso = new Date(today - tzOffset).toISOString().split('T')[0];
@@ -79,15 +93,16 @@ export default function LeaveManager({ students }) {
     tenlop: getStudentMalopNames(r.mahv),
     trangthai: r.trangthai,
     ghichu: r.ghichu || '-',
-    sdt: getStudentPhone(r.mahv)
+    sdt: getStudentPhone(r.mahv),
+    sdtphuhuynh: getStudentParentPhone(r.mahv)
   }));
 
   // Tính toán số học sinh vắng liên tiếp bằng JavaScript thay vì dùng RPC supabase
   const consecutiveAbsencesList = React.useMemo(() => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const tzOffset = thirtyDaysAgo.getTimezoneOffset() * 60000;
-    const thirtyDaysAgoIso = new Date(thirtyDaysAgo - tzOffset).toISOString().split('T')[0];
+    const tzOffsetAgo = thirtyDaysAgo.getTimezoneOffset() * 60000;
+    const thirtyDaysAgoIso = new Date(thirtyDaysAgo - tzOffsetAgo).toISOString().split('T')[0];
 
     const recordsByStudent = {};
     attendanceRecords.forEach(r => {
@@ -128,6 +143,7 @@ export default function LeaveManager({ students }) {
           mahv: mahv,
           tenhv: getStudentName(mahv),
           sdt: getStudentPhone(mahv),
+          sdtphuhuynh: getStudentParentPhone(mahv),
           tenlop: getStudentMalopNames(mahv),
           songayvang: consecutiveCount,
           ngaybatdau: ngayBatDau,
@@ -138,6 +154,247 @@ export default function LeaveManager({ students }) {
 
     return list.sort((a, b) => b.songayvang - a.songayvang);
   }, [attendanceRecords, classes, students]);
+
+  // ── Gửi tin nhắn Zalo Nhắc nghỉ học hôm nay (đơn lẻ) ────────────────
+  const handleSendZaloRemindToday = async (item) => {
+    if (!item || !item.mahv) return;
+    setSendingZaloMahv(item.mahv);
+    try {
+      const student = (students || []).find(st => st.mahv === item.mahv) || {};
+      const phone = (student.sdt || item.sdt || '').trim();
+      const sdtphuhuynh = (student.sdtba || student.sdtme || item.sdtphuhuynh || '').trim();
+
+      if (!phone && !sdtphuhuynh && !item.mahv) {
+        alert(`Học sinh ${item.tenhv} (${item.mahv}) chưa có Số điện thoại!`);
+        return;
+      }
+
+      const todayStr = todayIso.split('-').reverse().join('/');
+      const rawTpl = config?.zalonhacnghiphep || 'Kính gửi Phụ huynh bé [tenhv] (Mã: [mahv]), Lớp [lop]. Hôm nay ngày [ngay], nhà trường ghi nhận bé [trangthai] (Ghi chú: [ghichu]). Xin vui lòng liên hệ giáo viên chủ nhiệm nếu cần hỗ trợ thêm thông tin. Chúc bé và gia đình nhiều sức khỏe!';
+      const msgText = rawTpl
+        .replace(/\[mahv\]/g, item.mahv || '')
+        .replace(/\[tenhv\]/g, item.tenhv || '')
+        .replace(/\[lop\]/g, item.tenlop || '')
+        .replace(/\[ngay\]/g, todayStr)
+        .replace(/\[trangthai\]/g, item.trangthai || 'Nghỉ học')
+        .replace(/\[ghichu\]/g, item.ghichu && item.ghichu !== '-' ? item.ghichu : 'Không có');
+
+      const recipient = await findZaloRecipient({
+        sdtme: sdtphuhuynh || student.sdtme,
+        sdtba: student.sdtba,
+        mahv: item.mahv,
+        zaloBackendUrl: ZALO_BACKEND_URL
+      });
+
+      if (!recipient.found || !recipient.targetId) {
+        alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học sinh ${item.tenhv} (${item.mahv})!`);
+        return;
+      }
+
+      const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
+        threadId: recipient.targetId,
+        message: msgText,
+        threadType: 'user'
+      }, { timeout: 30000 });
+
+      if (sendRes.data?.success || sendRes.status === 200) {
+        alert(`Đã gửi tin nhắn Zalo nhắc nghỉ tới phụ huynh bé ${item.tenhv} thành công!`);
+        insertLog(`[NHẮC NGHỈ] Đã gửi Zalo nhắc nghỉ học hôm nay cho bé ${item.tenhv} (${item.mahv})`);
+      } else {
+        alert('Gửi tin nhắn Zalo không thành công.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi gửi tin nhắn Zalo nhắc nghỉ: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingZaloMahv(null);
+    }
+  };
+
+  // ── Gửi tin nhắn Zalo Nhắc nghỉ học hôm nay (HÀNG LOẠT) ───────────────
+  const handleBulkSendToday = async () => {
+    if (todayAbsences.length === 0) {
+      alert('Hôm nay không có học sinh nào nghỉ học!');
+      return;
+    }
+    if (!window.confirm(`Bạn có chắc muốn gửi tin nhắn Zalo nhắc nghỉ cho tất cả ${todayAbsences.length} học sinh nghỉ hôm nay không?`)) return;
+
+    setIsBulkSendingToday(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (let i = 0; i < todayAbsences.length; i++) {
+        const s = todayAbsences[i];
+        try {
+          const student = (students || []).find(st => st.mahv === s.mahv) || {};
+          const phone = (student.sdt || s.sdt || '').trim();
+          const sdtphuhuynh = (student.sdtba || student.sdtme || s.sdtphuhuynh || '').trim();
+          const todayStr = todayIso.split('-').reverse().join('/');
+          const rawTpl = config?.zalonhacnghiphep || 'Kính gửi Phụ huynh bé [tenhv] (Mã: [mahv]), Lớp [lop]. Hôm nay ngày [ngay], nhà trường ghi nhận bé [trangthai] (Ghi chú: [ghichu]). Xin vui lòng liên hệ giáo viên chủ nhiệm nếu cần hỗ trợ thêm thông tin. Chúc bé và gia đình nhiều sức khỏe!';
+          const msgText = rawTpl
+            .replace(/\[mahv\]/g, s.mahv || '')
+            .replace(/\[tenhv\]/g, s.tenhv || '')
+            .replace(/\[lop\]/g, s.tenlop || '')
+            .replace(/\[ngay\]/g, todayStr)
+            .replace(/\[trangthai\]/g, s.trangthai || 'Nghỉ học')
+            .replace(/\[ghichu\]/g, s.ghichu && s.ghichu !== '-' ? s.ghichu : 'Không có');
+
+          const recipient = await findZaloRecipient({
+            sdtme: sdtphuhuynh || student.sdtme,
+          sdtba: student.sdtba,
+          mahv: s.mahv,
+            zaloBackendUrl: ZALO_BACKEND_URL
+          });
+
+          if (recipient.found && recipient.targetId) {
+            await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
+              threadId: recipient.targetId,
+              message: msgText,
+              threadType: 'user'
+            }, { timeout: 30000 });
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          console.error(err);
+          failCount++;
+        }
+        if (i < todayAbsences.length - 1) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      insertLog(`[NHẮC NGHỈ] Đã gửi Zalo nhắc nghỉ hàng loạt hôm nay: Thành công ${successCount}/${todayAbsences.length}, Thất bại ${failCount}`);
+      alert(`Hoàn thành gửi Zalo nhắc nghỉ hôm nay!\n- Thành công: ${successCount}\n- Thất bại / không tìm thấy Zalo: ${failCount}`);
+    } finally {
+      setIsBulkSendingToday(false);
+    }
+  };
+
+  // ── Gửi tin nhắn Zalo Nhắc nghỉ vắng liên tiếp (đơn lẻ) ─────────────
+  const handleSendZaloRemindConsecutive = async (item) => {
+    if (!item || !item.mahv) return;
+    setSendingZaloMahv(item.mahv);
+    try {
+      const student = (students || []).find(st => st.mahv === item.mahv) || {};
+      const phone = (student.sdt || item.sdt || '').trim();
+      const sdtphuhuynh = (student.sdtba || student.sdtme || item.sdtphuhuynh || '').trim();
+
+      if (!phone && !sdtphuhuynh && !item.mahv) {
+        alert(`Học sinh ${item.tenhv} (${item.mahv}) chưa có Số điện thoại!`);
+        return;
+      }
+
+      const fromDate = item.ngaybatdau ? new Date(item.ngaybatdau).toLocaleDateString('vi-VN') : '';
+      const toDate = item.ngayketthuc ? new Date(item.ngayketthuc).toLocaleDateString('vi-VN') : '';
+
+      const rawTpl = config?.zalonhacnghiphep || 'Kính gửi Phụ huynh bé [tenhv] (Mã: [mahv]), Lớp [lop]. Nhà trường ghi nhận bé đã vắng [songayvang] buổi liên tiếp (từ [ngaybatdau] đến [ngayketthuc]). Nhà trường xin gửi lời thăm hỏi đến bé và gia đình. Kính mong Quý Phụ huynh cập nhật tình hình sức khỏe/học tập của bé với giáo viên. Trân trọng!';
+      const msgText = rawTpl
+        .replace(/\[mahv\]/g, item.mahv || '')
+        .replace(/\[tenhv\]/g, item.tenhv || '')
+        .replace(/\[lop\]/g, item.tenlop || '')
+        .replace(/\[songayvang\]/g, item.songayvang || '')
+        .replace(/\[ngaybatdau\]/g, fromDate)
+        .replace(/\[ngayketthuc\]/g, toDate)
+        .replace(/\[trangthai\]/g, 'Nghỉ học liên tiếp')
+        .replace(/\[ghichu\]/g, '');
+
+      const recipient = await findZaloRecipient({
+        sdtme: sdtphuhuynh || student.sdtme,
+        sdtba: student.sdtba,
+        mahv: item.mahv,
+        zaloBackendUrl: ZALO_BACKEND_URL
+      });
+
+      if (!recipient.found || !recipient.targetId) {
+        alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học sinh ${item.tenhv} (${item.mahv})!`);
+        return;
+      }
+
+      const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
+        threadId: recipient.targetId,
+        message: msgText,
+        threadType: 'user'
+      }, { timeout: 30000 });
+
+      if (sendRes.data?.success || sendRes.status === 200) {
+        alert(`Đã gửi tin nhắn Zalo nhắc nghỉ liên tiếp tới phụ huynh bé ${item.tenhv} thành công!`);
+        insertLog(`[NHẮC NGHỈ] Đã gửi Zalo nhắc nghỉ liên tiếp cho bé ${item.tenhv} (${item.mahv}) - ${item.songayvang} buổi`);
+      } else {
+        alert('Gửi tin nhắn Zalo không thành công.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi gửi tin nhắn Zalo nhắc nghỉ: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingZaloMahv(null);
+    }
+  };
+
+  // ── Gửi tin nhắn Zalo Nhắc nghỉ vắng liên tiếp (HÀNG LOẠT) ────────────
+  const handleBulkSendConsecutive = async () => {
+    if (consecutiveAbsencesList.length === 0) {
+      alert('Không có học sinh nào vắng liên tiếp!');
+      return;
+    }
+    if (!window.confirm(`Bạn có chắc muốn gửi tin nhắn Zalo nhắc nghỉ cho tất cả ${consecutiveAbsencesList.length} học sinh vắng liên tiếp không?`)) return;
+
+    setIsBulkSendingConsecutive(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (let i = 0; i < consecutiveAbsencesList.length; i++) {
+        const s = consecutiveAbsencesList[i];
+        try {
+          const student = (students || []).find(st => st.mahv === s.mahv) || {};
+          const phone = (student.sdt || s.sdt || '').trim();
+          const sdtphuhuynh = (student.sdtba || student.sdtme || s.sdtphuhuynh || '').trim();
+          const fromDate = s.ngaybatdau ? new Date(s.ngaybatdau).toLocaleDateString('vi-VN') : '';
+          const toDate = s.ngayketthuc ? new Date(s.ngayketthuc).toLocaleDateString('vi-VN') : '';
+          const rawTpl = config?.zalonhacnghiphep || 'Kính gửi Phụ huynh bé [tenhv] (Mã: [mahv]), Lớp [lop]. Nhà trường ghi nhận bé đã vắng [songayvang] buổi liên tiếp (từ [ngaybatdau] đến [ngayketthuc]). Nhà trường xin gửi lời thăm hỏi đến bé và gia đình. Kính mong Quý Phụ huynh cập nhật tình hình sức khỏe/học tập của bé với giáo viên. Trân trọng!';
+          const msgText = rawTpl
+            .replace(/\[mahv\]/g, s.mahv || '')
+            .replace(/\[tenhv\]/g, s.tenhv || '')
+            .replace(/\[lop\]/g, s.tenlop || '')
+            .replace(/\[songayvang\]/g, s.songayvang || '')
+            .replace(/\[ngaybatdau\]/g, fromDate)
+            .replace(/\[ngayketthuc\]/g, toDate)
+            .replace(/\[trangthai\]/g, 'Nghỉ học liên tiếp')
+            .replace(/\[ghichu\]/g, '');
+
+          const recipient = await findZaloRecipient({
+            sdtme: sdtphuhuynh || student.sdtme,
+          sdtba: student.sdtba,
+          mahv: s.mahv,
+            zaloBackendUrl: ZALO_BACKEND_URL
+          });
+
+          if (recipient.found && recipient.targetId) {
+            await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
+              threadId: recipient.targetId,
+              message: msgText,
+              threadType: 'user'
+            }, { timeout: 30000 });
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          console.error(err);
+          failCount++;
+        }
+        if (i < consecutiveAbsencesList.length - 1) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      insertLog(`[NHẮC NGHỈ] Đã gửi Zalo nhắc vắng liên tiếp hàng loạt: Thành công ${successCount}/${consecutiveAbsencesList.length}, Thất bại ${failCount}`);
+      alert(`Hoàn thành gửi Zalo nhắc vắng liên tiếp!\n- Thành công: ${successCount}\n- Thất bại / không tìm thấy Zalo: ${failCount}`);
+    } finally {
+      setIsBulkSendingConsecutive(false);
+    }
+  };
 
   if (loading) {
     return <div className="loading-state">Đang rà soát dữ liệu nghỉ học...</div>;
@@ -154,7 +411,32 @@ export default function LeaveManager({ students }) {
               <CalendarX size={20} className="text-danger" />
               <h3>Nghỉ học hôm nay ({todayIso.split('-').reverse().join('/')})</h3>
             </div>
-            <span className="leave-badge danger">{todayAbsences.length} Học sinh</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {todayAbsences.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkSendToday}
+                  disabled={isBulkSendingToday}
+                  style={{
+                    background: '#0284c7',
+                    border: 'none',
+                    color: 'white',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isBulkSendingToday ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                  Gửi Zalo tất cả
+                </button>
+              )}
+              <span className="leave-badge danger">{todayAbsences.length} Học sinh</span>
+            </div>
           </div>
           <div className="leave-body">
             <div className="table-scroll-wrapper">
@@ -168,6 +450,7 @@ export default function LeaveManager({ students }) {
                     <th>Trạng Thái</th>
                     <th>Ghi Chú</th>
                     <th>SĐT Liên Hệ</th>
+                    <th className="text-center">Nhắc Zalo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -189,11 +472,35 @@ export default function LeaveManager({ students }) {
                         </td>
                         <td className="text-muted">{s.ghichu}</td>
                         <td className="font-medium text-primary">{s.sdt}</td>
+                        <td className="text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleSendZaloRemindToday(s)}
+                            disabled={sendingZaloMahv === s.mahv}
+                            style={{
+                              background: '#e0f2fe',
+                              color: '#0369a1',
+                              border: '1px solid #bae6fd',
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                            title="Gửi tin nhắn Zalo nhắc nghỉ"
+                          >
+                            {sendingZaloMahv === s.mahv ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                            Nhắc nghỉ
+                          </button>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="empty-state">Tuyệt vời! Hôm nay chưa ghi nhận học sinh nào nghỉ học.</td>
+                      <td colSpan="8" className="empty-state">Tuyệt vời! Hôm nay chưa ghi nhận học sinh nào nghỉ học.</td>
                     </tr>
                   )}
                 </tbody>
@@ -228,6 +535,29 @@ export default function LeaveManager({ students }) {
                         <span><strong>Ghi chú:</strong> {s.ghichu}</span>
                       </div>
                     )}
+                    <div className="card-row" style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSendZaloRemindToday(s)}
+                        disabled={sendingZaloMahv === s.mahv}
+                        style={{
+                          background: '#0284c7',
+                          color: 'white',
+                          border: 'none',
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {sendingZaloMahv === s.mahv ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                        Gửi Zalo nhắc nghỉ
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -244,7 +574,32 @@ export default function LeaveManager({ students }) {
               <AlertTriangle size={20} className="text-warning" />
               <h3>Vắng liên tiếp (Cảnh báo &ge; 2 buổi)</h3>
             </div>
-            <span className="leave-badge warning">{consecutiveAbsencesList.length} Học sinh</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {consecutiveAbsencesList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkSendConsecutive}
+                  disabled={isBulkSendingConsecutive}
+                  style={{
+                    background: '#d97706',
+                    border: 'none',
+                    color: 'white',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isBulkSendingConsecutive ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                  Gửi Zalo tất cả
+                </button>
+              )}
+              <span className="leave-badge warning">{consecutiveAbsencesList.length} Học sinh</span>
+            </div>
           </div>
           <div className="leave-body">
             <div className="table-scroll-wrapper">
@@ -257,6 +612,7 @@ export default function LeaveManager({ students }) {
                     <th>Tên Lớp</th>
                     <th className="text-center">Số Ngày Vắng Liên Tiếp</th>
                     <th>SĐT Liên Hệ</th>
+                    <th className="text-center">Nhắc Zalo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -282,12 +638,36 @@ export default function LeaveManager({ students }) {
                             </div>
                           </td>
                           <td className="font-medium text-primary">{s.sdt}</td>
+                          <td className="text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleSendZaloRemindConsecutive(s)}
+                              disabled={sendingZaloMahv === s.mahv}
+                              style={{
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                border: '1px solid #fde68a',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                              title="Gửi tin nhắn Zalo nhắc nghỉ liên tiếp"
+                            >
+                              {sendingZaloMahv === s.mahv ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                              Nhắc nghỉ
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan="6" className="empty-state">Tuyệt vời! Không có học sinh nào vắng liên tiếp kéo dài.</td>
+                      <td colSpan="7" className="empty-state">Tuyệt vời! Không có học sinh nào vắng liên tiếp kéo dài.</td>
                     </tr>
                   )}
                 </tbody>
@@ -317,6 +697,29 @@ export default function LeaveManager({ students }) {
                     </div>
                     <div className="card-row">
                       <span><strong>SĐT:</strong> {s.sdt}</span>
+                    </div>
+                    <div className="card-row" style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSendZaloRemindConsecutive(s)}
+                        disabled={sendingZaloMahv === s.mahv}
+                        style={{
+                          background: '#d97706',
+                          color: 'white',
+                          border: 'none',
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {sendingZaloMahv === s.mahv ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+                        Gửi Zalo nhắc nghỉ
+                      </button>
                     </div>
                   </div>
                 ))

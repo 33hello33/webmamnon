@@ -30,22 +30,30 @@ export const clearZaloRecipientCache = () => {
 };
 
 /**
- * Tra cứu thông tin người nhận Zalo theo thứ tự ưu tiên:
- * 1. Nếu có SĐT học viên (phone/sdt) -> tìm kiếm qua /api/zalo/search-phone
- * 2. Nếu SĐT học viên trống hoặc tìm không ra -> tìm kiếm theo SĐT phụ huynh (sdtphuhuynh/parentPhone)
- * 3. Nếu tìm theo SĐT phụ huynh vẫn không ra (bị chặn tìm, ko có Zalo...) -> tìm theo Alias mã học viên (mahv)
+ * Tra cứu thông tin người nhận Zalo cho học sinh mầm non theo thứ tự ưu tiên:
+ * 1. Ưu tiên số điện thoại Mẹ (sdtme)
+ * 2. Nếu không tìm ra hoặc không có, tìm kiếm theo số điện thoại Ba (sdtba)
+ * 3. Nếu cả 2 đều không có hoặc bị chặn tìm -> tìm theo Alias mã học viên (mahv)
  *
  * @param {Object} options
- * @param {string} [options.phone] - Số điện thoại học viên
- * @param {string} [options.sdt] - Alias cho Số điện thoại học viên
- * @param {string} [options.sdtphuhuynh] - Số điện thoại phụ huynh
- * @param {string} [options.parentPhone] - Alias cho Số điện thoại phụ huynh
+ * @param {string} [options.sdtme] - Số điện thoại mẹ
+ * @param {string} [options.phoneMe] - Alias cho SĐT mẹ
+ * @param {string} [options.sdtba] - Số điện thoại ba
+ * @param {string} [options.phoneBa] - Alias cho SĐT ba
+ * @param {string} [options.phone] - Fallback tham số phone cũ
+ * @param {string} [options.sdt] - Fallback tham số sdt cũ
+ * @param {string} [options.sdtphuhuynh] - Fallback tham số sdtphuhuynh cũ
+ * @param {string} [options.parentPhone] - Fallback tham số parentPhone cũ
  * @param {string} [options.mahv] - Mã học viên
  * @param {string} [options.zaloBackendUrl] - Đường dẫn backend Zalo
  * @param {boolean} [options.forceRefresh] - Bỏ qua cache khi quét alias
- * @returns {Promise<{ found: boolean, contact: any, targetId: string|null, method: 'phone'|'parent_phone'|'alias'|null, error?: string }>}
+ * @returns {Promise<{ found: boolean, contact: any, targetId: string|null, method: 'phone_me'|'phone_ba'|'alias'|null, error?: string }>}
  */
 export async function findZaloRecipient({
+  sdtme,
+  phoneMe,
+  sdtba,
+  phoneBa,
   phone,
   sdt,
   sdtphuhuynh,
@@ -55,37 +63,40 @@ export async function findZaloRecipient({
   forceRefresh = false
 }) {
   const backendUrl = zaloBackendUrl || process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
-  let cleanPhone = normalizePhoneNumber(phone || sdt);
-  let cleanParentPhone = normalizePhoneNumber(sdtphuhuynh || parentPhone);
+  
+  // Xác định SĐT mẹ (ưu tiên cao nhất) và SĐT ba (ưu tiên thứ hai)
+  let cleanPhoneMe = normalizePhoneNumber(sdtme || phoneMe || phone || sdt);
+  let cleanPhoneBa = normalizePhoneNumber(sdtba || phoneBa || sdtphuhuynh || parentPhone);
+  
   const cleanMahv = String(mahv || '').trim();
   const lowerMahv = cleanMahv.toLowerCase();
 
-  // Nếu có mã HV mà còn thiếu SĐT học viên hoặc SĐT phụ huynh, tra cứu thêm từ tbl_hv để không bỏ sót
-  if (cleanMahv && (!cleanPhone || !cleanParentPhone)) {
+  // Nếu có mã HV mà còn thiếu SĐT mẹ hoặc SĐT ba, tra cứu thêm từ tbl_hv (chỉ dùng cột sdtme, sdtba)
+  if (cleanMahv && (!cleanPhoneMe || !cleanPhoneBa)) {
     try {
       const { data: hvData } = await supabase
         .from('tbl_hv')
-        .select('sdt, sdtphuhuynh')
+        .select('sdtme, sdtba')
         .eq('mahv', cleanMahv)
         .maybeSingle();
 
       if (hvData) {
-        if (!cleanPhone && hvData.sdt) {
-          cleanPhone = normalizePhoneNumber(hvData.sdt);
+        if (!cleanPhoneMe && hvData.sdtme) {
+          cleanPhoneMe = normalizePhoneNumber(hvData.sdtme);
         }
-        if (!cleanParentPhone && hvData.sdtphuhuynh) {
-          cleanParentPhone = normalizePhoneNumber(hvData.sdtphuhuynh);
+        if (!cleanPhoneBa && hvData.sdtba) {
+          cleanPhoneBa = normalizePhoneNumber(hvData.sdtba);
         }
       }
     } catch (e) {
-      console.warn('[zaloHelper] Không thể tra cứu thêm SĐT từ tbl_hv:', e?.message || e);
+      console.warn('[zaloHelper] Không thể tra cứu SĐT ba/mẹ từ tbl_hv:', e?.message || e);
     }
   }
 
-  // ── BƯỚC 1: Tìm kiếm bằng SĐT học viên (cleanPhone) ───────────────────
-  if (cleanPhone) {
+  // ── BƯỚC 1: Ưu tiên tìm kiếm bằng SĐT MẸ (cleanPhoneMe) ───────────────────
+  if (cleanPhoneMe) {
     try {
-      const url = `${backendUrl}/api/zalo/search-phone?phone=${encodeURIComponent(cleanPhone)}`;
+      const url = `${backendUrl}/api/zalo/search-phone?phone=${encodeURIComponent(cleanPhoneMe)}`;
       const searchRes = await axios.get(url, { timeout: 15000 });
 
       if (searchRes.data?.success && searchRes.data?.found && searchRes.data?.contact) {
@@ -96,19 +107,19 @@ export async function findZaloRecipient({
             found: true,
             contact,
             targetId: String(targetId),
-            method: 'phone'
+            method: 'phone_me'
           };
         }
       }
     } catch (phoneErr) {
-      console.warn(`[zaloHelper] Tìm theo SĐT học viên ${cleanPhone} không thành công:`, phoneErr.response?.data || phoneErr.message);
+      console.warn(`[zaloHelper] Tìm theo SĐT mẹ ${cleanPhoneMe} không thành công:`, phoneErr.response?.data || phoneErr.message);
     }
   }
 
-  // ── BƯỚC 2: Nếu SĐT học viên trống hoặc tìm không ra, tìm theo SĐT phụ huynh (cleanParentPhone) ───
-  if (cleanParentPhone && cleanParentPhone !== cleanPhone) {
+  // ── BƯỚC 2: Nếu SĐT mẹ trống hoặc không ra Zalo, tìm theo SĐT BA (cleanPhoneBa) ───
+  if (cleanPhoneBa && cleanPhoneBa !== cleanPhoneMe) {
     try {
-      const parentUrl = `${backendUrl}/api/zalo/search-phone?phone=${encodeURIComponent(cleanParentPhone)}`;
+      const parentUrl = `${backendUrl}/api/zalo/search-phone?phone=${encodeURIComponent(cleanPhoneBa)}`;
       const parentRes = await axios.get(parentUrl, { timeout: 15000 });
 
       if (parentRes.data?.success && parentRes.data?.found && parentRes.data?.contact) {
@@ -119,16 +130,16 @@ export async function findZaloRecipient({
             found: true,
             contact,
             targetId: String(targetId),
-            method: 'parent_phone'
+            method: 'phone_ba'
           };
         }
       }
     } catch (parentErr) {
-      console.warn(`[zaloHelper] Tìm theo SĐT phụ huynh ${cleanParentPhone} không thành công (bị chặn tìm hoặc không có Zalo):`, parentErr.response?.data || parentErr.message);
+      console.warn(`[zaloHelper] Tìm theo SĐT ba ${cleanPhoneBa} không thành công:`, parentErr.response?.data || parentErr.message);
     }
   }
 
-  // ── BƯỚC 3: Nếu tìm theo SĐT phụ huynh vẫn không ra (bị chặn tìm), tìm theo alias mã học viên ────
+  // ── BƯỚC 3: Nếu tìm theo SĐT mẹ & ba vẫn không ra (bị chặn tìm hoặc không có Zalo), tìm theo alias mã học viên ────
   if (cleanMahv) {
     try {
       // 3a. Thử endpoint /api/zalo/search-alias trực tiếp từ backend
@@ -228,8 +239,8 @@ export async function findZaloRecipient({
   }
 
   const triedList = [];
-  if (cleanPhone) triedList.push(`SĐT HV ${cleanPhone}`);
-  if (cleanParentPhone) triedList.push(`SĐT PH ${cleanParentPhone}`);
+  if (cleanPhoneMe) triedList.push(`SĐT mẹ ${cleanPhoneMe}`);
+  if (cleanPhoneBa) triedList.push(`SĐT ba ${cleanPhoneBa}`);
   if (cleanMahv) triedList.push(`Alias mã HV ${cleanMahv}`);
 
   return {
@@ -237,6 +248,6 @@ export async function findZaloRecipient({
     contact: null,
     targetId: null,
     method: null,
-    error: `Không tìm thấy tài khoản Zalo theo ${triedList.length > 0 ? triedList.join(', ') : 'SĐT hoặc Mã HV'}`
+    error: `Không tìm thấy tài khoản Zalo theo ${triedList.length > 0 ? triedList.join(', ') : 'SĐT mẹ, SĐT ba hoặc Mã HV'}`
   };
 }

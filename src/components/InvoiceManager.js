@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, SUPABASE_SCHEMA } from '../supabase';
+import { supabase, SUPABASE_SCHEMA, insertLog } from '../supabase';
 import { Search, Receipt, User, BookOpen, Wallet, GraduationCap, AlertCircle, CheckCircle, X, MessageSquare, Plus, CreditCard, List, Edit2, Trash2, RefreshCw } from 'lucide-react';
+import axios from 'axios';
+import { findZaloRecipient } from '../services/zaloHelper';
+import '../services/zaloSocketClient';
 import { toPng } from 'html-to-image';
 import './InvoiceManager.css';
 import { useConfig } from '../ConfigContext';
@@ -12,6 +15,8 @@ import { buildLateFeeSurcharges, getLateAttendanceCounts, mergeLateFeeSurcharges
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+
+const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
 
 
@@ -269,6 +274,7 @@ export default function InvoiceManager({
    const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
    const [showMobileDetails, setShowMobileDetails] = useState(false);
+   const [sendZaloAuto, setSendZaloAuto] = useState(true);
    const invoiceExportLockRef = useRef(null);
    const noticeExportLockRef = useRef(null);
    const initialInvoiceData = {
@@ -508,6 +514,34 @@ export default function InvoiceManager({
                      const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
                      await updateGeneratedImageUrl('tbl_hd', downloadingInvoice.mahv, downloadingInvoice.mahd, imageUrl);
 
+                     // Gửi ảnh qua Zalo cho học sinh / phụ huynh nếu không bỏ tick
+                     if (downloadingInvoice.sendZalo) {
+                        try {
+                           const recipient = await findZaloRecipient({
+                              sdtme: downloadingInvoice.sdtme,
+                              sdtba: downloadingInvoice.sdtba,
+                              mahv: downloadingInvoice.mahv,
+                              zaloBackendUrl: ZALO_BACKEND_URL
+                           });
+                           if (recipient.found && recipient.targetId) {
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('threadId', recipient.targetId);
+                              formData.append('threadType', 'user');
+                              formData.append('caption', `Biên lai thu học phí ${downloadingInvoice.tenhv} - Số phiếu ${downloadingInvoice.mahd}`);
+                              await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
+                                 headers: { 'Content-Type': 'multipart/form-data' },
+                                 timeout: 30000
+                              });
+                              insertLog(`[HÓA ĐƠN] Đã gửi biên lai ${downloadingInvoice.mahd} qua Zalo cho học viên ${downloadingInvoice.tenhv} (${downloadingInvoice.mahv})`);
+                           } else {
+                              console.warn('[Zalo] Không tìm thấy tài khoản Zalo cho học sinh:', downloadingInvoice.mahv, recipient.error);
+                           }
+                        } catch (zaloErr) {
+                           console.error('[Zalo] Lỗi gửi ảnh biên lai qua Zalo:', zaloErr);
+                        }
+                     }
+
                   } catch (autoSendErr) {
                      console.error('Invoice image save error:', autoSendErr);
                   }
@@ -630,6 +664,34 @@ export default function InvoiceManager({
 
                      const imageUrl = await uploadGeneratedImage(file, storedImageKey, configRef.current);
                      await updateGeneratedImageUrl('tbl_thongbao', downloadingNotice.mahv, downloadingNotice.mahd, imageUrl);
+
+                     // Gửi ảnh qua Zalo cho học sinh / phụ huynh nếu không bỏ tick
+                     if (downloadingNotice.sendZalo) {
+                        try {
+                           const recipient = await findZaloRecipient({
+                              sdtme: downloadingNotice.sdtme,
+                              sdtba: downloadingNotice.sdtba,
+                              mahv: downloadingNotice.mahv,
+                              zaloBackendUrl: ZALO_BACKEND_URL
+                           });
+                           if (recipient.found && recipient.targetId) {
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('threadId', recipient.targetId);
+                              formData.append('threadType', 'user');
+                              formData.append('caption', `Thông báo thu học phí ${downloadingNotice.tenhv} - Số phiếu ${downloadingNotice.mahd}`);
+                              await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
+                                 headers: { 'Content-Type': 'multipart/form-data' },
+                                 timeout: 30000
+                              });
+                              insertLog(`[THÔNG BÁO] Đã gửi thông báo ${downloadingNotice.mahd} qua Zalo cho học viên ${downloadingNotice.tenhv} (${downloadingNotice.mahv})`);
+                           } else {
+                              console.warn('[Zalo] Không tìm thấy tài khoản Zalo cho học sinh:', downloadingNotice.mahv, recipient.error);
+                           }
+                        } catch (zaloErr) {
+                           console.error('[Zalo] Lỗi gửi ảnh thông báo qua Zalo:', zaloErr);
+                        }
+                     }
 
                   } catch (autoSendErr) {
                      console.error('Notice image save error:', autoSendErr);
@@ -1486,6 +1548,8 @@ export default function InvoiceManager({
             ngaylap: localNow,
             tenhv: selectedStudent.tenhv,
             sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
+            sdtphuhuynh: selectedStudent.sdtphuhuynh || selectedStudent.sdtme || selectedStudent.sdtba || "",
+            sendZalo: sendZaloAuto,
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -1591,6 +1655,8 @@ export default function InvoiceManager({
             mahv: selectedStudent.mahv,
             tenhv: selectedStudent.tenhv,
             sdt: selectedStudent.sdtme || selectedStudent.sdtba || selectedStudent.sdt || "",
+            sdtphuhuynh: selectedStudent.sdtphuhuynh || selectedStudent.sdtme || selectedStudent.sdtba || "",
+            sendZalo: sendZaloAuto,
             tenlop: activeClass?.tenlop || '',
             ngaybatdau: invoiceData.ngayBatDau || null,
             ngayketthuc: invoiceData.ngayKetThuc || null,
@@ -2308,15 +2374,26 @@ export default function InvoiceManager({
                            </div>
                         </div>
 
-                        <div className="im-actions" style={{ display: 'flex', gap: '10px' }}>
-                           <button className="im-btn-secondary" onClick={handleExportNotice} disabled={isSaving}>
-                              <MessageSquare size={18} />
-                              Xuất Thông Báo
-                           </button>
-                           <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
-                              <Receipt size={18} />
-                              {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}
-                           </button>
+                        <div className="im-actions" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 600, color: '#0369a1', userSelect: 'none' }}>
+                              <input 
+                                 type="checkbox" 
+                                 checked={sendZaloAuto} 
+                                 onChange={(e) => setSendZaloAuto(e.target.checked)}
+                                 style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#0284c7' }}
+                              />
+                              <span>Gửi ảnh qua Zalo cho phụ huynh/học sinh khi xuất</span>
+                           </label>
+                           <div style={{ display: 'flex', gap: '10px' }}>
+                              <button className="im-btn-secondary" onClick={handleExportNotice} disabled={isSaving}>
+                                 <MessageSquare size={18} />
+                                 Xuất Thông Báo
+                              </button>
+                              <button className="im-btn-submit" onClick={handleSaveInvoice} disabled={isSaving}>
+                                 <Receipt size={18} />
+                                 {isSaving ? 'Đang tạo cơ sở dữ liệu...' : 'Xác Nhận Xuất Hóa Đơn'}
+                              </button>
+                           </div>
                         </div>
                      </div>
                   </div>
