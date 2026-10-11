@@ -310,7 +310,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          malop: r.malop || hvMap[r.mahv]?.malop || '',
          ngaybatdau: r.ngaybatdau, ngayketthuc: r.ngayketthuc,
          hocphi: fCur(r.hocphi), giamhocphi: fCur(r.giamhocphi), sobuoihoc: r.sobuoihoc,
-         tongcong: fCur(r.tongcong), conno: fCur(r.conno || r.tongcong), nocu: fCur(r.nocu || 0),
+         tongcong: fCur(r.tongcong), dadong: fCur(r.dadong || 0), conno: fCur(r.conno || r.tongcong), nocu: fCur(r.nocu || 0),
          hinhthuc: r.hinhthuc, ghichu: r.ghichu,
          nhanvien: nvMap[r.manv] || r.nhanvien || r.manv || 'Thu Ngân',
          thoiluong: r.thoiluong, phuthu: parsedPt,
@@ -3720,6 +3720,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <div>TỔNG CỘNG:</div>
                         <div>{downloadingInvoice?.tongcong} VNĐ</div>
                      </div>
+
+                     <div style={{ borderTop: '1.5px dashed #93c5fd', marginTop: '14px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
+                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingInvoice?.dadong || '0'} VNĐ</b></div>
+                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingInvoice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingInvoice?.conno || '0'} VNĐ</b></div>
+                     </div>
                   </div>
 
                   <div style={{ marginTop: '20px', fontSize: '15pt', color: '#1e293b', lineHeight: '1.8' }}>
@@ -3843,6 +3848,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                         <div>TỔNG CỘNG:</div>
                         <div>{downloadingNotice?.tongcong} VNĐ</div>
+                     </div>
+
+                     <div style={{ borderTop: '1.5px dashed #93c5fd', marginTop: '14px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
+                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice?.dadong || '0'} VNĐ</b></div>
+                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingNotice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingNotice?.conno || downloadingNotice?.tongcong || '0'} VNĐ</b></div>
                      </div>
                   </div>
 

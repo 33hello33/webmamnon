@@ -114,11 +114,19 @@ const getQRUrl = (hoaDon, walletsConfig, cacheBust = false, qrTemplate = '') => 
    const hinhThucTrim = String(hoaDon.hinhthuc).trim();
    const matchedWallet = walletsConfig.find(w => String(w.name).trim() === hinhThucTrim);
    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
+      let qrAmount = hoaDon.tongcong || '0';
+      if (hoaDon.conno !== undefined && hoaDon.conno !== null) {
+         const connoNum = parseInt(String(hoaDon.conno).replace(/\D/g, ''), 10);
+         const dadongNum = parseInt(String(hoaDon.dadong || '0').replace(/\D/g, ''), 10);
+         if (dadongNum > 0 && !isNaN(connoNum) && connoNum > 0) {
+            qrAmount = hoaDon.conno;
+         }
+      }
       return generateVietQRUrl({
          bankId: matchedWallet.bankId,
          accNo: matchedWallet.accNo,
          accName: matchedWallet.accName || '',
-         amount: hoaDon.tongcong || '0',
+         amount: qrAmount,
          template: qrTemplate,
          data: hoaDon,
          cacheBust
@@ -1619,6 +1627,9 @@ export default function InvoiceManager({
          const combinedNote = buildCombinedNote(invoiceData.ghiChu, ngoaiKhoaAutoNote, billNote);
          const sobuoihocFinal = `${invoiceData.soLuong} ${invoiceData.loaiDong}${invoiceData.loaiDong.toLowerCase().includes('tháng') ? ` (${currentTimePeriod})` : ''}`;
 
+         const paidAmount = Number(invoiceData.daDong) || 0;
+         const remainingDebt = conLai;
+
          const insertData = {
             mahd: newMaTB,
             ngaylap: localNow,
@@ -1630,8 +1641,8 @@ export default function InvoiceManager({
             hocphi: formatCurrency(invoiceData.hocphi),
             giamhocphi: formatCurrency(invoiceData.giamHocphi),
             tongcong: formatCurrency(tongCong),
-            dadong: '0',
-            conno: formatCurrency(tongCong),
+            dadong: formatCurrency(paidAmount),
+            conno: formatCurrency(remainingDebt),
             hinhthuc: invoiceData.hinhThuc,
             ghichu: combinedNote,
             phuthu: effectiveSurcharges.length > 0 ? JSON.stringify(effectiveSurcharges) : null,
@@ -1649,6 +1660,8 @@ export default function InvoiceManager({
          const res = await supabase.from('tbl_thongbao').insert([insertData]);
          if (res.error) throw res.error;
 
+         const qrAmount = paidAmount > 0 && remainingDebt > 0 ? remainingDebt : tongCong;
+
          setDownloadingNotice({
             mahd: newMaTB,
             ngaylap: localNow,
@@ -1665,7 +1678,8 @@ export default function InvoiceManager({
             sobuoihoc: sobuoihocFinal,
             nocu: formatCurrency(noCu),
             tongcong: formatCurrency(tongCong),
-            conno: formatCurrency(tongCong),
+            dadong: formatCurrency(paidAmount),
+            conno: formatCurrency(remainingDebt),
             hinhthuc: invoiceData.hinhThuc,
             ghichu: combinedNote,
             nhanvien: cashier,
@@ -1677,7 +1691,9 @@ export default function InvoiceManager({
                   mahv: selectedStudent.mahv,
                   tenhv: selectedStudent.tenhv,
                   tenlop: selectedStudent.tenlop || selectedStudent.malop || '',
-                  tongcong: formatCurrency(tongCong),
+                  tongcong: formatCurrency(qrAmount),
+                  dadong: formatCurrency(paidAmount),
+                  conno: formatCurrency(remainingDebt),
                   hinhthuc: invoiceData.hinhThuc,
                   thoiluong: currentTimePeriod,
                   ngaybatdau: invoiceData.ngayBatDau || null,
@@ -2516,6 +2532,13 @@ export default function InvoiceManager({
                         <div style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi}</div>
                      </div>
 
+                     {parseInt(String(downloadingInvoice?.nocu || '0').replace(/\D/g, ''), 10) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#dc2626' }}>
+                           <div style={{ fontWeight: 600 }}>Nợ cũ:</div>
+                           <div style={{ fontWeight: 900 }}>+{downloadingInvoice?.nocu} đ</div>
+                        </div>
+                     )}
+
                      {parseInt(String(downloadingInvoice?.giamhocphi).replace(/\D/g, '')) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                            <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
@@ -2597,6 +2620,11 @@ export default function InvoiceManager({
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                         <div>TỔNG CỘNG:</div>
                         <div>{downloadingInvoice?.tongcong} VNĐ</div>
+                     </div>
+
+                     <div style={{ borderTop: '1.5px dashed #93c5fd', marginTop: '14px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
+                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingInvoice?.dadong || '0'} VNĐ</b></div>
+                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingInvoice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingInvoice?.conno || '0'} VNĐ</b></div>
                      </div>
                   </div>
 
@@ -2682,6 +2710,13 @@ export default function InvoiceManager({
                         <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
                      </div>
 
+                     {parseInt(String(downloadingNotice?.nocu || '0').replace(/\D/g, ''), 10) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#dc2626' }}>
+                           <div style={{ fontWeight: 600 }}>Nợ cũ:</div>
+                           <div style={{ fontWeight: 900 }}>+{downloadingNotice?.nocu} đ</div>
+                        </div>
+                     )}
+
                      {parseInt(String(downloadingNotice?.giamhocphi).replace(/\D/g, '')) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                            <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
@@ -2747,6 +2782,11 @@ export default function InvoiceManager({
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                         <div>TỔNG CỘNG:</div>
                         <div>{downloadingNotice?.tongcong} VNĐ</div>
+                     </div>
+
+                     <div style={{ borderTop: '1.5px dashed #93c5fd', marginTop: '14px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
+                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice?.dadong || '0'} VNĐ</b></div>
+                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingNotice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingNotice?.conno || downloadingNotice?.tongcong || '0'} VNĐ</b></div>
                      </div>
                   </div>
 
