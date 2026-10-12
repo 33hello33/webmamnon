@@ -1,3 +1,71 @@
+const convertImageToDataUrl = async (url) => {
+  if (!url || typeof url !== 'string') return null;
+  if (url.startsWith('data:')) return url;
+
+  const safeFetchBlob = async (targetUrl) => {
+    const resp = await fetch(targetUrl, { mode: 'cors' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.blob();
+  };
+
+  const blobToDataUrl = (blob) => new Promise((res) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result);
+    reader.onerror = () => res(null);
+    reader.readAsDataURL(blob);
+  });
+
+  const bustUrl = url.includes('?') ? (url + '&_cb=' + Date.now()) : (url + '?_cb=' + Date.now());
+  try {
+    const blob = await safeFetchBlob(bustUrl);
+    const dataUrl = await blobToDataUrl(blob);
+    if (dataUrl) return dataUrl;
+  } catch (_) { }
+
+  try {
+    const blob = await safeFetchBlob(url);
+    const dataUrl = await blobToDataUrl(blob);
+    if (dataUrl) return dataUrl;
+  } catch (_) { }
+
+  try {
+    const canvasResult = await new Promise((res) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width || 280;
+          canvas.height = img.naturalHeight || img.height || 280;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          res(canvas.toDataURL('image/png'));
+        } catch (err) {
+          res(null);
+        }
+      };
+      img.onerror = () => res(null);
+      setTimeout(() => res(null), 3000);
+      img.src = bustUrl;
+    });
+    if (canvasResult) return canvasResult;
+  } catch (_) { }
+
+  const proxies = [
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    'https://corsproxy.io/?url=' + encodeURIComponent(url)
+  ];
+  for (const proxyUrl of proxies) {
+    try {
+      const blob = await safeFetchBlob(proxyUrl);
+      const dataUrl = await blobToDataUrl(blob);
+      if (dataUrl) return dataUrl;
+    } catch (_) { }
+  }
+
+  return null;
+};
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
@@ -197,6 +265,26 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     { id: 'vi3', name: config.vi3?.name || '', bankId: config.vi3?.bankId || '', accNo: config.vi3?.accNo || '', accName: config.vi3?.accName || '' },
     { id: 'vi4', name: config.vi4?.name || '', bankId: config.vi4?.bankId || '', accNo: config.vi4?.accNo || '', accName: config.vi4?.accName || '' }
   ].filter(w => w.name && w.name.trim() !== '') : []), [config]);
+
+  const [logoDataUrl, setLogoDataUrl] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const loadLogo = async () => {
+      const src = config?.logo || '/logo.png';
+      if (!src) return;
+      if (src.startsWith('data:')) {
+        if (active) setLogoDataUrl(src);
+        return;
+      }
+      const dataUrl = await convertImageToDataUrl(src);
+      if (active && dataUrl) {
+        setLogoDataUrl(dataUrl);
+      }
+    };
+    loadLogo();
+    return () => { active = false; };
+  }, [config?.logo]);
 
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState(null);
@@ -2755,7 +2843,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           {/* HEADER */}
           <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ width: '180px', textAlign: 'left' }}>
-              <img src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } else { e.target.dataset.hasFallback = 'true'; e.target.src = "/logo.png"; } }} />
+              <img crossOrigin="anonymous" src={logoDataUrl || config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { if (!logoDataUrl) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } } else { e.target.dataset.hasFallback = 'true'; e.target.src = logoDataUrl || "/logo.png"; } }} />
             </div>
             <div style={{ flex: 1, textAlign: 'center' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', color: '#000' }}>
@@ -2783,24 +2871,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '16px', padding: '24px', marginTop: '15px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                 <div style={{ fontWeight: 600 }}>Học phí:</div>
-                <div style={{ fontWeight: 900 }}>{exportingNotice.hocphiStr} đ</div>
+                <div style={{ fontWeight: 900 }}>{exportingNotice.hocphiStr}</div>
               </div>
               {parseFormattedNumber(exportingNotice.tienAn) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                   <div style={{ fontWeight: 600 }}>Tiền ăn ({exportingNotice.feedingDays || 0} ngày):</div>
-                  <div style={{ fontWeight: 900 }}>{exportingNotice.tienAnStr} đ</div>
+                  <div style={{ fontWeight: 900 }}>{exportingNotice.tienAnStr}</div>
                 </div>
               )}
               {parseFormattedNumber(exportingNotice.noCu) !== 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                   <div style={{ fontWeight: 600 }}>{parseFormattedNumber(exportingNotice.noCu) > 0 ? 'Tiền nợ cũ:' : 'Tiền dư (đối trừ):'}</div>
-                  <div style={{ fontWeight: 900 }}>{exportingNotice.noCuStr} đ</div>
+                  <div style={{ fontWeight: 900 }}>{exportingNotice.noCuStr}</div>
                 </div>
               )}
               {parseInt(String(exportingNotice.giamhocphi).replace(/\D/g, '')) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                   <div style={{ fontWeight: 600 }}>Giảm trừ:</div>
-                  <div style={{ fontWeight: 900 }}>{exportingNotice.giamhocphiStr} đ</div>
+                  <div style={{ fontWeight: 900 }}>{exportingNotice.giamhocphiStr}</div>
                 </div>
               )}
               {exportingNotice.phuthu && exportingNotice.phuthu.length > 0 && (
@@ -2809,7 +2897,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   {exportingNotice.phuthu.map((pt, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                       <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
-                      <div style={{ fontWeight: 700 }}>{formatTuition(pt.amount || 0)} đ</div>
+                      <div style={{ fontWeight: 700 }}>{formatTuition(pt.amount || 0)}</div>
                     </div>
                   ))}
                 </>
@@ -2820,19 +2908,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   {parseInt(String(exportingNotice.truTienAn).replace(/\D/g, '')) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                       <div style={{ fontStyle: 'italic' }}>- Trừ tiền ăn (nghỉ phép tháng trước):</div>
-                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truTienAnStr} đ</div>
+                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truTienAnStr}</div>
                     </div>
                   )}
                   {parseInt(String(exportingNotice.truHocPhi).replace(/\D/g, '')) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
                       <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
-                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truHocPhiStr} đ</div>
+                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truHocPhiStr}</div>
                     </div>
                   )}
                   {parseInt(String(exportingNotice.truTienDaNgoai).replace(/\D/g, '')) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
                       <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
-                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truTienDaNgoaiStr} đ</div>
+                      <div style={{ fontWeight: 700 }}>-{exportingNotice.truTienDaNgoaiStr}</div>
                     </div>
                   )}
                 </>
@@ -2840,7 +2928,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                 <div>TỔNG CỘNG:</div>
-                <div>{exportingNotice.tongcongStr} VNĐ</div>
+                <div>{exportingNotice.tongcongStr}</div>
               </div>
             </div>
 

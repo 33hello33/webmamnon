@@ -171,25 +171,38 @@ const dataUrlToBlob = (dataUrl) => {
 const convertImageToDataUrl = async (url) => {
    if (!url || typeof url !== 'string') return null;
    if (url.startsWith('data:')) return url;
-   // 1. Thử fetch thông thường không kèm custom headers (tránh CORS preflight OPTIONS)
-   try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-         const blob = await resp.blob();
-         return await new Promise((res) => {
-            const reader = new FileReader();
-            reader.onload = () => res(reader.result);
-            reader.onerror = () => res(null);
-            reader.readAsDataURL(blob);
-         });
-      }
-   } catch (e) {
-      // Fetch thất bại (CORS hoặc mạng)
-   }
 
-   // 2. Thử load qua thẻ Image + Canvas
+   const safeFetchBlob = async (targetUrl) => {
+      const resp = await fetch(targetUrl, { mode: 'cors' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return await resp.blob();
+   };
+
+   const blobToDataUrl = (blob) => new Promise((res) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result);
+      reader.onerror = () => res(null);
+      reader.readAsDataURL(blob);
+   });
+
+   // 1. Thu fetch voi cache-bust de tranh cache HTTP thieu CORS header
+   const bustUrl = url.includes('?') ? (url + '&_cb=' + Date.now()) : (url + '?_cb=' + Date.now());
    try {
-      return await new Promise((res) => {
+      const blob = await safeFetchBlob(bustUrl);
+      const dataUrl = await blobToDataUrl(blob);
+      if (dataUrl) return dataUrl;
+   } catch (_) { }
+
+   // 2. Thu fetch nguyen ban
+   try {
+      const blob = await safeFetchBlob(url);
+      const dataUrl = await blobToDataUrl(blob);
+      if (dataUrl) return dataUrl;
+   } catch (_) { }
+
+   // 3. Thu qua Canvas + Image
+   try {
+      const canvasResult = await new Promise((res) => {
          const img = new Image();
          img.crossOrigin = 'anonymous';
          img.onload = () => {
@@ -205,12 +218,26 @@ const convertImageToDataUrl = async (url) => {
             }
          };
          img.onerror = () => res(null);
-         setTimeout(() => res(null), 3500);
-         img.src = url;
+         setTimeout(() => res(null), 3000);
+         img.src = bustUrl;
       });
-   } catch (_) {
-      return null;
+      if (canvasResult) return canvasResult;
+   } catch (_) { }
+
+   // 4. Fallback qua CORS proxy
+   const proxies = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+      'https://corsproxy.io/?url=' + encodeURIComponent(url)
+   ];
+   for (const proxyUrl of proxies) {
+      try {
+         const blob = await safeFetchBlob(proxyUrl);
+         const dataUrl = await blobToDataUrl(blob);
+         if (dataUrl) return dataUrl;
+      } catch (_) { }
    }
+
+   return null;
 };
 
 const sanitizeFileSegment = (value, fallback = 'file') => {
@@ -299,6 +326,25 @@ export default function InvoiceManager({
    const { config, getTienAnConfig, getTienAnTiers } = useConfig();
    const mealTiers = React.useMemo(() => (getTienAnTiers ? getTienAnTiers() : []), [config, getTienAnTiers]);
    const [holidayDates, setHolidayDates] = useState([]);
+   const [logoDataUrl, setLogoDataUrl] = useState('');
+
+   useEffect(() => {
+      let active = true;
+      const loadLogo = async () => {
+         const src = config?.logo || '/logo.png';
+         if (!src) return;
+         if (src.startsWith('data:')) {
+            if (active) setLogoDataUrl(src);
+            return;
+         }
+         const dataUrl = await convertImageToDataUrl(src);
+         if (active && dataUrl) {
+            setLogoDataUrl(dataUrl);
+         }
+      };
+      loadLogo();
+      return () => { active = false; };
+   }, [config?.logo]);
    const walletsConfig = React.useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
       { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -2304,7 +2350,7 @@ export default function InvoiceManager({
                                                       }}
                                                       style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
                                                    />
-                                                   <span style={{ fontWeight: 700 }}>đ</span>
+                                                   <span style={{ fontWeight: 700 }}></span>
                                                 </div>
                                              </div>
                                           )}
@@ -2322,7 +2368,7 @@ export default function InvoiceManager({
                                                       }}
                                                       style={{ width: '100px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700, color: '#065f46', outline: 'none', padding: 0 }}
                                                    />
-                                                   <span style={{ fontWeight: 700 }}>đ</span>
+                                                   <span style={{ fontWeight: 700 }}></span>
                                                 </div>
                                              </div>
                                           )}
@@ -2332,12 +2378,12 @@ export default function InvoiceManager({
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                    <span style={{ fontWeight: 700 }}>-</span>
                                                    <span style={{ fontWeight: 700 }}>{formatCurrency(ngoaiKhoaDeduction)}</span>
-                                                   <span style={{ fontWeight: 700 }}>đ</span>
+                                                   <span style={{ fontWeight: 700 }}></span>
                                                 </div>
                                              </div>
                                           )}
                                           <div style={{ textAlign: 'right', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #10b981', fontWeight: 800 }}>
-                                             Tổng khoản trừ: -{formatCurrency(deductionSum)}đ
+                                             Tổng khoản trừ: -{formatCurrency(deductionSum)}
                                           </div>
                                        </>
                                     )}
@@ -2698,13 +2744,13 @@ export default function InvoiceManager({
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
                   <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } else { e.target.dataset.hasFallback = 'true'; e.target.src = "/logo.png"; } }} />
+                     <img crossOrigin="anonymous" src={logoDataUrl || config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { if (!logoDataUrl) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } } else { e.target.dataset.hasFallback = 'true'; e.target.src = logoDataUrl || "/logo.png"; } }} />
                   </div>
 
                   {/* CENTER: Info */}
                   <div style={{ flex: 1, textAlign: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        {config?.tencongty || 'TRƯỜNG MẦM NON DOREMI'}
+                        {config?.tencongty || 'TRƯỜNG MẦM NON'}
                      </h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
@@ -2808,13 +2854,13 @@ export default function InvoiceManager({
                               {otherFees.map((pt, i) => (
                                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                                     <div style={{ fontStyle: 'italic' }}>+ {pt.name}:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
+                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)}</div>
                                  </div>
                               ))}
                               {lateFeeSum > 0 && (
                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                                     <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)} đ</div>
+                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)}</div>
                                  </div>
                               )}
                            </>
@@ -2827,19 +2873,19 @@ export default function InvoiceManager({
                            {parseInt(String(downloadingInvoice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualMealRefund} đ</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualMealRefund}</div>
                               </div>
                            )}
                            {parseInt(String(downloadingInvoice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualTuitionRefund} đ</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.actualTuitionRefund}</div>
                               </div>
                            )}
                            {parseInt(String(downloadingInvoice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.ngoaiKhoaDeduction} đ</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingInvoice?.ngoaiKhoaDeduction}</div>
                               </div>
                            )}
                         </>
@@ -2848,12 +2894,12 @@ export default function InvoiceManager({
                      <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                         <div>TỔNG CỘNG:</div>
-                        <div>{downloadingInvoice?.tongcong} VNĐ</div>
+                        <div>{downloadingInvoice?.tongcong}</div>
                      </div>
 
                      <div style={{ borderTop: '1.5px dashed #93c5fd', marginTop: '14px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
-                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingInvoice?.dadong || '0'} VNĐ</b></div>
-                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingInvoice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingInvoice?.conno || '0'} VNĐ</b></div>
+                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingInvoice?.dadong || '0'}</b></div>
+                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingInvoice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingInvoice?.conno || '0'}</b></div>
                      </div>
                   </div>
 
@@ -2878,9 +2924,8 @@ export default function InvoiceManager({
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Doremi Preschool
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
+                     Nhân viên: <b style={{ fontWeight: 950 }}>{config?.tencongty}</b>
                   </div>
                   <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                      (Xác nhận)
@@ -2894,13 +2939,13 @@ export default function InvoiceManager({
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
                   <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } else { e.target.dataset.hasFallback = 'true'; e.target.src = "/logo.png"; } }} />
+                     <img crossOrigin="anonymous" src={logoDataUrl || config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { if (!logoDataUrl) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } } else { e.target.dataset.hasFallback = 'true'; e.target.src = logoDataUrl || "/logo.png"; } }} />
                   </div>
 
                   {/* CENTER: Info */}
                   <div style={{ flex: 1, textAlign: 'center' }}>
                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>
-                        TRƯỜNG MẦM NON DOREMI
+                        {config?.tencongty || 'TRƯỜNG MẦM NON'}
                      </h3>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Địa chỉ: {config?.diachicongty}</p>
                      <p style={{ margin: '4px 0', fontSize: '14px', fontWeight: 600, color: '#4b5563' }}>Số điện thoại: {config?.sdtcongty}</p>
@@ -2988,13 +3033,13 @@ export default function InvoiceManager({
                               {otherFees.map((pt, i) => (
                                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                                     <div style={{ fontStyle: 'italic' }}>+ {pt.name || 'Phụ thu'}:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)} đ</div>
+                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(pt.amount)}</div>
                                  </div>
                               ))}
                               {lateFeeSum > 0 && (
                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                                     <div style={{ fontStyle: 'italic' }}>+ Phụ thu trả trễ:</div>
-                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)} đ</div>
+                                    <div style={{ fontWeight: 700 }}>{formatPlainCurrency(lateFeeSum)}</div>
                                  </div>
                               )}
                            </>
@@ -3007,19 +3052,19 @@ export default function InvoiceManager({
                            {parseInt(String(downloadingNotice?.actualMealRefund).replace(/\D/g, '')) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền ăn:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualMealRefund} đ</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualMealRefund}</div>
                               </div>
                            )}
                            {parseInt(String(downloadingNotice?.actualTuitionRefund).replace(/\D/g, '')) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền học:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund} đ</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.actualTuitionRefund}</div>
                               </div>
                            )}
                            {parseInt(String(downloadingNotice?.ngoaiKhoaDeduction).replace(/\D/g, '')) > 0 && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', color: '#475569', marginTop: '8px' }}>
                                  <div style={{ fontStyle: 'italic' }}>- Trừ tiền dã ngoại tháng trước:</div>
-                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.ngoaiKhoaDeduction} đ</div>
+                                 <div style={{ fontWeight: 700 }}>-{downloadingNotice?.ngoaiKhoaDeduction}</div>
                               </div>
                            )}
                         </>
@@ -3028,12 +3073,12 @@ export default function InvoiceManager({
                      <div style={{ borderTop: '2.5px solid #0369a1', margin: '18px 0 12px 0' }}></div>
                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22pt', fontWeight: 900, color: '#0369a1' }}>
                         <div>TỔNG CỘNG:</div>
-                        <div>{downloadingNotice?.tongcong} VNĐ</div>
+                        <div>{downloadingNotice?.tongcong}</div>
                      </div>
 
                      <div style={{ borderTop: '1.5px dashed #93c5fd', marginTop: '14px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '16pt', color: '#1e293b' }}>
-                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice?.dadong || '0'} VNĐ</b></div>
-                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingNotice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingNotice?.conno || downloadingNotice?.tongcong || '0'} VNĐ</b></div>
+                        <div>Đã đóng: <b style={{ color: '#059669', fontWeight: 900 }}>{downloadingNotice?.dadong || '0'}</b></div>
+                        <div>Còn lại: <b style={{ color: parseInt(String(downloadingNotice?.conno || '0').replace(/\D/g, ''), 10) > 0 ? '#dc2626' : '#059669', fontWeight: 900 }}>{downloadingNotice?.conno || downloadingNotice?.tongcong || '0'}</b></div>
                      </div>
                   </div>
 
@@ -3076,9 +3121,8 @@ export default function InvoiceManager({
                {/* FOOTER */}
                <div style={{ marginTop: 20, fontSize: "15pt", display: "flex", justifyContent: "space-between", alignItems: 'flex-end' }}>
                   <div style={{ lineHeight: '1.6' }}>
-                     Facebook: Doremi Preschool
                      Hotline: <b style={{ fontWeight: 900 }}>{config?.sdtcongty}</b><br />
-                     Nhân viên: <b style={{ fontWeight: 950 }}>Doremi Preschool</b>
+                     Trường Mầm Non: <b style={{ fontWeight: 950 }}>{config?.tencongty}</b>
                   </div>
                   <div style={{ textAlign: "right", fontSize: '12pt', fontStyle: 'italic', opacity: 0.8 }}>
                      (Xác nhận)
