@@ -53,6 +53,12 @@ export const fetchHolidayDates = async (year = new Date().getFullYear()) => {
   }
 };
 
+export const fetchHolidayDatesForYears = async (years = []) => {
+  const uniqueYears = Array.from(new Set((years || []).map(normalizeYear)));
+  const results = await Promise.all(uniqueYears.map((y) => fetchHolidayDates(y)));
+  return Array.from(new Set(results.flat())).sort();
+};
+
 export const isHoliday = (dateStr, holidayDates) => {
   return Array.isArray(holidayDates) && holidayDates.includes(dateStr);
 };

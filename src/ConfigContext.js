@@ -159,21 +159,25 @@ export const ConfigProvider = ({ children }) => {
     }
 
     if (trutienanConfig && typeof trutienanConfig === 'object') {
-      return Object.entries(trutienanConfig).map(([k, v]) => ({
-        amount: parseInt(String(k).replace(/\D/g, ''), 10) || 0,
-        tru_nghi: parseInt(String(v?.tru_nghi || '0').replace(/\D/g, ''), 10) || 0
-      })).filter(t => t.amount > 0 || t.tru_nghi > 0);
+      return Object.entries(trutienanConfig).map(([k, v]) => {
+        const amt = parseInt(String(k).replace(/\D/g, ''), 10) || 0;
+        const tru = parseInt(String((typeof v === 'object' ? (v?.tru_nghi ?? v?.amount) : v) ?? amt).replace(/\D/g, ''), 10) || amt;
+        return {
+          amount: amt || tru,
+          tru_nghi: tru || amt
+        };
+      }).filter(t => t.amount > 0 || t.tru_nghi > 0);
     }
 
     const val = parseInt(String(config.trutienan || '0').replace(/\D/g, ''), 10) || 0;
-    if (val > 0) return [{ amount: 0, tru_nghi: val }];
+    if (val > 0) return [{ amount: val, tru_nghi: val }];
     return [];
   };
 
   const getTienAnConfig = (mealTierInput) => {
-    if (!config || !config.trutienan) return { amount: 0, tru_nghi: 0 };
+    if (!config || !config.trutienan) return { amount: Number(mealTierInput) || 0, tru_nghi: Number(mealTierInput) || 0 };
 
-    const mealTier = parseInt(String(mealTierInput || '0').replace(/\D/g, ''));
+    const mealTier = parseInt(String(mealTierInput || '0').replace(/\D/g, ''), 10) || 0;
     let trutienanConfig = config.trutienan;
 
     if (typeof trutienanConfig === 'string' && trutienanConfig.startsWith('{')) {
@@ -186,26 +190,37 @@ export const ConfigProvider = ({ children }) => {
 
     if (trutienanConfig && typeof trutienanConfig === 'object') {
       const keys = Object.keys(trutienanConfig);
-      if (keys.length === 0) return { amount: 0, tru_nghi: 0 };
+      if (keys.length === 0) return { amount: mealTier, tru_nghi: mealTier };
 
       // Find match exactly
       if (mealTier > 0 && trutienanConfig[mealTier]) {
-        return { amount: mealTier, tru_nghi: parseInt(trutienanConfig[mealTier].tru_nghi) || 0 };
+        const item = trutienanConfig[mealTier];
+        const tru = parseInt(String((typeof item === 'object' ? (item?.tru_nghi ?? item?.amount) : item) ?? mealTier).replace(/\D/g, ''), 10) || mealTier;
+        return { amount: mealTier, tru_nghi: tru };
       }
 
       // Fallback matching
       if (mealTier > 0) {
-        const match = Object.entries(trutienanConfig).find(([k]) => parseInt(k) === mealTier);
-        if (match) return { amount: parseInt(match[0]), tru_nghi: parseInt(match[1].tru_nghi) || 0 };
+        const match = Object.entries(trutienanConfig).find(([k]) => parseInt(k, 10) === mealTier);
+        if (match) {
+          const item = match[1];
+          const kAmt = parseInt(match[0], 10);
+          const tru = parseInt(String((typeof item === 'object' ? (item?.tru_nghi ?? item?.amount) : item) ?? kAmt).replace(/\D/g, ''), 10) || kAmt;
+          return { amount: kAmt, tru_nghi: tru };
+        }
+        return { amount: mealTier, tru_nghi: mealTier };
       }
 
       // Default to first tier if no match
       const firstKey = keys[0];
-      return { amount: parseInt(firstKey), tru_nghi: parseInt(trutienanConfig[firstKey].tru_nghi) || 0 };
+      const item = trutienanConfig[firstKey];
+      const kAmt = parseInt(firstKey, 10);
+      const tru = parseInt(String((typeof item === 'object' ? (item?.tru_nghi ?? item?.amount) : item) ?? kAmt).replace(/\D/g, ''), 10) || kAmt;
+      return { amount: kAmt, tru_nghi: tru };
     }
 
-    const val = parseInt(String(trutienanConfig).replace(/\D/g, '')) || 0;
-    return { amount: 0, tru_nghi: val }; // Old behavior compatibility
+    const val = parseInt(String(trutienanConfig).replace(/\D/g, ''), 10) || 0;
+    return { amount: mealTier || val, tru_nghi: mealTier || val };
   };
 
   return (

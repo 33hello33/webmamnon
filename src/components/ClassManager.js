@@ -14,6 +14,8 @@ import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, ded
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { calculateFeedingDays } from '../utils/mealFeeUtils';
+import { fetchHolidayDatesForYears } from '../utils/holidays';
 import SurchargeRegistration from './SurchargeRegistration';
 import './ClassManager.css';
 
@@ -211,11 +213,33 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
   const getMealRefundRate = useCallback((mucTienAn) => {
     const tier = getTienAnConfig?.(mucTienAn);
+    if (tier && Number(tier.amount) > 0) {
+      return Number(tier.amount);
+    }
     if (tier && Number(tier.tru_nghi) > 0) {
       return Number(tier.tru_nghi);
     }
-    return parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
+    return Number(mucTienAn) || parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0;
   }, [config, getTienAnConfig]);
+
+  // Ngày nghỉ lễ từ cấu hình (cache theo năm) để trừ khi tính số ngày ăn
+  const holidayDatesRef = useRef([]);
+  const holidayYearsLoadedRef = useRef(new Set());
+  const loadHolidayDatesFor = useCallback(async (dateStr) => {
+    const d = new Date(dateStr || Date.now());
+    const baseYear = isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+    const years = [baseYear, baseYear + 1].filter(y => !holidayYearsLoadedRef.current.has(y));
+    if (years.length > 0) {
+      const dates = await fetchHolidayDatesForYears(years);
+      years.forEach(y => holidayYearsLoadedRef.current.add(y));
+      holidayDatesRef.current = Array.from(new Set([...holidayDatesRef.current, ...dates])).sort();
+    }
+    return holidayDatesRef.current;
+  }, []);
+
+  useEffect(() => {
+    loadHolidayDatesFor(new Date());
+  }, [loadHolidayDatesFor]);
 
   const loadBatchNgoaiKhoaAdjustments = useCallback(async (studentIds, billingStartDate) => {
     const tienDaNgoai = parseInt(String(config?.tiendangoai || '0').replace(/\D/g, ''), 10) || 0;
@@ -656,6 +680,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       });
 
       const tl = formatMonthYear(startStr);
+      const feedingInfo = calculateFeedingDays(startStr, 1, await loadHolidayDatesFor(startStr));
+      const feedingDays = feedingInfo.feedingDays;
       const initData = activeStudents.map((s) => {
         const studentRaw = students.find(st => st.mahv === s.mahv) || s;
         const currentMahv = studentRaw.mahv;
@@ -688,6 +714,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const studentMealAmount = defaultMealTier;
         const mealRefundRate = getMealRefundRate(studentMealAmount);
         const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+        const studentTienAn = feedingDays * studentMealAmount;
 
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
@@ -739,6 +766,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           tenhv: currentTenhv,
           hocphi: initHocPhi,
           mucTienAn: studentMealAmount,
+          tienAn: studentTienAn,
+          feedingDays,
           giamhocphi,
           giamhp_percent,
           base_giamhp_percent,
@@ -747,7 +776,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
           nghiLienTiep: maxLeave,
-          tongcong: Math.max(0, initHocPhi + stNoCu + surchargeSum - totalRefund - giamhocphi),
+          tongcong: Math.max(0, initHocPhi + studentTienAn + stNoCu + surchargeSum - totalRefund - giamhocphi),
           ngaybatdau: startStr,
           hinhthuc: stHinhThuc,
           phuthu,
@@ -846,6 +875,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       ]);
       const attendance = attData || [];
       const tuitionRefundRate = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
+      const feedingInfo = calculateFeedingDays(startStr, 1, await loadHolidayDatesFor(startStr));
+      const feedingDays = feedingInfo.feedingDays;
 
       setBatchStudentsData(prev => (prev || []).map(row => {
         const studentAttendance = attendance.filter(a => a.mahv === row.mahv && a.ngay >= sStart && a.ngay <= sEnd);
@@ -867,6 +898,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         let mealRefund = 0, maxLeave = 0;
         const studentMealAmount = row.mucTienAn || (mealTiers.length > 0 ? mealTiers[0].amount : 0);
         const mealRefundRate = getMealRefundRate(studentMealAmount);
+        const studentTienAn = feedingDays * studentMealAmount;
         groups.forEach(g => {
           const count = g.so_ngay_nghi_lien_tuc;
           if (count > maxLeave) maxLeave = count;
@@ -909,6 +941,8 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
         return {
           ...row,
+          tienAn: studentTienAn,
+          feedingDays,
           giamhocphi: ghp,
           giamhp_percent,
           truTienAn: mealRefund,
@@ -919,7 +953,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           diemDanhInfo: { diHoc, nghiPhep, nghiKP, statsPeriod: sPeriod },
           phuthu: studentPhuThu,
           ghichu: buildCombinedNote(batchNoticeData.ghiChu, ngoaiKhoaAutoNote),
-          tongcong: Math.max(0, hp - ghp + nocu + surchargeSum - totalRefund),
+          tongcong: Math.max(0, hp + studentTienAn - ghp + nocu + surchargeSum - totalRefund),
           ngaybatdau: startStr
         };
       }));
@@ -947,6 +981,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
     const appliedMealAmount = batchNoticeData.mucTienAnOpt || (mealTiers.length > 0 ? mealTiers[0].amount : 0);
     const mealRefundRate = getMealRefundRate(appliedMealAmount);
+    const feedingInfo = calculateFeedingDays(batchNoticeData.ngayBatDau, 1, holidayDatesRef.current);
+    const feedingDays = feedingInfo.feedingDays;
+    const studentTienAn = feedingDays * appliedMealAmount;
 
     setBatchStudentsData(prev => (prev || []).map(item => {
       const currentNoCu = parseInt(item.noCu || 0);
@@ -959,12 +996,14 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         calculatedGiamHocPhi = Math.round((hpNumber * item.giamhp_percent) / 100);
       }
 
-      const tc = Math.max(0, hpNumber + currentNoCu + surchargeSum - calculatedGiamHocPhi - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
+      const tc = Math.max(0, hpNumber + studentTienAn + currentNoCu + surchargeSum - calculatedGiamHocPhi - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
 
       return {
         ...item,
         hocphi: hpNumber,
         mucTienAn: appliedMealAmount,
+        tienAn: studentTienAn,
+        feedingDays,
         giamhocphi: calculatedGiamHocPhi,
         truTienAn: recalculatedMealRefund,
         ngaybatdau: batchNoticeData.ngayBatDau,
@@ -978,7 +1017,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     setBatchStudentsData(prev => (prev || []).map(item => {
       if (item.mahv === mahv) {
         let cleanVal = value;
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
+        if (['hocphi', 'tienAn', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
           cleanVal = parseFormattedNumber(value);
         }
         
@@ -1004,7 +1043,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
         if (field === 'mucTienAn') {
           const mealRate = getMealRefundRate(cleanVal);
+          const feedingInfo = calculateFeedingDays(newItem.ngaybatdau || batchNoticeData.ngayBatDau, 1, holidayDatesRef.current);
           newItem.mucTienAn = cleanVal;
+          newItem.feedingDays = feedingInfo.feedingDays;
+          newItem.tienAn = feedingInfo.feedingDays * cleanVal;
           newItem.truTienAn = Math.round(((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRate)) / 1000)) * 1000;
         }
 
@@ -1013,15 +1055,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             newItem.giamhocphi = Math.round((cleanVal * newItem.giamhp_percent) / 100);
           }
         }
-        if (['hocphi', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
+        if (['hocphi', 'tienAn', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
+          const ta = parseInt(newItem.tienAn || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
           const nocu = parseInt(newItem.noCu || 0);
           const tta = parseInt(newItem.truTienAn || 0);
           const thp = parseInt(newItem.truHocPhi || 0);
           const ttdn = parseInt(newItem.truTienDaNgoai || 0);
           const surchargeSum = sumSurcharges(newItem.phuthu);
-          newItem.tongcong = Math.max(0, hp - ghp + nocu + surchargeSum - tta - thp - ttdn);
+          newItem.tongcong = Math.max(0, hp + ta - ghp + nocu + surchargeSum - tta - thp - ttdn);
         }
         return newItem;
       }
@@ -1058,6 +1101,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           thoiluong: tl,
           ngaylap: localNow,
           hocphiStr: formatTuition(row.hocphi),
+          tienAn: row.tienAn || 0,
+          tienAnStr: formatTuition(row.tienAn || 0),
+          feedingDays: row.feedingDays || 0,
+          mucTienAn: row.mucTienAn || 0,
           giamhocphiStr: formatTuition(row.giamhocphi),
           truTienAnStr: formatTuition(row.truTienAn || 0),
           truHocPhiStr: formatTuition(row.truHocPhi || 0),
@@ -1103,6 +1150,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         malop: selectedClass?.malop || '',
         thoiluong: n.thoiluong,
         sobuoihoc: n.thoiluong,
+        tienan: JSON.stringify({ amount: n.tienAn || 0, days: n.feedingDays || 0, rate: n.mucTienAn || 0 }),
         tiennghiphep: n.truHocPhiStr,
         trutienan: n.truTienAnStr,
         trutiendangoai: n.truTienDaNgoaiStr,
@@ -1239,12 +1287,35 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 node.style.opacity = '1';
                 node.style.visibility = 'visible';
 
-                const dataUrl = await toPng(node, {
-                  cacheBust: true,
-                  backgroundColor: '#ffffff',
-                  width: 800,
-                  height: 1150
-                });
+                let dataUrl;
+                try {
+                  dataUrl = await toPng(node, {
+                    cacheBust: false,
+                    backgroundColor: '#ffffff',
+                    width: 800,
+                    height: 1150,
+                    filter: (domNode) => {
+                      if (domNode.tagName === 'IMG' && domNode.dataset.error === 'true') {
+                        return false;
+                      }
+                      return true;
+                    }
+                  });
+                } catch (pngErr) {
+                  console.warn('[Batch Export] Initial toPng failed, retrying without failed images:', pngErr);
+                  dataUrl = await toPng(node, {
+                    cacheBust: false,
+                    backgroundColor: '#ffffff',
+                    width: 800,
+                    height: 1150,
+                    filter: (domNode) => {
+                      if (domNode.tagName === 'IMG') {
+                        return Boolean(domNode.src && domNode.src.startsWith('data:'));
+                      }
+                      return true;
+                    }
+                  });
+                }
 
                 if (dataUrl && dataUrl.length > 2500) {
                   const link = document.createElement('a');
@@ -2429,7 +2500,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                               border: `1px solid ${isActive ? '#047857' : '#cbd5e1'}`,
                             }}
                           >
-                            {formatTuition(tier.amount)} (-{formatTuition(tier.tru_nghi)}/n)
+                            {formatTuition(tier.amount)} ₫/ngày
                           </span>
                         );
                       }) : <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Mặc định</span>}
@@ -2491,6 +2562,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ minWidth: '130px' }}>Giảm HP</th>
                           <th style={{ width: '80px' }}>Nghỉ LT</th>
                           <th style={{ minWidth: '150px' }}>Mức Tiền Ăn</th>
+                          <th style={{ minWidth: '130px' }}>Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Trừ Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Trừ Học Phí</th>
                           <th style={{ minWidth: '130px' }}>Trừ Dã Ngoại</th>
@@ -2565,13 +2637,23 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                   >
                                     {mealTiers.map(t => (
                                       <option key={t.amount} value={t.amount}>
-                                        {formatTuition(t.amount)} (-{formatTuition(t.tru_nghi)}/n)
+                                        {formatTuition(t.amount)} ₫/ngày
                                       </option>
                                     ))}
                                   </select>
                                 ) : (
                                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Mặc định</span>
                                 )}
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={formatTuition(row.tienAn || 0)}
+                                  onChange={e => handleBatchStudentChange(row.mahv, 'tienAn', e.target.value)}
+                                  className="td-input"
+                                  style={{ width: '100%', border: 'none', background: '#f0fdf4', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#166534' }}
+                                  title={`Tiền ăn: ${row.feedingDays || 0} ngày x ${formatTuition(row.mucTienAn || 0)}đ/ngày`}
+                                />
                               </td>
                               <td>
                                 <input
@@ -2673,7 +2755,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           {/* HEADER */}
           <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ width: '180px', textAlign: 'left' }}>
-              <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+              <img src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } else { e.target.dataset.hasFallback = 'true'; e.target.src = "/logo.png"; } }} />
             </div>
             <div style={{ flex: 1, textAlign: 'center' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', color: '#000' }}>
@@ -2703,6 +2785,12 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 <div style={{ fontWeight: 600 }}>Học phí:</div>
                 <div style={{ fontWeight: 900 }}>{exportingNotice.hocphiStr} đ</div>
               </div>
+              {parseFormattedNumber(exportingNotice.tienAn) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                  <div style={{ fontWeight: 600 }}>Tiền ăn ({exportingNotice.feedingDays || 0} ngày):</div>
+                  <div style={{ fontWeight: 900 }}>{exportingNotice.tienAnStr} đ</div>
+                </div>
+              )}
               {parseFormattedNumber(exportingNotice.noCu) !== 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
                   <div style={{ fontWeight: 600 }}>{parseFormattedNumber(exportingNotice.noCu) > 0 ? 'Tiền nợ cũ:' : 'Tiền dư (đối trừ):'}</div>
@@ -2731,7 +2819,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <div style={{ borderTop: '1px solid #bae6fd', margin: '15px 0' }}></div>
                   {parseInt(String(exportingNotice.truTienAn).replace(/\D/g, '')) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15pt', marginBottom: '8px', color: '#475569' }}>
-                      <div style={{ fontStyle: 'italic' }}>- Hoàn trả tiền Ăn:</div>
+                      <div style={{ fontStyle: 'italic' }}>- Trừ tiền ăn (nghỉ phép tháng trước):</div>
                       <div style={{ fontWeight: 700 }}>-{exportingNotice.truTienAnStr} đ</div>
                     </div>
                   )}
@@ -2778,10 +2866,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   <img
                     key={exportingNotice.mahd}
                     data-role="notice-qr"
-                    crossOrigin="anonymous"
                     src={exportingNotice.qrBase64 || exportingNotice.qrUrl}
                     alt="Mã QR"
                     style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }}
+                    onError={(e) => { e.target.dataset.error = 'true'; }}
                   />
                   <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                 </div>

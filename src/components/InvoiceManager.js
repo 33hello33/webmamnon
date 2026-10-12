@@ -15,6 +15,8 @@ import { buildLateFeeSurcharges, getLateAttendanceCounts, mergeLateFeeSurcharges
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { calculateFeedingDays } from '../utils/mealFeeUtils';
+import { fetchHolidayDatesForYears } from '../utils/holidays';
 
 const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
@@ -166,6 +168,51 @@ const dataUrlToBlob = (dataUrl) => {
    return new Blob([bytes], { type: mime });
 };
 
+const convertImageToDataUrl = async (url) => {
+   if (!url || typeof url !== 'string') return null;
+   if (url.startsWith('data:')) return url;
+   // 1. Thử fetch thông thường không kèm custom headers (tránh CORS preflight OPTIONS)
+   try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+         const blob = await resp.blob();
+         return await new Promise((res) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = () => res(null);
+            reader.readAsDataURL(blob);
+         });
+      }
+   } catch (e) {
+      // Fetch thất bại (CORS hoặc mạng)
+   }
+
+   // 2. Thử load qua thẻ Image + Canvas
+   try {
+      return await new Promise((res) => {
+         const img = new Image();
+         img.crossOrigin = 'anonymous';
+         img.onload = () => {
+            try {
+               const canvas = document.createElement('canvas');
+               canvas.width = img.naturalWidth || img.width || 280;
+               canvas.height = img.naturalHeight || img.height || 280;
+               const ctx = canvas.getContext('2d');
+               ctx.drawImage(img, 0, 0);
+               res(canvas.toDataURL('image/png'));
+            } catch (err) {
+               res(null);
+            }
+         };
+         img.onerror = () => res(null);
+         setTimeout(() => res(null), 3500);
+         img.src = url;
+      });
+   } catch (_) {
+      return null;
+   }
+};
+
 const sanitizeFileSegment = (value, fallback = 'file') => {
    const normalized = String(value || '')
       .normalize('NFD')
@@ -251,6 +298,7 @@ export default function InvoiceManager({
 }) {
    const { config, getTienAnConfig, getTienAnTiers } = useConfig();
    const mealTiers = React.useMemo(() => (getTienAnTiers ? getTienAnTiers() : []), [config, getTienAnTiers]);
+   const [holidayDates, setHolidayDates] = useState([]);
    const walletsConfig = React.useMemo(() => (config ? [
       { id: 'vi1', name: config.vi1?.name || '', bankId: config.vi1?.bankId || '', accNo: config.vi1?.accNo || '', accName: config.vi1?.accName || '' },
       { id: 'vi2', name: config.vi2?.name || '', bankId: config.vi2?.bankId || '', accNo: config.vi2?.accNo || '', accName: config.vi2?.accName || '' },
@@ -277,7 +325,7 @@ export default function InvoiceManager({
    const [downloadingNotice, setDownloadingNotice] = useState(null);
    const [previewImg, setPreviewImg] = useState(null);
    const [studySummary, setStudySummary] = useState(null);
-   const [refundOverrides, setRefundOverrides] = useState({ meal: null, tuition: null, ngoaiKhoa: null });
+   const [refundOverrides, setRefundOverrides] = useState({ meal: null, mealFee: null, tuition: null, ngoaiKhoa: null });
    const [ngoaiKhoaAdjustment, setNgoaiKhoaAdjustment] = useState({ totalDeduction: 0, period: '', items: [] });
    const [isHinhThucLocked, setIsHinhThucLocked] = useState(true);
    const [recentSourceText, setRecentSourceText] = useState('');
@@ -322,7 +370,7 @@ export default function InvoiceManager({
    const [unpaidBills, setUnpaidBills] = useState([]);
    const [unpaidBillsTotal, setUnpaidBillsTotal] = useState(0);
 
-      const [registeredSurcharges, setRegisteredSurcharges] = useState([]);
+   const [registeredSurcharges, setRegisteredSurcharges] = useState([]);
    const [isLoadingSurcharges, setIsLoadingSurcharges] = useState(false);
 
    const fetchRegisteredSurcharges = useCallback(async (studentId, startDate, soLuong = 1, loaiDong = 'Tháng') => {
@@ -481,16 +529,58 @@ export default function InvoiceManager({
                      await new Promise(r => setTimeout(r, 150));
                   }
 
-                  const images = node.querySelectorAll('img');
-                  await Promise.all(Array.from(images).map(img => {
-                     if (img.complete) return Promise.resolve();
-                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
+                  // Chuyển đổi Logo sang Data URL nếu có
+                  const logoImgEl = node.querySelector('.p-header img');
+                  if (logoImgEl && logoImgEl.src && !logoImgEl.src.startsWith('data:')) {
+                     const logoDataUrl = await convertImageToDataUrl(logoImgEl.src);
+                     if (logoDataUrl) {
+                        logoImgEl.removeAttribute('crossorigin');
+                        logoImgEl.src = logoDataUrl;
+                        logoImgEl.dataset.error = 'false';
+                     }
+                  }
+
+                  const images = Array.from(node.querySelectorAll('img'));
+                  await Promise.all(images.map(img => {
+                     if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                     return new Promise(res => {
+                        img.onload = res;
+                        img.onerror = () => {
+                           img.dataset.error = 'true';
+                           res();
+                        };
+                        setTimeout(res, 3000);
+                     });
                   }));
                   await new Promise(requestAnimationFrame);
                   await new Promise(requestAnimationFrame);
-                  await new Promise(r => setTimeout(r, 400));
+                  await new Promise(r => setTimeout(r, 300));
 
-                  const dataUrl = await toPng(node, { cacheBust: false, backgroundColor: '#ffffff' });
+                  let dataUrl;
+                  try {
+                     dataUrl = await toPng(node, {
+                        cacheBust: false,
+                        backgroundColor: '#ffffff',
+                        filter: (domNode) => {
+                           if (domNode.tagName === 'IMG' && domNode.dataset.error === 'true') {
+                              return false;
+                           }
+                           return true;
+                        }
+                     });
+                  } catch (pngErr) {
+                     console.warn('Initial invoice toPng failed, retrying with data images only:', pngErr);
+                     dataUrl = await toPng(node, {
+                        cacheBust: false,
+                        backgroundColor: '#ffffff',
+                        filter: (domNode) => {
+                           if (domNode.tagName === 'IMG') {
+                              return Boolean(domNode.src && domNode.src.startsWith('data:'));
+                           }
+                           return true;
+                        }
+                     });
+                  }
 
                   // Restore hide
                   node.style.position = 'static';
@@ -588,35 +678,33 @@ export default function InvoiceManager({
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
 
-                  // === FIX TRIỆT ĐỂ CACHE QR ===
-                  // Fetch QR image hoàn toàn mới với cache:'no-store' → convert sang data URL
-                  // html-to-image sẽ không fetch lại (data: URL = embed sẵn) → không thể bị cache nhầm
+                  // === FIX TRIỆT ĐỂ CACHE QR & CORS ===
+                  // Chuyển QR image sang data URL chuẩn (không dùng header để tránh CORS preflight OPTIONS bị VietQR từ chối)
                   if (expectedQrSrc) {
                      const qrImgEl = node.querySelector('[data-role="notice-qr"]');
                      if (qrImgEl) {
-                        try {
-                           const resp = await fetch(expectedQrSrc, {
-                              cache: 'no-store',
-                              headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
-                           });
-                           const blob = await resp.blob();
-                           const qrDataUrl = await new Promise((res, rej) => {
-                              const reader = new FileReader();
-                              reader.onload = () => res(reader.result);
-                              reader.onerror = rej;
-                              reader.readAsDataURL(blob);
-                           });
-                           // Gán data URL trực tiếp — không còn CORS, không còn cache
+                        const qrDataUrl = await convertImageToDataUrl(expectedQrSrc);
+                        if (qrDataUrl) {
                            qrImgEl.removeAttribute('crossorigin');
                            qrImgEl.src = qrDataUrl;
-                           await new Promise(r => setTimeout(r, 100));
-                        } catch (fetchErr) {
-                           // Nếu fetch thất bại, fallback: set src bình thường
-                           console.warn('QR fetch failed, fallback to src:', fetchErr);
-                           qrImgEl.removeAttribute('src');
-                           await new Promise(r => setTimeout(r, 50));
-                           qrImgEl.setAttribute('src', expectedQrSrc);
+                           qrImgEl.dataset.error = 'false';
+                        } else {
+                           console.warn('QR convert to data URL failed, keeping src with crossorigin removed');
+                           qrImgEl.removeAttribute('crossorigin');
+                           qrImgEl.src = expectedQrSrc;
                         }
+                        await new Promise(r => setTimeout(r, 100));
+                     }
+                  }
+
+                  // Chuyển đổi Logo sang Data URL nếu có
+                  const logoImgEl = node.querySelector('.p-header img');
+                  if (logoImgEl && logoImgEl.src && !logoImgEl.src.startsWith('data:')) {
+                     const logoDataUrl = await convertImageToDataUrl(logoImgEl.src);
+                     if (logoDataUrl) {
+                        logoImgEl.removeAttribute('crossorigin');
+                        logoImgEl.src = logoDataUrl;
+                        logoImgEl.dataset.error = 'false';
                      }
                   }
 
@@ -627,21 +715,53 @@ export default function InvoiceManager({
                      await new Promise(r => setTimeout(r, 150));
                   }
 
-                  const images = node.querySelectorAll('img');
-                  await Promise.all(Array.from(images).map(img => {
-                     if (img.complete) return Promise.resolve();
-                     return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
+                  const images = Array.from(node.querySelectorAll('img'));
+                  await Promise.all(images.map(img => {
+                     if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                     return new Promise(res => {
+                        img.onload = res;
+                        img.onerror = () => {
+                           img.dataset.error = 'true';
+                           res();
+                        };
+                        setTimeout(res, 3000);
+                     });
                   }));
+
                   const qrImg = node.querySelector('[data-role="notice-qr"]');
                   if (qrImg?.decode) {
                      try { await qrImg.decode(); } catch (_) { /* ignore */ }
                   }
                   await new Promise(requestAnimationFrame);
                   await new Promise(requestAnimationFrame);
-                  await new Promise(r => setTimeout(r, 400));
+                  await new Promise(r => setTimeout(r, 300));
 
-                  // cacheBust:false vì QR img đã là data URL — không cần html-to-image fetch lại
-                  const dataUrl = await toPng(node, { cacheBust: false, backgroundColor: '#ffffff' });
+                  // Chụp ảnh node với bảo vệ an toàn
+                  let dataUrl;
+                  try {
+                     dataUrl = await toPng(node, {
+                        cacheBust: false,
+                        backgroundColor: '#ffffff',
+                        filter: (domNode) => {
+                           if (domNode.tagName === 'IMG' && domNode.dataset.error === 'true') {
+                              return false;
+                           }
+                           return true;
+                        }
+                     });
+                  } catch (pngErr) {
+                     console.warn('Initial notice capture failed, retrying without failed images:', pngErr);
+                     dataUrl = await toPng(node, {
+                        cacheBust: false,
+                        backgroundColor: '#ffffff',
+                        filter: (domNode) => {
+                           if (domNode.tagName === 'IMG') {
+                              return Boolean(domNode.src && domNode.src.startsWith('data:'));
+                           }
+                           return true;
+                        }
+                     });
+                  }
 
                   // Restore hide
                   node.style.position = 'static';
@@ -772,7 +892,7 @@ export default function InvoiceManager({
       setRegisteredSurcharges([]);
       setShowMobileDetails(true);
       setMessage({ type: '', text: '' });
-      setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
+      setRefundOverrides({ meal: null, mealFee: null, tuition: null, ngoaiKhoa: null });
       setIsHinhThucLocked(true);
       await calculateOldDebt(st.mahv);
 
@@ -922,6 +1042,7 @@ export default function InvoiceManager({
             // Lấy các khoản giảm trừ hoàn toàn từ chứng từ gần nhất
             setRefundOverrides({
                meal: parseCur(recentDoc.trutienan),
+               mealFee: null,
                tuition: parseCur(recentDoc.tiennghiphep),
                ngoaiKhoa: parseCur(recentDoc.trutiendangoai)
             });
@@ -1448,7 +1569,7 @@ export default function InvoiceManager({
             period: `${mm}/${yyyy}`
          });
          // Reset hoàn trả để tính lại từ điểm danh mới
-         setRefundOverrides({ meal: null, tuition: null, ngoaiKhoa: null });
+         setRefundOverrides({ meal: null, mealFee: null, tuition: null, ngoaiKhoa: null });
 
          // Cập nhật giảm học phí theo số ngày đi học của tháng mới
          setInvoiceData(prev => {
@@ -1552,6 +1673,7 @@ export default function InvoiceManager({
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
             sobuoihoc: sobuoihocFinal,
+            tienan: JSON.stringify({ amount: tienAnVal, days: feedingInfo.feedingDays, rate: currentMealTierAmount }),
             tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
             trutienan: formatCurrency(Math.round(actualMealRefund)),
             trutiendangoai: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
@@ -1619,6 +1741,7 @@ export default function InvoiceManager({
             thoiluong: currentTimePeriod,
             phuthu: effectiveSurcharges,
             studySummary: studySummary,
+            tienan: { amount: tienAnVal, days: feedingInfo.feedingDays, rate: currentMealTierAmount },
             actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
             actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0)),
             ngoaiKhoaDeduction: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
@@ -1695,6 +1818,7 @@ export default function InvoiceManager({
             malop: activeClass?.malop || '',
             thoiluong: currentTimePeriod,
             sobuoihoc: sobuoihocFinal,
+            tienan: JSON.stringify({ amount: tienAnVal, days: feedingInfo.feedingDays, rate: currentMealTierAmount }),
             tiennghiphep: formatCurrency(Math.round(actualTuitionRefund)),
             trutienan: formatCurrency(Math.round(actualMealRefund)),
             trutiendangoai: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
@@ -1730,6 +1854,10 @@ export default function InvoiceManager({
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
             phuthu: effectiveSurcharges,
+            tienan: { amount: tienAnVal, days: feedingInfo.feedingDays, rate: currentMealTierAmount },
+            actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
+            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0)),
+            ngoaiKhoaDeduction: formatCurrency(Math.round(ngoaiKhoaDeduction || 0)),
             qrUrl: (() => {
                // cacheBust=true: mỗi lần xuất tạo URL duy nhất, tránh cache ảnh QR của học sinh khác
                return getQRUrl({
@@ -1753,10 +1881,7 @@ export default function InvoiceManager({
                traTre2: studySummary.traTre2 || 0,
                traTre3: studySummary.traTre3 || 0,
                statsPeriod: studySummary.period || currentTimePeriod
-            } : null,
-            actualMealRefund: formatCurrency(Math.round(actualMealRefund || 0)),
-            actualTuitionRefund: formatCurrency(Math.round(actualTuitionRefund || 0)),
-            ngoaiKhoaDeduction: formatCurrency(Math.round(ngoaiKhoaDeduction || 0))
+            } : null
          });
       } catch (err) {
          console.error(err);
@@ -1844,19 +1969,38 @@ export default function InvoiceManager({
 
    const handleSelectMucTienAn = (amount) => {
       setInvoiceData(prev => ({ ...prev, mucTienAn: amount }));
-      setRefundOverrides(prev => ({ ...prev, meal: null }));
+      setRefundOverrides(prev => ({ ...prev, meal: null, mealFee: null }));
    };
 
-   // Tính tiền hoàn trả từ lịch nghỉ (Nghỉ phép)
+   // Mức tiền ăn / ngày (Dùng chung cho cả tiền ăn tháng và trừ tiền ăn khi nghỉ)
    const currentMealTierAmount = invoiceData.mucTienAn || (mealTiers.length > 0 ? mealTiers[0].amount : 0);
-   const tienAnConfig = getTienAnConfig?.(currentMealTierAmount);
-   const trutienan_val = (tienAnConfig && Number(tienAnConfig.tru_nghi) > 0)
-      ? Number(tienAnConfig.tru_nghi)
-      : (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
+   const trutienan_val = currentMealTierAmount || (parseInt(String(config?.trutienan || '0').replace(/\D/g, '')) || 0);
    const trutiennghi_val = parseInt(String(config?.trutiennghi || '0').replace(/\D/g, '')) || 0;
 
-   // Logic hoàn trả tiền học & tiền ăn theo số ngày nghỉ phép:
-   // (Số ngày nghỉ phép * đơn giá cấu hình)
+   // Tải ngày nghỉ lễ (năm của ngày bắt đầu + năm sau, phòng kỳ đóng vắt qua năm mới)
+   const holidayBaseYear = (() => {
+      const d = new Date(invoiceData.ngayBatDau || Date.now());
+      return isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+   })();
+   useEffect(() => {
+      let cancelled = false;
+      fetchHolidayDatesForYears([holidayBaseYear, holidayBaseYear + 1]).then((dates) => {
+         if (!cancelled) setHolidayDates(dates);
+      });
+      return () => { cancelled = true; };
+   }, [holidayBaseYear]);
+
+   // Tính số ngày ăn trong tháng (số ngày của tháng trừ đi các ngày Chủ Nhật và ngày nghỉ lễ)
+   const feedingInfo = calculateFeedingDays(
+      invoiceData.ngayBatDau,
+      invoiceData.loaiDong?.toLowerCase().includes('tháng') ? (parseInt(invoiceData.soLuong, 10) || 1) : 1,
+      holidayDates
+   );
+   const defaultTienAn = feedingInfo.feedingDays * currentMealTierAmount;
+   const tienAnVal = refundOverrides.mealFee !== null ? refundOverrides.mealFee : defaultTienAn;
+
+   // Logic hoàn trả tiền học & tiền ăn theo số ngày nghỉ phép tháng trước:
+   // (Số ngày nghỉ phép * mức tiền ăn đã chọn)
    const mealRefund = (studySummary?.nghiPhep || 0) * trutienan_val;
    const tuitionRefund = (studySummary?.nghiPhep || 0) * trutiennghi_val;
 
@@ -1872,7 +2016,7 @@ export default function InvoiceManager({
 
    const hpVal = Number(invoiceData.hocphi) || 0;
    const ghpVal = Number(invoiceData.giamHocphi) || 0;
-   const tongCong = (noCu || 0) + (unpaidBillsTotal || 0) + hpVal + (surchargeSum || 0) - ghpVal - (deductionSum || 0);
+   const tongCong = (noCu || 0) + (unpaidBillsTotal || 0) + hpVal + tienAnVal + (surchargeSum || 0) - ghpVal - (deductionSum || 0);
 
    // Auto fill daDong in InvoiceManager: Default to full payment (but not less than 0)
    useEffect(() => {
@@ -2021,7 +2165,12 @@ export default function InvoiceManager({
                               </div>
                            </div>
                            <div className="im-field-hz" style={{ marginTop: '12px', gridColumn: 'span 2' }}>
-                              <label style={{ color: '#0369a1', fontWeight: 700, fontSize: '0.95rem' }}>Mức tiền ăn:</label>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+                                 <label style={{ color: '#0369a1', fontWeight: 700, fontSize: '0.95rem' }}>Mức tiền ăn / ngày:</label>
+                                 <span style={{ fontSize: '0.85rem', color: '#0369a1', fontWeight: 600, background: '#e0f2fe', padding: '3px 8px', borderRadius: '6px' }}>
+                                    Tháng {feedingInfo.month}: {feedingInfo.feedingDays} ngày ({feedingInfo.totalDays} ngày - {feedingInfo.sundays} CN{feedingInfo.holidays > 0 ? ` - ${feedingInfo.holidays} ngày lễ` : ''}) = {formatCurrency(tienAnVal)} ₫
+                                 </span>
+                              </div>
                               <div className="val-text" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                                  {mealTiers.length > 0 ? (
                                     mealTiers.map(tier => {
@@ -2044,12 +2193,12 @@ export default function InvoiceManager({
                                                 transition: 'all 0.15s ease'
                                              }}
                                           >
-                                             {formatCurrency(tier.amount)} ₫ (-{formatCurrency(tier.tru_nghi)} ₫/n)
+                                             {formatCurrency(tier.amount)} ₫/ngày
                                           </button>
                                        );
                                     })
                                  ) : (
-                                    <span style={{ fontSize: '0.95rem', color: '#64748b' }}>Trừ {formatCurrency(trutienan_val)} ₫/ngày</span>
+                                    <span style={{ fontSize: '0.95rem', color: '#64748b' }}>{formatCurrency(currentMealTierAmount || trutienan_val)} ₫/ngày</span>
                                  )}
                               </div>
                            </div>
@@ -2116,7 +2265,7 @@ export default function InvoiceManager({
                                           {actualMealRefund > 0 && (
                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                   <span>Hoàn trả tiền ăn nghỉ phép{studySummary?.nghiPhep ? ` (${studySummary.nghiPhep} ngày x ${formatCurrency(trutienan_val)}đ)` : ''}:</span>
+                                                   <span>Hoàn trả tiền ăn nghỉ phép{studySummary?.nghiPhep ? ` (${studySummary.nghiPhep} ngày x ${formatCurrency(currentMealTierAmount)}đ)` : ''}:</span>
                                                    {mealTiers.length > 1 && (
                                                       <div style={{ display: 'inline-flex', gap: '4px' }}>
                                                          {mealTiers.map(tier => {
@@ -2137,7 +2286,7 @@ export default function InvoiceManager({
                                                                      color: isSel ? '#ffffff' : '#047857'
                                                                   }}
                                                                >
-                                                                  {formatCurrency(tier.amount)} ₫
+                                                                  {formatCurrency(tier.amount)} ₫/ngày
                                                                </button>
                                                             );
                                                          })}
@@ -2315,8 +2464,8 @@ export default function InvoiceManager({
                      <div className="im-section">
                         <h3 className="im-section-title"><Wallet size={18} /> Quyết Toán Tổng (VNĐ)</h3>
 
-                        {/* HÀNG 1: NỢ CŨ, HỌC PHÍ, VOUCHER */}
-                        <div className="im-finance-row grid-3">
+                        {/* HÀNG 1: NỢ CŨ, HỌC PHÍ, TIỀN ĂN, GIẢM HP */}
+                        <div className="im-finance-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
                            <div className="im-fi-item">
                               <label>{noCu >= 0 ? 'Nợ cũ' : 'Tiền dư (Credit)'}</label>
                               <div className={`fi-val-display ${noCu > 0 ? 'text-danger' : 'text-success'}`}>{formatCurrency(noCu)} ₫</div>
@@ -2349,6 +2498,23 @@ export default function InvoiceManager({
                                        })}
                                     </div>
                                  )}
+                              </div>
+                           </div>
+                           <div className="im-fi-item">
+                              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                 <span>Tiền ăn</span>
+                                 <span style={{ fontSize: '0.75rem', color: '#0284c7', fontWeight: 700 }}>{feedingInfo.feedingDays} ngày</span>
+                              </label>
+                              <div className="fi-input-wrapper" style={{ maxWidth: 'unset' }}>
+                                 <input
+                                    type="text"
+                                    value={formatCurrency(tienAnVal)}
+                                    onChange={e => {
+                                       const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                                       setRefundOverrides(p => ({ ...p, mealFee: val }));
+                                    }}
+                                 />
+                                 <span className="unit">₫</span>
                               </div>
                            </div>
                            <div className="im-fi-item">
@@ -2437,9 +2603,9 @@ export default function InvoiceManager({
 
                         <div className="im-actions" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 600, color: '#0369a1', userSelect: 'none' }}>
-                              <input 
-                                 type="checkbox" 
-                                 checked={sendZaloAuto} 
+                              <input
+                                 type="checkbox"
+                                 checked={sendZaloAuto}
                                  onChange={(e) => setSendZaloAuto(e.target.checked)}
                                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#0284c7' }}
                               />
@@ -2532,7 +2698,7 @@ export default function InvoiceManager({
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
                   <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     <img src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } else { e.target.dataset.hasFallback = 'true'; e.target.src = "/logo.png"; } }} />
                   </div>
 
                   {/* CENTER: Info */}
@@ -2577,10 +2743,28 @@ export default function InvoiceManager({
                         <div style={{ fontWeight: 900 }}>{downloadingInvoice?.hocphi}</div>
                      </div>
 
+                     {(() => {
+                        let ta = null;
+                        try {
+                           ta = typeof downloadingInvoice?.tienan === 'string' ? JSON.parse(downloadingInvoice.tienan) : downloadingInvoice?.tienan;
+                        } catch (e) { }
+                        if (ta && (Number(ta.amount) > 0 || Number(ta) > 0)) {
+                           const amt = Number(ta.amount) || Number(ta);
+                           const days = ta.days ? ` (${ta.days} ngày)` : '';
+                           return (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                                 <div style={{ fontWeight: 600 }}>Tiền ăn{days}:</div>
+                                 <div style={{ fontWeight: 900 }}>{formatCurrency(amt)}</div>
+                              </div>
+                           );
+                        }
+                        return null;
+                     })()}
+
                      {parseInt(String(downloadingInvoice?.nocu || '0').replace(/\D/g, ''), 10) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#dc2626' }}>
                            <div style={{ fontWeight: 600 }}>Nợ cũ:</div>
-                           <div style={{ fontWeight: 900 }}>+{downloadingInvoice?.nocu} đ</div>
+                           <div style={{ fontWeight: 900 }}>+{downloadingInvoice?.nocu}</div>
                         </div>
                      )}
 
@@ -2599,7 +2783,7 @@ export default function InvoiceManager({
                         } else if (typeof downloadingInvoice.phuthu === 'string') {
                            try {
                               phuThuList = JSON.parse(downloadingInvoice.phuthu);
-                           } catch (_) {}
+                           } catch (_) { }
                         }
                         if (!Array.isArray(phuThuList) || phuThuList.length === 0) return null;
 
@@ -2710,7 +2894,7 @@ export default function InvoiceManager({
                <div className="p-header" style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {/* LEFT: Logo */}
                   <div style={{ width: '180px', textAlign: 'left' }}>
-                     <img crossOrigin="anonymous" src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { e.target.src = "/logo.png" }} />
+                     <img src={config?.logo || "/logo.png"} alt="logo" style={{ maxWidth: '160px', maxHeight: '100px', objectFit: 'contain' }} onError={(e) => { if (e.target.dataset.hasFallback) { e.target.style.display = 'none'; e.target.dataset.error = 'true'; } else { e.target.dataset.hasFallback = 'true'; e.target.src = "/logo.png"; } }} />
                   </div>
 
                   {/* CENTER: Info */}
@@ -2755,10 +2939,28 @@ export default function InvoiceManager({
                         <div style={{ fontWeight: 900 }}>{downloadingNotice?.hocphi}</div>
                      </div>
 
+                     {(() => {
+                        let ta = null;
+                        try {
+                           ta = typeof downloadingNotice?.tienan === 'string' ? JSON.parse(downloadingNotice.tienan) : downloadingNotice?.tienan;
+                        } catch (e) { }
+                        if (ta && (Number(ta.amount) > 0 || Number(ta) > 0)) {
+                           const amt = Number(ta.amount) || Number(ta);
+                           const days = ta.days ? ` (${ta.days} ngày)` : '';
+                           return (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#1e293b' }}>
+                                 <div style={{ fontWeight: 600 }}>Tiền ăn{days}:</div>
+                                 <div style={{ fontWeight: 900 }}>{formatCurrency(amt)}</div>
+                              </div>
+                           );
+                        }
+                        return null;
+                     })()}
+
                      {parseInt(String(downloadingNotice?.nocu || '0').replace(/\D/g, ''), 10) > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16pt', marginBottom: '10px', color: '#dc2626' }}>
                            <div style={{ fontWeight: 600 }}>Nợ cũ:</div>
-                           <div style={{ fontWeight: 900 }}>+{downloadingNotice?.nocu} đ</div>
+                           <div style={{ fontWeight: 900 }}>+{downloadingNotice?.nocu}</div>
                         </div>
                      )}
 
@@ -2863,7 +3065,7 @@ export default function InvoiceManager({
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
                            <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
                            <div style={{ textAlign: 'center' }}>
-                              <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                              <img key={qrUrl} data-role="notice-qr" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} onError={(e) => { e.target.dataset.error = 'true'; }} />
                               <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                            </div>
                         </div>

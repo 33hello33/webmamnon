@@ -71,12 +71,22 @@ const TruTienAnModal = ({ isOpen, onClose, initialData, onSave }) => {
       if (!dataObj || typeof dataObj !== 'object') {
         dataObj = {};
       }
-      const list = Object.entries(dataObj).map(([k, v], idx) => ({
-        id: `tta_${idx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: k,
-        truNghi: v?.tru_nghi !== undefined ? String(v.tru_nghi) : '0'
-      }));
-      setItems(list);
+      const list = Object.entries(dataObj).map(([k, v], idx) => {
+        const tru = v?.tru_nghi !== undefined ? v.tru_nghi : (v?.amount !== undefined ? v.amount : k);
+        const kNum = parseInt(String(k).replace(/\D/g, ''), 10) || 0;
+        const truNum = parseInt(String(tru).replace(/\D/g, ''), 10) || 0;
+        // Nếu data cũ có mức tháng (e.g. 650,000) và trừ ngày (e.g. 20,000), ưu tiên mức theo ngày (< 100,000)
+        const chosen = (truNum > 0 && truNum < 100000 && kNum >= 100000) ? truNum : (kNum > 0 ? kNum : truNum);
+        return {
+          id: `tta_${idx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          amount: chosen > 0 ? String(chosen) : ''
+        };
+      }).filter(item => item.amount !== '');
+
+      setItems(list.length > 0 ? list : [{
+        id: `tta_${Date.now()}`,
+        amount: ''
+      }]);
     }
   }, [isOpen]);
 
@@ -91,8 +101,7 @@ const TruTienAnModal = ({ isOpen, onClose, initialData, onSave }) => {
       ...prev,
       {
         id: `tta_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: '',
-        truNghi: ''
+        amount: ''
       }
     ]);
   };
@@ -106,10 +115,8 @@ const TruTienAnModal = ({ isOpen, onClose, initialData, onSave }) => {
     items.forEach(item => {
       const cleanAmt = String(item.amount).replace(/\D/g, '');
       const amt = parseInt(cleanAmt, 10);
-      const cleanTru = String(item.truNghi).replace(/\D/g, '');
-      const tru = parseInt(cleanTru, 10) || 0;
-      if (cleanAmt !== '' && Number.isFinite(amt)) {
-        resultObj[String(amt)] = { tru_nghi: tru };
+      if (cleanAmt !== '' && Number.isFinite(amt) && amt > 0) {
+        resultObj[String(amt)] = { tru_nghi: amt };
       }
     });
     onSave(resultObj);
@@ -120,33 +127,26 @@ const TruTienAnModal = ({ isOpen, onClose, initialData, onSave }) => {
     <div className="config-modal-overlay" onClick={handleClose}>
       <div className="config-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Cấu hình mức trừ tiền ăn</h3>
+          <h3>Cấu hình mức tiền ăn / Trừ tiền ăn</h3>
           <button type="button" className="btn-close" onClick={handleClose}>×</button>
         </div>
         <div className="modal-body">
-          <p className="hint" style={{ marginBottom: '1rem', color: 'black' }}>
-            Thiết lập số tiền hoàn trả (trừ) mỗi ngày nghỉ có phép dựa trên mức học phí tháng.
-            Ví dụ: Nếu tiền ăn là 650,000đ thì trừ 20,000đ/ngày.
+          <p className="hint" style={{ marginBottom: '1rem', color: '#334155', fontSize: '0.9rem', lineHeight: '1.5' }}>
+            Thiết lập các mức tiền ăn (VNĐ/ngày). Mức này dùng chung để tính tiền ăn hàng tháng 
+            (số ngày trong tháng trừ các ngày Chủ Nhật) và trừ tiền ăn khi học sinh nghỉ phép.
           </p>
           <div className="tier-list">
-            <div className="tier-header">
-              <span>Mức tiền ăn (VNĐ)</span>
-              <span>Tiền trừ/ngày (VNĐ)</span>
+            <div className="tier-header" style={{ display: 'grid', gridTemplateColumns: '1fr 40px', gap: '10px' }}>
+              <span>Mức tiền ăn (VNĐ/ngày)</span>
               <span></span>
             </div>
             {items.map(item => (
-              <div key={item.id} className="tier-item">
+              <div key={item.id} className="tier-item" style={{ display: 'grid', gridTemplateColumns: '1fr 40px', gap: '10px' }}>
                 <input
                   type="text"
                   value={formatCurrency(item.amount)}
                   onChange={(e) => handleUpdateItem(item.id, 'amount', e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
-                  placeholder="VD: 650000"
-                />
-                <input
-                  type="text"
-                  value={formatCurrency(item.truNghi)}
-                  onChange={(e) => handleUpdateItem(item.id, 'truNghi', e.target.value.replace(/,/g, '').replace(/\D/g, ''))}
-                  placeholder="VD: 20000"
+                  placeholder="VD: 30000"
                 />
                 <button type="button" className="btn-remove-tier" onClick={() => handleRemoveItem(item.id)}>×</button>
               </div>
@@ -782,7 +782,7 @@ const ConfigManager = () => {
               </label>
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Số tiền ăn trừ/ngày nghỉ</label>
+                  <label style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Mức tiền ăn / ngày (Tính & Trừ tiền ăn)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       type="button"
@@ -799,7 +799,7 @@ const ConfigManager = () => {
                         cursor: 'pointer'
                       }}
                     >
-                      {Object.keys(trutienanTiers).length > 0 ? `Đã cấu hình ${Object.keys(trutienanTiers).length} mức` : 'Nhấp để cấu hình chi tiết'}
+                      {Object.keys(trutienanTiers).length > 0 ? `Đã cấu hình ${Object.keys(trutienanTiers).length} mức` : 'Nhấp để cấu hình mức tiền ăn'}
                     </button>
                   </div>
                 </div>
