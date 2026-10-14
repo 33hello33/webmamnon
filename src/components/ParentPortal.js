@@ -3170,36 +3170,59 @@ function ParentPortal({ parentData, setParentData }) {
                                                 </button>
                                                 <button
                                                    onClick={() => {
-                                                      if (!showDeclineReason) {
-                                                         setShowDeclineReason(true);
-                                                      } else {
-                                                         handleNgoaiKhoaSubmit(false);
-                                                      }
+                                                      if (ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) return;
+                                                      setShowDeclineReason(prev => !prev);
                                                    }}
-                                                   disabled={ngoaiKhoaLoading || (showDeclineReason && !ngoaiKhoaReason.trim())}
+                                                   disabled={ngoaiKhoaLoading || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0}
                                                    style={{
                                                       flex: 1, padding: '12px', borderRadius: '12px',
                                                       background: (showDeclineReason || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? '#64748b' : 'white',
                                                       color: (showDeclineReason || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 'white' : '#475569',
                                                       border: '1px solid #e2e8f0', fontWeight: 700,
-                                                      cursor: (ngoaiKhoaLoading || (showDeclineReason && !ngoaiKhoaReason.trim())) ? 'not-allowed' : 'pointer',
-                                                      opacity: (ngoaiKhoaLoading || (showDeclineReason && !ngoaiKhoaReason.trim())) ? 0.7 : 1
+                                                      cursor: (ngoaiKhoaLoading || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 'not-allowed' : 'pointer',
+                                                      opacity: (ngoaiKhoaLoading || ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 0.7 : 1
                                                    }}
                                                 >
-                                                   {(ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 'Đã từ chối' : (ngoaiKhoaLoading && showDeclineReason ? 'Đang gửi...' : 'Không tham gia')}
+                                                   {(ngoaiKhoaReg?.codangky === false || ngoaiKhoaReg?.codangky === 0) ? 'Đã từ chối' : 'Không tham gia'}
                                                 </button>
                                              </div>
 
                                              {showDeclineReason && (
                                                 <div style={{ animation: 'slideDown 0.3s ease' }}>
                                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>Lý do không tham gia:</label>
-                                                   <textarea
-                                                      placeholder="Nhập lý do..."
-                                                      value={ngoaiKhoaReason}
-                                                      onChange={e => setNgoaiKhoaReason(e.target.value)}
-                                                      rows="2"
-                                                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none', marginBottom: '10px' }}
-                                                   />
+                                                   <div style={{ display: 'flex', alignItems: 'stretch', gap: '10px' }}>
+                                                      <textarea
+                                                         placeholder="Nhập lý do..."
+                                                         value={ngoaiKhoaReason}
+                                                         onChange={e => setNgoaiKhoaReason(e.target.value)}
+                                                         rows="2"
+                                                         style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', resize: 'none', fontFamily: 'inherit', fontSize: '0.95rem' }}
+                                                      />
+                                                      <button
+                                                         type="button"
+                                                         onClick={() => handleNgoaiKhoaSubmit(false)}
+                                                         disabled={ngoaiKhoaLoading || !ngoaiKhoaReason.trim()}
+                                                         style={{
+                                                            flexShrink: 0,
+                                                            padding: '12px 26px',
+                                                            borderRadius: '12px',
+                                                            background: 'linear-gradient(135deg, #64748b 0%, #334155 100%)',
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            fontWeight: 800,
+                                                            fontSize: '1rem',
+                                                            boxShadow: '0 4px 6px -1px rgba(51, 65, 85, 0.35)',
+                                                            cursor: (ngoaiKhoaLoading || !ngoaiKhoaReason.trim()) ? 'not-allowed' : 'pointer',
+                                                            opacity: (ngoaiKhoaLoading || !ngoaiKhoaReason.trim()) ? 0.7 : 1,
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '8px'
+                                                         }}
+                                                      >
+                                                         {ngoaiKhoaLoading ? <Loader2 size={18} className="spinner" /> : 'Gửi'}
+                                                      </button>
+                                                   </div>
                                                 </div>
                                              )}
                                           </div>
