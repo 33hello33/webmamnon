@@ -1131,13 +1131,24 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          return res;
       };
 
-      const [resChi, resKho, resHd, resBill, resThongBao, resLuong] = await Promise.all([
+      const buildAllQuery = async (table) => {
+         let q = supabase.from(table).select('*');
+         let res = await q;
+         if (res.error && (res.error.message || '').toLowerCase().includes('schema cache')) {
+            let qBase = baseSupabase.from(table).select('*');
+            res = await qBase;
+         }
+         return res;
+      };
+
+      const [resChi, resKho, resHd, resBill, resThongBao, resLuong, resAllHd] = await Promise.all([
          buildQuery('tbl_phieuchi', 'ngaylap'),
          buildQuery('tbl_nhapkho', 'ngaynhap'),
          buildQuery('tbl_hd', 'ngaylap'),
          buildQuery('tbl_billhanghoa', 'ngaylap'),
-         buildQuery('tbl_thongbao', 'ngaylap'),
-         buildQuery('tbl_luong', 'ngaylap')
+         buildAllQuery('tbl_thongbao'), // Doanh thu dự kiến là dòng tiền tương lai - không lọc theo thời gian
+         buildQuery('tbl_luong', 'ngaylap'),
+         buildAllQuery('tbl_hd') // Kiểm tra toàn bộ biên lai học phí đã đóng để gạch nợ chính xác
       ]);
 
       const chiList = resChi.data || [];
@@ -1161,10 +1172,43 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const finalBill = filterByWallet(billList);
       const finalThongBao = filterByWallet(thongBaoList);
       const finalLuong = filterByWallet(luongList);
+
+      const allActiveHDs = (resAllHd.data || resHd.data || []).filter(h => !isDeleted(h));
+      const paidInvoiceKeys = new Set(
+         allActiveHDs
+            .map(buildTuitionMatchKey)
+            .filter(Boolean)
+      );
+
+      const isNoticePaid = (tb) => {
+         if (!tb) return false;
+         if (String(tb.daxoa || '').toLowerCase() === 'đã xác nhận') return true;
+         const noticeKey = buildTuitionMatchKey(tb);
+         if (noticeKey && paidInvoiceKeys.has(noticeKey)) return true;
+
+         const tbMahv = String(tb.mahv || '').trim().toLowerCase();
+         if (!tbMahv) return false;
+
+         const tbPeriod = normalizeTuitionPeriod(tb.thoiluong);
+         return allActiveHDs.some(h => {
+            const hMahv = String(h.mahv || '').trim().toLowerCase();
+            if (hMahv !== tbMahv) return false;
+            if (tbPeriod && normalizeTuitionPeriod(h.thoiluong) === tbPeriod) return true;
+            if (tb.ngaybatdau && tb.ngayketthuc && h.ngaybatdau && h.ngayketthuc) {
+               if (String(h.ngaybatdau).slice(0, 10) === String(tb.ngaybatdau).slice(0, 10) &&
+                   String(h.ngayketthuc).slice(0, 10) === String(tb.ngayketthuc).slice(0, 10)) {
+                  return true;
+               }
+            }
+            return false;
+         });
+      };
+
+      // Chỉ lấy thông báo mới nhất cho mỗi học sinh (xuất thông báo mới sẽ đè lên thông báo cũ)
       const latestNoticeByStudent = [];
       const seenStudents = new Set();
       [...finalThongBao]
-         .filter(tb => !isDeleted(tb))
+         .filter(tb => !isDeleted(tb) && String(tb.daxoa || '').toLowerCase() !== 'đã xác nhận')
          .sort((a, b) => new Date(b.ngaylap || 0) - new Date(a.ngaylap || 0))
          .forEach(tb => {
             const studentKey = String(tb.mahv || '').trim().toLowerCase();
@@ -1172,16 +1216,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             seenStudents.add(studentKey);
             latestNoticeByStudent.push(tb);
          });
-      const paidInvoiceKeys = new Set(
-         finalHd
-            .filter(h => !isDeleted(h))
-            .map(buildTuitionMatchKey)
-            .filter(Boolean)
-      );
-      const pendingNotices = latestNoticeByStudent.filter(tb => {
-         const noticeKey = buildTuitionMatchKey(tb);
-         return noticeKey ? !paidInvoiceKeys.has(noticeKey) : true;
-      });
+
+      // Chỉ giữ các thông báo chưa đóng biên lai thu học phí
+      const pendingNotices = latestNoticeByStudent.filter(tb => !isNoticePaid(tb));
 
       setStats({
          phieuChi: finalChi.filter(c => !isDeleted(c) && (!c.loaiphieu || c.loaiphieu === 'Chi')).reduce((s, c) => s + pCur(c.chiphi), 0),
@@ -1190,7 +1227,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          nhapKho: finalKho.filter(k => !isDeleted(k)).reduce((s, k) => s + pCur(k.thanhtien), 0),
          thuHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.dadong), 0),
          thuBanHang: finalBill.filter(b => !isDeleted(b)).reduce((s, b) => s + pCur(b.tongcong), 0),
-         doanhThuDuKien: pendingNotices.reduce((s, tb) => s + pCur(tb.tongcong), 0),
+         doanhThuDuKien: pendingNotices.reduce((s, tb) => s + pCur(tb.conno || tb.tongcong), 0),
          giamHocPhi: finalHd.filter(h => !isDeleted(h)).reduce((s, h) => s + pCur(h.giamhocphi), 0)
       });
 
@@ -1770,6 +1807,25 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          case 'doanhthudukien':
             return (
                <>
+                  <div style={{
+                     display: 'flex',
+                     alignItems: 'center',
+                     gap: '12px',
+                     background: 'linear-gradient(135deg, #f0fdfa 0%, #e6fffa 100%)',
+                     border: '1px solid #99f6e4',
+                     borderRadius: '10px',
+                     padding: '12px 16px',
+                     marginBottom: '16px',
+                     color: '#0f766e',
+                     fontSize: '0.88rem',
+                     lineHeight: 1.5,
+                     boxShadow: '0 1px 3px rgba(15, 118, 110, 0.05)'
+                  }}>
+                     <Clock size={22} style={{ flexShrink: 0, color: '#0d9488' }} />
+                     <div>
+                        <strong style={{ color: '#115e59', fontSize: '0.92rem' }}>Dòng tiền tương lai:</strong> Tab Doanh thu dự kiến không giới hạn theo thời gian. Mỗi học sinh chỉ hiển thị thông báo học phí mới nhất (thông báo mới sẽ đè lên thông báo cũ). Khoản dự kiến sẽ tự động biến mất khi học sinh hoàn tất đóng biên lai thu học phí hoặc được xác nhận tạo hóa đơn.
+                     </div>
+                  </div>
                   <div className="table-scroll-wrapper">
                      <table className="fm-table">
                         <thead>
@@ -2207,30 +2263,38 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {/* STATS MATRIX */}
          <div className="fm-stats-layout">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.4rem' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div className="fm-date-filter">
-                     <select value={dateFilter} onChange={e => {
-                        setDateFilter(e.target.value);
-                        if (e.target.value === 'custom') {
-                           setCustomDateRange({
-                              start: new Date().toISOString().split('T')[0],
-                              end: new Date().toISOString().split('T')[0]
-                           });
-                        }
-                     }}>
-                        <option value="today">Hôm nay</option>
-                        <option value="yesterday">Hôm qua</option>
-                        <option value="7days">7 ngày qua</option>
-                        <option value="this_month">Trong tháng này</option>
-                        <option value="last_month">Tháng trước</option>
-                        <option value="custom">Tùy chọn ngày...</option>
-                        <option value="all">Toàn bộ thời gian</option>
-                     </select>
-                  </div>
-                  {activeDateRangeStr && (
-                     <span className="fm-date-range-display" style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 600, background: '#ecfdf5', padding: '0.35rem 0.8rem', borderRadius: '6px', border: '1px solid #10b981' }}>
-                        {activeDateRangeStr}
+               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {activeSubTab === 'doanhthudukien' ? (
+                     <span className="fm-date-range-display" style={{ fontSize: '0.88rem', color: '#0f766e', fontWeight: 600, background: '#f0fdfa', padding: '0.4rem 0.85rem', borderRadius: '8px', border: '1px solid #14b8a6', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock size={16} /> Dòng tiền tương lai (Toàn bộ thời gian - Không lọc theo ngày)
                      </span>
+                  ) : (
+                     <>
+                        <div className="fm-date-filter">
+                           <select value={dateFilter} onChange={e => {
+                              setDateFilter(e.target.value);
+                              if (e.target.value === 'custom') {
+                                 setCustomDateRange({
+                                    start: new Date().toISOString().split('T')[0],
+                                    end: new Date().toISOString().split('T')[0]
+                                 });
+                              }
+                           }}>
+                              <option value="today">Hôm nay</option>
+                              <option value="yesterday">Hôm qua</option>
+                              <option value="7days">7 ngày qua</option>
+                              <option value="this_month">Trong tháng này</option>
+                              <option value="last_month">Tháng trước</option>
+                              <option value="custom">Tùy chọn ngày...</option>
+                              <option value="all">Toàn bộ thời gian</option>
+                           </select>
+                        </div>
+                        {activeDateRangeStr && (
+                           <span className="fm-date-range-display" style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 600, background: '#ecfdf5', padding: '0.35rem 0.8rem', borderRadius: '6px', border: '1px solid #10b981' }}>
+                              {activeDateRangeStr}
+                           </span>
+                        )}
+                     </>
                   )}
                   {activeSubTab === 'phieuchi' && (
                      <div className="fm-loaiphieu-filter">
@@ -2250,7 +2314,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      </select>
                   </div>
                </div>
-               {dateFilter === 'custom' && (
+               {dateFilter === 'custom' && activeSubTab !== 'doanhthudukien' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', width: 'fit-content' }}>
                      <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#475569' }}>Từ:</label>
                      <input type="date" value={customDateRange.start} onChange={e => setCustomDateRange({ ...customDateRange, start: e.target.value })} style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
