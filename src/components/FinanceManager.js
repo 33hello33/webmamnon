@@ -595,76 +595,107 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    // MATBAO HDDT HANDLERS
    const handleOpenMatbaoModal = async (record) => {
-      const hv = hvMap[record.mahv] || {};
+      let hv = hvMap[record.mahv] || {};
+      if (record.mahv && (!hv.cccd || !hv.diachi || !hv.hotenba)) {
+         try {
+            const { data: freshHv } = await supabase.from('tbl_hv').select('*').eq('mahv', record.mahv).maybeSingle();
+            if (freshHv) {
+               hv = { ...hv, ...freshHv, sdt: freshHv.sdtba || freshHv.sdtme || freshHv.sdt || hv.sdt };
+            }
+         } catch (err) {
+            console.warn('Lỗi lấy thông tin học sinh từ tbl_hv:', err);
+         }
+      }
+
       const matbaoCfg = getMatBaoConfig(config);
 
-      // Phân tách các mục chi phí trong phiếu thu
-      const hocV = pCur(record.hocphi);
-      const giamV = pCur(record.giamhocphi);
-      let ptItems = [];
-      try {
-         const pts = typeof record.phuthu === 'string' ? JSON.parse(record.phuthu) : record.phuthu;
-         if (Array.isArray(pts)) ptItems = pts.filter(it => (it.amount || 0) > 0);
-      } catch (e) { }
+      // 1. Tên hàng hóa học phí: "HỌC PHÍ THÁNG " + thời lượng đóng (viết hoa giống mẫu)
+      let thoiluongStr = String(record.thoiluong || '').trim();
+      let tenHocPhi = '';
+      if (thoiluongStr) {
+         const cleanThoiLuong = thoiluongStr.replace(/^tháng\s+/i, '').trim();
+         tenHocPhi = `HỌC PHÍ THÁNG ${cleanThoiLuong}`.toUpperCase();
+      } else {
+         const refDate = record.ngaybatdau ? new Date(record.ngaybatdau) : (record.ngaylap ? new Date(record.ngaylap) : new Date());
+         const mm = String(refDate.getMonth() + 1).padStart(2, '0');
+         const yyyy = refDate.getFullYear();
+         tenHocPhi = `HỌC PHÍ THÁNG ${mm}/${yyyy}`;
+      }
 
-      let taObj = null;
-      try {
-         const ta = typeof record.tienan === 'string' ? JSON.parse(record.tienan) : record.tienan;
-         if (ta && ta.amount > 0) taObj = ta;
-      } catch (e) { }
+      // Xác định khoảng thời gian của tháng để đếm số ngày điểm danh có mặt
+      let statsStart = '';
+      let statsEnd = '';
+      const matchMonth = (record.thoiluong || '').match(/(\d{1,2})[\/\-](\d{4})/);
+      if (matchMonth) {
+         const m = parseInt(matchMonth[1], 10);
+         const y = parseInt(matchMonth[2], 10);
+         const lastD = new Date(y, m, 0).getDate();
+         const mm = String(m).padStart(2, '0');
+         statsStart = `${y}-${mm}-01`;
+         statsEnd = `${y}-${mm}-${String(lastD).padStart(2, '0')}`;
+      } else if (record.ngaybatdau && record.ngayketthuc) {
+         statsStart = String(record.ngaybatdau).slice(0, 10);
+         statsEnd = String(record.ngayketthuc).slice(0, 10);
+      } else {
+         const d = record.ngaylap ? new Date(record.ngaylap) : new Date();
+         const y = d.getFullYear();
+         const m = d.getMonth() + 1;
+         const lastD = new Date(y, m, 0).getDate();
+         statsStart = `${y}-${String(m).padStart(2, '0')}-01`;
+         statsEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastD).padStart(2, '0')}`;
+      }
 
-      const rM = pCur(record.trutienan);
-      const rT = pCur(record.tiennghiphep);
-      const rN = pCur(record.trutiendangoai);
-      const tongDeduction = rM + rT + rN;
+      // Đếm số ngày điểm danh có mặt
+      let soNgayCoMat = 0;
+      if (record.mahv && statsStart && statsEnd) {
+         try {
+            const { data: attList } = await supabase
+               .from('tbl_diemdanh')
+               .select('ngay, trangthai')
+               .eq('mahv', record.mahv)
+               .gte('ngay', statsStart)
+               .lte('ngay', statsEnd);
 
-      const items = [];
-      // Khoản học phí
-      const netHocPhi = Math.max(0, hocV - giamV - tongDeduction);
-      if (netHocPhi > 0 || (!taObj && ptItems.length === 0)) {
-         items.push({
+            const daysSet = new Set();
+            (attList || []).forEach(att => {
+               const st = (att.trangthai || '').trim().toLowerCase();
+               if (st === 'có mặt' || st === 'comat') {
+                  if (!daysSet.has(att.ngay)) {
+                     daysSet.add(att.ngay);
+                     soNgayCoMat++;
+                  }
+               }
+            });
+         } catch (e) {
+            console.warn('Lỗi lấy điểm danh học sinh:', e);
+         }
+      }
+
+      // Đơn giá dòng 1 (học phí) = tổng cộng của phiếu thu
+      const donGiaHocPhi = pCur(record.tongcong || record.dadong || record.hocphi);
+      // Đơn giá dòng 2 (tiền ăn) = số ngày điểm danh có mặt * 30,000
+      const donGiaTienAn = soNgayCoMat * 30000;
+
+      const items = [
+         {
             id: 'hp',
-            ten: `Học phí ${record.thoiluong || ''} (${hv.tenhv || 'Học sinh'})`.trim(),
-            dvt: 'Tháng',
+            ma: 'HP',
+            ten: tenHocPhi,
+            dvt: 'tháng',
             sl: 1,
-            gia: netHocPhi > 0 ? netHocPhi : pCur(record.dadong || record.tongcong)
-         });
-      }
-
-      // Tiền ăn nếu có
-      if (taObj && taObj.amount > 0) {
-         items.push({
+            gia: donGiaHocPhi
+         },
+         {
             id: 'tienan',
-            ten: `Tiền ăn (${taObj.days || 1} ngày) - ${hv.tenhv || ''}`.trim(),
-            dvt: 'Ngày',
-            sl: taObj.days || 1,
-            gia: Math.round(taObj.amount / (taObj.days || 1))
-         });
-      }
-
-      // Các khoản phụ thu nếu có
-      ptItems.forEach((pt, idx) => {
-         items.push({
-            id: `pt_${idx}`,
-            ten: `${pt.name || 'Phụ thu'} - ${hv.tenhv || ''}`.trim(),
-            dvt: 'Khoản',
+            ma: 'TA',
+            ten: 'TIỀN ĂN',
+            dvt: 'tháng',
             sl: 1,
-            gia: pt.amount
-         });
-      });
+            gia: donGiaTienAn
+         }
+      ];
 
-      // Nếu không có sản phẩm nào, fallback lấy theo số tiền thực thu / tổng cộng
-      if (items.length === 0) {
-         items.push({
-            id: 'default',
-            ten: `Thu học phí - ${hv.tenhv || record.mahd}`,
-            dvt: 'Tháng',
-            sl: 1,
-            gia: pCur(record.dadong || record.tongcong)
-         });
-      }
-
-      // Buyer profile
+      // Buyer profile (kèm CCCD từ tbl_hv.cccd)
       const buyer = {
          ten: hv.tenhv || record.tenhv || 'Khách hàng',
          nguoiMua: hv.hotenba || hv.tenme || hv.tenhv || '',
@@ -672,7 +703,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          diachi: hv.diachi || '',
          mst: '',
          email: '',
-         mahv: record.mahv || ''
+         mahv: record.mahv || '',
+         cccd: hv.cccd || ''
       };
 
       setMatbaoModal({
@@ -682,10 +714,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             buyer,
             items,
             options: {
-               mauSo: matbaoCfg.khmshDon || '1',
-               kiHieu: matbaoCfg.khhDon || 'C26TAT',
+               mauSo: matbaoCfg.khmshDon || '2',
+               kiHieu: matbaoCfg.khhDon || 'C26TLL',
                loaiHDon: Number(matbaoCfg.loaiHDon || 0),
-               hinhThucTT: record.hinhthuc || matbaoCfg.hinhThucTT || 'TM/CK',
+               hinhThucTT: 'TM/CK',
                ghiChu: `Thu học phí ${record.thoiluong || ''} - Mã phiếu ${record.mahd}`.trim()
             }
          }
@@ -1034,12 +1066,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    useEffect(() => {
       const fetchDicts = async () => {
-         const { data: hvs } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme');
+         const { data: hvs } = await supabase.from('tbl_hv').select('mahv, tenhv, sdtba, sdtme, cccd, diachi, hotenba, tenme');
          const hVM = {};
          (hvs || []).forEach(h => {
             hVM[h.mahv] = {
                tenhv: h.tenhv,
-               sdt: h.sdtba || h.sdtme || ''
+               sdt: h.sdtba || h.sdtme || '',
+               cccd: h.cccd || '',
+               diachi: h.diachi || '',
+               hotenba: h.hotenba || '',
+               tenme: h.tenme || ''
             };
          });
          setHvMap(hVM);

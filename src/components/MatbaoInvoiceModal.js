@@ -216,6 +216,10 @@ export default function MatbaoInvoiceModal({
                   <input type="text" value={buyer.mst || ''} onChange={e => handleBuyerChange('mst', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: 0302712571" />
                 </div>
                 <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>CCCD / Định danh cá nhân</label>
+                  <input type="text" value={buyer.cccd || ''} onChange={e => handleBuyerChange('cccd', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="Số CCCD..." />
+                </div>
+                <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Số điện thoại</label>
                   <input type="text" value={buyer.sdt || ''} onChange={e => handleBuyerChange('sdt', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} />
                 </div>

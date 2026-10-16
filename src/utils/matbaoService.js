@@ -297,6 +297,7 @@ export const createMatBaoInvoice = async ({ invoice, buyer, items = [], options 
       // Thông tin người mua
       NMua_Ten: buyer.ten || buyer.tenhv || 'Khách hàng',
       NMua_MST: buyer.mst || '',
+      NMua_CCCDan: buyer.cccd || buyer.NMua_CCCDan || '',
       NMua_DChi: buyer.diachi || '',
       NMua_MKHang: buyer.mahv || '',
       NMua_SDThoai: buyer.sdt || '',
