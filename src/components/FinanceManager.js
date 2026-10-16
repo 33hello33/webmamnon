@@ -500,6 +500,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       let pKhoQ = supabase.from('tbl_nhapkho').select('*');
       let pHdQ = supabase.from('tbl_hd').select('*');
       let pBillQ = supabase.from('tbl_billhanghoa').select('*');
+      let pLuongQ = supabase.from('tbl_luong').select('*');
 
       if (init.ngaylap) {
          pChiQ = pChiQ.gte('ngaylap', init.ngaylap);
@@ -508,13 +509,24 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          pBillQ = pBillQ.gte('ngaylap', init.ngaylap);
       }
 
-      const [resChi, resKho, resHd, resBill] = await Promise.all([pChiQ, pKhoQ, pHdQ, pBillQ]);
+      const [resChi, resKho, resHd, resBill, resLuong] = await Promise.all([pChiQ, pKhoQ, pHdQ, pBillQ, pLuongQ]);
 
       let netVi = { vi1: 0, vi2: 0, vi3: 0, vi4: 0 };
       const addFlow = (hinhthuc, amount, isIncome) => {
          let val = isIncome ? amount : -amount;
-         if (!hinhthuc) return;
-         const matchedVi = walletsConfig.find(w => hinhthuc.toLowerCase() === w.name.toLowerCase() || hinhthuc.toLowerCase().includes(w.name.toLowerCase()));
+         if (!amount) return;
+         const hName = (hinhthuc || 'Tiền mặt').trim().toLowerCase();
+         let matchedVi = walletsConfig.find(w => {
+            const wName = (w.name || '').trim().toLowerCase();
+            return wName === hName || hName.includes(wName) || wName.includes(hName);
+         });
+         if (!matchedVi && walletsConfig.length > 0) {
+            if (hName.includes('tiền mặt') || hName.includes('mặt') || hName === 'tm') {
+               matchedVi = walletsConfig.find(w => (w.name || '').toLowerCase().includes('tiền mặt')) || walletsConfig[0];
+            } else {
+               matchedVi = walletsConfig[0];
+            }
+         }
          if (matchedVi) {
             netVi[matchedVi.id] += val;
          }
@@ -525,6 +537,21 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       safeParse(resHd.data).forEach(c => addFlow(c.hinhthuc, pCur(c.dadong), true));
       safeParse(resBill.data).forEach(c => addFlow(c.hinhthuc, pCur(c.tongcong), true));
 
+      // Trừ các khoản chi lương đã chi / đã duyệt từ tbl_luong
+      safeParse(resLuong?.data)
+         .filter(l => {
+            const isPaid = l.trangthai === 'Đã chi' || l.trangthai === 'Đã duyệt';
+            if (!isPaid) return false;
+            if (init.ngaylap) {
+               const luongDate = l.ngayduyet || l.ngaylap;
+               if (luongDate && new Date(luongDate) < new Date(init.ngaylap)) {
+                  return false;
+               }
+            }
+            return true;
+         })
+         .forEach(l => addFlow(l.hinhthuc, pCur(l.thucnhan), false));
+
       setCurrentBalances({
          vi1: init.vi1 + netVi.vi1,
          vi2: init.vi2 + netVi.vi2,
@@ -532,6 +559,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          vi4: init.vi4 + netVi.vi4
       });
    }, [walletsConfig]);
+
+   useEffect(() => {
+      fetchBalances();
+   }, [fetchBalances]);
 
    const requestSort = (key) => {
       let direction = 'ascending';
@@ -874,6 +905,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             const detailDesc = `[XÓA] Bảng: ${table} | Mã: ${idVal}`;
             insertLog(detailDesc);
             fetchData();
+            fetchBalances();
             // Refresh products if needed
             if (table === 'tbl_nhapkho' || table === 'tbl_billhanghoa') {
                const { data: hhs } = await supabase.from('tbl_hanghoa').select('*');
@@ -3988,6 +4020,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                            setApproveSalaryModal({ isOpen: false, item: null, wallet: '' });
                            fetchData();
+                           fetchBalances();
                         } catch (err) {
                            console.error('Lỗi duyệt chi lương:', err);
                            alert('Lỗi duyệt chi lương: ' + (err.message || 'Lỗi không xác định'));
