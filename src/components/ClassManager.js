@@ -1,3 +1,24 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
+import * as XLSX from 'xlsx';
+import {
+  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
+} from 'lucide-react';
+
+import { toPng } from 'html-to-image';
+import { useConfig } from '../ConfigContext';
+import { uploadToR2 } from '../utils/cloudflareR2';
+import { compressImage } from '../utils/imageUtils';
+import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, dedupeAttendanceRecordsByDay, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
+import { toLocalISODate } from '../utils/localDate';
+import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
+import { generateVietQRUrl } from '../utils/qrHelper';
+import { calculateFeedingDays } from '../utils/mealFeeUtils';
+import { fetchHolidayDatesForYears } from '../utils/holidays';
+import SurchargeRegistration from './SurchargeRegistration';
+import './ClassManager.css';
+
 const convertImageToDataUrl = async (url) => {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url;
@@ -65,27 +86,6 @@ const convertImageToDataUrl = async (url) => {
 
   return null;
 };
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
-import * as XLSX from 'xlsx';
-import {
-  Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
-} from 'lucide-react';
-
-import { toPng } from 'html-to-image';
-import { useConfig } from '../ConfigContext';
-import { uploadToR2 } from '../utils/cloudflareR2';
-import { compressImage } from '../utils/imageUtils';
-import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, dedupeAttendanceRecordsByDay, normalizeConsecutiveRefundConfig } from '../utils/consecutiveLeaveRefund';
-import { toLocalISODate } from '../utils/localDate';
-import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
-import { generateVietQRUrl } from '../utils/qrHelper';
-import { calculateFeedingDays } from '../utils/mealFeeUtils';
-import { fetchHolidayDatesForYears } from '../utils/holidays';
-import SurchargeRegistration from './SurchargeRegistration';
-import './ClassManager.css';
 
 const INITIAL_FORM = {
   malop: '', tenlop: '', hocphi: '', manv: '', daxoa: 'Đang Học'
