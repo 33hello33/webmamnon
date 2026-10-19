@@ -199,6 +199,49 @@ export default function StudentAttendanceCalendar({ studentId, studentName, onCl
     return attendance.find(a => a.ngay === targetDateStr);
   };
 
+  const monthStats = React.useMemo(() => {
+    let present = 0;
+    let excused = 0;
+    let unexcused = 0;
+    let late = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const paddedMonth = String(month + 1).padStart(2, '0');
+      const paddedDay = String(day).padStart(2, '0');
+      const targetDateStr = `${year}-${paddedMonth}-${paddedDay}`;
+      const record = attendance.find(a => a.ngay === targetDateStr);
+      const leaveInfo = getLeaveInfo(targetDateStr, record);
+
+      if (record) {
+        const s = (record.trangthai || '').trim().toLowerCase();
+        if (s === 'có mặt') {
+          present++;
+        } else if (s === 'nghỉ phép') {
+          excused++;
+        } else if (s === 'nghỉ không phép') {
+          unexcused++;
+        } else if (s.includes('trả trễ') || s.includes('về trễ')) {
+          late++;
+        } else {
+          present++;
+        }
+      } else if (leaveInfo.timeStr) {
+        excused++;
+      }
+    }
+
+    const totalRecorded = present + excused + unexcused + late;
+
+    return {
+      present,
+      excused,
+      unexcused,
+      late,
+      totalRecorded,
+      rate: totalRecorded > 0 ? Math.round((present / totalRecorded) * 100) : 0
+    };
+  }, [attendance, leaveRequests, year, month, daysInMonth]);
+
   return ReactDOM.createPortal(
     <div
       className="modal-overlay align-top"
@@ -246,6 +289,38 @@ export default function StudentAttendanceCalendar({ studentId, studentName, onCl
             <button className="btn btn-outline" onClick={prevMonth}><ChevronLeft size={18} /></button>
             <h4 className="calendar-month">Tháng {month + 1} - {year}</h4>
             <button className="btn btn-outline" onClick={nextMonth}><ChevronRight size={18} /></button>
+          </div>
+
+          {/* Monthly Attendance Summary Statistics */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px', marginBottom: '0.4rem' }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '6px 10px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Tổng ngày ghi</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '1px' }}>{monthStats.totalRecorded}</div>
+            </div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>Có mặt</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#15803d', marginTop: '1px' }}>{monthStats.present}</div>
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Nghỉ phép</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b45309', marginTop: '1px' }}>{monthStats.excused}</div>
+            </div>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase' }}>Nghỉ KP</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b91c1c', marginTop: '1px' }}>{monthStats.unexcused}</div>
+            </div>
+            {monthStats.late > 0 && (
+              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>Trả trễ</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#c2410c', marginTop: '1px' }}>{monthStats.late}</div>
+              </div>
+            )}
+            <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0d9488', textTransform: 'uppercase' }}>Tỷ lệ đi học</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f766e', marginTop: '1px' }}>
+                {monthStats.totalRecorded > 0 ? `${monthStats.rate}%` : '--'}
+              </div>
+            </div>
           </div>
 
           <div className="calendar-wrapper" style={{ flex: 'none', overflow: 'hidden' }}>
@@ -342,13 +417,20 @@ export default function StudentAttendanceCalendar({ studentId, studentName, onCl
             {loading && <div className="calendar-overlay">Đang tải...</div>}
           </div>
 
-          <div className="calendar-legend">
-            <div className="legend-item"><div className="legend-color present"></div> Có mặt: {attendance.filter(a => {
-               const s = (a.trangthai || '').toLowerCase();
-               return s === 'có mặt' || s.includes('trả trễ');
-            }).length}</div>
-            <div className="legend-item"><div className="legend-color excused"></div> Nghỉ phép: {attendance.filter(a => (a.trangthai || '').toLowerCase() === 'nghỉ phép').length}</div>
-            <div className="legend-item"><div className="legend-color unexcused"></div> Nghỉ KP: {attendance.filter(a => (a.trangthai || '').toLowerCase() === 'nghỉ không phép').length}</div>
+          <div className="calendar-legend" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="legend-item"><div className="legend-color present"></div> Có mặt ({monthStats.present})</div>
+              <div className="legend-item"><div className="legend-color excused"></div> Nghỉ phép ({monthStats.excused})</div>
+              <div className="legend-item"><div className="legend-color unexcused"></div> Nghỉ không phép ({monthStats.unexcused})</div>
+              {monthStats.late > 0 && (
+                <div className="legend-item"><div className="legend-color" style={{ background: '#f97316' }}></div> Trả trễ ({monthStats.late})</div>
+              )}
+            </div>
+            {monthStats.totalRecorded > 0 && (
+              <div style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600 }}>
+                Tổng kết tháng {month + 1}/{year}: <strong style={{ color: '#15803d' }}>{monthStats.present}</strong>/{monthStats.totalRecorded} buổi có mặt ({monthStats.rate}%)
+              </div>
+            )}
           </div>
         </div>
       </div>
