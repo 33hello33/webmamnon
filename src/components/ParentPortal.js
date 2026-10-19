@@ -3299,6 +3299,48 @@ function ParentPortal({ parentData, setParentData }) {
                               <button style={{ padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#64748b', cursor: 'pointer' }} onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}><ChevronRight size={18} /></button>
                            </div>
 
+                           {/* Monthly Attendance Summary Statistics */}
+                           {(() => {
+                              const coMat = monthlyAttendance.filter(a => a.trangthai === 'Có mặt').length;
+                              const nghiP = monthlyAttendance.filter(a => a.trangthai === 'Nghỉ phép').length;
+                              const nghiKP = monthlyAttendance.filter(a => a.trangthai === 'Nghỉ không phép').length;
+                              const traTre = monthlyAttendance.filter(a => (a.trangthai || '').toLowerCase().includes('trả trễ')).length;
+                              const totalRec = coMat + nghiP + nghiKP + traTre;
+                              const rate = totalRec > 0 ? Math.round((coMat / totalRec) * 100) : 0;
+                              return (
+                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+                                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                                       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Tổng ngày ghi</div>
+                                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '1px' }}>{totalRec}</div>
+                                    </div>
+                                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                                       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>Có mặt</div>
+                                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#15803d', marginTop: '1px' }}>{coMat}</div>
+                                    </div>
+                                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                                       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Nghỉ phép</div>
+                                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b45309', marginTop: '1px' }}>{nghiP}</div>
+                                    </div>
+                                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                                       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase' }}>Nghỉ KP</div>
+                                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b91c1c', marginTop: '1px' }}>{nghiKP}</div>
+                                    </div>
+                                    {traTre > 0 && (
+                                       <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                                          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>Trả trễ</div>
+                                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#c2410c', marginTop: '1px' }}>{traTre}</div>
+                                       </div>
+                                    )}
+                                    <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '12px', padding: '6px 10px', textAlign: 'center' }}>
+                                       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0d9488', textTransform: 'uppercase' }}>Tỷ lệ đi học</div>
+                                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f766e', marginTop: '1px' }}>
+                                          {totalRec > 0 ? `${rate}%` : '--'}
+                                       </div>
+                                    </div>
+                                 </div>
+                              );
+                           })()}
+
                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                                  {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
