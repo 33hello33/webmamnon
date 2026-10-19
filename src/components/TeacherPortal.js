@@ -822,6 +822,38 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
       };
    }, [historyStudents, historyRecords]);
 
+   const attendanceStats = React.useMemo(() => {
+      let present = 0;
+      let excused = 0;
+      let unexcused = 0;
+      let late = 0;
+      let unrecorded = 0;
+
+      attStudents.forEach(st => {
+         const rec = attRecords[st.mahv];
+         if (!rec || !rec.trangthai) {
+            unrecorded++;
+            return;
+         }
+         const tt = (rec.trangthai || '').trim().toLowerCase();
+         if (tt === 'có mặt') present++;
+         else if (tt === 'nghỉ phép') excused++;
+         else if (tt === 'nghỉ không phép') unexcused++;
+         else if (tt.includes('trả trễ') || tt.includes('về trễ')) late++;
+         else present++;
+      });
+
+      return {
+         total: attStudents.length,
+         present,
+         excused,
+         unexcused,
+         late,
+         unrecorded,
+         recorded: attStudents.length - unrecorded
+      };
+   }, [attStudents, attRecords]);
+
    const renderHistoryStatusBadge = (trangthai) => {
       const tt = (trangthai || '').trim();
       const lower = tt.toLowerCase();
@@ -2448,6 +2480,41 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                            Ngày đã chọn là ngày nghỉ. Hệ thống khóa ghi điểm danh cho ngày này.
                         </div>
                      )}
+
+                     {/* Top Summary Statistics Card */}
+                     {attStudents.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '1.25rem' }}>
+                           <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 14px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Sĩ số</div>
+                              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>{attendanceStats.total}</div>
+                           </div>
+                           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>Có mặt</div>
+                              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>{attendanceStats.present}</div>
+                           </div>
+                           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Nghỉ phép</div>
+                              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b45309', marginTop: '2px' }}>{attendanceStats.excused}</div>
+                           </div>
+                           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase' }}>Nghỉ KP</div>
+                              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b91c1c', marginTop: '2px' }}>{attendanceStats.unexcused}</div>
+                           </div>
+                           {attendanceStats.late > 0 && (
+                              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>Trả trễ</div>
+                                 <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#c2410c', marginTop: '2px' }}>{attendanceStats.late}</div>
+                              </div>
+                           )}
+                           {attendanceStats.unrecorded > 0 && (
+                              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 14px', textAlign: 'center' }}>
+                                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Chưa ghi</div>
+                                 <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#64748b', marginTop: '2px' }}>{attendanceStats.unrecorded}</div>
+                              </div>
+                           )}
+                        </div>
+                     )}
+
                      <div className="attendance-portal-list">
                         {attStudents.length > 0 ? attStudents.map(st => {
                            const rec = attRecords[st.mahv] || {};
@@ -2506,8 +2573,75 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                         )}
                      </div>
                      {attStudents.length > 0 && (
-                        <button onClick={handleSaveAttendance} disabled={loading || isAttendanceHoliday} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                           {loading ? <Loader2 size={20} className="spinner" /> : 'Lưu Danh Sách Điểm Danh'}
+                        <div style={{ marginTop: '1.5rem', marginBottom: '0.75rem', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1rem 1.25rem', boxShadow: '0 4px 14px rgba(0,0,0,0.04)' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                 <CalendarCheck size={18} style={{ color: '#ec4899' }} />
+                                 <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>Thống Kê Điểm Danh</span>
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                 <span>Đã ghi nhận:</span>
+                                 <span style={{ color: attendanceStats.unrecorded > 0 ? '#b91c1c' : '#15803d', fontWeight: 800, background: attendanceStats.unrecorded > 0 ? '#fef2f2' : '#f0fdf4', padding: '2px 8px', borderRadius: '12px', border: attendanceStats.unrecorded > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0' }}>
+                                    {attendanceStats.recorded}/{attendanceStats.total} học sinh
+                                 </span>
+                              </div>
+                           </div>
+
+                           {/* Visual distribution bar */}
+                           {attendanceStats.total > 0 && (
+                              <div style={{ height: '7px', width: '100%', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden', display: 'flex', marginBottom: '0.85rem' }}>
+                                 <div style={{ width: `${(attendanceStats.present / attendanceStats.total) * 100}%`, background: '#10b981', transition: 'width 0.3s' }} title={`Có mặt: ${attendanceStats.present}`} />
+                                 <div style={{ width: `${(attendanceStats.excused / attendanceStats.total) * 100}%`, background: '#f59e0b', transition: 'width 0.3s' }} title={`Nghỉ phép: ${attendanceStats.excused}`} />
+                                 <div style={{ width: `${(attendanceStats.unexcused / attendanceStats.total) * 100}%`, background: '#ef4444', transition: 'width 0.3s' }} title={`Nghỉ không phép: ${attendanceStats.unexcused}`} />
+                                 <div style={{ width: `${(attendanceStats.late / attendanceStats.total) * 100}%`, background: '#f97316', transition: 'width 0.3s' }} title={`Trả trễ: ${attendanceStats.late}`} />
+                              </div>
+                           )}
+
+                           {/* Quick Stats Grid */}
+                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: '8px' }}>
+                              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 10px', textAlign: 'center' }}>
+                                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Sĩ số</div>
+                                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>{attendanceStats.total}</div>
+                              </div>
+                              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '8px 10px', textAlign: 'center' }}>
+                                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>Có mặt</div>
+                                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>{attendanceStats.present}</div>
+                              </div>
+                              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '8px 10px', textAlign: 'center' }}>
+                                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Nghỉ phép</div>
+                                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b45309', marginTop: '2px' }}>{attendanceStats.excused}</div>
+                              </div>
+                              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '8px 10px', textAlign: 'center' }}>
+                                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase' }}>Nghỉ KP</div>
+                                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#b91c1c', marginTop: '2px' }}>{attendanceStats.unexcused}</div>
+                              </div>
+                              {attendanceStats.late > 0 && (
+                                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '8px 10px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>Trả trễ</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#c2410c', marginTop: '2px' }}>{attendanceStats.late}</div>
+                                 </div>
+                              )}
+                              {attendanceStats.unrecorded > 0 && (
+                                 <div style={{ background: '#fef2f2', border: '1px dashed #f87171', borderRadius: '12px', padding: '8px 10px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase' }}>Chưa ghi</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#dc2626', marginTop: '2px' }}>{attendanceStats.unrecorded}</div>
+                                 </div>
+                              )}
+                           </div>
+                        </div>
+                     )}
+                     {attStudents.length > 0 && (
+                        <button onClick={handleSaveAttendance} disabled={loading || isAttendanceHoliday} style={{ width: '100%', padding: '0.9rem 1.25rem', marginTop: '0.25rem', background: '#ec4899', color: 'white', fontWeight: 700, border: 'none', borderRadius: '12px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.6rem', fontSize: '1rem', boxShadow: '0 4px 14px rgba(236,72,153,0.3)', transition: 'all 0.2s' }}>
+                           {loading ? (
+                              <Loader2 size={20} className="spinner" />
+                           ) : (
+                              <>
+                                 <span>Lưu Danh Sách Điểm Danh</span>
+                                 <span style={{ fontSize: '0.85rem', opacity: 0.95, background: 'rgba(255,255,255,0.22)', padding: '3px 10px', borderRadius: '20px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    {attendanceStats.present}/{attendanceStats.total} có mặt
+                                 </span>
+                              </>
+                           )}
                         </button>
                      )}
                   </>
