@@ -87,7 +87,8 @@ function Login() {
          nameSuffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + parentData.student.tenhv;
       }
 
-      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png
+      // Dùng .svg: img.vietqr.io trả 301 từ .png sang .svg và 301 không có header CORS
+      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.svg
 ?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}
 &addInfo=${encodeURIComponent(parentMahv + nameSuffix)}
 &accountName=${encodeURIComponent(matched.accName)}`;

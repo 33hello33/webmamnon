@@ -189,7 +189,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          const nameParts = rawName ? rawName.split(' ') : [];
          const shortName = nameParts.length <= 2 ? rawName : nameParts.slice(-2).join(' ');
          const info = encodeURIComponent([mahv, shortName].filter(Boolean).join(' '));
-         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+         // Dùng .svg: img.vietqr.io trả 301 từ .png sang .svg và 301 không có header CORS
+         return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.svg?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
       }
       return null;
    };

@@ -91,7 +91,8 @@ const getQRUrl = (hoaDon, walletsConfig) => {
       }
 
       const info = encodeURIComponent(`${hoaDon.mahv}${suffix}`);
-      return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
+      // Dùng .svg: img.vietqr.io trả 301 từ .png sang .svg và 301 không có header CORS
+      return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.svg?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}`;
    }
    return null;
 };
