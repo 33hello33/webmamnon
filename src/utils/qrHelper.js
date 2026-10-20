@@ -142,6 +142,7 @@ export const generateVietQRUrl = ({
   const amountStr = String(amount || '0').replace(/\D/g, '');
   const infoText = formatQRTransferContent(template, data);
   const infoEncoded = encodeURIComponent(infoText);
-  const base = `https://img.vietqr.io/image/${bankId}-${accNo}-compact2.png?amount=${amountStr}&addInfo=${infoEncoded}&accountName=${encodeURIComponent(accName || '')}`;
+  // Dùng .svg: img.vietqr.io trả 301 từ .png sang .svg và 301 không có header CORS
+  const base = `https://img.vietqr.io/image/${bankId}-${accNo}-compact2.svg?amount=${amountStr}&addInfo=${infoEncoded}&accountName=${encodeURIComponent(accName || '')}`;
   return cacheBust ? `${base}&_cb=${Date.now()}_${Math.random().toString(36).slice(2)}` : base;
 };

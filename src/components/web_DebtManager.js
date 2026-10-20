@@ -76,7 +76,8 @@ export default function DebtManager({ setActiveTab, onSelectStudentForInvoice })
     const matched = walletsConfig.find(w => String(w.name).trim() === String(hinhthuc).trim());
     if (matched && matched.bankId && matched.accNo) {
       const info = encodeURIComponent(`${mahv} Tra no ${mahd}`);
-      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${amount}&addInfo=${info}&accountName=${encodeURIComponent(matched.accName || '')}`;
+      // Dùng .svg: img.vietqr.io trả 301 từ .png sang .svg và 301 không có header CORS
+      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.svg?amount=${amount}&addInfo=${info}&accountName=${encodeURIComponent(matched.accName || '')}`;
     }
     return null;
   };
