@@ -71,7 +71,8 @@ export const getQRUrl = (hoaDon, walletsConfig, qrTemplate = '') => {
 
     const info = encodeURIComponent(addInfoText);
     const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
-    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
+    // Dùng .svg: img.vietqr.io trả 301 từ .png sang .svg và 301 không có header CORS
+    return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.svg?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
   }
 
   return null;
