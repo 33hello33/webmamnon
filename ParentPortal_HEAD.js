@@ -4,6 +4,7 @@ import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { triggerPushNotification } from '../utils/pushNotifications';
+import { generateVietQRUrl } from '../utils/qrHelper';
 import ChatMessageContent from './ChatMessageContent';
 import ChatMediaAttachment from './ChatMediaAttachment';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
@@ -456,13 +457,24 @@ function ParentPortal({ parentData, setParentData }) {
       const fee = parentData?.latestFee;
       if (!fee) return '';
       const matched = wallets.find(w => fee.hinhthuc?.includes(w.name));
-      if (!matched) return '';
-      let nameSuffix = '';
-      if (parentData?.student?.tenhv) {
-         const parts = parentData.student.tenhv.trim().split(' ');
-         nameSuffix = parts.length >= 2 ? ' ' + parts.slice(-2).join(' ') : ' ' + parentData.student.tenhv;
-      }
-      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}&addInfo=${encodeURIComponent(parentData.student.mahv + nameSuffix)}&accountName=${encodeURIComponent(matched.accName)}`;
+      if (!matched || !matched.bankId || !matched.accNo) return '';
+      return generateVietQRUrl({
+         bankId: matched.bankId,
+         accNo: matched.accNo,
+         accName: matched.accName || '',
+         amount: fee.tongcong || '0',
+         template: config?.qr_template,
+         data: {
+            mahv: parentData.student?.mahv,
+            tenhv: parentData.student?.tenhv,
+            tenlop: parentData.student?.tenlop || parentData.student?.malop || fee.tenlop || '',
+            malop: parentData.student?.malop || '',
+            mahd: fee.mahd,
+            thang: fee.thang,
+            thoiluong: fee.thoiluong,
+            ngaybatdau: fee.ngaybatdau
+         }
+      }) || '';
    };
 
    const handleDownloadImage = async (imageUrl, filename = 'image.jpg', existingWindow = null) => {
