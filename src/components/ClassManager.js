@@ -14,6 +14,7 @@ import { calculateConsecutiveLeaveGroups, calculateConsecutiveTuitionRefund, ded
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 import './ClassManager.css';
 
 const INITIAL_FORM = {
@@ -1129,14 +1130,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
             if (notice.qrUrl) {
               try {
-                const response = await fetch(notice.qrUrl);
-                const blob = await response.blob();
-                const base64 = await new Promise((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result);
-                  reader.readAsDataURL(blob);
-                });
-                notice.qrBase64 = base64;
+                notice.qrBase64 = await fetchImageAsBase64(notice.qrUrl);
               } catch (fetchErr) {
                 // ignore
               }
