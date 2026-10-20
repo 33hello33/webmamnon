@@ -12,6 +12,7 @@ import { toPng } from 'html-to-image';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 import './FinanceManager.css';
 
 const pCur = (val) => {
@@ -190,7 +191,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             accName: matchedWallet.accName || '',
             amount: notice.tongcong || '0',
             template: config?.qr_template,
-            data: notice
+            data: notice,
+            cacheBust: true
          });
       }
       return null;
@@ -214,7 +216,15 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                   const qrImg = node.querySelector('img[data-role="notice-qr"]');
                   if (qrImg && downloadingNotice.qrUrl) {
-                     qrImg.src = downloadingNotice.qrUrl;
+                     try {
+                        const qrDataUrl = await fetchImageAsBase64(downloadingNotice.qrUrl);
+                        // Gán data URL trực tiếp — không còn CORS, không còn cache
+                        qrImg.removeAttribute('crossorigin');
+                        qrImg.src = qrDataUrl;
+                     } catch (fetchErr) {
+                        console.warn('QR fetch failed, fallback to src:', fetchErr);
+                        qrImg.src = downloadingNotice.qrUrl;
+                     }
                   }
 
                   const images = node.querySelectorAll('img');
