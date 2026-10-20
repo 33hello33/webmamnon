@@ -5,6 +5,7 @@ import { useConfig } from '../ConfigContext';
 import { BadgeDollarSign, Clock, CheckCircle, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 import './DebtManager.css';
 
 export default function DebtManager() {
@@ -98,6 +99,19 @@ export default function DebtManager() {
               if (img.complete) return Promise.resolve();
               return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
             }));
+            // Chuyển ảnh sang data URL để html-to-image không phải fetch lại (tránh logo/mã QR bị trắng)
+            await Promise.all(Array.from(images).map(async (img) => {
+              if (img.complete && img.naturalWidth > 0 && !img.src.startsWith('data:')) {
+                try {
+                  const dUrl = await fetchImageAsBase64(img.src);
+                  if (dUrl && dUrl.length > 100) {
+                    img.src = dUrl;
+                  }
+                } catch (cErr) {
+                  console.warn('Không chuyển được ảnh sang data URL:', cErr);
+                }
+              }
+            }));
             await new Promise(r => setTimeout(r, 500));
 
             const dataUrl = await toPng(node, { cacheBust: true, backgroundColor: '#ffffff' });
@@ -125,6 +139,30 @@ export default function DebtManager() {
       processPng();
     }
   }, [downloadingPayment]);
+
+  // QR của modal thanh toán: tải sẵn dạng data URL để không phụ thuộc CORS/redirect của VietQR
+  const modalQrUrl = showPaymentModal ? getDebtQRUrl(selectedDebt, paymentAmount, paymentMethod) : null;
+  const [modalQr, setModalQr] = useState(null);
+
+  useEffect(() => {
+    if (!modalQrUrl) {
+      setModalQr(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const dataUrl = await fetchImageAsBase64(modalQrUrl);
+        if (!cancelled) setModalQr({ url: modalQrUrl, dataUrl });
+      } catch (err) {
+        if (!cancelled) setModalQr(null);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [modalQrUrl]);
 
   const handleConfirmPayment = async () => {
     const payVal = parseInt(String(paymentAmount).replace(/,/g, ''), 10);
@@ -634,16 +672,12 @@ export default function DebtManager() {
               </select>
             </div>
 
-            {(() => {
-              const modalQrUrl = getDebtQRUrl(selectedDebt, paymentAmount, paymentMethod);
-              if (!modalQrUrl) return null;
-              return (
-                <div style={{ textAlign: 'center', marginBottom: '16px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>Quét mã QR để thanh toán</div>
-                  <img src={modalQrUrl} alt="QR thanh toán" style={{ width: '180px', height: '180px', borderRadius: '8px', border: '2px solid #000' }} />
-                </div>
-              );
-            })()}
+            {modalQrUrl && (
+              <div style={{ textAlign: 'center', marginBottom: '16px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>Quét mã QR để thanh toán</div>
+                <img src={modalQr?.url === modalQrUrl ? modalQr.dataUrl : modalQrUrl} alt="QR thanh toán" style={{ width: '180px', height: '180px', borderRadius: '8px', border: '2px solid #000' }} />
+              </div>
+            )}
 
             {paymentError && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '0.9rem' }}>{paymentError}</div>}
             {paymentSuccess && <div style={{ color: '#10b981', marginBottom: '16px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}><CheckCircle size={16} /> {paymentSuccess}</div>}

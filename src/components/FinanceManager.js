@@ -12,6 +12,7 @@ import { toPng } from 'html-to-image';
 import { uploadToR2 } from '../utils/cloudflareR2';
 import { compressImage } from '../utils/imageUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 import './FinanceManager.css';
 
 const pCur = (val) => {
@@ -212,9 +213,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   node.style.opacity = '1';
                   node.style.visibility = 'visible';
 
+                  // QR đã được chuyển sẵn sang data URL khi mở thông báo → triệt tiêu CORS/cache
                   const qrImg = node.querySelector('img[data-role="notice-qr"]');
                   if (qrImg && downloadingNotice.qrUrl) {
-                     qrImg.src = downloadingNotice.qrUrl;
+                     try {
+                        const qrDataUrl = downloadingNotice.qrBase64 || await fetchImageAsBase64(downloadingNotice.qrUrl);
+                        qrImg.removeAttribute('crossorigin');
+                        qrImg.src = qrDataUrl;
+                        await new Promise(r => setTimeout(r, 100));
+                     } catch (fetchErr) {
+                        console.warn('QR fetch failed, fallback to src:', fetchErr);
+                        qrImg.src = downloadingNotice.qrUrl;
+                     }
                   }
 
                   const images = node.querySelectorAll('img');
@@ -257,7 +267,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       }
    }, [downloadingNotice]);
 
-   const triggerDownloadNotice = (r) => {
+   const triggerDownloadNotice = async (r) => {
       const studentName = hvMap[r.mahv]?.tenhv || r.mahv?.tenhv || r.tenhv || '';
       const phuthuStr = typeof r.phuthu === 'string' ? r.phuthu : JSON.stringify(r.phuthu || []);
       let parsedPt = [];
@@ -275,6 +285,13 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          actualMealRefund: fCur(r.trutienan || 0), actualTuitionRefund: fCur(r.tiennghiphep || 0), ngoaiKhoaDeduction: fCur(r.trutiendangoai || 0),
       };
       noticeObj.qrUrl = getNoticeQRUrl(noticeObj);
+      if (noticeObj.qrUrl) {
+         try {
+            noticeObj.qrBase64 = await fetchImageAsBase64(noticeObj.qrUrl);
+         } catch (e) {
+            // fallback: dùng URL gốc
+         }
+      }
       setDownloadingNotice(noticeObj);
    };
 
@@ -3799,11 +3816,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                   </div>
 
                   {/* QR SECTION */}
-                  {downloadingNotice?.qrUrl && (
+                  {(downloadingNotice?.qrBase64 || downloadingNotice?.qrUrl) && (
                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
                         <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
                         <div style={{ textAlign: 'center' }}>
-                           <img key={downloadingNotice?.qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                           <img key={downloadingNotice?.mahd} data-role="notice-qr" crossOrigin="anonymous" src={downloadingNotice?.qrBase64 || downloadingNotice?.qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
                            <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                         </div>
                      </div>

@@ -11,6 +11,7 @@ import { getActiveNgoaiKhoaAnnouncements, isNgoaiKhoaCloseAnnouncement } from '.
 import { saveImageToDevice } from '../utils/mobileImageSave';
 import { fetchParentStudentPortalData } from '../utils/parentPortalData';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 import { Search, ArrowLeft, UserMinus, Bell, CalendarCheck, Heart, MessageSquare, Pill, Users, Utensils, Image, MessageCircle, LogOut, FileText, Download, Loader2, Send, CreditCard, Wallet, Paperclip, MoreVertical, X, Activity, Settings, QrCode, Newspaper, Megaphone, BookOpen, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Phone, CheckCircle2, Clock } from 'lucide-react';
 
 const isDeletedRecord = (record) => {
@@ -1375,6 +1376,27 @@ function ParentPortal({ parentData, setParentData }) {
          }
       }) || '';
    };
+
+   const parentQrUrl = getQRUrl();
+   const [parentQrSrc, setParentQrSrc] = useState('');
+
+   useEffect(() => {
+      let cancelled = false;
+      if (!parentQrUrl) {
+         setParentQrSrc('');
+         return undefined;
+      }
+      fetchImageAsBase64(parentQrUrl)
+         .then((dataUrl) => {
+            if (!cancelled) setParentQrSrc(dataUrl || parentQrUrl);
+         })
+         .catch(() => {
+            if (!cancelled) setParentQrSrc(parentQrUrl);
+         });
+      return () => {
+         cancelled = true;
+      };
+   }, [parentQrUrl]);
 
    const handleDownloadImage = async (imageUrl, filename = 'image.jpg', existingWindow = null) => {
       if (!imageUrl) return;
@@ -3811,6 +3833,13 @@ function ParentPortal({ parentData, setParentData }) {
                                     )}
                                  </div>
                               </div>
+                              {!tuitionStatus.isPaid && parentQrSrc && (
+                                 <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '20px', marginBottom: '20px', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1e293b', marginBottom: '12px' }}>Quét mã QR để chuyển khoản học phí</div>
+                                    <img src={parentQrSrc} alt="Mã QR chuyển khoản học phí" style={{ width: '100%', maxWidth: '260px', display: 'block', margin: '0 auto', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+                                    <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#64748b' }}>Nội dung chuyển khoản đã được điền sẵn trong mã QR</div>
+                                 </div>
+                              )}
                            </>
                         ) : (
                            <div className="fee-card-empty" style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', padding: '30px', borderRadius: '20px', textAlign: 'center', color: '#94a3b8', marginBottom: '20px' }}>

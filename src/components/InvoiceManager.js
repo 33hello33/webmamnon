@@ -512,7 +512,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                const node = document.getElementById('download-notice-node');
                if (node) {
                   const expectedNoticeId = downloadingNotice.mahd;
-                  const expectedQrSrc = downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig, true, config?.qr_template);
+                  const expectedQrSrc = downloadingNotice?.qrBase64 || downloadingNotice?.qrUrl || getQRUrl(downloadingNotice, walletsConfig, true, config?.qr_template);
 
                   // Capture setup
                   node.style.position = 'fixed';
@@ -529,7 +529,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      const qrImgEl = node.querySelector('[data-role="notice-qr"]');
                      if (qrImgEl) {
                         try {
-                           const qrDataUrl = await fetchImageAsBase64(expectedQrSrc);
+                           const qrDataUrl = expectedQrSrc.startsWith('data:') ? expectedQrSrc : await fetchImageAsBase64(expectedQrSrc);
                            // Gán data URL trực tiếp — không còn CORS, không còn cache
                            qrImgEl.removeAttribute('crossorigin');
                            qrImgEl.src = qrDataUrl;
@@ -1583,6 +1583,26 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
          const res = await supabase.from('tbl_thongbao').insert([insertData]);
          if (res.error) throw res.error;
 
+         // Tạo sẵn QR dạng data URL: dùng cho cả preview lẫn lúc xuất ảnh → không còn QR trắng/CORS
+         const noticeQrUrl = getQRUrl({
+            mahv: selectedStudent.mahv,
+            tenhv: selectedStudent.tenhv,
+            tenlop: selectedStudent.tenlop || selectedStudent.malop || '',
+            tongcong: formatCurrency(tongCong),
+            hinhthuc: invoiceData.hinhThuc,
+            thoiluong: currentTimePeriod,
+            ngaybatdau: invoiceData.ngayBatDau || null,
+            mahd: newMaTB
+         }, walletsConfig, true, config?.qr_template);
+         let noticeQrBase64 = '';
+         if (noticeQrUrl) {
+            try {
+               noticeQrBase64 = await fetchImageAsBase64(noticeQrUrl);
+            } catch (e) {
+               // fallback: dùng URL gốc
+            }
+         }
+
          setDownloadingNotice({
             mahd: newMaTB,
             ngaylap: localNow,
@@ -1603,19 +1623,8 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
             nhanvien: cashier,
             thoiluong: currentTimePeriod,
             phuthu: effectiveSurcharges,
-            qrUrl: (() => {
-               // cacheBust=true: mỗi lần xuất tạo URL duy nhất, tránh cache ảnh QR của học sinh khác
-               return getQRUrl({
-                  mahv: selectedStudent.mahv,
-                  tenhv: selectedStudent.tenhv,
-                  tenlop: selectedStudent.tenlop || selectedStudent.malop || '',
-                  tongcong: formatCurrency(tongCong),
-                  hinhthuc: invoiceData.hinhThuc,
-                  thoiluong: currentTimePeriod,
-                  ngaybatdau: invoiceData.ngayBatDau || null,
-                  mahd: newMaTB
-               }, walletsConfig, true, config?.qr_template);
-            })(),
+            qrUrl: noticeQrUrl,
+            qrBase64: noticeQrBase64,
             diemDanhInfo: studySummary ? {
                diHoc: studySummary.daHoc || 0,
                nghiPhep: studySummary.nghiPhep || 0,
@@ -2848,7 +2857,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                   {/* QR SECTION */}
                   {(() => {
                      // Dùng qrUrl đã cache-busted khi tạo notice; fallback cũng bật cacheBust
-                     const qrUrl = downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig, true, config?.qr_template) : null);
+                     const qrUrl = downloadingNotice?.qrBase64 || downloadingNotice?.qrUrl || (downloadingNotice ? getQRUrl(downloadingNotice, walletsConfig, true, config?.qr_template) : null);
                      if (!qrUrl) return (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
                         </div>
@@ -2857,7 +2866,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginTop: '10px' }}>
                            <div style={{ fontWeight: '950', fontSize: '14pt', marginBottom: '10px', textAlign: 'right', width: '100%' }}>Hình thức thanh toán: <span style={{ color: '#000' }}>{downloadingNotice?.hinhthuc}</span></div>
                            <div style={{ textAlign: 'center' }}>
-                              <img key={qrUrl} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
+                              <img key={downloadingNotice?.mahd} data-role="notice-qr" crossOrigin="anonymous" src={qrUrl} alt="Mã QR" style={{ width: '280px', height: '280px', borderRadius: '12px', border: '4px solid #000' }} />
                               <div style={{ fontSize: '12pt', textAlign: 'center', marginTop: '8px', color: '#000', fontWeight: 950 }}>QUÉT MÃ QR ĐỂ THANH TOÁN</div>
                            </div>
                         </div>
