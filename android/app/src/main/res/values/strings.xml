@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TruongLa</string>
+    <string name="title_activity_main">TruongLa</string>
+    <string name="package_name">com.truonglae.app</string>
+    <string name="custom_url_scheme">com.truonglae.app</string>
+</resources>
