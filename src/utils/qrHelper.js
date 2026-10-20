@@ -78,24 +78,3 @@ export const getQRUrl = (hoaDon, walletsConfig, qrTemplate = '') => {
   return null;
 };
 
-/**
- * Tải ảnh từ URL (ví dụ VietQR) và chuyển thành Base64 Data URL
- * Giúp triệt tiêu lỗi CORS, cache và ngăn tình trạng ảnh bị blank khi chụp html-to-image hoặc in
- */
-export const fetchQrAsBase64 = async (url) => {
-  if (!url) return '';
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Fetch VietQR failed');
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = () => resolve(url);
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    console.warn('Lỗi chuyển ảnh QR sang base64:', err);
-    return url;
-  }
-};

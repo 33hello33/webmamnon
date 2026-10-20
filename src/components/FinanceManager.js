@@ -8,7 +8,8 @@ import {
    Printer, History, Clock, Edit2, Receipt
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { getQRUrl, fetchQrAsBase64 } from '../utils/qrHelper';
+import { getQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 
 import './FinanceManager.css';
 
@@ -723,7 +724,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       const qrUrl = getQRUrl(enriched, walletsConfig, config?.qr_template);
       if (qrUrl) {
          try {
-            enriched.qrBase64 = await fetchQrAsBase64(qrUrl);
+            enriched.qrBase64 = await fetchImageAsBase64(qrUrl);
          } catch (e) { }
       }
       enriched.qrUrl = qrUrl;
@@ -809,7 +810,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          const qrUrl = getQRUrl(enriched, walletsConfig, config?.qr_template);
          let qrBase64 = '';
          if (qrUrl) {
-            qrBase64 = await fetchQrAsBase64(qrUrl);
+            try {
+               qrBase64 = await fetchImageAsBase64(qrUrl);
+            } catch (e) {
+               qrBase64 = '';
+            }
          }
 
          setDownloadingNotice({

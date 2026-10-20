@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './App.css';
 import { supabase } from './supabase';
 import { useConfig } from './ConfigContext';
+import { getQRUrl as buildQRUrl } from './utils/qrHelper';
 import { User, Lock, Loader2, LogIn, AlertCircle, CheckCircle2, Search, Key, X, LogOut, Users, Download } from 'lucide-react';
 
 function Login() {
@@ -74,36 +75,15 @@ function Login() {
    const getQRUrl = () => {
       const fee = parentData?.latestFee;
       if (!fee) return '';
-      console.log(fee);
-      const matched = wallets.find(w =>
-         fee.hinhthuc?.includes(w.name)
-      );
-
-      if (!matched) return '';
-
-      let shortName = '';
-      if (parentData?.student?.tenhv) {
-         const parts = parentData.student.tenhv.trim().split(' ');
-         shortName = parts.length >= 2 ? parts.slice(-2).join(' ') : parentData.student.tenhv;
-      }
-
-      let addInfoText = '';
-      const qrTemplate = config?.qr_template;
-      if (qrTemplate && qrTemplate.trim()) {
-         addInfoText = qrTemplate
-            .replace(/\{mahv\}/gi, parentMahv || parentData?.student?.mahv || fee.mahv || '')
-            .replace(/\{tenhv\}/gi, parentData?.student?.tenhv || fee.tenhv || '')
-            .replace(/\{ten\}/gi, shortName)
-            .replace(/\{mahd\}/gi, fee.mahd || '')
-            .replace(/\{tenlop\}/gi, fee.tenlop || parentData?.student?.tenlop || '')
-            .replace(/\{sdt\}/gi, parentData?.student?.sdt || '')
-            .replace(/\{thoiluong\}/gi, fee.thoiluong || '')
-            .trim().replace(/\s+/g, ' ');
-      } else {
-         addInfoText = `${parentMahv || ''}${shortName ? ' ' + shortName : ''}`.trim();
-      }
-
-      return `https://img.vietqr.io/image/${matched.bankId}-${matched.accNo}-compact2.png?amount=${encodeURIComponent((fee.tongcong || "0").replace(/,/g, ""))}&addInfo=${encodeURIComponent(addInfoText)}&accountName=${encodeURIComponent(matched.accName)}`;
+      const student = parentData?.student || {};
+      const hoaDon = {
+         ...fee,
+         mahv: parentMahv || student.mahv || fee.mahv || '',
+         tenhv: student.tenhv || fee.tenhv || '',
+         tenlop: fee.tenlop || student.tenlop || '',
+         sdt: student.sdt || fee.sdt || ''
+      };
+      return buildQRUrl(hoaDon, wallets, config?.qr_template) || '';
    };
    const formatMonthYear = (dateStr) => {
       if (!dateStr) return '';

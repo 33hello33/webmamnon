@@ -5,6 +5,8 @@ import { useConfig } from '../ConfigContext';
 import { BadgeDollarSign, Clock, CheckCircle, X, FileText } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import './DebtManager.css';
+import { getQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 
 export default function DebtManager() {
   const { config } = useConfig();
@@ -57,54 +59,6 @@ export default function DebtManager() {
     setShowPaymentModal(true);
   };
 
-  const getQRUrl = (hoaDon, wConfig, qrTemplate = '') => {
-    if (!wConfig || wConfig.length === 0 || !hoaDon?.hinhthuc) return null;
-    const hinhThucTrim = String(hoaDon.hinhthuc).trim().toLowerCase();
-
-    // Không hiển thị mã QR nếu là hình thức Tiền mặt
-    if (hinhThucTrim.includes('tiền mặt') || hinhThucTrim.includes('tien mat')) {
-      return null;
-    }
-
-    // Chỉ hiển thị mã QR khi hình thức thanh toán khớp với ví/tài khoản có STK ngân hàng
-    let matchedWallet = wConfig.find(w => String(w.name || '').trim().toLowerCase() === hinhThucTrim && w.bankId && w.accNo);
-    if (!matchedWallet) {
-      matchedWallet = wConfig.find(w => {
-        const wName = String(w.name || '').trim().toLowerCase();
-        return wName && (hinhThucTrim.includes(wName) || wName.includes(hinhThucTrim)) && w.bankId && w.accNo;
-      });
-    }
-
-    if (matchedWallet && matchedWallet.bankId && matchedWallet.accNo) {
-      const amountStr = (hoaDon.tongcong || hoaDon.conno || hoaDon.hocphi || "0").toString().replace(/\D/g, "");
-
-      let shortName = '';
-      if (hoaDon.tenhv) {
-        const parts = hoaDon.tenhv.trim().split(' ');
-        shortName = parts.length >= 2 ? parts.slice(-2).join(' ') : hoaDon.tenhv;
-      }
-
-      let addInfoText = '';
-      if (qrTemplate && qrTemplate.trim()) {
-        addInfoText = qrTemplate
-          .replace(/\{mahv\}/gi, hoaDon.mahv || '')
-          .replace(/\{tenhv\}/gi, hoaDon.tenhv || '')
-          .replace(/\{ten\}/gi, shortName)
-          .replace(/\{mahd\}/gi, hoaDon.mahd || '')
-          .replace(/\{tenlop\}/gi, hoaDon.tenlop || '')
-          .replace(/\{sdt\}/gi, hoaDon.sdt || '')
-          .replace(/\{thoiluong\}/gi, hoaDon.thoiluong || '')
-          .trim().replace(/\s+/g, ' ');
-      } else {
-        addInfoText = `${hoaDon.mahv || ''}${shortName ? ' ' + shortName : ''}`.trim();
-      }
-
-      const info = encodeURIComponent(addInfoText);
-      const uniqueTag = hoaDon._t || `${hoaDon.mahd || ''}_${amountStr}`;
-      return `https://img.vietqr.io/image/${matchedWallet.bankId}-${matchedWallet.accNo}-compact2.png?amount=${amountStr}&addInfo=${info}&accountName=${encodeURIComponent(matchedWallet.accName || '')}&tag=${encodeURIComponent(uniqueTag)}`;
-    }
-    return null;
-  };
 
   const handleOpenNotice = async (debtOrOverdue) => {
     let attendanceStats = null;
@@ -170,15 +124,10 @@ export default function DebtManager() {
               return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
             }));
             await new Promise(r => setTimeout(r, 400));
-            Array.from(images).forEach(img => {
+            await Promise.all(Array.from(images).map(async (img) => {
               if (img.complete && img.naturalWidth > 0 && !img.src.startsWith('data:')) {
                 try {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = img.naturalWidth;
-                  canvas.height = img.naturalHeight;
-                  const ctx = canvas.getContext('2d');
-                  ctx.drawImage(img, 0, 0);
-                  const dUrl = canvas.toDataURL('image/png');
+                  const dUrl = await fetchImageAsBase64(img.src);
                   if (dUrl && dUrl.length > 100) {
                     img.src = dUrl;
                   }
@@ -186,7 +135,7 @@ export default function DebtManager() {
                   console.warn('Canvas conversion skipped:', cErr);
                 }
               }
-            });
+            }));
             await new Promise(r => setTimeout(r, 200));
 
             const dataUrl = await toPng(node, { cacheBust: true, includeQueryParams: true, backgroundColor: '#ffffff' });
@@ -235,15 +184,10 @@ export default function DebtManager() {
               return new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 5000); });
             }));
             await new Promise(r => setTimeout(r, 400));
-            Array.from(images).forEach(img => {
+            await Promise.all(Array.from(images).map(async (img) => {
               if (img.complete && img.naturalWidth > 0 && !img.src.startsWith('data:')) {
                 try {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = img.naturalWidth;
-                  canvas.height = img.naturalHeight;
-                  const ctx = canvas.getContext('2d');
-                  ctx.drawImage(img, 0, 0);
-                  const dUrl = canvas.toDataURL('image/png');
+                  const dUrl = await fetchImageAsBase64(img.src);
                   if (dUrl && dUrl.length > 100) {
                     img.src = dUrl;
                   }
@@ -251,7 +195,7 @@ export default function DebtManager() {
                   console.warn('Canvas conversion skipped:', cErr);
                 }
               }
-            });
+            }));
             await new Promise(r => setTimeout(r, 200));
 
             const dataUrl = await toPng(node, { cacheBust: true, includeQueryParams: true, backgroundColor: '#ffffff' });
