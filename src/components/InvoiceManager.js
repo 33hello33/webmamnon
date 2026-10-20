@@ -12,6 +12,7 @@ import { buildLateFeeSurcharges, getLateAttendanceCounts, mergeLateFeeSurcharges
 import { toLocalISODate } from '../utils/localDate';
 import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
+import { fetchImageAsBase64 } from '../utils/qrImage';
 
 
 
@@ -528,17 +529,7 @@ export default function InvoiceManager({ focusStudentId, onFocusStudentHandled }
                      const qrImgEl = node.querySelector('[data-role="notice-qr"]');
                      if (qrImgEl) {
                         try {
-                           const resp = await fetch(expectedQrSrc, {
-                              cache: 'no-store',
-                              headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' }
-                           });
-                           const blob = await resp.blob();
-                           const qrDataUrl = await new Promise((res, rej) => {
-                              const reader = new FileReader();
-                              reader.onload = () => res(reader.result);
-                              reader.onerror = rej;
-                              reader.readAsDataURL(blob);
-                           });
+                           const qrDataUrl = await fetchImageAsBase64(expectedQrSrc);
                            // Gán data URL trực tiếp — không còn CORS, không còn cache
                            qrImgEl.removeAttribute('crossorigin');
                            qrImgEl.src = qrDataUrl;
