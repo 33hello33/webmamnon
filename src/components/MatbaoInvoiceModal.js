@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileCheck2, Settings, X, AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
+import { FileCheck2, Settings, X, AlertCircle, CheckCircle2, ExternalLink, Lock } from 'lucide-react';
 import { createMatBaoInvoice } from '../utils/matbaoService';
 import { supabase, insertLog } from '../supabase';
 
@@ -20,6 +20,17 @@ const pCur = (val) => {
   return isNaN(parsed) ? 0 : parsed;
 };
 
+const lockedFieldStyle = {
+  width: '100%',
+  padding: '0.55rem',
+  borderRadius: '6px',
+  border: '1px solid #e2e8f0',
+  fontSize: '0.9rem',
+  background: '#eef2f7',
+  color: '#475569',
+  cursor: 'not-allowed'
+};
+
 export default function MatbaoInvoiceModal({
   isOpen,
   onClose,
@@ -31,7 +42,7 @@ export default function MatbaoInvoiceModal({
   const [invoice] = useState(initialData?.invoice || null);
   const [buyer, setBuyer] = useState(initialData?.buyer || {});
   const [items, setItems] = useState(initialData?.items || []);
-  const [options, setOptions] = useState(initialData?.options || {
+  const [options] = useState(initialData?.options || {
     mauSo: '1',
     kiHieu: 'C26TAT',
     loaiHDon: 0,
@@ -56,9 +67,7 @@ export default function MatbaoInvoiceModal({
     });
   };
 
-  const handleOptionChange = (field, value) => {
-    setOptions(prev => ({ ...prev, [field]: value }));
-  };
+  const isDraft = Number(options.loaiHDon) !== 1;
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -90,7 +99,7 @@ export default function MatbaoInvoiceModal({
         console.warn('Lỗi ghi daxuathddo:', dbErr);
       }
 
-      insertLog(`[XUẤT HĐ ĐỎ MẮT BÃO] Phiếu thu: ${invoice.mahd} | Tra cứu: ${res.maTraCuu || '_'} | Số HĐ: ${res.shDon || 0} | Ký hiệu: ${res.khhDon || '_'}`);
+      insertLog(`[XUẤT HĐ ĐỎ MẮT BÃO] Phiếu thu: ${invoice.mahd} | ${isDraft ? 'Nháp' : 'Phát hành'} | Tra cứu: ${res.maTraCuu || '_'} | Số HĐ: ${res.shDon || 0} | Ký hiệu: ${res.khhDon || '_'}`);
 
       if (onSuccess) {
         onSuccess(invoice.mahd, res);
@@ -181,8 +190,15 @@ export default function MatbaoInvoiceModal({
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '1rem', color: '#166534' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <CheckCircle2 size={20} color="#16a34a" />
-                <strong style={{ fontSize: '1rem' }}>Tạo hóa đơn thành công trên hệ thống Mắt Bão!</strong>
+                <strong style={{ fontSize: '1rem' }}>
+                  {isDraft ? 'Đã tạo hóa đơn nháp trên hệ thống Mắt Bão!' : 'Tạo & phát hành hóa đơn thành công trên hệ thống Mắt Bão!'}
+                </strong>
               </div>
+              {isDraft && (
+                <div style={{ fontSize: '0.82rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', padding: '6px 10px', marginBottom: '4px' }}>
+                  Hóa đơn đang ở trạng thái <b>Nháp</b> — vào portal MIFI để kiểm tra và phát hành chính thức.
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '0.88rem', marginTop: '0.5rem', background: 'white', padding: '0.75rem', borderRadius: '6px', border: '1px solid #dcfce7' }}>
                 <div>Mã tra cứu: <b style={{ color: '#1e293b' }}>{result.maTraCuu}</b></div>
                 <div>Mẫu số / Ký hiệu: <b>{result.khmshDon}/{result.khhDon}</b></div>
@@ -207,10 +223,6 @@ export default function MatbaoInvoiceModal({
                 1. Thông tin người mua / Phụ huynh
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Tên đơn vị / Người mua (*)</label>
-                  <input type="text" required value={buyer.ten || ''} onChange={e => handleBuyerChange('ten', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="Tên cá nhân hoặc công ty..." />
-                </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Mã số thuế (nếu xuất cty)</label>
                   <input type="text" value={buyer.mst || ''} onChange={e => handleBuyerChange('mst', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: 0302712571" />
@@ -272,42 +284,51 @@ export default function MatbaoInvoiceModal({
               </div>
             </div>
 
-            {/* CẤU HÌNH PHÁT HÀNH & KÝ HIỆU */}
+            {/* CẤU HÌNH PHÁT HÀNH & KÝ HIỆU (KHÓA THEO CẤU HÌNH HỆ THỐNG) */}
             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-              <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: '#1e293b' }}>3. Tùy chọn hóa đơn</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Mẫu số (*)</label>
-                  <input type="text" required value={options.mauSo} onChange={e => handleOptionChange('mauSo', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: 1 hoặc 2" />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Ký hiệu mẫu HĐ (*)</label>
-                  {templates.length > 0 ? (
-                    <select value={options.kiHieu} onChange={e => {
-                      const tmpl = templates.find(t => t.khhDon === e.target.value);
-                      handleOptionChange('kiHieu', e.target.value);
-                      if (tmpl?.khmshDon) handleOptionChange('mauSo', tmpl.khmshDon);
-                    }} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}>
-                      {templates.map((t, i) => (
-                        <option key={i} value={t.khhDon}>{t.khhDon} - {t.thDon} (Mẫu {t.khmshDon})</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input type="text" required value={options.kiHieu} onChange={e => handleOptionChange('kiHieu', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="VD: C26TAT" />
-                  )}
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Loại hóa đơn (*)</label>
-                  <select value={options.loaiHDon} onChange={e => handleOptionChange('loaiHDon', Number(e.target.value))} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}>
-                    <option value={0}>0 - Hóa đơn nháp (Khuyên dùng)</option>
-                    <option value={1}>1 - Tạo & Phát hành chính thức</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Hình thức thanh toán</label>
-                  <input type="text" value={options.hinhThucTT} onChange={e => handleOptionChange('hinhThucTT', e.target.value)} style={{ width: '100%', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="TM/CK" />
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>3. Tùy chọn hóa đơn</h4>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', padding: '3px 8px', borderRadius: '999px' }}>
+                  <Lock size={12} /> Khóa theo Cấu hình hệ thống
+                </span>
               </div>
+              <fieldset disabled style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Mẫu số (*)</label>
+                    <input type="text" value={options.mauSo} readOnly style={lockedFieldStyle} placeholder="VD: 1 hoặc 2" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Ký hiệu mẫu HĐ (*)</label>
+                    {templates.length > 0 ? (
+                      <select value={options.kiHieu} disabled style={lockedFieldStyle}>
+                        {!templates.some(t => t.khhDon === options.kiHieu) && (
+                          <option value={options.kiHieu}>{options.kiHieu}</option>
+                        )}
+                        {templates.map((t, i) => (
+                          <option key={i} value={t.khhDon}>{t.khhDon} - {t.thDon} (Mẫu {t.khmshDon})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="text" value={options.kiHieu} readOnly style={lockedFieldStyle} placeholder="VD: C26TAT" />
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Loại hóa đơn (*)</label>
+                    <select value={Number(options.loaiHDon) === 1 ? 1 : 0} disabled style={lockedFieldStyle}>
+                      <option value={0}>0 - Hóa đơn nháp (Draft)</option>
+                      <option value={1}>1 - Phát hành chính thức (Publish)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Hình thức thanh toán</label>
+                    <input type="text" value={options.hinhThucTT} readOnly style={lockedFieldStyle} placeholder="TM/CK" />
+                  </div>
+                </div>
+              </fieldset>
+              <p style={{ margin: '0.6rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                Thay đổi mẫu số, ký hiệu, loại hóa đơn hoặc hình thức thanh toán tại <b>Cấu hình hệ thống → Hóa Đơn Điện Tử Mắt Bão</b>.
+              </p>
             </div>
           </form>
         </div>
@@ -317,8 +338,10 @@ export default function MatbaoInvoiceModal({
           <button type="submit" form="form-matbao-invoice" disabled={loading} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#dc2626', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', opacity: loading ? 0.7 : 1 }}>
             {loading ? (
               <>Đang tạo HĐ Mắt Bão...</>
+            ) : Number(options.loaiHDon) === 1 ? (
+              <><FileCheck2 size={16} /> Tạo &amp; Phát Hành Hóa Đơn Đỏ</>
             ) : (
-              <><FileCheck2 size={16} /> Tạo Hóa Đơn Đỏ Mắt Bão</>
+              <><FileCheck2 size={16} /> Tạo Hóa Đơn Nháp (Draft)</>
             )}
           </button>
         </div>

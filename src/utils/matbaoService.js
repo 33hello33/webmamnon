@@ -23,12 +23,29 @@ export const getEnvMatBaoConfig = () => ({
 export const DEFAULT_MATBAO_CONFIG = getEnvMatBaoConfig();
 
 /**
+ * Áp các tùy chọn xuất hóa đơn (mẫu số, ký hiệu, loại hóa đơn, hình thức TT)
+ * từ tbl_config lên cấu hình hiện tại. Chỉ áp khi cột tồn tại (có giá trị).
+ */
+const applyInvoiceOptionsFromDb = (cfg, dbConfig) => {
+  if (!dbConfig) return cfg;
+  if (dbConfig.matbao_khmshdon !== undefined && dbConfig.matbao_khmshdon !== null && dbConfig.matbao_khmshdon !== '') {
+    cfg.khmshDon = dbConfig.matbao_khmshdon;
+  }
+  if (dbConfig.matbao_khhdon) cfg.khhDon = dbConfig.matbao_khhdon;
+  if (dbConfig.matbao_loaihdon !== undefined && dbConfig.matbao_loaihdon !== null) {
+    cfg.loaiHDon = Number(dbConfig.matbao_loaihdon) === 1 ? 1 : 0;
+  }
+  if (dbConfig.matbao_hinhthuctt) cfg.hinhThucTT = dbConfig.matbao_hinhthuctt;
+  return cfg;
+};
+
+/**
  * Lấy cấu hình kết nối Mắt Bão hiện tại
  * Thứ tự ưu tiên: tbl_config (schema truongla) > localStorage tùy chỉnh > .env
  */
 export const getMatBaoConfig = (dbConfig = null) => {
   const envConfig = getEnvMatBaoConfig();
-  
+
   // Nếu có dbConfig truyền vào hoặc từ tbl_config
   let cfg = { ...envConfig };
   if (dbConfig) {
@@ -36,9 +53,8 @@ export const getMatBaoConfig = (dbConfig = null) => {
     if (dbConfig.matbao_mst) cfg.mst = dbConfig.matbao_mst;
     if (dbConfig.matbao_username) cfg.username = dbConfig.matbao_username;
     if (dbConfig.matbao_password) cfg.password = dbConfig.matbao_password;
-    if (dbConfig.matbao_khmshdon) cfg.khmshDon = dbConfig.matbao_khmshdon;
-    if (dbConfig.matbao_khhdon) cfg.khhDon = dbConfig.matbao_khhdon;
   }
+  cfg = applyInvoiceOptionsFromDb(cfg, dbConfig);
 
   try {
     const saved = localStorage.getItem(STORAGE_KEY_CONFIG);
@@ -48,7 +64,100 @@ export const getMatBaoConfig = (dbConfig = null) => {
   } catch (e) {
     console.warn('Lỗi đọc cấu hình Mắt Bão:', e);
   }
-  return cfg;
+
+  // Tùy chọn xuất hóa đơn lưu trong tbl_config (Cấu hình hệ thống) là nguồn chuẩn
+  return applyInvoiceOptionsFromDb(cfg, dbConfig);
+};
+
+/**
+ * Lấy các tùy chọn xuất hóa đơn mặc định (dùng cho ConfigManager)
+ */
+export const getMatBaoInvoiceDefaults = (dbConfig = null) => {
+  const cfg = getMatBaoConfig(dbConfig);
+  return {
+    khmshDon: String(cfg.khmshDon || '1'),
+    khhDon: String(cfg.khhDon || 'C26TAT'),
+    loaiHDon: Number(cfg.loaiHDon) === 1 ? 1 : 0,
+    hinhThucTT: cfg.hinhThucTT || 'TM/CK'
+  };
+};
+
+const upsertTblConfig = async (payload) => {
+  const { data: existing } = await supabase.from('tbl_config').select('id').maybeSingle();
+  if (existing?.id) {
+    return await supabase.from('tbl_config').update(payload).eq('id', existing.id);
+  }
+  return await supabase.from('tbl_config').insert([payload]);
+};
+
+/**
+ * Ghi cấu hình vào tbl_config. Nếu bảng chưa có các cột tùy chọn hóa đơn thì
+ * vẫn lưu được các cột kết nối (base url, MST, tài khoản, mật khẩu).
+ */
+const saveConfigToDb = async (fullPayload, connectionPayload) => {
+  try {
+    const { error } = await upsertTblConfig(fullPayload);
+    if (!error) return true;
+    const retry = await upsertTblConfig(connectionPayload);
+    if (retry?.error) console.warn('Lỗi khi lưu cấu hình Mắt Bão vào tbl_config:', retry.error.message);
+    return false;
+  } catch (err) {
+    console.warn('Lỗi khi lưu cấu hình Mắt Bão vào tbl_config:', err);
+    return false;
+  }
+};
+
+// tbl_config hiện chưa có các cột tùy chọn hóa đơn: chỉ thử ghi 1 lần để tránh làm chậm thao tác lưu
+let invoiceDefaultsDbSupported = true;
+
+const syncInvoiceDefaultsToDb = async (defaults, configId) => {
+  try {
+    const payload = {
+      matbao_khmshdon: defaults.khmshDon,
+      matbao_khhdon: defaults.khhDon,
+      matbao_loaihdon: defaults.loaiHDon,
+      matbao_hinhthuctt: defaults.hinhThucTT
+    };
+    const query = configId
+      ? supabase.from('tbl_config').update(payload).eq('id', configId)
+      : supabase.from('tbl_config').update(payload).not('id', 'is', null);
+    const { error } = await query;
+    if (error) {
+      if (error.code === 'PGRST204' || /column .* does not exist/i.test(error.message || '')) {
+        invoiceDefaultsDbSupported = false;
+      }
+      console.warn('Chưa lưu được tùy chọn hóa đơn Mắt Bão vào tbl_config:', error.message);
+    }
+  } catch (err) {
+    invoiceDefaultsDbSupported = false;
+    console.warn('Chưa lưu được tùy chọn hóa đơn Mắt Bão vào tbl_config:', err);
+  }
+};
+
+/**
+ * Lưu các tùy chọn xuất hóa đơn mặc định (mẫu số, ký hiệu, loại hóa đơn, hình thức TT)
+ * từ ConfigManager: lưu ngay vào localStorage, đồng bộ tbl_config ở nền (nếu có cột).
+ */
+export const saveMatBaoInvoiceDefaults = ({ khmshDon, khhDon, loaiHDon, hinhThucTT, configId = null }) => {
+  const defaults = {
+    khmshDon: String(khmshDon ?? '').trim() || '1',
+    khhDon: String(khhDon ?? '').trim().toUpperCase() || 'C26TAT',
+    loaiHDon: Number(loaiHDon) === 1 ? 1 : 0,
+    hinhThucTT: String(hinhThucTT ?? '').trim() || 'TM/CK'
+  };
+
+  try {
+    const current = JSON.parse(localStorage.getItem(STORAGE_KEY_CONFIG) || '{}');
+    localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify({ ...current, ...defaults }));
+  } catch (e) {
+    console.warn('Lỗi lưu tùy chọn hóa đơn Mắt Bão:', e);
+  }
+
+  if (invoiceDefaultsDbSupported) {
+    syncInvoiceDefaultsToDb(defaults, configId);
+  }
+
+  return defaults;
 };
 
 /**
@@ -59,25 +168,21 @@ export const saveMatBaoConfig = async (cfg) => {
   localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(cfg));
   localStorage.removeItem(STORAGE_KEY_TOKEN);
 
-  try {
-    const payload = {
-      matbao_base_url: cfg.baseUrl,
-      matbao_mst: cfg.mst,
-      matbao_username: cfg.username,
-      matbao_password: cfg.password,
-      matbao_khmshdon: cfg.khmshDon,
-      matbao_khhdon: cfg.khhDon
-    };
+  const connectionPayload = {
+    matbao_base_url: cfg.baseUrl,
+    matbao_mst: cfg.mst,
+    matbao_username: cfg.username,
+    matbao_password: cfg.password
+  };
 
-    const { data: existing } = await supabase.from('tbl_config').select('id').maybeSingle();
-    if (existing?.id) {
-      await supabase.from('tbl_config').update(payload).eq('id', existing.id);
-    } else {
-      await supabase.from('tbl_config').insert([payload]);
-    }
-  } catch (err) {
-    console.warn('Lỗi khi lưu cấu hình Mắt Bão vào tbl_config:', err);
-  }
+  const invoiceDefaults = {
+    matbao_khmshdon: cfg.khmshDon,
+    matbao_khhdon: cfg.khhDon,
+    matbao_loaihdon: cfg.loaiHDon,
+    matbao_hinhthuctt: cfg.hinhThucTT
+  };
+
+  await saveConfigToDb({ ...connectionPayload, ...invoiceDefaults }, connectionPayload);
 };
 
 /**
@@ -89,35 +194,48 @@ export const resetMatBaoConfig = () => {
   return getEnvMatBaoConfig();
 };
 
-/**
- * Gửi request tới API Mắt Bão DUY NHẤT qua Supabase Edge Function 'matbao-proxy'
- * (Không qua localhost proxy, không gọi trực tiếp từ browser để tránh lộ key và chặn CORS)
- */
-export const callMatBaoApi = async ({ endpoint, method = 'POST', headers = {}, body = null }) => {
-  const config = getMatBaoConfig();
+const MATBAO_FUNCTION_NAME = 'create-einvoice-matbao-truongla';
 
+const getFunctionErrorMessage = async (error) => {
+  let message = error?.message || `Lỗi khi gọi Edge Function ${MATBAO_FUNCTION_NAME}`;
+  try {
+    const response = error?.context;
+    if (response && typeof response.json === 'function') {
+      const payload = await response.json();
+      message = payload?.error || payload?.message || message;
+    }
+  } catch (e) {
+    // Giữ nguyên thông báo gốc nếu không đọc được body lỗi
+  }
+  return message;
+};
+
+// Schema được nhúng lúc build static (vd. trên Render) từ REACT_APP_SUPABASE_SCHEMA,
+// Edge Function dùng giá trị này để đọc đúng tbl_config của từng trường.
+const getClientSchema = () => process.env.REACT_APP_SUPABASE_SCHEMA || 'truongla';
+
+const invokeMatBaoFunction = async (body) => {
   if (!supabase?.functions?.invoke) {
     throw new Error('Supabase client chưa được khởi tạo đúng cách để gọi Edge Function.');
   }
 
-  const { data, error } = await supabase.functions.invoke('matbao-proxy', {
-    body: {
-      schema: process.env.REACT_APP_SUPABASE_SCHEMA || 'truongla',
-      endpoint,
-      method,
-      headers,
-      body,
-      baseUrl: config.baseUrl
-    }
-  });
+  const requestBody = Array.isArray(body) ? body : { ...body, schema: getClientSchema() };
+  const { data, error } = await supabase.functions.invoke(MATBAO_FUNCTION_NAME, { body: requestBody });
 
   if (error) {
-    console.error('[matbaoService] Lỗi Supabase Edge Function matbao-proxy:', error);
-    throw new Error(error.message || 'Lỗi khi gọi Supabase Edge Function matbao-proxy');
+    console.error(`[matbaoService] Lỗi Edge Function ${MATBAO_FUNCTION_NAME}:`, error);
+    throw new Error(await getFunctionErrorMessage(error));
   }
 
   return data;
 };
+
+/**
+ * Gửi request tới API Mắt Bão qua Edge Function 'create-einvoice-matbao-truongla'
+ * (Hàm tự lấy schema từ env và đọc cấu hình matbao_* trong tbl_config)
+ */
+export const callMatBaoApi = async ({ endpoint, method = 'POST', headers = {}, body = null }) =>
+  invokeMatBaoFunction({ endpoint, method, headers, body });
 
 /**
  * Lấy token xác thực từ Mắt Bão (tự động đăng nhập lại nếu hết hạn)
@@ -247,7 +365,6 @@ export const readVNDCurrency = (number) => {
  */
 export const createMatBaoInvoice = async ({ invoice, buyer, items = [], options = {} }) => {
   const config = getMatBaoConfig();
-  const token = await getMatBaoToken();
 
   const now = new Date();
   const dateIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T00:00:00`;
@@ -317,17 +434,11 @@ export const createMatBaoInvoice = async ({ invoice, buyer, items = [], options 
     }
   ];
 
-  const resJson = await callMatBaoApi({
-    endpoint: '/api/invoice/create-invoice',
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    },
-    body: payload
-  });
+  // Edge Function tự đăng nhập Mắt Bão (cấu hình trong tbl_config) và gửi hóa đơn
+  const resJson = await invokeMatBaoFunction({ invoices: payload });
 
-  if (resJson.errorCode !== 200) {
-    throw new Error(resJson.message || 'Lỗi tạo hóa đơn Mắt Bão');
+  if (resJson?.errorCode !== 200) {
+    throw new Error(resJson?.message || resJson?.error || 'Lỗi tạo hóa đơn Mắt Bão');
   }
 
   const resultItem = resJson.data?.[0];

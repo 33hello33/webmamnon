@@ -33,6 +33,7 @@ import {
   QrCode
 } from 'lucide-react';
 import { formatQRTransferContent } from '../utils/qrHelper';
+import { getMatBaoInvoiceDefaults, saveMatBaoInvoiceDefaults } from '../utils/matbaoService';
 import './ConfigManager.css';
 
 const formatCurrency = (val) => {
@@ -287,6 +288,7 @@ const ConfigManager = () => {
 
   useEffect(() => {
     if (config) {
+      const matbaoDefaults = getMatBaoInvoiceDefaults(config);
       setFormData({
         ...config,
         hangmucthu: Array.isArray(config.hangmucthu) ? config.hangmucthu.join('\n') : '',
@@ -312,7 +314,11 @@ const ConfigManager = () => {
         matbao_base_url: config.matbao_base_url || '',
         matbao_mst: config.matbao_mst || '',
         matbao_username: config.matbao_username || '',
-        matbao_password: config.matbao_password || ''
+        matbao_password: config.matbao_password || '',
+        matbao_khmshdon: matbaoDefaults.khmshDon,
+        matbao_khhdon: matbaoDefaults.khhDon,
+        matbao_loaihdon: String(matbaoDefaults.loaiHDon),
+        matbao_hinhthuctt: matbaoDefaults.hinhThucTT
       });
     }
   }, [config]);
@@ -326,8 +332,16 @@ const ConfigManager = () => {
     setLoading(true);
     setMsg({ type: '', text: '' });
 
+    const {
+      matbao_khmshdon,
+      matbao_khhdon,
+      matbao_loaihdon,
+      matbao_hinhthuctt,
+      ...configFields
+    } = formData;
+
     const payload = {
-      ...formData,
+      ...configFields,
       hangmucthu: formData.hangmucthu.split('\n').map(s => s.trim()).filter(s => s),
       hangmucchi: formData.hangmucchi.split('\n').map(s => s.trim()).filter(s => s),
       sonhanvientrogiang: Math.max(0, Math.min(3, parseInt(formData.sonhanvientrogiang) || 0)),
@@ -347,10 +361,16 @@ const ConfigManager = () => {
 
       if (error) throw error;
 
-
+      const matbaoDefaults = saveMatBaoInvoiceDefaults({
+        khmshDon: matbao_khmshdon,
+        khhDon: matbao_khhdon,
+        loaiHDon: matbao_loaihdon,
+        hinhThucTT: matbao_hinhthuctt,
+        configId: existing?.id || null
+      });
 
       setMsg({ type: 'success', text: 'Đã lưu cấu hình hệ thống thành công!' });
-      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tencongty || '_'}, QR Template: ${formData.qr_template || '_'}, SĐT: ${formData.sdtcongty || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'})`);
+      insertLog(`[CẤU HÌNH] Bảng: tbl_config | Chi tiết: Cập nhật cấu hình hệ thống (Tên trường: ${formData.tencongty || '_'}, QR Template: ${formData.qr_template || '_'}, SĐT: ${formData.sdtcongty || '_'}, Ngày quá hạn: ${formData.ngayquahan || '0'}, HĐ Mắt Bão: Mẫu ${matbaoDefaults.khmshDon} - Ký hiệu ${matbaoDefaults.khhDon} - ${matbaoDefaults.loaiHDon === 1 ? 'Phát hành' : 'Nháp'})`);
       refreshConfig();
     } catch (err) {
       console.error(err);
@@ -743,6 +763,9 @@ const ConfigManager = () => {
           <p className="hint" style={{ marginTop: '-8px', marginBottom: '16px' }}>
             Thông tin kết nối phát hành Hóa Đơn Đỏ được lưu trực tiếp vào bảng <code>tbl_config</code> (schema truongla) và sử dụng bởi Supabase Edge Function.
           </p>
+          <p className="hint" style={{ marginTop: '-8px', marginBottom: '16px' }}>
+            Mẫu số, ký hiệu mẫu, loại hóa đơn (Nháp / Phát hành) và hình thức thanh toán là mặc định khi xuất Hóa Đơn Đỏ. Phần &quot;Tùy chọn hóa đơn&quot; trong form xuất hóa đơn sẽ bị khóa và lấy đúng theo cấu hình này.
+          </p>
           <div className="form-grid">
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label>Base API URL</label>
@@ -778,6 +801,43 @@ const ConfigManager = () => {
                 value={formData.matbao_password || ''}
                 onChange={e => setFormData({ ...formData, matbao_password: e.target.value })}
                 placeholder="Nhập mật khẩu tài khoản API Mắt Bão"
+              />
+            </div>
+            <div className="form-group">
+              <label>Mẫu số hóa đơn</label>
+              <input
+                type="text"
+                value={formData.matbao_khmshdon || ''}
+                onChange={e => setFormData({ ...formData, matbao_khmshdon: e.target.value })}
+                placeholder="VD: 1 (Hóa đơn GTGT)"
+              />
+            </div>
+            <div className="form-group">
+              <label>Ký hiệu mẫu hóa đơn</label>
+              <input
+                type="text"
+                value={formData.matbao_khhdon || ''}
+                onChange={e => setFormData({ ...formData, matbao_khhdon: e.target.value.toUpperCase() })}
+                placeholder="VD: C26TAT"
+              />
+            </div>
+            <div className="form-group">
+              <label>Loại hóa đơn khi xuất</label>
+              <select
+                value={String(formData.matbao_loaihdon ?? '0')}
+                onChange={e => setFormData({ ...formData, matbao_loaihdon: e.target.value })}
+              >
+                <option value="0">0 - Hóa đơn nháp (Draft)</option>
+                <option value="1">1 - Phát hành chính thức (Publish)</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Hình thức thanh toán</label>
+              <input
+                type="text"
+                value={formData.matbao_hinhthuctt || ''}
+                onChange={e => setFormData({ ...formData, matbao_hinhthuctt: e.target.value })}
+                placeholder="VD: TM/CK"
               />
             </div>
           </div>

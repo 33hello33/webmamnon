@@ -166,7 +166,7 @@ const updateGeneratedImageUrl = async (tableName, studentId, recordId, imageUrl)
 };
 
 export default function FinanceManager({ activeSubTab, setActiveSubTab, currentUser }) {
-   const { config } = useConfig();
+   const { config, getTienAnConfig } = useConfig();
 
    const [downloadingInvoice, setDownloadingInvoice] = useState(null);
    const [downloadingNotice, setDownloadingNotice] = useState(null);
@@ -636,10 +636,18 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
    // MATBAO HDDT HANDLERS
    const handleOpenMatbaoModal = async (record) => {
-      let hv = hvMap[record.mahv] || {};
-      if (record.mahv && (!hv.cccd || !hv.diachi || !hv.hotenba)) {
+      const mahv = String(record.mahv || '').trim();
+      let hv = { ...(hvMap[mahv] || {}) };
+
+      // Luôn lấy thông tin mới nhất (CCCD, địa chỉ, phụ huynh) từ hồ sơ học sinh
+      if (mahv) {
          try {
-            const { data: freshHv } = await supabase.from('tbl_hv').select('*').eq('mahv', record.mahv).maybeSingle();
+            const { data: freshHv, error: hvErr } = await supabase
+               .from('tbl_hv')
+               .select('mahv, tenhv, sdtba, sdtme, sdt, hotenba, tenme, cccd, diachi')
+               .eq('mahv', mahv)
+               .maybeSingle();
+            if (hvErr) throw hvErr;
             if (freshHv) {
                hv = { ...hv, ...freshHv, sdt: freshHv.sdtba || freshHv.sdtme || freshHv.sdt || hv.sdt };
             }
@@ -663,31 +671,33 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          tenHocPhi = `HỌC PHÍ THÁNG ${mm}/${yyyy}`;
       }
 
-      // Xác định khoảng thời gian của tháng để đếm số ngày điểm danh có mặt
-      let statsStart = '';
-      let statsEnd = '';
+      // Thống kê điểm danh lấy theo THÁNG TRƯỚC của tháng học phí
+      // VD: phiếu thu học phí tháng 10/2026 -> đếm điểm danh tháng 09/2026
       const matchMonth = (record.thoiluong || '').match(/(\d{1,2})[\/\-](\d{4})/);
+      let refYear;
+      let refMonth;
       if (matchMonth) {
-         const m = parseInt(matchMonth[1], 10);
-         const y = parseInt(matchMonth[2], 10);
-         const lastD = new Date(y, m, 0).getDate();
-         const mm = String(m).padStart(2, '0');
-         statsStart = `${y}-${mm}-01`;
-         statsEnd = `${y}-${mm}-${String(lastD).padStart(2, '0')}`;
-      } else if (record.ngaybatdau && record.ngayketthuc) {
-         statsStart = String(record.ngaybatdau).slice(0, 10);
-         statsEnd = String(record.ngayketthuc).slice(0, 10);
+         refMonth = parseInt(matchMonth[1], 10);
+         refYear = parseInt(matchMonth[2], 10);
       } else {
-         const d = record.ngaylap ? new Date(record.ngaylap) : new Date();
-         const y = d.getFullYear();
-         const m = d.getMonth() + 1;
-         const lastD = new Date(y, m, 0).getDate();
-         statsStart = `${y}-${String(m).padStart(2, '0')}-01`;
-         statsEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastD).padStart(2, '0')}`;
+         const d = record.ngaybatdau ? new Date(record.ngaybatdau) : (record.ngaylap ? new Date(record.ngaylap) : new Date());
+         refYear = d.getFullYear();
+         refMonth = d.getMonth() + 1;
       }
 
-      // Đếm số ngày điểm danh có mặt
-      let soNgayCoMat = 0;
+      let statsMonth = refMonth - 1;
+      let statsYear = refYear;
+      if (statsMonth < 1) {
+         statsMonth = 12;
+         statsYear -= 1;
+      }
+      const lastD = new Date(statsYear, statsMonth, 0).getDate();
+      const statsMm = String(statsMonth).padStart(2, '0');
+      const statsStart = `${statsYear}-${statsMm}-01`;
+      const statsEnd = `${statsYear}-${statsMm}-${String(lastD).padStart(2, '0')}`;
+
+      // Đếm số ngày nghỉ phép trong tháng để trừ tiền ăn
+      let soNgayNghi = 0;
       if (record.mahv && statsStart && statsEnd) {
          try {
             const { data: attList } = await supabase
@@ -700,11 +710,11 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             const daysSet = new Set();
             (attList || []).forEach(att => {
                const st = (att.trangthai || '').trim().toLowerCase();
-               if (st === 'có mặt' || st === 'comat') {
-                  if (!daysSet.has(att.ngay)) {
-                     daysSet.add(att.ngay);
-                     soNgayCoMat++;
-                  }
+               const isExcusedLeave = st === 'nghỉ phép' || st === 'nghiphep'
+                  || st === 'vắng phép' || st === 'vangp';
+               if (isExcusedLeave && !daysSet.has(att.ngay)) {
+                  daysSet.add(att.ngay);
+                  soNgayNghi++;
                }
             });
          } catch (e) {
@@ -712,10 +722,14 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
       }
 
-      // Đơn giá dòng 1 (học phí) = tổng cộng của phiếu thu
-      const donGiaHocPhi = pCur(record.tongcong || record.dadong || record.hocphi);
-      // Đơn giá dòng 2 (tiền ăn) = số ngày điểm danh có mặt * 30,000
-      const donGiaTienAn = soNgayCoMat * 30000;
+      // Tiền ăn mặc định 910,000đ/tháng, mỗi ngày nghỉ phép trừ 35,000đ
+      const DEFAULT_MONTHLY_MEAL = 910000;
+      const configuredMealDeduction = Number(getTienAnConfig?.(record.hocphi)?.tru_nghi) || 0;
+      const mealDeductionPerDay = configuredMealDeduction > 0 ? configuredMealDeduction : 35000;
+      const donGiaTienAn = Math.max(0, DEFAULT_MONTHLY_MEAL - soNgayNghi * mealDeductionPerDay);
+      // Học phí = tổng cộng phiếu thu - tiền ăn
+      const tongPhieuThu = pCur(record.tongcong || record.dadong || record.hocphi);
+      const donGiaHocPhi = Math.max(0, tongPhieuThu - donGiaTienAn);
 
       const items = [
          {
@@ -736,16 +750,16 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          }
       ];
 
-      // Buyer profile (kèm CCCD từ tbl_hv.cccd)
+      // Buyer profile (kèm CCCD & địa chỉ từ hồ sơ học sinh)
       const buyer = {
          ten: hv.tenhv || record.tenhv || 'Khách hàng',
          nguoiMua: hv.hotenba || hv.tenme || hv.tenhv || '',
          sdt: hv.sdtba || hv.sdtme || hv.sdt || record.sdt || '',
-         diachi: hv.diachi || '',
+         diachi: hv.diachi || record.diachi || '',
          mst: '',
          email: '',
-         mahv: record.mahv || '',
-         cccd: hv.cccd || ''
+         mahv,
+         cccd: hv.cccd || record.cccd || ''
       };
 
       setMatbaoModal({
@@ -755,10 +769,10 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
             buyer,
             items,
             options: {
-               mauSo: matbaoCfg.khmshDon || '2',
-               kiHieu: matbaoCfg.khhDon || 'C26TLL',
-               loaiHDon: Number(matbaoCfg.loaiHDon || 0),
-               hinhThucTT: 'TM/CK',
+               mauSo: matbaoCfg.khmshDon || '1',
+               kiHieu: matbaoCfg.khhDon || 'C26TAT',
+               loaiHDon: Number(matbaoCfg.loaiHDon) === 1 ? 1 : 0,
+               hinhThucTT: matbaoCfg.hinhThucTT || 'TM/CK',
                ghiChu: `Thu học phí ${record.thoiluong || ''} - Mã phiếu ${record.mahd}`.trim()
             }
          }
@@ -4159,15 +4173,8 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                         <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>Mật khẩu (*)</label>
                         <input type="password" required value={matbaoConfigModal.data?.password || ''} onChange={e => setMatbaoConfigModal(prev => ({ ...prev, data: { ...prev.data, password: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="Mật khẩu tài khoản API" />
                      </div>
-                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                        <div>
-                           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>Mẫu số mặc định</label>
-                           <input type="text" value={matbaoConfigModal.data?.khmshDon || '1'} onChange={e => setMatbaoConfigModal(prev => ({ ...prev, data: { ...prev.data, khmshDon: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="1" />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>Ký hiệu mẫu mặc định</label>
-                           <input type="text" value={matbaoConfigModal.data?.khhDon || 'C26TAT'} onChange={e => setMatbaoConfigModal(prev => ({ ...prev, data: { ...prev.data, khhDon: e.target.value } }))} style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }} placeholder="C26TAT" />
-                        </div>
+                     <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#1e40af', lineHeight: 1.5 }}>
+                        Mẫu số, ký hiệu mẫu, loại hóa đơn (Nháp / Phát hành) và hình thức thanh toán được cấu hình tại <b>Cấu hình hệ thống → Hóa Đơn Điện Tử Mắt Bão</b>.
                      </div>
                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
                         <button type="button" onClick={() => {
