@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import * as XLSX from 'xlsx';
+import axios from 'axios';
 import {
   Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
 } from 'lucide-react';
@@ -17,8 +18,11 @@ import { generateVietQRUrl } from '../utils/qrHelper';
 import { fetchImageAsBase64 } from '../utils/qrImage';
 import { calculateFeedingDays } from '../utils/mealFeeUtils';
 import { fetchHolidayDatesForYears } from '../utils/holidays';
+import { findZaloRecipient } from '../services/zaloHelper';
 import SurchargeRegistration from './SurchargeRegistration';
 import './ClassManager.css';
+
+const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
 const convertImageToDataUrl = async (url) => {
   if (!url || typeof url !== 'string') return null;
@@ -466,6 +470,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     statsPeriod: ''
   });
   const [batchHinhThucFilter, setBatchHinhThucFilter] = useState('Tất cả');
+  const [batchSendZaloAuto, setBatchSendZaloAuto] = useState(true);
   const [batchStudentsData, setBatchStudentsData] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [noticesToPrint, setNoticesToPrint] = useState([]);
@@ -1186,6 +1191,9 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           mahv: studentId,
           tenhv: masterStudent.tenhv || row.tenhv,
           sdt: masterStudent.sdt || '',
+          sdtme: masterStudent.sdtme || '',
+          sdtba: masterStudent.sdtba || '',
+          sendZalo: batchSendZaloAuto,
           tenlop: selectedClass?.tenlop || '',
           thoiluong: tl,
           ngaylap: localNow,
@@ -1292,6 +1300,80 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     if (noticesToPrint.length > 0 && !isProcessingRef.current) {
       isProcessingRef.current = true;
       const processPngs = async () => {
+        const zaloStats = { sent: 0, failed: 0 };
+
+        const saveNoticeImage = async (dataUrl, notice) => {
+          const cleanFileName = `${Date.now()}_${notice.mahd}.jpg`;
+          const blob = dataUrlToBlob(dataUrl);
+          const pngFile = new File([blob], cleanFileName, { type: 'image/png' });
+          const file = await compressImage(pngFile, 150);
+
+          let imageUrl = '';
+          let r2Failed = false;
+          if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
+            try {
+              imageUrl = await uploadToR2(
+                file,
+                config.r2_endpoint,
+                config.r2_access_key_id,
+                config.r2_secret_access_key,
+                config.r2_bucket_name,
+                config.r2_public_url
+              );
+              if (!imageUrl) r2Failed = true;
+            } catch (e) {
+              console.warn('Lỗi R2, chuyển sang Supabase', e);
+              r2Failed = true;
+            }
+          }
+          if (!config?.r2_enabled || r2Failed) {
+            const path = `${SUPABASE_SCHEMA}/notice-images/${notice.mahv}/${cleanFileName}`;
+            const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
+            if (upErr) throw upErr;
+            const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
+            imageUrl = publicUrl;
+          }
+
+          const { error: noticeUpdateErr } = await supabase
+            .from('tbl_thongbao')
+            .update({ image_url: imageUrl })
+            .eq('mahv', notice.mahv)
+            .eq('mahd', notice.mahd);
+          if (noticeUpdateErr) {
+            console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
+          }
+
+          if (notice.sendZalo) {
+            try {
+              const recipient = await findZaloRecipient({
+                mahv: notice.mahv,
+                sdtme: notice.sdtme,
+                sdtba: notice.sdtba,
+                zaloBackendUrl: ZALO_BACKEND_URL
+              });
+              if (recipient.found && recipient.targetId) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('threadId', recipient.targetId);
+                formData.append('threadType', 'user');
+                formData.append('caption', `Thông báo thu học phí ${notice.tenhv} - Số phiếu ${notice.mahd}`);
+                await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
+                  headers: { 'Content-Type': 'multipart/form-data' },
+                  timeout: 30000
+                });
+                insertLog(`[THÔNG BÁO] Đã gửi thông báo ${notice.mahd} qua Zalo cho học viên ${notice.tenhv} (${notice.mahv})`);
+                zaloStats.sent += 1;
+              } else {
+                console.warn('[Zalo] Không tìm thấy tài khoản Zalo cho học sinh:', notice.mahv, recipient.error);
+                zaloStats.failed += 1;
+              }
+            } catch (zaloErr) {
+              console.error('[Zalo] Lỗi gửi ảnh thông báo qua Zalo:', zaloErr);
+              zaloStats.failed += 1;
+            }
+          }
+        };
+
         try {
           await new Promise(r => setTimeout(r, 3500));
 
@@ -1408,46 +1490,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                   document.body.removeChild(link);
 
                   try {
-                    const cleanFileName = `${Date.now()}_${notice.mahd}.jpg`;
-                    const blob = dataUrlToBlob(dataUrl);
-                    const pngFile = new File([blob], cleanFileName, { type: 'image/png' });
-                    const file = await compressImage(pngFile, 150);
-
-                    let imageUrl = '';
-                    let r2Failed = false;
-                    if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
-                      try {
-                        imageUrl = await uploadToR2(
-                          file,
-                          config.r2_endpoint,
-                          config.r2_access_key_id,
-                          config.r2_secret_access_key,
-                          config.r2_bucket_name,
-                          config.r2_public_url
-                        );
-                        if (!imageUrl) r2Failed = true;
-                      } catch (e) {
-                        console.warn('Lỗi R2, chuyển sang Supabase', e);
-                        r2Failed = true;
-                      }
-                    }
-                    if (!config?.r2_enabled || r2Failed) {
-                      const path = `${SUPABASE_SCHEMA}/notice-images/${notice.mahv}/${cleanFileName}`;
-                      const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
-                      if (upErr) throw upErr;
-                      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
-                      imageUrl = publicUrl;
-                    }
-
-                    const { error: noticeUpdateErr } = await supabase
-                      .from('tbl_thongbao')
-                      .update({ image_url: imageUrl })
-                      .eq('mahv', notice.mahv)
-                      .eq('mahd', notice.mahd);
-                    if (noticeUpdateErr) {
-                      console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
-                    }
-
+                    await saveNoticeImage(dataUrl, notice);
                   } catch (autoSendErr) {
                     console.error(`Notice image save error for ${notice.tenhv}:`, autoSendErr);
                   }
@@ -1463,46 +1506,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     document.body.removeChild(link);
 
                     try {
-                      const cleanFileName = `${Date.now()}_${notice.mahd}.jpg`;
-                      const blob = dataUrlToBlob(retryUrl);
-                      const pngFile = new File([blob], cleanFileName, { type: 'image/png' });
-                      const file = await compressImage(pngFile, 150);
-
-                      let imageUrl = '';
-                      let r2Failed = false;
-                      if (config?.r2_endpoint && config?.r2_access_key_id && config?.r2_secret_access_key && config?.r2_bucket_name) {
-                        try {
-                          imageUrl = await uploadToR2(
-                            file,
-                            config.r2_endpoint,
-                            config.r2_access_key_id,
-                            config.r2_secret_access_key,
-                            config.r2_bucket_name,
-                            config.r2_public_url
-                          );
-                          if (!imageUrl) r2Failed = true;
-                        } catch (e) {
-                          console.warn('Lỗi R2 (retry), chuyển sang Supabase', e);
-                          r2Failed = true;
-                        }
-                      }
-                      if (!config?.r2_enabled || r2Failed) {
-                        const path = `${SUPABASE_SCHEMA}/notice-images/${notice.mahv}/${cleanFileName}`;
-                        const { error: upErr } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
-                        if (upErr) throw upErr;
-                        const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path);
-                        imageUrl = publicUrl;
-                      }
-
-                      const { error: noticeUpdateErr } = await supabase
-                        .from('tbl_thongbao')
-                        .update({ image_url: imageUrl })
-                        .eq('mahv', notice.mahv)
-                        .eq('mahd', notice.mahd);
-                      if (noticeUpdateErr) {
-                        console.warn(`Không cập nhật được image_url cho thông báo ${notice.mahd}:`, noticeUpdateErr);
-                      }
-
+                      await saveNoticeImage(retryUrl, notice);
                     } catch (autoSendErr) {
                       console.error(`Retry notice image save error for ${notice.tenhv}:`, autoSendErr);
                     }
@@ -1516,7 +1520,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
             // Nghỉ ngắn giữa các lần tải để tránh quá tải trình duyệt
             await new Promise(r => setTimeout(r, 800));
           }
-          showMessage('success', 'Đã tải xong hình ảnh thông báo!');
+          if (zaloStats.sent > 0 || zaloStats.failed > 0) {
+            showMessage('success', `Đã tải xong hình ảnh thông báo! Zalo: gửi thành công ${zaloStats.sent}, không gửi được ${zaloStats.failed}.`);
+          } else {
+            showMessage('success', 'Đã tải xong hình ảnh thông báo!');
+          }
         } catch (err) {
           console.error('Lỗi PNG:', err);
           showMessage('error', 'Lỗi khi lưu tập tin hình ảnh: ' + err.message);
@@ -2794,7 +2802,19 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, borderTop: '1px solid #e2e8f0', padding: '10px 25px 10px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
+            <div className="modal-footer" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, borderTop: '1px solid #e2e8f0', padding: '10px 25px 10px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', background: '#f8fafc' }}>
+              <label
+                title="Tự động gửi ảnh thông báo qua Zalo ngay khi xuất (tìm theo alias mã HV, sau đó SĐT mẹ, cuối cùng SĐT ba)"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: 'auto', cursor: 'pointer', fontWeight: 700, color: batchSendZaloAuto ? '#0284c7' : '#94a3b8', userSelect: 'none' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={batchSendZaloAuto}
+                  onChange={(e) => setBatchSendZaloAuto(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#0284c7' }}
+                />
+                <span>Tự động gửi Zalo cho phụ huynh khi xuất</span>
+              </label>
               <button className="btn btn-outline" onClick={() => setIsBatchNoticeOpen(false)} style={{ padding: '0 20px', height: '40px', fontWeight: 600 }}>Đóng lại</button>
               <button
                 className="btn btn-success"
