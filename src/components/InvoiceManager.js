@@ -17,6 +17,7 @@ import { parseNgoaiKhoaCloseSnapshot } from '../utils/ngoaiKhoaUtils';
 import { generateVietQRUrl } from '../utils/qrHelper';
 import { calculateFeedingDays } from '../utils/mealFeeUtils';
 import { fetchHolidayDatesForYears } from '../utils/holidays';
+import { buildZaloCaption } from '../utils/zaloMessage';
 
 const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
@@ -672,7 +673,11 @@ export default function InvoiceManager({
                               formData.append('file', file);
                               formData.append('threadId', recipient.targetId);
                               formData.append('threadType', 'user');
-                              formData.append('caption', `Biên lai thu học phí ${downloadingInvoice.tenhv} - Số phiếu ${downloadingInvoice.mahd}`);
+                              formData.append('caption', buildZaloCaption(
+                                 configRef.current?.zalobienlai,
+                                 { tenhv: downloadingInvoice.tenhv, mahv: downloadingInvoice.mahv, mahd: downloadingInvoice.mahd },
+                                 `Biên lai thu học phí ${downloadingInvoice.tenhv} - Số phiếu ${downloadingInvoice.mahd}`
+                              ));
                               await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
                                  headers: { 'Content-Type': 'multipart/form-data' },
                                  timeout: 30000
@@ -853,7 +858,11 @@ export default function InvoiceManager({
                               formData.append('file', file);
                               formData.append('threadId', recipient.targetId);
                               formData.append('threadType', 'user');
-                              formData.append('caption', `Thông báo thu học phí ${downloadingNotice.tenhv} - Số phiếu ${downloadingNotice.mahd}`);
+                              formData.append('caption', buildZaloCaption(
+                                 configRef.current?.zalothongbaohp,
+                                 { tenhv: downloadingNotice.tenhv, mahv: downloadingNotice.mahv, mahd: downloadingNotice.mahd },
+                                 `Thông báo thu học phí ${downloadingNotice.tenhv} - Số phiếu ${downloadingNotice.mahd}`
+                              ));
                               await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
                                  headers: { 'Content-Type': 'multipart/form-data' },
                                  timeout: 30000

@@ -19,6 +19,7 @@ import { fetchImageAsBase64 } from '../utils/qrImage';
 import { calculateFeedingDays } from '../utils/mealFeeUtils';
 import { fetchHolidayDatesForYears } from '../utils/holidays';
 import { findZaloRecipient } from '../services/zaloHelper';
+import { buildZaloCaption } from '../utils/zaloMessage';
 import SurchargeRegistration from './SurchargeRegistration';
 import './ClassManager.css';
 
@@ -1356,7 +1357,11 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                 formData.append('file', file);
                 formData.append('threadId', recipient.targetId);
                 formData.append('threadType', 'user');
-                formData.append('caption', `Thông báo thu học phí ${notice.tenhv} - Số phiếu ${notice.mahd}`);
+                formData.append('caption', buildZaloCaption(
+                  config?.zalothongbaohp,
+                  { tenhv: notice.tenhv, mahv: notice.mahv, mahd: notice.mahd },
+                  `Thông báo thu học phí ${notice.tenhv} - Số phiếu ${notice.mahd}`
+                ));
                 await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
                   headers: { 'Content-Type': 'multipart/form-data' },
                   timeout: 30000
