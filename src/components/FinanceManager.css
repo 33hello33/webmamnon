@@ -825,7 +825,7 @@
   }
 }
 
-.p-header {
+.print-a5-receipt .p-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -893,7 +893,7 @@
     align-items: baseline;
   }
 
-  .p-label {
+  .print-a5-receipt .p-label {
     min-width: 140px;
     display: inline-block;
   }

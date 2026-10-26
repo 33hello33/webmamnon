@@ -1036,7 +1036,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                         <td className="p-right">{fCur(thucNhan)} đ</td>
                      </tr>
                      <tr>
-                        <td className="p-label" style={{ width: '22%' }}>Bằng chữ</td>
+                        <td className="p-label">Bằng chữ</td>
                         <td className="p-italic">{bangChuText}</td>
                      </tr>
                      {formData.ghichu && (

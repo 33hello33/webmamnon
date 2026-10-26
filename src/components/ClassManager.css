@@ -665,7 +665,7 @@
   color: #000 !important;
 }
 
-.p-header {
+.print-a5-receipt .p-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: flex-start !important;

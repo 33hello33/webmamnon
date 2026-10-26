@@ -922,22 +922,23 @@
   }
 
   .print-pay-slip-a4 .p-header {
+    display: block !important;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     border-bottom: 2px solid #000;
-    padding-bottom: 10px;
+    padding-bottom: 8px;
   }
 
   .print-pay-slip-a4 .p-header h3 {
     margin: 0;
-    font-size: 16pt;
+    font-size: 15pt;
     font-weight: 800;
     text-transform: uppercase;
   }
 
   .print-pay-slip-a4 .p-header p {
-    margin: 6px 0 0 0;
-    font-size: 13pt;
+    margin: 4px 0 0 0;
+    font-size: 12pt;
     font-weight: bold;
   }
 
@@ -972,8 +973,9 @@
   .print-pay-slip-a4 .p-footer {
     display: flex;
     justify-content: space-between;
-    margin-top: 40px;
+    margin-top: 20px;
     page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   .print-pay-slip-a4 .p-sig {
@@ -989,8 +991,8 @@
     font-size: 10pt;
     letter-spacing: 0.4px;
     text-transform: uppercase;
-    padding: 5px 8px;
-    margin-top: 10px;
+    padding: 4px 8px;
+    margin-top: 8px;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -999,13 +1001,15 @@
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
   .print-pay-slip-a4 .p-net-table {
-    margin-top: 10px;
-    margin-bottom: 18px;
+    margin-top: 8px;
+    margin-bottom: 12px;
   }
 
   .print-pay-slip-a4 .p-col-stt {
@@ -1030,8 +1034,8 @@
   .print-pay-slip-a4 .p-day-table th,
   .print-pay-slip-a4 .p-day-table td {
     border: 1px solid #000 !important;
-    padding: 5px 8px;
-    font-size: 10.5pt;
+    padding: 4px 8px;
+    font-size: 10pt;
     color: #000 !important;
   }
 
@@ -1041,6 +1045,12 @@
     text-align: center;
     font-size: 9.5pt;
     line-height: 1.2;
+  }
+
+  /* `.p-label` is also used by the A5 receipt templates — keep these cells as real table cells */
+  .print-pay-slip-a4 .p-day-table td.p-label {
+    display: table-cell;
+    min-width: 0;
   }
 
   .print-pay-slip-a4 .p-day-table .p-label {
@@ -1074,6 +1084,10 @@
 
   .print-pay-slip-a4 .p-day-table .p-italic {
     font-style: italic;
+  }
+
+  .print-pay-slip-a4 .p-net-table tr.p-net td:first-child {
+    white-space: nowrap;
   }
 
   .text-right {
