@@ -1517,7 +1517,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     cacheBust: false,
                     backgroundColor: '#ffffff',
                     width: 800,
-                    height: 1150,
                     filter: (domNode) => {
                       if (domNode.tagName === 'IMG' && domNode.dataset.error === 'true') {
                         return false;
@@ -1531,7 +1530,6 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                     cacheBust: false,
                     backgroundColor: '#ffffff',
                     width: 800,
-                    height: 1150,
                     filter: (domNode) => {
                       if (domNode.tagName === 'IMG') {
                         return Boolean(domNode.src && domNode.src.startsWith('data:'));
