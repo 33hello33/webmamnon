@@ -20,6 +20,16 @@ import { calculateFeedingDays } from '../utils/mealFeeUtils';
 import { fetchHolidayDatesForYears } from '../utils/holidays';
 import { findZaloRecipient } from '../services/zaloHelper';
 import { buildZaloCaption } from '../utils/zaloMessage';
+import {
+  DISCOUNT_TYPES,
+  buildDiscountSelectOptions,
+  calcStudentDiscountAmount,
+  getDiscountSelectValue,
+  getStudentDiscountType,
+  parseStudentDiscount,
+  parseStudentDiscountLevels,
+  resolveDiscountValue
+} from '../utils/studentDiscount';
 import SurchargeRegistration from './SurchargeRegistration';
 import './ClassManager.css';
 
@@ -839,20 +849,24 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         const surchargeSum = sumSurcharges(phuthu);
 
         let giamhocphi = 0;
-        const base_giamhp_percent = parseFloat(studentRaw['giamhp%']) || 0;
+        const studentDiscountLevels = parseStudentDiscountLevels(studentRaw.giamhp);
+        const studentDiscount = studentDiscountLevels[0] || { phantram: 0, sotien: 0 };
+        const base_giamhp_percent = studentDiscount.phantram;
+        const base_giamhp_amount = studentDiscount.sotien;
         let giamhp_percent = base_giamhp_percent;
+        let discountMode = getStudentDiscountType(studentRaw.giamhp);
         if (diHoc >= 10) {
           // >= 10 ngày: giữ nguyên logic cũ
-          if (giamhp_percent > 0) {
-            giamhocphi = Math.round((initHocPhi * giamhp_percent) / 100);
-          }
+          giamhocphi = calcStudentDiscountAmount(initHocPhi, studentDiscount);
         } else if (diHoc >= 5 && diHoc <= 9) {
           // 5-9 buổi: chỉ đóng 50% học phí (tự điền vào ô giảm học phí 50%)
           giamhp_percent = 50;
+          discountMode = DISCOUNT_TYPES.PERCENT;
           giamhocphi = Math.round(initHocPhi * 0.5);
         } else {
           // < 5 buổi: chỉ đóng 30% học phí (tự điền vào ô giảm học phí 70%)
           giamhp_percent = 70;
+          discountMode = DISCOUNT_TYPES.PERCENT;
           giamhocphi = Math.round(initHocPhi * 0.7);
         }
 
@@ -866,6 +880,10 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           giamhocphi,
           giamhp_percent,
           base_giamhp_percent,
+          base_giamhp_amount,
+          studentDiscount,
+          studentDiscountLevels,
+          discountMode,
           noCu: stNoCu,
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
@@ -1022,15 +1040,17 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
         let ghp = 0;
         let giamhp_percent = row.base_giamhp_percent || 0;
+        let discountMode = row.discountMode || getStudentDiscountType(row.studentDiscount);
+        const rowDiscount = parseStudentDiscount(row.studentDiscount);
         if (diHoc >= 10) {
-          if (giamhp_percent > 0) {
-            ghp = Math.round((hp * giamhp_percent) / 100);
-          }
+          ghp = calcStudentDiscountAmount(hp, rowDiscount);
         } else if (diHoc >= 5 && diHoc <= 9) {
           giamhp_percent = 50;
+          discountMode = DISCOUNT_TYPES.PERCENT;
           ghp = Math.round(hp * 0.5);
         } else {
           giamhp_percent = 70;
+          discountMode = DISCOUNT_TYPES.PERCENT;
           ghp = Math.round(hp * 0.7);
         }
 
@@ -1040,6 +1060,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           feedingDays,
           giamhocphi: ghp,
           giamhp_percent,
+          discountMode,
           truTienAn: mealRefund,
           truHocPhi: tuitionRefund,
           truTienDaNgoai,
@@ -1087,8 +1108,15 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const truTienDaNgoai = parseInt(item.truTienDaNgoai || 0);
 
       let calculatedGiamHocPhi = parseInt(batchNoticeData.giamHocphi) || 0;
-      if (!calculatedGiamHocPhi && item.giamhp_percent > 0) {
-        calculatedGiamHocPhi = Math.round((hpNumber * item.giamhp_percent) / 100);
+      if (!calculatedGiamHocPhi) {
+        const priceDiscountMode = item.discountMode || getStudentDiscountType(item.studentDiscount);
+        if (priceDiscountMode === DISCOUNT_TYPES.AMOUNT) {
+          calculatedGiamHocPhi = parseInt(item.giamhocphi) || 0;
+        } else if (priceDiscountMode === 'custom') {
+          calculatedGiamHocPhi = parseInt(item.giamhocphi) || 0;
+        } else if (item.giamhp_percent > 0) {
+          calculatedGiamHocPhi = Math.round((hpNumber * item.giamhp_percent) / 100);
+        }
       }
 
       const tc = Math.max(0, hpNumber + studentTienAn + currentNoCu + surchargeSum - calculatedGiamHocPhi - recalculatedMealRefund - (item.truHocPhi || 0) - truTienDaNgoai);
@@ -1118,7 +1146,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         
         let newItem = { ...item };
         
-        if (field === 'phuthu_name') {
+        if (field === 'discountSelect') {
+           const resolved = resolveDiscountValue(cleanVal, newItem.hocphi);
+           if (resolved) {
+             newItem.giamhocphi = resolved.giamHocphi;
+             newItem.giamhp_percent = resolved.discountPercent;
+             if (resolved.discountPercent > 0) newItem.discountMode = DISCOUNT_TYPES.PERCENT;
+             else if (resolved.giamHocphi > 0) newItem.discountMode = DISCOUNT_TYPES.AMOUNT;
+             else newItem.discountMode = 'none';
+           } else {
+             newItem.discountMode = 'custom';
+           }
+        } else if (field === 'phuthu_name') {
            if (!newItem.phuthu) newItem.phuthu = [];
            if (!newItem.phuthu[0]) newItem.phuthu[0] = {name: '', amount: 0};
            newItem.phuthu[0].name = cleanVal;
@@ -1145,12 +1184,16 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
           newItem.truTienAn = Math.round(((((newItem.diemDanhInfo?.nghiPhep || 0) * mealRate)) / 1000)) * 1000;
         }
 
+        if (field === 'giamhocphi') {
+          newItem.discountMode = 'custom';
+        }
+
         if (field === 'hocphi') {
-          if (newItem.giamhp_percent > 0) {
+          if (newItem.discountMode === DISCOUNT_TYPES.PERCENT && newItem.giamhp_percent > 0) {
             newItem.giamhocphi = Math.round((cleanVal * newItem.giamhp_percent) / 100);
           }
         }
-        if (['hocphi', 'tienAn', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn'].includes(field)) {
+        if (['hocphi', 'tienAn', 'giamhocphi', 'truTienAn', 'truHocPhi', 'truTienDaNgoai', 'noCu', 'phuthu_amount', 'mucTienAn', 'discountSelect'].includes(field)) {
           const hp = parseInt(newItem.hocphi || 0);
           const ta = parseInt(newItem.tienAn || 0);
           const ghp = parseInt(newItem.giamhocphi || 0);
@@ -1166,6 +1209,18 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       return item;
     }));
   };
+
+  const getBatchRowDiscountValue = (row) => getDiscountSelectValue({
+    mode: row.discountMode,
+    discountPercent: row.giamhp_percent,
+    giamHocphi: row.giamhocphi
+  });
+
+  const getBatchRowDiscountOptions = (row) => buildDiscountSelectOptions(
+    row.studentDiscountLevels || row.studentDiscount,
+    getBatchRowDiscountValue(row),
+    { compact: true }
+  );
 
   const handleRemoveBatchStudent = (mahv) => {
     setBatchStudentsData(prev => prev.filter(item => item.mahv !== mahv));
@@ -2654,7 +2709,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                           <th style={{ width: '100px', whiteSpace: 'nowrap' }}>CM/P/KP</th>
                           <th style={{ minWidth: '130px' }}>Nợ cũ</th>
                           <th style={{ minWidth: '130px' }}>Học phí</th>
-                          <th style={{ minWidth: '130px' }}>Giảm HP</th>
+                          <th style={{ minWidth: '150px' }}>Giảm HP</th>
                           <th style={{ width: '80px' }}>Nghỉ LT</th>
                           <th style={{ minWidth: '150px' }}>Mức Tiền Ăn</th>
                           <th style={{ minWidth: '130px' }}>Tiền Ăn</th>
@@ -2704,13 +2759,38 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
                                 />
                               </td>
                               <td>
-                                <input
-                                  type="text"
-                                  value={formatTuition(row.giamhocphi)}
-                                  onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
-                                  className="td-input"
-                                  style={{ width: '100%', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}
-                                />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', width: '100%', minWidth: 0, overflow: 'hidden', boxSizing: 'border-box' }}>
+                                  <select
+                                    value={getBatchRowDiscountValue(row)}
+                                    onChange={e => handleBatchStudentChange(row.mahv, 'discountSelect', e.target.value)}
+                                    style={{
+                                      width: '100%',
+                                      maxWidth: '100%',
+                                      boxSizing: 'border-box',
+                                      padding: '4px 2px',
+                                      borderRadius: '4px',
+                                      border: '1px solid #fecaca',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 600,
+                                      color: '#b91c1c',
+                                      background: '#fef2f2',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {getBatchRowDiscountOptions(row).map(opt => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                  {row.discountMode === 'custom' && (
+                                    <input
+                                      type="text"
+                                      value={formatTuition(row.giamhocphi)}
+                                      onChange={e => handleBatchStudentChange(row.mahv, 'giamhocphi', e.target.value)}
+                                      className="td-input"
+                                      style={{ width: '100%', boxSizing: 'border-box', border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px', textAlign: 'right', fontWeight: 600, color: '#dc2626', whiteSpace: 'nowrap' }}
+                                    />
+                                  )}
+                                </div>
                               </td>
                               <td style={{ fontWeight: 700, color: '#f59e0b' }}>{row.nghiLienTiep || 0} n</td>
                               <td>

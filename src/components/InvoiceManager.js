@@ -18,6 +18,13 @@ import { generateVietQRUrl } from '../utils/qrHelper';
 import { calculateFeedingDays } from '../utils/mealFeeUtils';
 import { fetchHolidayDatesForYears } from '../utils/holidays';
 import { buildZaloCaption } from '../utils/zaloMessage';
+import {
+  buildDiscountSelectOptions,
+  calcStudentDiscountAmount,
+  detectDiscountValue,
+  parseStudentDiscount,
+  resolveDiscountValue
+} from '../utils/studentDiscount';
 
 const ZALO_BACKEND_URL = process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
 
@@ -1189,10 +1196,14 @@ export default function InvoiceManager({
             }
          }
 
-         if (!foundDiscount && student['giamhp%'] && parseFloat(student['giamhp%']) > 0) {
-            discountPercent = parseFloat(student['giamhp%']);
-            giamHocphi = Math.round((hocphi * discountPercent) / 100);
-            foundDiscount = true;
+         if (!foundDiscount) {
+            const studentDiscount = parseStudentDiscount(student.giamhp);
+            const studentDiscountAmount = calcStudentDiscountAmount(hocphi, studentDiscount);
+            if (studentDiscountAmount > 0) {
+               discountPercent = studentDiscount.phantram;
+               giamHocphi = studentDiscountAmount;
+               foundDiscount = true;
+            }
          }
 
          if (!foundDiscount && !recentDoc && recentHDDoc && parseCurGlobal(recentHDDoc.giamhocphi) > 0) {
@@ -1478,6 +1489,12 @@ export default function InvoiceManager({
       });
    };
 
+   const handleSelectStudentDiscount = (value) => {
+      const resolved = resolveDiscountValue(value, invoiceData.hocphi);
+      if (!resolved) return;
+      setInvoiceData(prev => ({ ...prev, ...resolved }));
+   };
+
    const handleSelectTuitionPackage = (optText) => {
       let newInv = { ...invoiceData };
 
@@ -1632,10 +1649,11 @@ export default function InvoiceManager({
             let nextGiamHocphi = prev.giamHocphi;
             let nextDiscountPercent = prev.discountPercent;
             if (daHoc >= 10) {
-               const basePercent = parseFloat(selectedStudent?.['giamhp%']) || 0;
-               if (basePercent > 0) {
-                  nextDiscountPercent = basePercent;
-                  nextGiamHocphi = Math.round((hp * basePercent) / 100);
+               const studentDiscount = parseStudentDiscount(selectedStudent?.giamhp);
+               const studentDiscountAmount = calcStudentDiscountAmount(hp, studentDiscount);
+               if (studentDiscountAmount > 0) {
+                  nextDiscountPercent = studentDiscount.phantram;
+                  nextGiamHocphi = studentDiscountAmount;
                }
             } else if (daHoc >= 5 && daHoc <= 9) {
                nextDiscountPercent = 50;
@@ -2071,6 +2089,12 @@ export default function InvoiceManager({
 
    const hpVal = Number(invoiceData.hocphi) || 0;
    const ghpVal = Number(invoiceData.giamHocphi) || 0;
+   const studentDiscountRaw = selectedStudent?.giamhp;
+   const discountSelectValue = detectDiscountValue({
+      discountPercent: invoiceData.discountPercent,
+      giamHocphi: invoiceData.giamHocphi
+   });
+   const discountOptions = buildDiscountSelectOptions(studentDiscountRaw, discountSelectValue);
    const tongCong = (noCu || 0) + (unpaidBillsTotal || 0) + hpVal + tienAnVal + (surchargeSum || 0) - ghpVal - (deductionSum || 0);
 
    // Auto fill daDong in InvoiceManager: Default to full payment (but not less than 0)
@@ -2574,14 +2598,39 @@ export default function InvoiceManager({
                            </div>
                            <div className="im-fi-item">
                               <label>Giảm HP</label>
-                              <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '5px' }}>
-                                 <div className="fi-input-wrapper">
-                                    <input type="text" placeholder="%" value={invoiceData.discountPercent > 0 ? invoiceData.discountPercent : ''} onChange={handlePercentDiscount} />
-                                    <span className="unit">%</span>
-                                 </div>
-                                 <div className="fi-input-wrapper">
-                                    <input type="text" value={formatCurrency(invoiceData.giamHocphi)} onChange={e => handleFinanceInput('giamHocphi', e)} />
-                                    <span className="unit">₫</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '100%' }}>
+                                 {selectedStudent && (
+                                    <select
+                                       value={discountSelectValue}
+                                       onChange={e => handleSelectStudentDiscount(e.target.value)}
+                                       style={{
+                                          width: '100%',
+                                          maxWidth: '100%',
+                                          boxSizing: 'border-box',
+                                          padding: '6px 8px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #fecaca',
+                                          background: '#fef2f2',
+                                          color: '#b91c1c',
+                                          fontWeight: 700,
+                                          fontSize: '0.8rem',
+                                          cursor: 'pointer'
+                                       }}
+                                    >
+                                       {discountOptions.map(opt => (
+                                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                       ))}
+                                    </select>
+                                 )}
+                                 <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '5px' }}>
+                                    <div className="fi-input-wrapper">
+                                       <input type="text" placeholder="%" value={invoiceData.discountPercent > 0 ? invoiceData.discountPercent : ''} onChange={handlePercentDiscount} />
+                                       <span className="unit">%</span>
+                                    </div>
+                                    <div className="fi-input-wrapper">
+                                       <input type="text" value={formatCurrency(invoiceData.giamHocphi)} onChange={e => handleFinanceInput('giamHocphi', e)} />
+                                       <span className="unit">₫</span>
+                                    </div>
                                  </div>
                               </div>
                            </div>

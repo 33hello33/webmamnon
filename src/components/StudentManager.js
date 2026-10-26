@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog, getActiveSchema, SCHEMA_CS1, SUPABASE_SCHEMA, HAS_MULTI_BRANCH } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart
+  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart, Plus
 } from 'lucide-react';
 import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
@@ -15,6 +15,13 @@ import { compressImage } from '../utils/imageUtils';
 import { toLocalISODate } from '../utils/localDate';
 import { useConfig } from '../ConfigContext';
 import { uploadToR2 } from '../utils/cloudflareR2';
+import {
+  DISCOUNT_TYPES,
+  buildStudentDiscountLevels,
+  formatThousands,
+  parseMoneyDigits,
+  parseStudentDiscountLevels
+} from '../utils/studentDiscount';
 
 const INITIAL_FORM = {
   mahv: '', tenhv: '', sdtba: '', sdtme: '', ghichu: '',
@@ -27,7 +34,7 @@ const INITIAL_FORM = {
   ngaysinhme: toLocalISODate(),
   username: '', password: '',
   hinhthucdong: 'Tiền mặt',
-  'giamhp%': 0
+  giamhp: { phantram: 0, sotien: 0 }
 };
 
 export default function StudentManager({
@@ -59,6 +66,13 @@ export default function StudentManager({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [discountLevels, setDiscountLevels] = useState([]);
+  const discountLevelIdRef = useRef(0);
+
+  const nextDiscountLevelId = () => {
+    discountLevelIdRef.current += 1;
+    return `dl${discountLevelIdRef.current}`;
+  };
 
 
   // Delete Modal State
@@ -125,6 +139,7 @@ export default function StudentManager({
     const prefix = (HAS_MULTI_BRANCH && activeSchema === SCHEMA_CS1) ? 'AC' : 'HV';
     const newMaHV = await generateId('tbl_hv', 'mahv', prefix, 4);
     setFormData({ ...INITIAL_FORM, mahv: newMaHV });
+    setDiscountLevels([{ id: nextDiscountLevelId(), type: DISCOUNT_TYPES.PERCENT, value: '' }]);
     setIsEditMode(false);
     setIsFormOpen(true);
   };
@@ -134,6 +149,11 @@ export default function StudentManager({
     const student = students.find(s => s.mahv === selectedStudentId);
     if (student) {
       setFormData({ ...INITIAL_FORM, ...student });
+      setDiscountLevels(parseStudentDiscountLevels(student.giamhp).map(level => ({
+        id: nextDiscountLevelId(),
+        type: level.phantram > 0 ? DISCOUNT_TYPES.PERCENT : DISCOUNT_TYPES.AMOUNT,
+        value: level.phantram > 0 ? String(level.phantram) : String(level.sotien)
+      })));
       setIsEditMode(true);
       setIsFormOpen(true);
     }
@@ -214,6 +234,33 @@ export default function StudentManager({
     });
   };
 
+  const handleAddDiscountLevel = () => {
+    setDiscountLevels(prev => [...prev, { id: nextDiscountLevelId(), type: DISCOUNT_TYPES.PERCENT, value: '' }]);
+  };
+
+  const handleRemoveDiscountLevel = (id) => {
+    setDiscountLevels(prev => prev.filter(level => level.id !== id));
+  };
+
+  const handleDiscountLevelTypeChange = (id, type) => {
+    setDiscountLevels(prev => prev.map(level => (
+      level.id === id ? { ...level, type, value: '' } : level
+    )));
+  };
+
+  const handleDiscountLevelValueChange = (id, rawValue) => {
+    setDiscountLevels(prev => prev.map(level => {
+      if (level.id !== id) return level;
+      if (level.type === DISCOUNT_TYPES.PERCENT) {
+        const cleaned = rawValue.replace(/[^\d.]/g, '');
+        const parts = cleaned.split('.');
+        const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : parts[0];
+        return { ...level, value: normalized };
+      }
+      return { ...level, value: parseMoneyDigits(rawValue) };
+    }));
+  };
+
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -281,7 +328,7 @@ export default function StudentManager({
     }
 
     try {
-      const dataToSave = { ...formData };
+      const dataToSave = { ...formData, giamhp: buildStudentDiscountLevels(discountLevels) };
 
       // Đảm bảo các giá trị null thay vì chuỗi trống cho các trường date nếu cần
       if (!dataToSave.ngaysinh) dataToSave.ngaysinh = null;
@@ -1039,8 +1086,62 @@ export default function StudentManager({
                     </select>
                   </div>
                   <div className="sm-form-group">
-                    <label style={{ fontWeight: 800, color: '#ef4444', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>% Giảm Học Phí</label>
-                    <input type="number" name="giamhp%" value={formData['giamhp%'] || ''} onChange={handleChange} min="0" max="100" placeholder="0 - 100" style={{ fontWeight: 600, borderColor: '#fca5a5' }} />
+                    <label style={{ fontWeight: 800, color: '#ef4444', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Giảm Học Phí</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {discountLevels.length === 0 && (
+                        <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic' }}>Chưa có mức giảm nào</div>
+                      )}
+                      {discountLevels.map((level) => (
+                        <div key={level.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <select
+                            value={level.type}
+                            onChange={e => handleDiscountLevelTypeChange(level.id, e.target.value)}
+                            style={{ flex: '0 0 130px', fontWeight: 600, borderColor: '#fca5a5' }}
+                          >
+                            <option value={DISCOUNT_TYPES.PERCENT}>Giảm theo %</option>
+                            <option value={DISCOUNT_TYPES.AMOUNT}>Giảm theo số tiền</option>
+                          </select>
+                          <div style={{ position: 'relative', flex: '1 1 0' }}>
+                            <input
+                              type="text"
+                              inputMode={level.type === DISCOUNT_TYPES.PERCENT ? 'decimal' : 'numeric'}
+                              value={level.type === DISCOUNT_TYPES.PERCENT ? level.value : formatThousands(level.value)}
+                              onChange={e => handleDiscountLevelValueChange(level.id, e.target.value)}
+                              placeholder={level.type === DISCOUNT_TYPES.PERCENT ? '0 - 100' : '0'}
+                              style={{
+                                width: '100%',
+                                fontWeight: 700,
+                                color: '#dc2626',
+                                borderColor: '#fca5a5',
+                                textAlign: 'right',
+                                paddingRight: level.type === DISCOUNT_TYPES.PERCENT ? '26px' : '14px'
+                              }}
+                            />
+                            {level.type === DISCOUNT_TYPES.PERCENT && (
+                              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#dc2626', fontWeight: 700, pointerEvents: 'none' }}>%</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDiscountLevel(level.id)}
+                            title="Xóa mức giảm"
+                            style={{ flex: '0 0 auto', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', padding: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={handleAddDiscountLevel}
+                        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px', background: '#fef2f2', color: '#dc2626', border: '1px dashed #fca5a5', borderRadius: '6px', padding: '6px 10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        <Plus size={14} /> Thêm mức giảm
+                      </button>
+                      {discountLevels.length > 1 && (
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Mức đầu tiên là mức giảm mặc định khi lên hoá đơn.</div>
+                      )}
+                    </div>
                   </div>
 
                 </div>
