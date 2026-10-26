@@ -566,6 +566,321 @@
   justify-content: center;
 }
 
+/* ===== Mẫu phiếu lương: các khối thông tin / ngày công / thu nhập / khấu trừ ===== */
+.ts-sheet-sub {
+  margin: 4px 0 0 0;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.ts-schema-alert {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 1.5rem 0 1.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.ts-schema-alert code {
+  background: #fee2e2;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.ts-schema-retry {
+  border: none;
+  background: none;
+  color: #b91c1c;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 0.85rem;
+}
+
+.ts-section {
+  border-top: 1px solid #e2e8f0;
+}
+
+.ts-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  border-left: 4px solid #0f172a;
+}
+
+.ts-form-table,
+.ts-days-table,
+.ts-money-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.86rem;
+}
+
+.ts-form-table td,
+.ts-days-table td,
+.ts-days-table th,
+.ts-money-table td,
+.ts-money-table th {
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+
+.ts-ft-label {
+  width: 15%;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+}
+
+.ts-ft-value {
+  width: 35%;
+  background: #ffffff;
+  padding: 3px 8px !important;
+}
+
+.ts-ft-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #0f172a;
+  font-size: 0.88rem;
+  padding: 3px 2px;
+}
+
+.ts-ft-input:focus,
+.ts-day-input:focus,
+.ts-amount-input:focus,
+.ts-note-input:focus {
+  background: #eff6ff;
+  border-radius: 4px;
+}
+
+.ts-days-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.25;
+  padding: 7px 4px;
+}
+
+.ts-day-cell {
+  padding: 3px 4px !important;
+  text-align: center;
+}
+
+.ts-day-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.ts-days-total td {
+  background: #f8fafc;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ts-days-total-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ts-money-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 7px 10px;
+}
+
+.ts-col-stt {
+  width: 54px;
+  text-align: center !important;
+}
+
+.ts-col-amount {
+  width: 26%;
+  text-align: right !important;
+}
+
+.ts-col-note {
+  width: 26%;
+}
+
+.ts-money-table td.ts-stt {
+  text-align: center;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.ts-money-table td.ts-amount {
+  text-align: right;
+  padding: 3px 10px !important;
+}
+
+.ts-amount-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  text-align: right;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.ts-amount-static {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ts-note-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.82rem;
+  color: #475569;
+  padding: 3px 2px;
+}
+
+.ts-note-cell {
+  position: relative;
+  vertical-align: top;
+  padding: 0 !important;
+}
+
+.ts-note-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+  resize: none;
+  padding: 8px 10px !important;
+  font-family: inherit;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.ts-note-area::placeholder {
+  color: #94a3b8;
+}
+
+.ts-total-row td {
+  background: #f8fafc;
+  font-weight: 800;
+  color: #0f172a;
+  border-top: 2px solid #cbd5e1;
+}
+
+.ts-net-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #e2e8f0;
+  border-top: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  padding: 14px 16px;
+}
+
+.ts-net-label {
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #0f172a;
+}
+
+.ts-net-label span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #475569;
+}
+
+.ts-net-value {
+  font-size: 1.35rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.ts-bangchu-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.ts-bangchu-text {
+  font-style: italic;
+  color: #334155;
+}
+
+.ts-signature-row {
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 18px 14px 24px 14px;
+}
+
+.ts-signature-row .ts-sig-col {
+  flex: 1;
+}
+
+.ts-signature-row .ts-sig-title {
+  margin-bottom: 40px;
+}
+
 /* Print Hide on Screen */
 .print-pay-slip-a4 {
   display: none;
@@ -664,6 +979,101 @@
   .print-pay-slip-a4 .p-sig {
     text-align: center;
     width: 45%;
+  }
+
+  .print-pay-slip-a4 .p-section-title {
+    background: #f1f5f9 !important;
+    border: 1px solid #000 !important;
+    border-left: 4px solid #000 !important;
+    font-weight: bold;
+    font-size: 10pt;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 5px 8px;
+    margin-top: 10px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-pay-slip-a4 .p-day-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-pay-slip-a4 .p-net-table {
+    margin-top: 10px;
+    margin-bottom: 18px;
+  }
+
+  .print-pay-slip-a4 .p-col-stt {
+    width: 8%;
+    text-align: center;
+  }
+
+  .print-pay-slip-a4 .p-col-amount {
+    width: 26%;
+    text-align: right;
+  }
+
+  .print-pay-slip-a4 .p-col-note {
+    width: 26%;
+  }
+
+  .print-pay-slip-a4 .p-bold td {
+    font-weight: bold;
+    background: #f8fafc !important;
+  }
+
+  .print-pay-slip-a4 .p-day-table th,
+  .print-pay-slip-a4 .p-day-table td {
+    border: 1px solid #000 !important;
+    padding: 5px 8px;
+    font-size: 10.5pt;
+    color: #000 !important;
+  }
+
+  .print-pay-slip-a4 .p-day-table th {
+    background: #ffffff !important;
+    font-weight: bold;
+    text-align: center;
+    font-size: 9.5pt;
+    line-height: 1.2;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-label {
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-right {
+    text-align: right;
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-center {
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-bold td {
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-highlight td {
+    background: #d9ead3 !important;
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-net td {
+    background: #d9ead3 !important;
+    color: #c00000 !important;
+    font-weight: bold;
+  }
+
+  .print-pay-slip-a4 .p-day-table .p-italic {
+    font-style: italic;
   }
 
   .text-right {

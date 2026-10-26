@@ -84,6 +84,61 @@ const fCur = (val) => {
    return isNaN(parsed) ? '0' : parsed.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
 
+// Số ngày công: hỗ trợ số thập phân (VD 0.5 ngày)
+const pNum = (val) => {
+   if (val === undefined || val === null || val === '') return 0;
+   const sVal = String(val).replace(/,/g, '.').replace(/%/g, '');
+   if (sVal === '-') return 0;
+   const parsed = parseFloat(sVal);
+   return isNaN(parsed) ? 0 : parsed;
+};
+
+const fDay = (val) => {
+   const n = pNum(val);
+   return Number.isInteger(n) ? `${n}.0` : String(Math.round(n * 100) / 100);
+};
+
+const fDayTotal = (n) => (Number.isInteger(n) ? `${n}` : String(Math.round(n * 100) / 100));
+
+// Trên phiếu lương: giá trị 0 hiển thị "-"
+const fSlip = (val) => (pCur(val) === 0 ? '-' : fCur(val));
+
+const BHXH_EMPLOYEE_RATE = 0.105;
+
+const SALARY_DAY_FIELDS = [
+   { key: 'ngaycong_thucte', label: 'Ngày công thực tế' },
+   { key: 'nghiphep_nam', label: 'Nghỉ phép năm' },
+   { key: 'nghile_tet', label: 'Nghỉ lễ, Tết, cưới hỏi, tang sư' },
+   { key: 'nghiviec_rieng', label: 'Nghỉ việc riêng' },
+   { key: 'nghiom', label: 'Nghỉ ốm' },
+   { key: 'nghikhongphep', label: 'Nghỉ không phép' }
+];
+
+// Các cột mới của mẫu phiếu lương (xem supabase/migrations/20261026120000_payslip_template.sql)
+const SALARY_TEMPLATE_COLUMNS = [
+   'chitiet_ngaycong', 'luong_nghiphep', 'hotro_sinhnhat', 'thuong_hocvien', 'hotro_kidscamp',
+   'luong_bhxh', 'thue_tncn', 'ghichu_trukhoac'
+];
+
+// Chi tiết ngày công được lưu trong 1 cột json: chitiet_ngaycong
+const buildDayInfo = (formData) => ({
+   thucte: pNum(formData.ngaycong_thucte),
+   nghiphep_nam: pNum(formData.nghiphep_nam),
+   nghile_tet: pNum(formData.nghile_tet),
+   nghiviec_rieng: pNum(formData.nghiviec_rieng),
+   nghiom: pNum(formData.nghiom),
+   nghikhongphep: pNum(formData.nghikhongphep)
+});
+
+const PAYSLIP_MIGRATION_FILE = 'supabase/migrations/20261026120000_payslip_template.sql';
+
+const isMissingColumnError = (err) => {
+   if (!err) return false;
+   const code = err.code || '';
+   const msg = `${err.message || ''} ${err.details || ''}`;
+   return code === '42703' || code === 'PGRST204' || /column .* does not exist|could not find the .* column|schema cache/i.test(msg);
+};
+
 export default function TimesheetManager({ currentUser, setActiveTab, setActiveSubTab }) {
    const { config } = useConfig();
    const schoolName = config?.tencongty || process.env.REACT_APP_COMPANY_NAME;
@@ -104,31 +159,38 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
    // Month state (defaults to current month: MM/YYYY)
    const [currentDate, setCurrentDate] = useState(new Date());
 
-   // Form data for Pay Slip
+   // Form data for Pay Slip - mẫu phiếu lương mới
    const [formData, setFormData] = useState({
       manv: '',
       tennv: '',
       chucvu: '',
-      // Earnings
+      // Ngày công (lưu dạng chuỗi để nhập số thập phân)
+      ngaycong_thucte: '26',
+      nghiphep_nam: '0',
+      nghile_tet: '0',
+      nghiviec_rieng: '0',
+      nghiom: '0',
+      nghikhongphep: '0',
+      // Khoản thu nhập (nhập tay)
       luongcoban: 0,
-      chuyencan: 0,
-      phucap_bhxh: 0,
-      phucap_trachnhiem: 0,
-      phucap_dilai: 0,
-      phucap_chuyenmon: 0,
-      phucap_khac: 0,
-      thuongle: 0,
-      tangluong: 0,
-      // Deductions
-      khautru_bhxh: 0,
-      tamung: 0,
+      luong_nghiphep: 0,
+      hotro_sinhnhat: 0,
+      thuong_hocvien: 0,
+      hotro_kidscamp: 0,
+      // Khoản khấu trừ
+      luong_bhxh: 0,
+      thue_tncn: 0,
       khautru_khac: 0,
+      ghichu_trukhoac: '',
       // Meta
       hinhthuc: walletOptions.length > 0 ? walletOptions[0].name : 'Tiền mặt',
       nguoilap: currentUser?.tennv || currentUser?.manv || 'Quản lý',
       nguoiduyet: 'Người nhận lương',
       ghichu: ''
    });
+
+   // Bảng tbl_luong đã có các cột của mẫu phiếu lương mới hay chưa
+   const [schemaReady, setSchemaReady] = useState(true);
 
    const [existingRecord, setExistingRecord] = useState(null);
    const [successModal, setSuccessModal] = useState({ isOpen: false, message: '', recordId: '' });
@@ -188,22 +250,27 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
          if (!error && data) {
             setExistingRecord(data);
+            const dayInfo = (data.chitiet_ngaycong && typeof data.chitiet_ngaycong === 'object') ? data.chitiet_ngaycong : {};
+            const dayValue = (key, fallback) => fDay(dayInfo[key] === undefined || dayInfo[key] === null ? fallback : dayInfo[key]);
             setFormData({
                manv: data.manv || emp.manv,
                tennv: data.tennv || emp.tennv,
                chucvu: data.chucvu || emp.role || 'Nhân viên',
+               ngaycong_thucte: dayValue('thucte', 26),
+               nghiphep_nam: dayValue('nghiphep_nam', 0),
+               nghile_tet: dayValue('nghile_tet', 0),
+               nghiviec_rieng: dayValue('nghiviec_rieng', 0),
+               nghiom: dayValue('nghiom', 0),
+               nghikhongphep: dayValue('nghikhongphep', 0),
                luongcoban: pCur(data.luongcoban),
-               chuyencan: pCur(data.chuyencan),
-               phucap_bhxh: pCur(data.phucap_bhxh),
-               phucap_trachnhiem: pCur(data.phucap_trachnhiem),
-               phucap_dilai: pCur(data.phucap_dilai),
-               phucap_chuyenmon: pCur(data.phucap_chuyenmon),
-               phucap_khac: pCur(data.phucap_khac),
-               thuongle: pCur(data.thuongle),
-               tangluong: pCur(data.tangluong),
-               khautru_bhxh: pCur(data.khautru_bhxh),
-               tamung: pCur(data.tamung),
+               luong_nghiphep: pCur(data.luong_nghiphep),
+               hotro_sinhnhat: pCur(data.hotro_sinhnhat),
+               thuong_hocvien: pCur(data.thuong_hocvien),
+               hotro_kidscamp: pCur(data.hotro_kidscamp),
+               luong_bhxh: pCur(data.luong_bhxh) || Math.round(pCur(data.khautru_bhxh) / BHXH_EMPLOYEE_RATE),
+               thue_tncn: pCur(data.thue_tncn),
                khautru_khac: pCur(data.khautru_khac),
+               ghichu_trukhoac: data.ghichu_trukhoac || '',
                hinhthuc: data.hinhthuc || (walletOptions.length > 0 ? walletOptions[0].name : 'Tiền mặt'),
                nguoilap: data.nguoilap || currentUser?.tennv || currentUser?.manv || 'Quản lý',
                nguoiduyet: data.nguoiduyet || 'Người nhận lương',
@@ -215,24 +282,28 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                manv: emp.manv,
                tennv: emp.tennv,
                chucvu: emp.role || 'Nhân viên',
-               luongcoban: pCur(emp.luongcoban || emp.luongtheobuoi || 0),
-               chuyencan: 0,
-               phucap_bhxh: 0,
-               phucap_trachnhiem: 0,
-               phucap_dilai: 0,
-               phucap_chuyenmon: 0,
-               phucap_khac: 0,
-               thuongle: 0,
-               tangluong: 0,
-               khautru_bhxh: 0,
-               tamung: 0,
+               ngaycong_thucte: '26',
+               nghiphep_nam: '0',
+               nghile_tet: '0',
+               nghiviec_rieng: '0',
+               nghiom: '0',
+               nghikhongphep: '0',
+               luongcoban: 0,
+               luong_nghiphep: 0,
+               hotro_sinhnhat: 0,
+               thuong_hocvien: 0,
+               hotro_kidscamp: 0,
+               luong_bhxh: 0,
+               thue_tncn: 0,
                khautru_khac: 0,
+               ghichu_trukhoac: '',
                hinhthuc: walletOptions.length > 0 ? walletOptions[0].name : 'Tiền mặt',
                nguoilap: currentUser?.tennv || currentUser?.manv || 'Quản lý',
                nguoiduyet: 'Người nhận lương',
                ghichu: ''
             });
          }
+
       } catch (err) {
          console.error('Lỗi tải phiếu lương:', err);
       } finally {
@@ -245,6 +316,28 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
          loadSalaryForEmployee(selectedEmployee, currentDate);
       }
    }, [selectedEmployee, currentDate, loadSalaryForEmployee]);
+
+   // Kiểm tra bảng lương đã có các cột của mẫu phiếu lương mới
+   const ensureSalarySchema = useCallback(async () => {
+      const probe = SALARY_TEMPLATE_COLUMNS.join(',');
+      const { error } = await supabase.from('tbl_luong').select(probe).limit(1);
+      if (!error) {
+         setSchemaReady(true);
+         return true;
+      }
+      if (!isMissingColumnError(error)) {
+         setSchemaReady(true);
+         return true;
+      }
+      const baseRes = await baseSupabase.from('tbl_luong').select(probe).limit(1);
+      const ready = !baseRes.error;
+      setSchemaReady(ready);
+      return ready;
+   }, []);
+
+   useEffect(() => {
+      ensureSalarySchema();
+   }, [ensureSalarySchema]);
 
    // Handlers
    const handleSelectEmployee = (emp) => {
@@ -272,26 +365,25 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       }));
    };
 
-   // Calculations
-   const tongThuNhap = (
-      pCur(formData.luongcoban) +
-      pCur(formData.chuyencan) +
-      pCur(formData.phucap_bhxh) +
-      pCur(formData.phucap_trachnhiem) +
-      pCur(formData.phucap_dilai) +
-      pCur(formData.phucap_chuyenmon) +
-      pCur(formData.phucap_khac) +
-      pCur(formData.thuongle) +
-      pCur(formData.tangluong)
-   );
+   const handleDayChange = (field, rawValue) => {
+      const cleaned = String(rawValue).replace(/,/g, '.').replace(/[^\d.]/g, '');
+      setFormData(prev => ({ ...prev, [field]: cleaned }));
+   };
 
-   const tongKhauTru = (
-      pCur(formData.khautru_bhxh) +
-      pCur(formData.tamung) +
-      pCur(formData.khautru_khac)
-   );
-
-   const thucNhan = tongThuNhap - tongKhauTru;
+   // Calculations - mẫu phiếu lương mới (các khoản nhập tay, không tự tính lại theo ngày công)
+   const tongNgayCong = SALARY_DAY_FIELDS.reduce((sum, f) => sum + pNum(formData[f.key]), 0);
+   const luongThangNay = pCur(formData.luongcoban);
+   const luongNghiPhep = pCur(formData.luong_nghiphep);
+   const hotroSinhNhat = pCur(formData.hotro_sinhnhat);
+   const thuongHocVien = pCur(formData.thuong_hocvien);
+   const hotroKidscamp = pCur(formData.hotro_kidscamp);
+   const tongThuNhap = luongThangNay + luongNghiPhep + hotroSinhNhat + thuongHocVien + hotroKidscamp;
+   const mucLuongBhxh = pCur(formData.luong_bhxh);
+   const tienBhxh = Math.round(mucLuongBhxh * BHXH_EMPLOYEE_RATE);
+   const thueTncn = pCur(formData.thue_tncn);
+   const truKhac = pCur(formData.khautru_khac);
+   const tongPhaiTru = tienBhxh + thueTncn + truKhac;
+   const thucNhan = tongThuNhap - tongPhaiTru;
    const bangChuText = READ_NUMBER_VN(thucNhan);
 
    // Save to Finance
@@ -307,6 +399,14 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
       setSaving(true);
       try {
+         if (!(await ensureSalarySchema())) {
+            setWarningModal({
+               isOpen: true,
+               title: 'Chưa nâng cấp cấu trúc dữ liệu',
+               message: `Bảng lương (tbl_luong) chưa có các cột của mẫu phiếu lương mới nên chưa thể lưu. Vui lòng chạy file ${PAYSLIP_MIGRATION_FILE} trong Supabase SQL Editor rồi bấm "Lưu lên tài chính" lại.`
+            });
+            return;
+         }
          let maphieuluong = existingRecord?.maphieuluong;
          if (!maphieuluong) {
             maphieuluong = await generateId('tbl_luong', 'maphieuluong', 'PL', 4);
@@ -318,20 +418,22 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             tennv: formData.tennv,
             chucvu: formData.chucvu,
             thang: monthStr,
-            luongcoban: pCur(formData.luongcoban),
-            chuyencan: pCur(formData.chuyencan),
-            phucap_bhxh: pCur(formData.phucap_bhxh),
-            phucap_trachnhiem: pCur(formData.phucap_trachnhiem),
-            phucap_dilai: pCur(formData.phucap_dilai),
-            phucap_chuyenmon: pCur(formData.phucap_chuyenmon),
-            phucap_khac: pCur(formData.phucap_khac),
-            thuongle: pCur(formData.thuongle),
-            tangluong: pCur(formData.tangluong),
+            // Ngày công (lưu trong 1 cột json)
+            chitiet_ngaycong: buildDayInfo(formData),
+            // Thu nhập
+            luongcoban: luongThangNay,
+            luong_nghiphep: luongNghiPhep,
+            hotro_sinhnhat: hotroSinhNhat,
+            thuong_hocvien: thuongHocVien,
+            hotro_kidscamp: hotroKidscamp,
             tongthunhap: tongThuNhap,
-            khautru_bhxh: pCur(formData.khautru_bhxh),
-            tamung: pCur(formData.tamung),
-            khautru_khac: pCur(formData.khautru_khac),
-            tongkhautru: tongKhauTru,
+            // Khấu trừ
+            luong_bhxh: mucLuongBhxh,
+            khautru_bhxh: tienBhxh,
+            thue_tncn: thueTncn,
+            khautru_khac: truKhac,
+            ghichu_trukhoac: formData.ghichu_trukhoac || '',
+            tongkhautru: tongPhaiTru,
             thucnhan: thucNhan,
             bangchu: bangChuText,
             hinhthuc: formData.hinhthuc,
@@ -387,26 +489,28 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
          [`Họ và tên: ${formData.tennv}`],
          [`Chức vụ: ${formData.chucvu}`],
          [''],
-         ['DANH MỤC', 'SỐ TIỀN (VNĐ)'],
-         ['--- KHOẢN THU ---', ''],
-         ['LƯƠNG CƠ BẢN', fCur(formData.luongcoban)],
-         ['CHUYÊN CẦN', fCur(formData.chuyencan)],
-         ['PHỤ CẤP BHXH/BHYT/BHTN', fCur(formData.phucap_bhxh)],
-         ['PHỤ CẤP TRÁCH NHIỆM', fCur(formData.phucap_trachnhiem)],
-         ['PHỤ CẤP ĐI LẠI', fCur(formData.phucap_dilai)],
-         ['PHỤ CẤP CHUYÊN MÔN', fCur(formData.phucap_chuyenmon)],
-         ['PHỤ CẤP KHÁC', fCur(formData.phucap_khac)],
-         ['THƯỞNG LỄ', fCur(formData.thuongle)],
-         ['TĂNG LƯƠNG', fCur(formData.tangluong)],
-         ['TỔNG THU NHẬP', fCur(tongThuNhap)],
+         ['NGÀY CÔNG TRONG THÁNG'],
+         [...SALARY_DAY_FIELDS.map(f => f.label), 'Tổng ngày công tính lương'],
+         [...SALARY_DAY_FIELDS.map(f => fDay(formData[f.key])), fDayTotal(tongNgayCong)],
          [''],
-         ['--- KHOẢN KHẤU TRỪ ---', ''],
-         ['KHẤU TRỪ BHXH/BHYT/BHTN', fCur(formData.khautru_bhxh)],
-         ['Tạm ứng', fCur(formData.tamung)],
-         ['Khấu trừ khác', fCur(formData.khautru_khac)],
-         ['TỔNG KHẤU TRỪ', fCur(tongKhauTru)],
+         ['KHOẢN THU NHẬP', '', ''],
+         ['STT', 'NỘI DUNG', 'SỐ TIỀN (đ)'],
+         ['1', 'Lương tháng này & Phụ cấp', fCur(luongThangNay)],
+         ['2', 'Lương nghỉ phép, lễ, cưới hỏi, tang sư', fCur(luongNghiPhep)],
+         ['3', 'Hỗ trợ sinh nhật, cưới hỏi, tang sư', fCur(hotroSinhNhat)],
+         ['4', 'Tiền thưởng học viên', fCur(thuongHocVien)],
+         ['5', 'Hỗ trợ KidsCamp', fCur(hotroKidscamp)],
+         ['', 'TỔNG THU NHẬP (1+2+3+4+5)', fCur(tongThuNhap)],
          [''],
-         ['THỰC NHẬN', fCur(thucNhan)],
+         ['KHOẢN KHẤU TRỪ', '', '', ''],
+         ['STT', 'NỘI DUNG', 'SỐ TIỀN (đ)', 'GHI CHÚ'],
+         ['1', 'Mức lương đóng BHXH', fCur(mucLuongBhxh), ''],
+         ['2', 'Khấu trừ BHXH/BHYT/BHTN (10,5% LCB)', fCur(tienBhxh), ''],
+         ['3', 'Thuế TNCN', fCur(thueTncn), ''],
+         ['4', 'Trừ khác', fCur(truKhac), formData.ghichu_trukhoac || ''],
+         ['', 'TỔNG KHẤU TRỪ', fCur(tongPhaiTru), ''],
+         [''],
+         ['THỰC NHẬN (Tổng thu nhập - Tổng khấu trừ)', fCur(thucNhan)],
          ['Bằng chữ', bangChuText],
          ['Ghi chú', formData.ghichu || ''],
          [''],
@@ -508,6 +612,18 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                   </div>
                </div>
 
+               {!schemaReady && (
+                  <div className="ts-schema-alert">
+                     <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                     <div>
+                        <strong>Chưa nâng cấp cấu trúc dữ liệu phiếu lương.</strong> Bảng <code>tbl_luong</code> chưa có
+                        các cột ngày công / thu nhập mới nên chưa thể lưu phiếu. Vui lòng chạy file
+                        <code> {PAYSLIP_MIGRATION_FILE}</code> trong Supabase SQL Editor rồi bấm
+                        <button type="button" className="ts-schema-retry" onClick={() => ensureSalarySchema()}>Kiểm tra lại</button>.
+                     </div>
+                  </div>
+               )}
+
                {/* PAY SLIP SHEET - Exact Table Replica */}
                <div className="ts-sheet-wrapper">
                   <div className="ts-pay-sheet">
@@ -515,332 +631,273 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                      {/* Sheet Title */}
                      <div className="ts-sheet-header">
                         <h2>PHIẾU LƯƠNG NHÂN VIÊN</h2>
+                        <p className="ts-sheet-sub">Tháng {monthStr} • {formData.tennv || 'Chưa chọn nhân viên'}</p>
                      </div>
 
-                     {/* Sheet Table Grid */}
-                     <table className="ts-grid-table">
-                        <tbody>
-                           {/* Tháng */}
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Tháng</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <div className="ts-inline-flex">
+                     {/* THÔNG TIN NHÂN VIÊN */}
+                     <div className="ts-section">
+                        <div className="ts-section-title">
+                           <Users size={15} /> Thông tin nhân viên
+                        </div>
+                        <table className="ts-form-table">
+                           <tbody>
+                              <tr>
+                                 <td className="ts-ft-label">Tháng</td>
+                                 <td className="ts-ft-value">
+                                    <div className="ts-inline-flex">
+                                       <input
+                                          type="text"
+                                          className="ts-ft-input fw-bold"
+                                          value={monthStr}
+                                          onChange={(e) => {
+                                             const parts = e.target.value.split('/');
+                                             if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                                                const m = parseInt(parts[0], 10) - 1;
+                                                const y = parseInt(parts[1], 10);
+                                                if (m >= 0 && m <= 11 && y > 2000) {
+                                                   setCurrentDate(new Date(y, m, 1));
+                                                }
+                                             }
+                                          }}
+                                       />
+                                       {existingRecord && (
+                                          <span className={`ts-badge-status ${existingRecord.trangthai === 'Đã chi' ? 'bg-success' : 'bg-warning'}`}>
+                                             {existingRecord.trangthai || 'Chờ duyệt'}
+                                          </span>
+                                       )}
+                                    </div>
+                                 </td>
+                                 <td className="ts-ft-label">Mã nhân viên</td>
+                                 <td className="ts-ft-value">
                                     <input
                                        type="text"
-                                       className="ts-input-raw"
-                                       value={monthStr}
-                                       onChange={(e) => {
-                                          const parts = e.target.value.split('/');
-                                          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                                             const m = parseInt(parts[0], 10) - 1;
-                                             const y = parseInt(parts[1], 10);
-                                             if (m >= 0 && m <= 11 && y > 2000) {
-                                                setCurrentDate(new Date(y, m, 1));
-                                             }
-                                          }
-                                       }}
+                                       className="ts-ft-input fw-bold text-primary"
+                                       placeholder="Nhập mã NV..."
+                                       value={formData.manv}
+                                       onChange={(e) => handleInputChange('manv', e.target.value)}
                                     />
-                                    {existingRecord && (
-                                       <span className={`ts-badge-status ${existingRecord.trangthai === 'Đã chi' ? 'bg-success' : 'bg-warning'}`}>
-                                          {existingRecord.trangthai || 'Chờ duyệt'}
-                                       </span>
-                                    )}
-                                 </div>
-                              </td>
-                           </tr>
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-ft-label">Họ và tên</td>
+                                 <td className="ts-ft-value">
+                                    <input
+                                       type="text"
+                                       className="ts-ft-input fw-bold"
+                                       value={formData.tennv}
+                                       onChange={(e) => handleInputChange('tennv', e.target.value)}
+                                    />
+                                 </td>
+                                 <td className="ts-ft-label">Chức vụ</td>
+                                 <td className="ts-ft-value">
+                                    <input
+                                       type="text"
+                                       className="ts-ft-input"
+                                       value={formData.chucvu}
+                                       onChange={(e) => handleInputChange('chucvu', e.target.value)}
+                                    />
+                                 </td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
 
-                           {/* Mã nhân viên */}
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Mã nhân viên</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-raw text-primary fw-bold"
-                                    placeholder="Nhập mã NV..."
-                                    value={formData.manv}
-                                    onChange={(e) => handleInputChange('manv', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
+                     {/* NGÀY CÔNG TRONG THÁNG */}
+                     <div className="ts-section">
+                        <div className="ts-section-title">Ngày công trong tháng</div>
+                        <table className="ts-days-table">
+                           <thead>
+                              <tr>
+                                 {SALARY_DAY_FIELDS.map(f => (
+                                    <th key={f.key}>{f.label}</th>
+                                 ))}
+                              </tr>
+                           </thead>
+                           <tbody>
+                              <tr>
+                                 {SALARY_DAY_FIELDS.map(f => (
+                                    <td key={f.key} className="ts-day-cell">
+                                       <input
+                                          type="text"
+                                          inputMode="decimal"
+                                          className="ts-day-input"
+                                          value={formData[f.key]}
+                                          onChange={(e) => handleDayChange(f.key, e.target.value)}
+                                       />
+                                    </td>
+                                 ))}
+                              </tr>
+                              <tr className="ts-days-total">
+                                 <td colSpan={5}>Tổng ngày công tính lương</td>
+                                 <td className="ts-days-total-value">{fDayTotal(tongNgayCong)} ngày</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
 
-                           {/* Họ và tên */}
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Họ và tên</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-raw fw-bold"
-                                    value={formData.tennv}
-                                    onChange={(e) => handleInputChange('tennv', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
+                     {/* KHOẢN THU NHẬP */}
+                     <div className="ts-section">
+                        <div className="ts-section-title">Khoản thu nhập</div>
+                        <table className="ts-money-table">
+                           <thead>
+                              <tr>
+                                 <th className="ts-col-stt">STT</th>
+                                 <th>Nội dung</th>
+                                 <th className="ts-col-amount">Số tiền (đ)</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              <tr>
+                                 <td className="ts-stt">1</td>
+                                 <td>Lương tháng này &amp; Phụ cấp</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.luongcoban)} onChange={(e) => handleNumberChange('luongcoban', e.target.value)} /></td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">2</td>
+                                 <td>Lương nghỉ phép, lễ, cưới hỏi, tang sư</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.luong_nghiphep)} onChange={(e) => handleNumberChange('luong_nghiphep', e.target.value)} /></td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">3</td>
+                                 <td>Hỗ trợ sinh nhật, cưới hỏi, tang sư</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.hotro_sinhnhat)} onChange={(e) => handleNumberChange('hotro_sinhnhat', e.target.value)} /></td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">4</td>
+                                 <td>Tiền thưởng học viên</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.thuong_hocvien)} onChange={(e) => handleNumberChange('thuong_hocvien', e.target.value)} /></td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">5</td>
+                                 <td>Hỗ trợ KidsCamp</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.hotro_kidscamp)} onChange={(e) => handleNumberChange('hotro_kidscamp', e.target.value)} /></td>
+                              </tr>
+                              <tr className="ts-total-row">
+                                 <td colSpan={2}>TỔNG THU NHẬP (1+2+3+4+5)</td>
+                                 <td className="ts-amount ts-amount-static">{fCur(tongThuNhap)}</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
 
-                           {/* Chức vụ */}
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Chức vụ</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-raw"
-                                    value={formData.chucvu}
-                                    onChange={(e) => handleInputChange('chucvu', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
+                     {/* KHOẢN KHẤU TRỪ */}
+                     <div className="ts-section">
+                        <div className="ts-section-title">Khoản khấu trừ</div>
+                        <table className="ts-money-table">
+                           <thead>
+                              <tr>
+                                 <th className="ts-col-stt">STT</th>
+                                 <th>Nội dung</th>
+                                 <th className="ts-col-amount">Số tiền (đ)</th>
+                                 <th className="ts-col-note">Ghi chú</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              <tr>
+                                 <td className="ts-stt">1</td>
+                                 <td>Mức lương đóng BHXH</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.luong_bhxh)} onChange={(e) => handleNumberChange('luong_bhxh', e.target.value)} /></td>
+                                 <td className="ts-note-cell" rowSpan={4}>
+                                    <textarea
+                                       className="ts-note-input ts-note-area"
+                                       placeholder="Ghi chú trừ khác (VD: Đi trễ 30 phút)..."
+                                       value={formData.ghichu_trukhoac}
+                                       onChange={(e) => handleInputChange('ghichu_trukhoac', e.target.value)}
+                                    />
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">2</td>
+                                 <td>Khấu trừ BHXH/BHYT/BHTN (10,5% LCB)</td>
+                                 <td className="ts-amount ts-amount-static">{fCur(tienBhxh)}</td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">3</td>
+                                 <td>Thuế TNCN</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.thue_tncn)} onChange={(e) => handleNumberChange('thue_tncn', e.target.value)} /></td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-stt">4</td>
+                                 <td>Trừ khác</td>
+                                 <td className="ts-amount"><input type="text" inputMode="numeric" className="ts-amount-input" value={fCur(formData.khautru_khac)} onChange={(e) => handleNumberChange('khautru_khac', e.target.value)} /></td>
+                              </tr>
+                              <tr className="ts-total-row">
+                                 <td colSpan={2}>TỔNG KHẤU TRỪ</td>
+                                 <td className="ts-amount ts-amount-static">{fCur(tongPhaiTru)}</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
 
-                           {/* HEADER SECTION 1: KHOẢN THU */}
-                           <tr className="ts-section-header">
-                              <td colSpan="4" className="fw-bold">KHOẢN THU</td>
-                           </tr>
+                     {/* THỰC NHẬN */}
+                     <div className="ts-net-row">
+                        <div className="ts-net-label">
+                           Thực nhận
+                           <span>(Tổng thu nhập - Tổng khấu trừ)</span>
+                        </div>
+                        <div className="ts-net-value">{fCur(thucNhan)} đ</div>
+                     </div>
 
-                           {/* LƯƠNG CƠ BẢN */}
-                           <tr>
-                              <td className="ts-cell-label">LƯƠNG CƠ BẢN</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.luongcoban)}
-                                    onChange={(e) => handleNumberChange('luongcoban', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
+                     <div className="ts-bangchu-row">
+                        <strong>Bằng chữ</strong>
+                        <span className="ts-bangchu-text">{bangChuText}</span>
+                     </div>
 
-                           {/* CHUYÊN CẦN */}
-                           <tr>
-                              <td className="ts-cell-label">CHUYÊN CẦN</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.chuyencan)}
-                                    onChange={(e) => handleNumberChange('chuyencan', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
+                     <div className="ts-section">
+                        <table className="ts-form-table">
+                           <tbody>
+                              <tr>
+                                 <td className="ts-ft-label">Hình thức chi trả</td>
+                                 <td className="ts-ft-value">
+                                    <select
+                                       className="ts-select-raw"
+                                       value={formData.hinhthuc}
+                                       onChange={(e) => handleInputChange('hinhthuc', e.target.value)}
+                                    >
+                                       {walletOptions.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                                       {walletOptions.map(w => (
+                                          <option key={w.id} value={w.name}>{w.name}</option>
+                                       ))}
+                                    </select>
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td className="ts-ft-label">Ghi chú</td>
+                                 <td className="ts-ft-value">
+                                    <input
+                                       type="text"
+                                       className="ts-ft-input"
+                                       placeholder="Nhập ghi chú chi tiết phiếu lương (nếu có)..."
+                                       value={formData.ghichu}
+                                       onChange={(e) => handleInputChange('ghichu', e.target.value)}
+                                    />
+                                 </td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
 
-                           {/* PHỤ CẤP BHXH/BHYT/BHTN */}
-                           <tr>
-                              <td className="ts-cell-label">PHỤ CẤP BHXH/BHYT/BHTN</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.phucap_bhxh)}
-                                    onChange={(e) => handleNumberChange('phucap_bhxh', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* PHỤ CẤP TRÁCH NHIỆM */}
-                           <tr>
-                              <td className="ts-cell-label">PHỤ CẤP TRÁCH NHIỆM</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.phucap_trachnhiem)}
-                                    onChange={(e) => handleNumberChange('phucap_trachnhiem', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* PHỤ CẤP ĐI LẠI */}
-                           <tr>
-                              <td className="ts-cell-label">PHỤ CẤP ĐI LẠI</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.phucap_dilai)}
-                                    onChange={(e) => handleNumberChange('phucap_dilai', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* PHỤ CẤP CHUYÊN MÔN */}
-                           <tr>
-                              <td className="ts-cell-label">PHỤ CẤP CHUYÊN MÔN</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.phucap_chuyenmon)}
-                                    onChange={(e) => handleNumberChange('phucap_chuyenmon', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* PHỤ CẤP KHÁC */}
-                           <tr>
-                              <td className="ts-cell-label">PHỤ CẤP KHÁC</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.phucap_khac)}
-                                    onChange={(e) => handleNumberChange('phucap_khac', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* THƯỞNG LỄ */}
-                           <tr>
-                              <td className="ts-cell-label">THƯỞNG LỄ</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.thuongle)}
-                                    onChange={(e) => handleNumberChange('thuongle', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* TĂNG LƯƠNG */}
-                           <tr>
-                              <td className="ts-cell-label">TĂNG LƯƠNG</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num"
-                                    value={fCur(formData.tangluong)}
-                                    onChange={(e) => handleNumberChange('tangluong', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* TỔNG THU NHẬP */}
-                           <tr className="ts-row-total">
-                              <td className="ts-cell-label fw-bold text-uppercase">TỔNG THU NHẬP</td>
-                              <td className="ts-cell-input-td fw-bold text-success" colSpan="3">
-                                 {fCur(tongThuNhap)} ₫
-                              </td>
-                           </tr>
-
-                           {/* HEADER SECTION 2: KHOẢN KHẤU TRỪ */}
-                           <tr className="ts-section-header">
-                              <td colSpan="4" className="fw-bold">KHOẢN KHẤU TRỪ</td>
-                           </tr>
-
-                           {/* KHẤU TRỪ BHXH/BHYT/BHTN */}
-                           <tr>
-                              <td className="ts-cell-label">KHẤU TRỪ BHXH/BHYT/BHTN</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num text-danger"
-                                    value={fCur(formData.khautru_bhxh)}
-                                    onChange={(e) => handleNumberChange('khautru_bhxh', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* Tạm ứng */}
-                           <tr>
-                              <td className="ts-cell-label">Tạm ứng</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num text-danger"
-                                    value={fCur(formData.tamung)}
-                                    onChange={(e) => handleNumberChange('tamung', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* Khấu trừ khác */}
-                           <tr>
-                              <td className="ts-cell-label">Khấu trừ khác</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-num text-danger"
-                                    value={fCur(formData.khautru_khac)}
-                                    onChange={(e) => handleNumberChange('khautru_khac', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* TỔNG KHẤU TRỪ */}
-                           <tr className="ts-row-total">
-                              <td className="ts-cell-label fw-bold text-uppercase">TỔNG KHẤU TRỪ</td>
-                              <td className="ts-cell-input-td fw-bold text-danger" colSpan="3">
-                                 {fCur(tongKhauTru)} ₫
-                              </td>
-                           </tr>
-
-                           {/* THỰC NHẬN */}
-                           <tr className="ts-row-net">
-                              <td className="ts-cell-label fw-bold text-uppercase fs-lg">THỰC NHẬN</td>
-                              <td className="ts-cell-input-td fw-bold text-primary fs-lg" colSpan="3">
-                                 {fCur(thucNhan)} ₫
-                              </td>
-                           </tr>
-
-                           {/* Bằng chữ */}
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Bằng chữ</td>
-                              <td className="ts-cell-input-td fst-italic" colSpan="3">
-                                 {bangChuText}
-                              </td>
-                           </tr>
-
-                           {/* Hình thức thanh toán & Ghi chú */}
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Hình thức chi trả</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <select
-                                    className="ts-select-raw"
-                                    value={formData.hinhthuc}
-                                    onChange={(e) => handleInputChange('hinhthuc', e.target.value)}
-                                 >
-                                    {walletOptions.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
-                                    {walletOptions.map(w => (
-                                       <option key={w.id} value={w.name}>{w.name}</option>
-                                    ))}
-                                 </select>
-                              </td>
-                           </tr>
-
-                           <tr>
-                              <td className="ts-cell-label fw-bold">Ghi chú</td>
-                              <td className="ts-cell-input-td" colSpan="3">
-                                 <input
-                                    type="text"
-                                    className="ts-input-raw"
-                                    placeholder="Nhập ghi chú chi tiết phiếu lương (nếu có)..."
-                                    value={formData.ghichu}
-                                    onChange={(e) => handleInputChange('ghichu', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                           {/* Signatures block */}
-                           <tr className="ts-signature-row">
-                              <td colSpan="2" className="ts-sig-col">
-                                 <div className="ts-sig-title fw-bold">Người lập</div>
-                                 <input
-                                    type="text"
-                                    className="ts-sig-input"
-                                    value={formData.nguoilap}
-                                    onChange={(e) => handleInputChange('nguoilap', e.target.value)}
-                                 />
-                              </td>
-                              <td colSpan="2" className="ts-sig-col">
-                                 <div className="ts-sig-title fw-bold">Người nhận lương</div>
-                                 <input
-                                    type="text"
-                                    className="ts-sig-input"
-                                    value={formData.nguoiduyet}
-                                    onChange={(e) => handleInputChange('nguoiduyet', e.target.value)}
-                                 />
-                              </td>
-                           </tr>
-
-                        </tbody>
-                     </table>
+                     {/* Chữ ký */}
+                     <div className="ts-signature-row">
+                        <div className="ts-sig-col">
+                           <div className="ts-sig-title fw-bold">Người lập</div>
+                           <input
+                              type="text"
+                              className="ts-sig-input"
+                              value={formData.nguoilap}
+                              onChange={(e) => handleInputChange('nguoilap', e.target.value)}
+                           />
+                        </div>
+                        <div className="ts-sig-col">
+                           <div className="ts-sig-title fw-bold">Người nhận lương</div>
+                           <input
+                              type="text"
+                              className="ts-sig-input"
+                              value={formData.nguoiduyet}
+                              onChange={(e) => handleInputChange('nguoiduyet', e.target.value)}
+                           />
+                        </div>
+                     </div>
 
                   </div>
                </div>
@@ -894,51 +951,97 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                   <p>BẢNG PHIẾU LƯƠNG NHÂN VIÊN - THÁNG {monthStr}</p>
                </div>
 
-               <table className="p-table">
+               <div className="p-section-title">Thông tin nhân viên</div>
+               <table className="p-day-table">
                   <tbody>
                      <tr>
-                        <td className="fw-bold" style={{ width: '35%' }}>Mã nhân viên:</td>
+                        <td className="p-label">Tháng</td>
+                        <td><b>{monthStr}</b></td>
+                        <td className="p-label">Mã nhân viên</td>
                         <td><b>{formData.manv}</b></td>
                      </tr>
                      <tr>
-                        <td className="fw-bold">Họ và tên:</td>
+                        <td className="p-label">Họ và tên</td>
                         <td><b>{formData.tennv}</b></td>
-                     </tr>
-                     <tr>
-                        <td className="fw-bold">Chức vụ:</td>
+                        <td className="p-label">Chức vụ</td>
                         <td>{formData.chucvu}</td>
                      </tr>
-                     <tr className="p-section-header">
-                        <td colSpan="2">KHOẢN THU</td>
-                     </tr>
-                     <tr><td>LƯƠNG CƠ BẢN</td><td className="text-right">{fCur(formData.luongcoban)} ₫</td></tr>
-                     <tr><td>CHUYÊN CẦN</td><td className="text-right">{fCur(formData.chuyencan)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.phucap_bhxh)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP TRÁCH NHIỆM</td><td className="text-right">{fCur(formData.phucap_trachnhiem)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP ĐI LẠI</td><td className="text-right">{fCur(formData.phucap_dilai)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP CHUYÊN MÔN</td><td className="text-right">{fCur(formData.phucap_chuyenmon)} ₫</td></tr>
-                     <tr><td>PHỤ CẤP KHÁC</td><td className="text-right">{fCur(formData.phucap_khac)} ₫</td></tr>
-                     <tr><td>THƯỞNG LỄ</td><td className="text-right">{fCur(formData.thuongle)} ₫</td></tr>
-                     <tr><td>TĂNG LƯƠNG</td><td className="text-right">{fCur(formData.tangluong)} ₫</td></tr>
-                     <tr className="p-total-row"><td>TỔNG THU NHẬP</td><td className="text-right fw-bold">{fCur(tongThuNhap)} ₫</td></tr>
-                     <tr className="p-section-header">
-                        <td colSpan="2">KHOẢN KHẤU TRỪ</td>
-                     </tr>
-                     <tr><td>KHẤU TRỪ BHXH/BHYT/BHTN</td><td className="text-right">{fCur(formData.khautru_bhxh)} ₫</td></tr>
-                     <tr><td>Tạm ứng</td><td className="text-right">{fCur(formData.tamung)} ₫</td></tr>
-                     <tr><td>Khấu trừ khác</td><td className="text-right">{fCur(formData.khautru_khac)} ₫</td></tr>
-                     <tr className="p-total-row"><td>TỔNG KHẤU TRỪ</td><td className="text-right fw-bold">{fCur(tongKhauTru)} ₫</td></tr>
-                     <tr className="p-net-row">
-                        <td className="fw-bold fs-lg">THỰC NHẬN</td>
-                        <td className="text-right fw-bold fs-lg">{fCur(thucNhan)} VNĐ</td>
+                  </tbody>
+               </table>
+
+               <div className="p-section-title">Ngày công trong tháng</div>
+               <table className="p-day-table">
+                  <tbody>
+                     <tr className="p-day-head">
+                        {SALARY_DAY_FIELDS.map(f => (
+                           <th key={f.key}>{f.label}</th>
+                        ))}
                      </tr>
                      <tr>
-                        <td className="fw-bold">Bằng chữ:</td>
-                        <td className="fst-italic">{bangChuText}</td>
+                        {SALARY_DAY_FIELDS.map(f => (
+                           <td key={f.key} className="p-center">{fDay(formData[f.key])}</td>
+                        ))}
+                     </tr>
+                     <tr className="p-bold">
+                        <td colSpan={5}>Tổng ngày công tính lương</td>
+                        <td className="p-right">{fDayTotal(tongNgayCong)} ngày</td>
+                     </tr>
+                  </tbody>
+               </table>
+
+               <div className="p-section-title">Khoản thu nhập</div>
+               <table className="p-day-table">
+                  <tbody>
+                     <tr className="p-day-head">
+                        <th className="p-col-stt">STT</th>
+                        <th>Nội dung</th>
+                        <th className="p-col-amount">Số tiền (đ)</th>
+                     </tr>
+                     <tr><td className="p-center">1</td><td>Lương tháng này &amp; Phụ cấp</td><td className="p-right">{fSlip(luongThangNay)}</td></tr>
+                     <tr><td className="p-center">2</td><td>Lương nghỉ phép, lễ, cưới hỏi, tang sư</td><td className="p-right">{fSlip(luongNghiPhep)}</td></tr>
+                     <tr><td className="p-center">3</td><td>Hỗ trợ sinh nhật, cưới hỏi, tang sư</td><td className="p-right">{fSlip(hotroSinhNhat)}</td></tr>
+                     <tr><td className="p-center">4</td><td>Tiền thưởng học viên</td><td className="p-right">{fSlip(thuongHocVien)}</td></tr>
+                     <tr><td className="p-center">5</td><td>Hỗ trợ KidsCamp</td><td className="p-right">{fSlip(hotroKidscamp)}</td></tr>
+                     <tr className="p-bold">
+                        <td colSpan={2}>TỔNG THU NHẬP (1+2+3+4+5)</td>
+                        <td className="p-right">{fCur(tongThuNhap)}</td>
+                     </tr>
+                  </tbody>
+               </table>
+
+               <div className="p-section-title">Khoản khấu trừ</div>
+               <table className="p-day-table">
+                  <tbody>
+                     <tr className="p-day-head">
+                        <th className="p-col-stt">STT</th>
+                        <th>Nội dung</th>
+                        <th className="p-col-amount">Số tiền (đ)</th>
+                        <th className="p-col-note">Ghi chú</th>
+                     </tr>
+                     <tr><td className="p-center">1</td><td>Mức lương đóng BHXH</td><td className="p-right">{fSlip(mucLuongBhxh)}</td><td rowSpan={4}>{formData.ghichu_trukhoac}</td></tr>
+                     <tr><td className="p-center">2</td><td>Khấu trừ BHXH/BHYT/BHTN (10,5% LCB)</td><td className="p-right">{fSlip(tienBhxh)}</td></tr>
+                     <tr><td className="p-center">3</td><td>Thuế TNCN</td><td className="p-right">{fSlip(thueTncn)}</td></tr>
+                     <tr><td className="p-center">4</td><td>Trừ khác</td><td className="p-right">{fSlip(truKhac)}</td></tr>
+                     <tr className="p-bold">
+                        <td colSpan={2}>TỔNG KHẤU TRỪ</td>
+                        <td className="p-right">{fCur(tongPhaiTru)}</td>
+                     </tr>
+                  </tbody>
+               </table>
+
+               <table className="p-day-table p-net-table">
+                  <tbody>
+                     <tr className="p-net">
+                        <td>THỰC NHẬN (Tổng thu nhập - Tổng khấu trừ)</td>
+                        <td className="p-right">{fCur(thucNhan)} đ</td>
+                     </tr>
+                     <tr>
+                        <td className="p-label" style={{ width: '22%' }}>Bằng chữ</td>
+                        <td className="p-italic">{bangChuText}</td>
                      </tr>
                      {formData.ghichu && (
                         <tr>
-                           <td className="fw-bold">Ghi chú:</td>
+                           <td className="p-label">Ghi chú</td>
                            <td>{formData.ghichu}</td>
                         </tr>
                      )}

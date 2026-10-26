@@ -120,6 +120,71 @@ const READ_NUMBER_VN = (number) => {
 };
 
 
+// Bảng chi tiết phiếu lương theo mẫu mới (ngày công + thu nhập / khấu trừ)
+const SalarySlipRows = ({ item }) => {
+   if (!item) return null;
+
+   const cell = { border: '1px solid #000', padding: '6px 10px' };
+   const labelCell = { ...cell, fontWeight: 'bold', width: '45%' };
+   const rightCell = { ...cell, textAlign: 'right' };
+   const highlightCell = { ...cell, background: '#f1f5f9', fontWeight: 900 };
+   const highlightRight = { ...rightCell, background: '#f1f5f9', fontWeight: 900 };
+   const netCell = { ...cell, background: '#e2e8f0', color: '#0f172a', fontWeight: 900, fontSize: '1rem' };
+   const netRight = { ...rightCell, background: '#e2e8f0', color: '#0f172a', fontWeight: 900, fontSize: '1.05rem' };
+
+   const fmtDay = (value) => {
+      const n = parseFloat(String(value === undefined || value === null || value === '' ? 0 : value).replace(',', '.')) || 0;
+      return Number.isInteger(n) ? n.toFixed(1) : String(n);
+   };
+
+   const hasNewTemplate = Object.prototype.hasOwnProperty.call(item, 'chitiet_ngaycong');
+   const dayInfo = (item.chitiet_ngaycong && typeof item.chitiet_ngaycong === 'object') ? item.chitiet_ngaycong : {};
+   const bhxhBase = pCur(item.luong_bhxh) || Math.round(pCur(item.khautru_bhxh) / 0.105);
+   const otherDeduction = pCur(item.khautru_khac);
+   const daySummary = [
+      dayInfo.thucte, dayInfo.nghiphep_nam, dayInfo.nghile_tet,
+      dayInfo.nghiviec_rieng, dayInfo.nghiom, dayInfo.nghikhongphep
+   ].map(fmtDay).join(' / ');
+
+   return (
+      <tbody>
+         <tr><td style={labelCell}>Tháng</td><td style={cell}>{item.thang}</td></tr>
+         <tr><td style={labelCell}>Mã nhân viên</td><td style={{ ...cell, fontWeight: 'bold', color: '#2563eb' }}>{item.manv}</td></tr>
+         <tr><td style={labelCell}>Họ và tên</td><td style={{ ...cell, fontWeight: 'bold' }}>{item.tennv}</td></tr>
+         <tr><td style={labelCell}>Chức vụ</td><td style={cell}>{item.chucvu}</td></tr>
+         {hasNewTemplate && (
+            <tr>
+               <td style={labelCell}>Ngày công (thực tế / phép năm / lễ, Tết / việc riêng / ốm / không phép)</td>
+               <td style={rightCell}>{daySummary}</td>
+            </tr>
+         )}
+
+         <tr><td style={cell}>1: Lương tháng này &amp; Phụ cấp</td><td style={rightCell}>{fCur(item.luongcoban)}</td></tr>
+         <tr><td style={cell}>2: Lương nghỉ phép, lễ, cưới hỏi, tang sư:</td><td style={rightCell}>{fCur(item.luong_nghiphep)}</td></tr>
+         <tr><td style={cell}>3: Hỗ trợ sinh nhật, cưới hỏi, tang sư :</td><td style={rightCell}>{fCur(item.hotro_sinhnhat)}</td></tr>
+         <tr><td style={cell}>4: Tiền thưởng học viên:</td><td style={rightCell}>{fCur(item.thuong_hocvien)}</td></tr>
+         <tr><td style={cell}>5: Hỗ trợ kidscamp</td><td style={rightCell}>{fCur(item.hotro_kidscamp)}</td></tr>
+
+         <tr><td style={highlightCell}>7: Tổng thu nhập (1+2+3+4+5):</td><td style={highlightRight}>{fCur(item.tongthunhap)}</td></tr>
+         <tr><td style={highlightCell}>8: Tổng cộng phải trừ (1+2+3):</td><td style={highlightRight}>{fCur(item.tongkhautru)}</td></tr>
+
+         <tr><td style={cell}>Mức lương đóng BHXH</td><td style={rightCell}>{fCur(bhxhBase)}</td></tr>
+         <tr><td style={cell}>1. BHXH (10,5% LCB) :</td><td style={rightCell}>{fCur(item.khautru_bhxh)}</td></tr>
+         <tr><td style={cell}>2. Thuế TNCN</td><td style={rightCell}>{fCur(item.thue_tncn)}</td></tr>
+         <tr><td style={cell}>3. Trừ khác</td><td style={rightCell}>{fCur(otherDeduction)}</td></tr>
+         {item.ghichu_trukhoac && (
+            <tr><td style={cell}>Ghi chú trừ khác</td><td style={rightCell}>{item.ghichu_trukhoac}</td></tr>
+         )}
+
+         <tr><td style={netCell}>9: THỰC NHẬN KỲ NÀY (7-8):</td><td style={netRight}>{fCur(item.thucnhan)} ₫</td></tr>
+         <tr><td style={labelCell}>Bằng chữ</td><td style={{ ...cell, fontStyle: 'italic' }}>{item.bangchu || (READ_NUMBER_VN(pCur(item.thucnhan)) + ' đồng')}</td></tr>
+         {item.ghichu && (
+            <tr><td style={labelCell}>Ghi chú</td><td style={cell}>{item.ghichu}</td></tr>
+         )}
+      </tbody>
+   );
+};
+
 const dataUrlToBlob = (dataUrl) => {
    const [meta, base64] = dataUrl.split(',');
    const mime = meta.match(/data:(.*?);base64/)?.[1] || 'image/png';
@@ -2791,33 +2856,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                      <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#000' }}>PHIẾU LƯƠNG NHÂN VIÊN - {(config?.tencongty || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                     <tbody>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', width: '40%' }}>Tháng</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.thang}</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{printLuong.manv}</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{printLuong.tennv}</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{printLuong.chucvu}</td></tr>
-
-                        <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.luongcoban)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.chuyencan)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_bhxh)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_trachnhiem)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_dilai)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_chuyenmon)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.phucap_khac)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.thuongle)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tangluong)} ₫</td></tr>
-                        <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(printLuong.tongthunhap)} ₫</td></tr>
-
-                        <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_bhxh)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.tamung)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(printLuong.khautru_khac)} ₫</td></tr>
-                        <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(printLuong.tongkhautru)} ₫</td></tr>
-
-                        <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(printLuong.thucnhan)} ₫</td></tr>
-                        <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{printLuong.bangchu || (READ_NUMBER_VN(pCur(printLuong.thucnhan)) + ' đồng')}</td></tr>
-                     </tbody>
+                     <SalarySlipRows item={printLuong} />
                   </table>
                </div>
             </div>,
@@ -3927,33 +3966,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#000' }}>PHIẾU LƯƠNG NHÂN VIÊN - {(config?.tencongty || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
                         </div>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                           <tbody>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', width: '40%' }}>Tháng</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.thang}</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Mã nhân viên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold', color: '#2563eb' }}>{viewSalarySlipModal.item.manv}</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Họ và tên</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>{viewSalarySlipModal.item.tennv}</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Chức vụ</td><td style={{ border: '1px solid #000', padding: '6px 10px' }}>{viewSalarySlipModal.item.chucvu}</td></tr>
-
-                              <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN THU</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>LƯƠNG CƠ BẢN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.luongcoban)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>CHUYÊN CẦN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.chuyencan)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_bhxh)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP TRÁCH NHIỆM</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_trachnhiem)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP ĐI LẠI</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_dilai)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP CHUYÊN MÔN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_chuyenmon)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>PHỤ CẤP KHÁC</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.phucap_khac)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>THƯỞNG LỄ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.thuongle)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TĂNG LƯƠNG</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tangluong)} ₫</td></tr>
-                              <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG THU NHẬP</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#10b981' }}>{fCur(viewSalarySlipModal.item.tongthunhap)} ₫</td></tr>
-
-                              <tr style={{ background: '#e9edf4', fontWeight: 900 }}><td colSpan="2" style={{ border: '1px solid #000', padding: '6px 10px' }}>KHOẢN KHẤU TRỪ</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>KHẤU TRỪ BHXH/BHYT/BHTN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_bhxh)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Tạm ứng</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.tamung)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px' }}>Khấu trừ khác</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right' }}>{fCur(viewSalarySlipModal.item.khautru_khac)} ₫</td></tr>
-                              <tr style={{ background: '#f8fafc', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px' }}>TỔNG KHẤU TRỪ</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#ef4444' }}>{fCur(viewSalarySlipModal.item.tongkhautru)} ₫</td></tr>
-
-                              <tr style={{ background: '#fef3c7', fontWeight: 900 }}><td style={{ border: '1px solid #000', padding: '6px 10px', fontSize: '1rem' }}>THỰC NHẬN</td><td style={{ border: '1px solid #000', padding: '6px 10px', textAlign: 'right', color: '#2563eb', fontSize: '1.05rem' }}>{fCur(viewSalarySlipModal.item.thucnhan)} ₫</td></tr>
-                              <tr><td style={{ border: '1px solid #000', padding: '6px 10px', fontWeight: 'bold' }}>Bằng chữ</td><td style={{ border: '1px solid #000', padding: '6px 10px', fontStyle: 'italic' }}>{viewSalarySlipModal.item.bangchu || (READ_NUMBER_VN(pCur(viewSalarySlipModal.item.thucnhan)) + ' đồng')}</td></tr>
-                           </tbody>
+                           <SalarySlipRows item={viewSalarySlipModal.item} />
                         </table>
                      </div>
                   </div>
