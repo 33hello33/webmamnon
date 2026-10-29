@@ -427,7 +427,9 @@ export default function InvoiceManager({
    const [registeredSurcharges, setRegisteredSurcharges] = useState([]);
    const [isLoadingSurcharges, setIsLoadingSurcharges] = useState(false);
 
-   const fetchRegisteredSurcharges = useCallback(async (studentId, startDate, soLuong = 1, loaiDong = 'Tháng') => {
+   const invoiceClassId = activeClass?.malop || selectedStudent?.malop || '';
+
+   const fetchRegisteredSurcharges = useCallback(async (studentId, startDate, soLuong = 1, loaiDong = 'Tháng', classId = '') => {
       if (!studentId || !startDate) {
          setRegisteredSurcharges([]);
          return;
@@ -446,20 +448,24 @@ export default function InvoiceManager({
          const targetMonths = [];
          const count = unit.includes('tháng') && sl > 1 ? sl : 1;
          for (let i = 0; i < count; i++) {
-            const cur = new Date(d);
-            cur.setMonth(d.getMonth() + i);
-            const m = cur.getMonth() + 1;
-            const y = cur.getFullYear();
+            const cur = new Date(d.getFullYear(), d.getMonth() + i, 1);
             targetMonths.push({
-               month: m,
-               year: y
+               month: cur.getMonth() + 1,
+               year: cur.getFullYear()
             });
          }
 
-         const { data, error } = await supabase
+         // Chỉ lấy đăng ký phụ phí của đúng học viên - đúng lớp - đúng tháng
+         // (giống tab Đăng ký phụ phí), tránh load dư dòng đăng ký của lớp khác.
+         let surchargeQuery = supabase
             .from('tbl_dangky_phuphi')
             .select('*')
             .eq('mahv', studentId);
+         if (classId) {
+            surchargeQuery = surchargeQuery.eq('malop', classId);
+         }
+
+         const { data, error } = await surchargeQuery;
 
          if (error) {
             console.warn('Lỗi lấy dữ liệu tbl_dangky_phuphi:', error);
@@ -492,7 +498,7 @@ export default function InvoiceManager({
       const d = new Date(invoiceData.ngayBatDau);
       const month = !isNaN(d.getTime()) ? d.getMonth() + 1 : (new Date().getMonth() + 1);
       const year = !isNaN(d.getTime()) ? d.getFullYear() : new Date().getFullYear();
-      const classId = activeClass?.malop || selectedStudent?.malop_list?.[0] || selectedStudent?.malop || '';
+      const classId = invoiceClassId || selectedStudent?.malop_list?.[0] || '';
 
       if (typeof onNavigateToSurchargeRegistration === 'function') {
          onNavigateToSurchargeRegistration({
@@ -533,12 +539,13 @@ export default function InvoiceManager({
             selectedStudent.mahv,
             invoiceData.ngayBatDau,
             invoiceData.soLuong,
-            invoiceData.loaiDong
+            invoiceData.loaiDong,
+            invoiceClassId
          );
       } else {
          setRegisteredSurcharges([]);
       }
-   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, invoiceData.soLuong, invoiceData.loaiDong, fetchRegisteredSurcharges]);
+   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, invoiceData.soLuong, invoiceData.loaiDong, invoiceClassId, fetchRegisteredSurcharges]);
 
    useEffect(() => {
       const handleWindowFocus = () => {
@@ -547,13 +554,14 @@ export default function InvoiceManager({
                selectedStudent.mahv,
                invoiceData.ngayBatDau,
                invoiceData.soLuong,
-               invoiceData.loaiDong
+               invoiceData.loaiDong,
+               invoiceClassId
             );
          }
       };
       window.addEventListener('focus', handleWindowFocus);
       return () => window.removeEventListener('focus', handleWindowFocus);
-   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, invoiceData.soLuong, invoiceData.loaiDong, fetchRegisteredSurcharges]);
+   }, [selectedStudent?.mahv, invoiceData.ngayBatDau, invoiceData.soLuong, invoiceData.loaiDong, invoiceClassId, fetchRegisteredSurcharges]);
 
    useEffect(() => {
       if (downloadingInvoice) {

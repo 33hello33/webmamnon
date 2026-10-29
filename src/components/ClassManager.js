@@ -405,7 +405,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     return { period: prevMonthKey, byStudent };
   }, [config?.tiendangoai]);
 
-  const loadBatchRegisteredSurcharges = useCallback(async (studentIds, billingStartDate, soLuong = 1, loaiDong = 'Tháng') => {
+  const loadBatchRegisteredSurcharges = useCallback(async (studentIds, billingStartDate, soLuong = 1, loaiDong = 'Tháng', classId = '') => {
     if (!Array.isArray(studentIds) || studentIds.length === 0 || !billingStartDate) {
       return {};
     }
@@ -416,18 +416,22 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
     const numMonths = (loaiDong || '').toLowerCase().includes('tháng') ? Math.max(1, parseInt(soLuong, 10) || 1) : 1;
     const targetMonths = [];
     for (let i = 0; i < numMonths; i++) {
-      const cur = new Date(d);
-      cur.setMonth(d.getMonth() + i);
-      const m = cur.getMonth() + 1;
-      const y = cur.getFullYear();
-      targetMonths.push({ month: m, year: y });
+      const cur = new Date(d.getFullYear(), d.getMonth() + i, 1);
+      targetMonths.push({ month: cur.getMonth() + 1, year: cur.getFullYear() });
     }
 
     try {
-      const { data, error } = await supabase
+      // Chỉ lấy đăng ký phụ phí của đúng lớp + đúng tháng (giống tab Đăng ký phụ phí),
+      // tránh load dư dòng đăng ký của lớp khác của cùng học viên.
+      let surchargeQuery = supabase
         .from('tbl_dangky_phuphi')
         .select('*')
         .in('mahv', studentIds);
+      if (classId) {
+        surchargeQuery = surchargeQuery.eq('malop', classId);
+      }
+
+      const { data, error } = await surchargeQuery;
 
       if (error) {
         console.warn('Lỗi lấy dữ liệu tbl_dangky_phuphi:', error);
@@ -754,7 +758,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
         supabase.from('tbl_hd').select('mahv, conno, daxoa').in('mahv', studentIds),
         supabase.from('tbl_billhanghoa').select('mahv, conno, dadong, daxoa').in('mahv', studentIds),
         loadBatchNgoaiKhoaAdjustments(studentIds, startStr),
-        loadBatchRegisteredSurcharges(studentIds, startStr, initSoLuong, initLoaiDong)
+        loadBatchRegisteredSurcharges(studentIds, startStr, initSoLuong, initLoaiDong, selectedClassId)
       ]);
 
       const attendance = attData || [];
@@ -978,7 +982,7 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
       const studentIds = activeStudents.map(s => s.mahv);
       const [ngoaiKhoaAdjustments, regSurchargesMap, { data: attData }] = await Promise.all([
         loadBatchNgoaiKhoaAdjustments(studentIds, startStr),
-        loadBatchRegisteredSurcharges(studentIds, startStr, batchNoticeData.soLuong || 1, batchNoticeData.loaiDong || 'Tháng'),
+        loadBatchRegisteredSurcharges(studentIds, startStr, batchNoticeData.soLuong || 1, batchNoticeData.loaiDong || 'Tháng', selectedClassId),
         supabase
           .from('tbl_diemdanh')
           .select('*')
