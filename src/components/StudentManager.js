@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog, getActiveSchema, SCHEMA_CS1, SUPABASE_SCHEMA, HAS_MULTI_BRANCH } from '../supabase';
 import * as XLSX from 'xlsx';
 import {
-  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart, Plus
+  Users, UserPlus, Edit, Trash2, FileSpreadsheet, Download, BookOpen, Search, RefreshCw, X, CheckCircle2, AlertCircle, ArrowRightLeft, Camera, Heart, Plus, MessageCircle
 } from 'lucide-react';
 import ClassManager from './ClassManager';
 import AttendanceManager from './AttendanceManager';
 import LeaveManager from './LeaveManager';
 import AttendanceToday from './AttendanceToday';
 import SurchargeRegistration from './SurchargeRegistration';
+import ZaloUserIdFinder from './ZaloUserIdFinder';
 import './StudentManager.css';
 import { compressImage } from '../utils/imageUtils';
 import { toLocalISODate } from '../utils/localDate';
@@ -61,6 +62,18 @@ export default function StudentManager({
 
   // Modals & Selections
   const [selectedStudentId, setSelectedStudentId] = useState(null);
+
+  // Zalo User ID Finder
+  const [isZaloFinderOpen, setIsZaloFinderOpen] = useState(false);
+  const [zaloJobInfo, setZaloJobInfo] = useState(null);
+
+  const handleZaloUserIdSaved = React.useCallback((mahv, zaloUserId) => {
+    setStudents(prev => prev.map(s => (s.mahv === mahv ? { ...s, zalo_user_id: zaloUserId } : s)));
+  }, []);
+
+  const handleZaloJobInfoChange = React.useCallback((info) => {
+    setZaloJobInfo(info);
+  }, []);
 
   // Form State
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -785,6 +798,14 @@ export default function StudentManager({
               <button className="grid-btn transfer" onClick={handleTransferClassTrigger}><ArrowRightLeft size={16} /><small>Chuyển</small></button>
               <button className="grid-btn success" onClick={() => fileInputRef.current?.click()}><FileSpreadsheet size={16} /><small>Nhập</small></button>
               <button className="grid-btn success" onClick={handleExportExcel}><Download size={16} /><small>Xuất</small></button>
+              <button
+                className={`grid-btn zalo ${zaloJobInfo?.running ? 'is-running' : ''}`}
+                title="Lấy Zalo User ID theo SĐT mẹ / SĐT ba"
+                onClick={() => setIsZaloFinderOpen(true)}
+              >
+                <MessageCircle size={16} />
+                <small>{zaloJobInfo && zaloJobInfo.pending > 0 ? `Zalo ${zaloJobInfo.done}/${zaloJobInfo.total}` : 'Zalo ID'}</small>
+              </button>
 
               <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} ref={fileInputRef} onChange={handleImportExcel} />
             </div>
@@ -986,6 +1007,16 @@ export default function StudentManager({
           />
         )}
       </div>
+
+      <ZaloUserIdFinder
+        open={isZaloFinderOpen}
+        onClose={() => setIsZaloFinderOpen(false)}
+        students={students}
+        filteredStudents={filteredStudents}
+        selectedStudentId={selectedStudentId}
+        onSaved={handleZaloUserIdSaved}
+        onJobStateChange={handleZaloJobInfoChange}
+      />
 
       {/* Form Modal */}
       {isFormOpen && createPortal(

@@ -1,12 +1,35 @@
 import axios from 'axios';
 import { supabase } from '../supabase';
 
+/**
+ * Xác định backend Zalo đã xử lý thành công hay chưa
+ * (một số endpoint trả 200 nhưng success: false).
+ */
+export const isZaloRequestSuccessful = (response) => (
+  Boolean(response?.data?.success) || (response?.status === 200 && response?.data?.success !== false)
+);
+
 // Bộ nhớ đệm tạm thời cho danh sách alias & friends để tránh gửi quá nhiều request khi gửi hàng loạt
 let cachedAliases = null;
 let cachedFriends = null;
 let cacheTimestamp = 0;
 let aliasEndpointUnsupported = false;
 const CACHE_TTL_MS = 60000; // Cache 60 giây
+
+// Cache thông tin Zalo của học viên (zalo_user_id, SĐT ba/mẹ) theo mã HV
+const studentZaloInfoCache = new Map();
+
+// Tắt ghi zalo_user_id nếu bảng tbl_hv chưa có cột này (tránh lặp lỗi khi gửi hàng loạt)
+let canPersistZaloUserId = true;
+
+const isMissingZaloUserIdColumn = (err) => {
+  const message = String(err?.message || err || '');
+  return err?.code === '42703' || (/zalo_user_id/i.test(message) && /column|does not exist/i.test(message));
+};
+
+export const getZaloBackendUrl = (zaloBackendUrl) => (
+  zaloBackendUrl || process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000'
+);
 
 /**
  * Chuẩn hóa số điện thoại Việt Nam
@@ -29,7 +52,77 @@ export const clearZaloRecipientCache = () => {
   cachedFriends = null;
   cacheTimestamp = 0;
   aliasEndpointUnsupported = false;
+  studentZaloInfoCache.clear();
 };
+
+/**
+ * Đọc zalo_user_id (và SĐT ba/mẹ) đã lưu trong tbl_hv theo mã học viên.
+ * Có cache 60 giây để không phát sinh thêm truy vấn khi gửi hàng loạt.
+ */
+export async function getStudentZaloInfo(mahv, forceRefresh = false) {
+  const key = String(mahv || '').trim();
+  if (!key) return null;
+
+  const cached = studentZaloInfoCache.get(key);
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('tbl_hv')
+      .select('*')
+      .eq('mahv', key)
+      .maybeSingle();
+    if (error) throw error;
+
+    const info = data ? {
+      tenhv: data.tenhv || '',
+      sdtme: data.sdtme || '',
+      sdtba: data.sdtba || '',
+      zaloUserId: String(data.zalo_user_id || '').trim()
+    } : null;
+
+    studentZaloInfoCache.set(key, { data: info, timestamp: Date.now() });
+    return info;
+  } catch (e) {
+    console.warn('[zaloHelper] Không đọc được thông tin Zalo từ tbl_hv:', e?.message || e);
+    return null;
+  }
+}
+
+/**
+ * Lưu zalo_user_id vừa tra cứu được vào tbl_hv để các lần gửi sau dùng trực tiếp.
+ * Không chặn luồng gửi tin nếu ghi thất bại.
+ */
+export async function saveStudentZaloUserId(mahv, zaloUserId) {
+  const key = String(mahv || '').trim();
+  const uid = String(zaloUserId || '').trim();
+  if (!key || !uid || !canPersistZaloUserId) return false;
+
+  const cached = studentZaloInfoCache.get(key);
+  if (cached?.data?.zaloUserId === uid) return true;
+
+  try {
+    const { error } = await supabase
+      .from('tbl_hv')
+      .update({ zalo_user_id: uid })
+      .eq('mahv', key);
+    if (error) throw error;
+
+    if (cached?.data) {
+      studentZaloInfoCache.set(key, {
+        data: { ...cached.data, zaloUserId: uid },
+        timestamp: Date.now()
+      });
+    }
+    return true;
+  } catch (e) {
+    if (isMissingZaloUserIdColumn(e)) canPersistZaloUserId = false;
+    console.warn(`[zaloHelper] Không lưu được zalo_user_id cho ${key}:`, e?.message || e);
+    return false;
+  }
+}
 
 // Ưu tiên khớp chính xác alias, sau đó mới khớp một phần để tránh gửi nhầm người nhận
 const pickAliasMatch = (items, lowerMahv, getText) => {
@@ -147,9 +240,10 @@ async function findZaloByAlias({ backendUrl, mahv, forceRefresh = false }) {
 
 /**
  * Tra cứu thông tin người nhận Zalo cho học sinh mầm non theo thứ tự ưu tiên:
+ * 0. Nếu tbl_hv đã lưu zalo_user_id (hoặc truyền vào zaloUserId) -> dùng luôn ID đó
  * 1. Alias mã học viên (mahv)
- * 2. Nếu không tìm ra, tìm kiếm theo số điện thoại Mẹ (sdtme)
- * 3. Nếu vẫn không có, tìm kiếm theo số điện thoại Ba (sdtba)
+ * 2. Nếu không tìm ra, tìm kiếm theo số điện thoại Mẹ (sdtme) — tìm ra UID sẽ lưu vào tbl_hv.zalo_user_id
+ * 3. Nếu vẫn không có, tìm kiếm theo số điện thoại Ba (sdtba) — cũng lưu lại UID
  *
  * @param {Object} options
  * @param {string} [options.sdtme] - Số điện thoại mẹ
@@ -161,9 +255,11 @@ async function findZaloByAlias({ backendUrl, mahv, forceRefresh = false }) {
  * @param {string} [options.sdtphuhuynh] - Fallback tham số sdtphuhuynh cũ
  * @param {string} [options.parentPhone] - Fallback tham số parentPhone cũ
  * @param {string} [options.mahv] - Mã học viên
+ * @param {string} [options.zaloUserId] - zalo_user_id đã lưu (ưu tiên cao nhất)
  * @param {string} [options.zaloBackendUrl] - Đường dẫn backend Zalo
- * @param {boolean} [options.forceRefresh] - Bỏ qua cache khi quét alias
- * @returns {Promise<{ found: boolean, contact: any, targetId: string|null, method: 'alias'|'phone_me'|'phone_ba'|null, error?: string }>}
+ * @param {boolean} [options.forceRefresh] - Bỏ qua cache khi quét alias / thông tin học viên
+ * @param {boolean} [options.skipSavedZaloUserId] - Bỏ qua bước ưu tiên zalo_user_id đã lưu (dùng cho cơ chế dự phòng)
+ * @returns {Promise<{ found: boolean, contact: any, targetId: string|null, method: 'zalo_user_id'|'alias'|'phone_me'|'phone_ba'|null, error?: string }>}
  */
 export async function findZaloRecipient({
   sdtme,
@@ -175,10 +271,12 @@ export async function findZaloRecipient({
   sdtphuhuynh,
   parentPhone,
   mahv,
+  zaloUserId,
   zaloBackendUrl,
-  forceRefresh = false
+  forceRefresh = false,
+  skipSavedZaloUserId = false
 }) {
-  const backendUrl = zaloBackendUrl || process.env.REACT_APP_ZALO_API_URL || 'http://localhost:5000';
+  const backendUrl = getZaloBackendUrl(zaloBackendUrl);
 
   // Xác định SĐT mẹ (ưu tiên sau alias) và SĐT ba (ưu tiên thấp nhất)
   let cleanPhoneMe = normalizePhoneNumber(sdtme || phoneMe || phone || sdt);
@@ -186,25 +284,32 @@ export async function findZaloRecipient({
 
   const cleanMahv = String(mahv || '').trim();
 
-  // Nếu có mã HV mà còn thiếu SĐT mẹ hoặc SĐT ba, tra cứu thêm từ tbl_hv (chỉ dùng cột sdtme, sdtba)
-  if (cleanMahv && (!cleanPhoneMe || !cleanPhoneBa)) {
-    try {
-      const { data: hvData } = await supabase
-        .from('tbl_hv')
-        .select('sdtme, sdtba')
-        .eq('mahv', cleanMahv)
-        .maybeSingle();
+  // Luôn đọc thông tin học viên (zalo_user_id + SĐT ba/mẹ) từ tbl_hv khi có mã HV
+  const studentInfo = cleanMahv ? await getStudentZaloInfo(cleanMahv, forceRefresh) : null;
 
-      if (hvData) {
-        if (!cleanPhoneMe && hvData.sdtme) {
-          cleanPhoneMe = normalizePhoneNumber(hvData.sdtme);
-        }
-        if (!cleanPhoneBa && hvData.sdtba) {
-          cleanPhoneBa = normalizePhoneNumber(hvData.sdtba);
-        }
-      }
-    } catch (e) {
-      console.warn('[zaloHelper] Không thể tra cứu SĐT ba/mẹ từ tbl_hv:', e?.message || e);
+  // ── BƯỚC 0: Ưu tiên zalo_user_id đã lưu trong tbl_hv ─────────────────
+  const savedZaloUserId = String(zaloUserId || studentInfo?.zaloUserId || '').trim();
+  if (!skipSavedZaloUserId && savedZaloUserId) {
+    return {
+      found: true,
+      contact: {
+        userId: savedZaloUserId,
+        zaloUserId: savedZaloUserId,
+        displayName: studentInfo?.tenhv || '',
+        resolvedName: studentInfo?.tenhv || ''
+      },
+      targetId: savedZaloUserId,
+      method: 'zalo_user_id'
+    };
+  }
+
+  // Bổ sung SĐT còn thiếu từ tbl_hv để không bỏ sót
+  if (studentInfo) {
+    if (!cleanPhoneMe && studentInfo.sdtme) {
+      cleanPhoneMe = normalizePhoneNumber(studentInfo.sdtme);
+    }
+    if (!cleanPhoneBa && studentInfo.sdtba) {
+      cleanPhoneBa = normalizePhoneNumber(studentInfo.sdtba);
     }
   }
 
@@ -231,6 +336,7 @@ export async function findZaloRecipient({
         const contact = searchRes.data.contact;
         const targetId = contact.uid || contact.userId || contact.zaloId || contact.id;
         if (targetId) {
+          await saveStudentZaloUserId(cleanMahv, targetId);
           return {
             found: true,
             contact,
@@ -254,6 +360,7 @@ export async function findZaloRecipient({
         const contact = parentRes.data.contact;
         const targetId = contact.uid || contact.userId || contact.zaloId || contact.id;
         if (targetId) {
+          await saveStudentZaloUserId(cleanMahv, targetId);
           return {
             found: true,
             contact,
@@ -280,3 +387,167 @@ export async function findZaloRecipient({
     error: `Không tìm thấy tài khoản Zalo theo ${triedList.length > 0 ? triedList.join(', ') : 'Mã HV, SĐT mẹ hoặc SĐT ba'}`
   };
 }
+
+const isZaloNetworkFailure = (err) => (
+  !err?.response &&
+  (
+    err?.code === 'ECONNABORTED' ||
+    err?.code === 'ERR_NETWORK' ||
+    String(err?.message || '').toLowerCase().includes('timeout') ||
+    String(err?.message || '').toLowerCase().includes('network')
+  )
+);
+
+/**
+ * Gửi Zalo với cơ chế dự phòng: thử zalo_user_id đã lưu trước,
+ * chỉ khi gửi thất bại mới tra cứu theo cơ chế cũ (Alias -> SĐT mẹ -> SĐT ba) và gửi lại.
+ */
+async function sendZaloWithFallback({ targetArgs, attempt }) {
+  const { mahv, zaloUserId, forceRefresh = false } = targetArgs;
+  const triedTargetIds = [];
+  let lastError = '';
+  let lastTarget = null;
+  let aborted = false;
+
+  const trySend = async (target) => {
+    triedTargetIds.push(target.targetId);
+    lastTarget = target;
+    try {
+      const response = await attempt(target);
+      if (isZaloRequestSuccessful(response)) {
+        return {
+          success: true,
+          targetId: target.targetId,
+          method: target.method,
+          contact: target.contact,
+          triedTargetIds,
+          response,
+          error: ''
+        };
+      }
+      lastError = response?.data?.error || response?.data?.message || 'Zalo server không xác nhận gửi thành công';
+      console.warn(`[zaloHelper] Gửi Zalo qua ${target.method} (${target.targetId}) không thành công:`, lastError);
+    } catch (err) {
+      lastError = err?.response?.data?.error || err?.message || 'Lỗi gửi Zalo';
+      console.warn(`[zaloHelper] Lỗi gửi Zalo qua ${target.method} (${target.targetId}):`, lastError);
+      // Lỗi mạng/timeout thì thử tiếp cũng vô ích, tránh nhân đôi thời gian chờ
+      if (isZaloNetworkFailure(err)) aborted = true;
+    }
+    return null;
+  };
+
+  // ── 1. Gửi bằng zalo_user_id đã lưu trong tbl_hv ─────────────────────
+  const studentInfo = mahv ? await getStudentZaloInfo(mahv, forceRefresh) : null;
+  const savedZaloUserId = String(zaloUserId || studentInfo?.zaloUserId || '').trim();
+  if (savedZaloUserId) {
+    const sent = await trySend({
+      targetId: savedZaloUserId,
+      method: 'zalo_user_id',
+      contact: {
+        userId: savedZaloUserId,
+        zaloUserId: savedZaloUserId,
+        displayName: studentInfo?.tenhv || '',
+        resolvedName: studentInfo?.tenhv || ''
+      }
+    });
+    if (sent) return sent;
+  }
+
+  // ── 2. Dự phòng: cơ chế cũ (chỉ chạy khi bước 1 không gửi được) ──────
+  let lookupError = '';
+  if (!aborted) {
+    const legacy = await findZaloRecipient({ ...targetArgs, skipSavedZaloUserId: true });
+    lookupError = legacy.error || '';
+    if (legacy.found && legacy.targetId && !triedTargetIds.includes(legacy.targetId)) {
+      const sent = await trySend({
+        targetId: legacy.targetId,
+        method: legacy.method,
+        contact: legacy.contact
+      });
+      if (sent) return sent;
+    }
+  }
+
+  return {
+    success: false,
+    targetId: lastTarget?.targetId || null,
+    method: lastTarget?.method || null,
+    contact: lastTarget?.contact || null,
+    triedTargetIds,
+    response: null,
+    error: lastError || lookupError || 'Không tìm thấy tài khoản Zalo'
+  };
+}
+
+/**
+ * Gửi tin nhắn văn bản Zalo: ưu tiên zalo_user_id trong tbl_hv, thất bại mới dùng cơ chế cũ.
+ * @returns {Promise<{ success: boolean, targetId: string|null, method: string|null, contact: any, triedTargetIds: string[], response: any, error: string }>}
+ */
+export async function sendZaloMessage({ message, threadType = 'user', timeout = 30000, ...targetArgs }) {
+  return sendZaloWithFallback({
+    targetArgs,
+    attempt: (target) => axios.post(
+      `${getZaloBackendUrl(targetArgs.zaloBackendUrl)}/api/zalo/send-message`,
+      { threadId: target.targetId, message, threadType },
+      { timeout }
+    )
+  });
+}
+
+/**
+ * Gửi hình ảnh Zalo: ưu tiên zalo_user_id trong tbl_hv, thất bại mới dùng cơ chế cũ.
+ * @returns {Promise<{ success: boolean, targetId: string|null, method: string|null, contact: any, triedTargetIds: string[], response: any, error: string }>}
+ */
+export async function sendZaloImage({ file, caption, threadType = 'user', timeout = 30000, ...targetArgs }) {
+  return sendZaloWithFallback({
+    targetArgs,
+    attempt: (target) => {
+      const formData = new FormData();
+      if (file) formData.append('file', file);
+      formData.append('threadId', target.targetId);
+      formData.append('threadType', threadType);
+      if (caption) formData.append('caption', caption);
+      return axios.post(
+        `${getZaloBackendUrl(targetArgs.zaloBackendUrl)}/api/zalo/send-image`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout }
+      );
+    }
+  });
+}
+
+/**
+ * Chuyển dataURL (kết quả html-to-image) thành File để gửi Zalo.
+ */
+export const dataUrlToFile = (dataUrl, fileName) => {
+  const [meta, base64] = String(dataUrl || '').split(',');
+  const mimeString = meta?.split(':')[1]?.split(';')[0] || 'image/png';
+  const byteString = atob(base64 || '');
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+  return new File([ab], fileName, { type: mimeString });
+};
+
+/**
+ * Xác định bảng chứa chứng từ theo mã: TB* -> tbl_thongbao (Doanh thu dự kiến), còn lại -> tbl_hd (QL phiếu thu HP).
+ */
+export const getZaloStatusTable = (mahd) => (
+  String(mahd || '').trim().toUpperCase().startsWith('TB') ? 'tbl_thongbao' : 'tbl_hd'
+);
+
+/**
+ * Ghi trạng thái gửi Zalo ('sending' | 'sent' | 'failed') vào đúng bảng chứng từ
+ * để cột "Trạng thái Zalo" ở QL phiếu thu HP / Doanh thu dự kiến luôn chính xác.
+ */
+export const updateZaloStatus = async (mahd, status) => {
+  const docId = String(mahd || '').trim();
+  if (!docId) return;
+  const { error } = await supabase
+    .from(getZaloStatusTable(docId))
+    .update({ zalo_status: status })
+    .eq('mahd', docId);
+  if (error) {
+    console.warn(`[zaloHelper] Không cập nhật được zalo_status (${status}) cho ${docId}:`, error.message);
+  }
+};

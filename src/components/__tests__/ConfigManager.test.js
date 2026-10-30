@@ -31,7 +31,7 @@ const baseConfig = {
 };
 
 describe('ConfigManager - cấu hình tin nhắn Zalo', () => {
-  test('hiển thị mẫu tin nhắn khi tbl_config.chatzalo = true', () => {
+  test('luôn hiển thị mẫu tin nhắn Zalo (không phụ thuộc tbl_config.chatzalo)', () => {
     mockConfig = { ...baseConfig, chatzalo: true };
     render(<ConfigManager />);
 
@@ -43,15 +43,15 @@ describe('ConfigManager - cấu hình tin nhắn Zalo', () => {
     expect(screen.getByDisplayValue('Biên lai thu học phí [tenhv] - Số phiếu [mahd]')).toBeInTheDocument();
   });
 
-  test('ẩn mẫu tin nhắn khi tbl_config.chatzalo = false', () => {
+  test('vẫn hiển thị mẫu tin nhắn khi tbl_config.chatzalo = false', () => {
     mockConfig = { ...baseConfig, chatzalo: false };
     render(<ConfigManager />);
 
-    expect(screen.queryByText('Cấu hình Tin nhắn tự động Zalo')).not.toBeInTheDocument();
+    expect(screen.getByText('Cấu hình Tin nhắn tự động Zalo')).toBeInTheDocument();
   });
 
-  test('nhận cả giá trị chuỗi "true"', () => {
-    mockConfig = { ...baseConfig, chatzalo: 'true' };
+  test('vẫn hiển thị mẫu tin nhắn khi config không có trường chatzalo', () => {
+    mockConfig = { ...baseConfig };
     render(<ConfigManager />);
 
     expect(screen.getByText('Cấu hình Tin nhắn tự động Zalo')).toBeInTheDocument();

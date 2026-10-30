@@ -291,6 +291,21 @@
   border-color: #e0f2fe;
 }
 
+.grid-btn.zalo {
+  background: #f2f8ff;
+  color: #0068ff;
+  border-color: #d6e6ff;
+}
+
+.grid-btn.zalo.is-running {
+  box-shadow: 0 0 0 2px rgba(0, 104, 255, 0.18);
+  border-color: #93c5fd;
+}
+
+.grid-btn.zalo:hover {
+  background: #dbeafe;
+}
+
 .grid-btn.danger:hover {
   background: #fee2e2;
 }

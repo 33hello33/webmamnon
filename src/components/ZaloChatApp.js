@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { socket } from '../services/zaloSocketClient';
+import { isZaloRequestSuccessful } from '../services/zaloHelper';
 import { Send, Users, User, LogOut, MessageSquare, RefreshCw, Loader2, Image, Paperclip, Smile, Shield, UserCheck, Edit3, X, FileText, Download } from 'lucide-react';
 import './ZaloChat.css';
 
@@ -633,7 +634,7 @@ export default function ZaloChatApp({ onLogout }) {
 
       const res = await axios.post(`${BACKEND_URL}/api/zalo/send-message`, payload);
 
-      if (res.data?.success || res.status === 200) {
+      if (isZaloRequestSuccessful(res)) {
         const newMsgId = res.data?.messageId || res.data?.msgId || `self-${Date.now()}`;
         setMessages(prev => {
           if (prev.some(m => (m.msgId || (m.data && m.data.msgId)) === newMsgId)) return prev;
@@ -711,7 +712,7 @@ export default function ZaloChatApp({ onLogout }) {
         userId: aliasTarget.userId,
         alias: newAliasName.trim()
       });
-      if (res.data?.success || res.status === 200) {
+      if (isZaloRequestSuccessful(res)) {
         alert('Cập nhật biệt danh thành công!');
         // Cập nhật state bạn bè tại chỗ
         setFriends(prev => prev.map(f => {
@@ -755,7 +756,7 @@ export default function ZaloChatApp({ onLogout }) {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      if (res.data?.success || res.status === 200) {
+      if (isZaloRequestSuccessful(res)) {
         const localUrl = URL.createObjectURL(file);
         const serverPublicUrl = res.data?.publicUrl || res.data?.result?.publicUrl || res.data?.url || res.data?.result?.url;
         const permanentUrl = serverPublicUrl ? (serverPublicUrl.startsWith('http') ? serverPublicUrl : `${BACKEND_URL}${serverPublicUrl}`) : localUrl;

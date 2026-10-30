@@ -56,6 +56,21 @@ export const getSchemaClient = (schemaName) => {
 export const supabaseCs1 = getSchemaClient(SCHEMA_CS1);
 export const supabaseCs2 = SCHEMA_CS2 ? getSchemaClient(SCHEMA_CS2) : supabaseCs1;
 
+// Client riêng cho các thao tác ghi log thủ công (bỏ qua auto-log của fetch interceptor)
+const noLogBaseSupabase = createClient(
+   supabaseUrl || 'https://placeholder.supabase.co',
+   supabaseKey || 'placeholder-key',
+   { global: { headers: { 'x-skip-log': 'true' } } }
+);
+
+const getNoLogSchemaClient = (schemaName) => {
+   const schema = schemaName !== undefined ? schemaName : getActiveSchema();
+   if (schema && typeof schema === 'string' && schema.trim() !== '') {
+      return noLogBaseSupabase.schema(schema.trim());
+   }
+   return noLogBaseSupabase;
+};
+
 export const SHARED_WAREHOUSE_TABLES = ['tbl_hanghoa', 'tbl_nhapkho', 'tbl_billhanghoa'];
 
 export const getSupabaseForSchema = (schemaName) => {
@@ -102,6 +117,32 @@ export const supabase = new Proxy({}, {
       const val = baseSupabase[prop];
       if (typeof val === 'function') {
          return val.bind(baseSupabase);
+      }
+      return val;
+   }
+});
+
+export const supabaseNoLog = new Proxy({}, {
+   get(target, prop) {
+      const schemaClient = getNoLogSchemaClient();
+      if (prop === 'from') {
+         return (tableName) => {
+            if (HAS_MULTI_BRANCH && SCHEMA_CS1 && SHARED_WAREHOUSE_TABLES.includes(tableName)) {
+               return getNoLogSchemaClient(SCHEMA_CS1).from(tableName);
+            }
+            return schemaClient.from(tableName);
+         };
+      }
+      if (typeof schemaClient[prop] !== 'undefined') {
+         const val = schemaClient[prop];
+         if (typeof val === 'function') {
+            return val.bind(schemaClient);
+         }
+         return val;
+      }
+      const val = noLogBaseSupabase[prop];
+      if (typeof val === 'function') {
+         return val.bind(noLogBaseSupabase);
       }
       return val;
    }
@@ -161,6 +202,15 @@ window.fetch = async (...args) => {
    const response = await originalFetch(...args);
 
    if (url.includes('/rest/v1/') && ['POST', 'PATCH', 'DELETE'].includes(method)) {
+      // Cho phép bỏ qua auto-log với các thao tác đã ghi log thủ công
+      const getHeader = (headers, name) => {
+         if (!headers) return null;
+         if (typeof headers.get === 'function') return headers.get(name);
+         return headers[name] || headers[name.toLowerCase()];
+      };
+      const skipLog = getHeader(args[1]?.headers, 'x-skip-log') === 'true';
+      if (skipLog) return response;
+
       const match = url.match(/\/rest\/v1\/([^?]+)/);
       if (match) {
          const table = match[1].split('?')[0].replace(/\/$/, '');

@@ -1,0 +1,489 @@
+/* Zalo User ID Finder — modal tra cứu Zalo User ID theo SĐT */
+
+.zuf-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.zuf-modal {
+  width: 100%;
+  max-width: 720px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(15, 23, 42, 0.45);
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.zuf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.zuf-title {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.zuf-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 10px;
+  background: #e8f1ff;
+  color: #0068ff;
+}
+
+.zuf-title h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.zuf-title p {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.zuf-close {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 8px;
+  line-height: 0;
+}
+
+.zuf-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.zuf-body {
+  padding: 0.9rem 1.1rem 1.1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.zuf-config {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 0.6rem 0.75rem;
+}
+
+.zuf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.zuf-field label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.zuf-field select,
+.zuf-field input[type='number'] {
+  height: 36px;
+  padding: 0 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #fff;
+  outline: none;
+}
+
+.zuf-field select:focus,
+.zuf-field input[type='number']:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.zuf-field select:disabled,
+.zuf-field input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.zuf-checks {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  padding-top: 0.15rem;
+}
+
+.zuf-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: #334155;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.zuf-check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: #0068ff;
+  cursor: pointer;
+}
+
+.zuf-quota {
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.zuf-quota-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.zuf-quota-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0068ff;
+}
+
+.zuf-quota-value {
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.zuf-quota-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.zuf-quota-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #0068ff);
+  transition: width 0.3s ease;
+}
+
+.zuf-quota-fill.is-full {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.zuf-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border: 1px solid transparent;
+}
+
+.zuf-banner svg {
+  flex: 0 0 auto;
+}
+
+.zuf-banner.is-info {
+  background: #eff6ff;
+  border-color: #dbeafe;
+  color: #1d4ed8;
+}
+
+.zuf-banner.is-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.zuf-banner.is-quota {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.zuf-banner.is-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.zuf-spin {
+  animation: zuf-spin 1s linear infinite;
+}
+
+@keyframes zuf-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.zuf-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.zuf-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.45rem 0.3rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+}
+
+.zuf-stat strong {
+  font-size: 1.05rem;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.zuf-stat span {
+  font-size: 0.7rem;
+  color: #64748b;
+  text-align: center;
+}
+
+.zuf-stat.is-ok strong {
+  color: #059669;
+}
+
+.zuf-stat.is-warn strong {
+  color: #d97706;
+}
+
+.zuf-stat.is-err strong {
+  color: #dc2626;
+}
+
+.zuf-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.zuf-progress-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.zuf-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  transition: width 0.3s ease;
+}
+
+.zuf-progress-text {
+  font-size: 0.76rem;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.zuf-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.zuf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 36px;
+  padding: 0 0.9rem;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.zuf-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.zuf-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.zuf-btn.is-primary {
+  background: #0068ff;
+  border-color: #0068ff;
+  color: #fff;
+}
+
+.zuf-btn.is-primary:hover:not(:disabled) {
+  background: #0057d6;
+  border-color: #0057d6;
+}
+
+.zuf-btn.is-warning {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+.zuf-btn.is-warning:hover:not(:disabled) {
+  background: #d97706;
+  border-color: #d97706;
+}
+
+.zuf-btn.is-ghost {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fff;
+}
+
+.zuf-btn.is-ghost:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.zuf-actions-note {
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.zuf-log {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.zuf-log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.zuf-log-row svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.zuf-log-time {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.zuf-log-text {
+  word-break: break-word;
+}
+
+.zuf-log-row.is-success {
+  color: #047857;
+  background: #f0fdf4;
+}
+
+.zuf-log-row.is-warn {
+  color: #b45309;
+  background: #fffbeb;
+}
+
+.zuf-log-row.is-error {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.zuf-log-row.is-info {
+  color: #1d4ed8;
+}
+
+@media (max-width: 640px) {
+  .zuf-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .zuf-modal {
+    max-width: 100%;
+    max-height: 94dvh;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .zuf-config {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zuf-field:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .zuf-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .zuf-log {
+    max-height: 30dvh;
+  }
+}

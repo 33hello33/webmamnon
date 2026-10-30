@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { supabase, insertLog } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { UserX, AlertTriangle, CalendarX, Calendar, MessageSquare, Loader2 } from 'lucide-react';
 import StudentAttendanceCalendar from './StudentAttendanceCalendar';
-import { findZaloRecipient } from '../services/zaloHelper';
+import { sendZaloMessage } from '../services/zaloHelper';
 import '../services/zaloSocketClient';
 import './LeaveManager.css';
 
@@ -161,10 +160,10 @@ export default function LeaveManager({ students }) {
     setSendingZaloMahv(item.mahv);
     try {
       const student = (students || []).find(st => st.mahv === item.mahv) || {};
-      const phone = (student.sdt || item.sdt || '').trim();
-      const sdtphuhuynh = (student.sdtba || student.sdtme || item.sdtphuhuynh || '').trim();
+      const sdtme = (student.sdtme || item.sdtme || '').trim();
+      const sdtba = (student.sdtba || item.sdtba || '').trim();
 
-      if (!phone && !sdtphuhuynh && !item.mahv) {
+      if (!sdtme && !sdtba && !item.mahv) {
         alert(`Học sinh ${item.tenhv} (${item.mahv}) chưa có Số điện thoại!`);
         return;
       }
@@ -179,27 +178,19 @@ export default function LeaveManager({ students }) {
         .replace(/\[trangthai\]/g, item.trangthai || 'Nghỉ học')
         .replace(/\[ghichu\]/g, item.ghichu && item.ghichu !== '-' ? item.ghichu : 'Không có');
 
-      const recipient = await findZaloRecipient({
-        sdtme: sdtphuhuynh || student.sdtme,
-        sdtba: student.sdtba,
+      const sendResult = await sendZaloMessage({
+        sdtme,
+        sdtba,
         mahv: item.mahv,
-        zaloBackendUrl: ZALO_BACKEND_URL
+        zaloBackendUrl: ZALO_BACKEND_URL,
+        message: msgText
       });
 
-      if (!recipient.found || !recipient.targetId) {
-        alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học sinh ${item.tenhv} (${item.mahv})!`);
-        return;
-      }
-
-      const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-        threadId: recipient.targetId,
-        message: msgText,
-        threadType: 'user'
-      }, { timeout: 30000 });
-
-      if (sendRes.data?.success || sendRes.status === 200) {
+      if (sendResult.success) {
         alert(`Đã gửi tin nhắn Zalo nhắc nghỉ tới phụ huynh bé ${item.tenhv} thành công!`);
         insertLog(`[NHẮC NGHỈ] Đã gửi Zalo nhắc nghỉ học hôm nay cho bé ${item.tenhv} (${item.mahv})`);
+      } else if (sendResult.triedTargetIds.length === 0) {
+        alert(sendResult.error || `Không tìm thấy tài khoản Zalo cho học sinh ${item.tenhv} (${item.mahv})!`);
       } else {
         alert('Gửi tin nhắn Zalo không thành công.');
       }
@@ -228,8 +219,8 @@ export default function LeaveManager({ students }) {
         const s = todayAbsences[i];
         try {
           const student = (students || []).find(st => st.mahv === s.mahv) || {};
-          const phone = (student.sdt || s.sdt || '').trim();
-          const sdtphuhuynh = (student.sdtba || student.sdtme || s.sdtphuhuynh || '').trim();
+          const sdtme = (student.sdtme || s.sdtme || '').trim();
+          const sdtba = (student.sdtba || s.sdtba || '').trim();
           const todayStr = todayIso.split('-').reverse().join('/');
           const rawTpl = config?.zalonhacnghiphep || 'Kính gửi Phụ huynh bé [tenhv] (Mã: [mahv]), Lớp [lop]. Hôm nay ngày [ngay], nhà trường ghi nhận bé [trangthai] (Ghi chú: [ghichu]). Xin vui lòng liên hệ giáo viên chủ nhiệm nếu cần hỗ trợ thêm thông tin. Chúc bé và gia đình nhiều sức khỏe!';
           const msgText = rawTpl
@@ -240,19 +231,15 @@ export default function LeaveManager({ students }) {
             .replace(/\[trangthai\]/g, s.trangthai || 'Nghỉ học')
             .replace(/\[ghichu\]/g, s.ghichu && s.ghichu !== '-' ? s.ghichu : 'Không có');
 
-          const recipient = await findZaloRecipient({
-            sdtme: sdtphuhuynh || student.sdtme,
-          sdtba: student.sdtba,
-          mahv: s.mahv,
-            zaloBackendUrl: ZALO_BACKEND_URL
+          const sendResult = await sendZaloMessage({
+            sdtme,
+            sdtba,
+            mahv: s.mahv,
+            zaloBackendUrl: ZALO_BACKEND_URL,
+            message: msgText
           });
 
-          if (recipient.found && recipient.targetId) {
-            await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-              threadId: recipient.targetId,
-              message: msgText,
-              threadType: 'user'
-            }, { timeout: 30000 });
+          if (sendResult.success) {
             successCount++;
           } else {
             failCount++;
@@ -278,10 +265,10 @@ export default function LeaveManager({ students }) {
     setSendingZaloMahv(item.mahv);
     try {
       const student = (students || []).find(st => st.mahv === item.mahv) || {};
-      const phone = (student.sdt || item.sdt || '').trim();
-      const sdtphuhuynh = (student.sdtba || student.sdtme || item.sdtphuhuynh || '').trim();
+      const sdtme = (student.sdtme || item.sdtme || '').trim();
+      const sdtba = (student.sdtba || item.sdtba || '').trim();
 
-      if (!phone && !sdtphuhuynh && !item.mahv) {
+      if (!sdtme && !sdtba && !item.mahv) {
         alert(`Học sinh ${item.tenhv} (${item.mahv}) chưa có Số điện thoại!`);
         return;
       }
@@ -300,27 +287,19 @@ export default function LeaveManager({ students }) {
         .replace(/\[trangthai\]/g, 'Nghỉ học liên tiếp')
         .replace(/\[ghichu\]/g, '');
 
-      const recipient = await findZaloRecipient({
-        sdtme: sdtphuhuynh || student.sdtme,
-        sdtba: student.sdtba,
+      const sendResult = await sendZaloMessage({
+        sdtme,
+        sdtba,
         mahv: item.mahv,
-        zaloBackendUrl: ZALO_BACKEND_URL
+        zaloBackendUrl: ZALO_BACKEND_URL,
+        message: msgText
       });
 
-      if (!recipient.found || !recipient.targetId) {
-        alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học sinh ${item.tenhv} (${item.mahv})!`);
-        return;
-      }
-
-      const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-        threadId: recipient.targetId,
-        message: msgText,
-        threadType: 'user'
-      }, { timeout: 30000 });
-
-      if (sendRes.data?.success || sendRes.status === 200) {
+      if (sendResult.success) {
         alert(`Đã gửi tin nhắn Zalo nhắc nghỉ liên tiếp tới phụ huynh bé ${item.tenhv} thành công!`);
         insertLog(`[NHẮC NGHỈ] Đã gửi Zalo nhắc nghỉ liên tiếp cho bé ${item.tenhv} (${item.mahv}) - ${item.songayvang} buổi`);
+      } else if (sendResult.triedTargetIds.length === 0) {
+        alert(sendResult.error || `Không tìm thấy tài khoản Zalo cho học sinh ${item.tenhv} (${item.mahv})!`);
       } else {
         alert('Gửi tin nhắn Zalo không thành công.');
       }
@@ -349,8 +328,8 @@ export default function LeaveManager({ students }) {
         const s = consecutiveAbsencesList[i];
         try {
           const student = (students || []).find(st => st.mahv === s.mahv) || {};
-          const phone = (student.sdt || s.sdt || '').trim();
-          const sdtphuhuynh = (student.sdtba || student.sdtme || s.sdtphuhuynh || '').trim();
+          const sdtme = (student.sdtme || s.sdtme || '').trim();
+          const sdtba = (student.sdtba || s.sdtba || '').trim();
           const fromDate = s.ngaybatdau ? new Date(s.ngaybatdau).toLocaleDateString('vi-VN') : '';
           const toDate = s.ngayketthuc ? new Date(s.ngayketthuc).toLocaleDateString('vi-VN') : '';
           const rawTpl = config?.zalonhacnghiphep || 'Kính gửi Phụ huynh bé [tenhv] (Mã: [mahv]), Lớp [lop]. Nhà trường ghi nhận bé đã vắng [songayvang] buổi liên tiếp (từ [ngaybatdau] đến [ngayketthuc]). Nhà trường xin gửi lời thăm hỏi đến bé và gia đình. Kính mong Quý Phụ huynh cập nhật tình hình sức khỏe/học tập của bé với giáo viên. Trân trọng!';
@@ -364,19 +343,15 @@ export default function LeaveManager({ students }) {
             .replace(/\[trangthai\]/g, 'Nghỉ học liên tiếp')
             .replace(/\[ghichu\]/g, '');
 
-          const recipient = await findZaloRecipient({
-            sdtme: sdtphuhuynh || student.sdtme,
-          sdtba: student.sdtba,
-          mahv: s.mahv,
-            zaloBackendUrl: ZALO_BACKEND_URL
+          const sendResult = await sendZaloMessage({
+            sdtme,
+            sdtba,
+            mahv: s.mahv,
+            zaloBackendUrl: ZALO_BACKEND_URL,
+            message: msgText
           });
 
-          if (recipient.found && recipient.targetId) {
-            await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-              threadId: recipient.targetId,
-              message: msgText,
-              threadType: 'user'
-            }, { timeout: 30000 });
+          if (sendResult.success) {
             successCount++;
           } else {
             failCount++;

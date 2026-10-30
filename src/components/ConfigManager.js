@@ -64,9 +64,6 @@ const ZALO_MESSAGE_DEFAULTS = {
   zalobienlai: 'Biên lai thu học phí [tenhv] - Số phiếu [mahd]'
 };
 
-// tbl_config.chatzalo có thể là boolean hoặc chuỗi 'true'
-const isChatZaloEnabled = (value) => value === true || value === 'true';
-
 const TruTienAnModal = ({ isOpen, onClose, initialData, onSave }) => {
   const [items, setItems] = useState([]);
 
@@ -474,7 +471,6 @@ const ConfigManager = () => {
 
   const trutienanTiers = (typeof formData.trutienan === 'object' && formData.trutienan !== null) ? formData.trutienan : {};
   const consecutiveRefundConfig = normalizeConsecutiveRefundConfig(formData.nghilientiep, formData);
-  const zaloChatEnabled = isChatZaloEnabled(formData.chatzalo);
 
   return (
     <div className="config-manager">
@@ -959,96 +955,94 @@ const ConfigManager = () => {
           </div>
         </section>
 
-        {/* Zalo Auto Messages Config - chỉ hiển thị khi tbl_config.chatzalo = true */}
-        {zaloChatEnabled && (
-          <section className="config-section">
-            <div className="section-title">
-              <MessageSquare size={20} className="text-primary" />
-              <h3>Cấu hình Tin nhắn tự động Zalo</h3>
+        {/* Zalo Auto Messages Config */}
+        <section className="config-section">
+          <div className="section-title">
+            <MessageSquare size={20} className="text-primary" />
+            <h3>Cấu hình Tin nhắn tự động Zalo</h3>
+          </div>
+          <div className="zalo-config-grid" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="form-group" style={{ width: '100%' }}>
+              <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
+                1. Mẫu tin nhắn tự động nhắc đóng trễ
+              </label>
+              <textarea
+                rows="3"
+                value={formData.zalodongtre || ''}
+                onChange={e => setFormData({ ...formData, zalodongtre: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn nhắc đóng trễ..."
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
+              />
+              <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
+                Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[lop]</strong> (Lớp), <strong>[ngayketthuc]</strong> (Ngày kết thúc)
+              </p>
             </div>
-            <div className="zalo-config-grid" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div className="form-group" style={{ width: '100%' }}>
-                <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
-                  1. Mẫu tin nhắn tự động nhắc đóng trễ
-                </label>
-                <textarea
-                  rows="3"
-                  value={formData.zalodongtre || ''}
-                  onChange={e => setFormData({ ...formData, zalodongtre: e.target.value })}
-                  placeholder="Nhập mẫu tin nhắn nhắc đóng trễ..."
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
-                />
-                <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
-                  Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[lop]</strong> (Lớp), <strong>[ngayketthuc]</strong> (Ngày kết thúc)
-                </p>
-              </div>
 
-              <div className="form-group" style={{ width: '100%' }}>
-                <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
-                  2. Mẫu tin nhắn tự động nhắc nợ
-                </label>
-                <textarea
-                  rows="3"
-                  value={formData.zalonhacno || ''}
-                  onChange={e => setFormData({ ...formData, zalonhacno: e.target.value })}
-                  placeholder="Nhập mẫu tin nhắn nhắc nợ..."
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
-                />
-                <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
-                  Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[lop]</strong> (Lớp), <strong>[ngaydonggannhat]</strong> (Ngày đóng gần nhất), <strong>[sotiencanno]</strong> (Số tiền còn nợ)
-                </p>
-              </div>
-
-              <div className="form-group" style={{ width: '100%' }}>
-                <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
-                  3. Mẫu tin nhắn nhắc nhở khi bé nghỉ học / nghỉ không phép
-                </label>
-                <textarea
-                  rows="3"
-                  value={formData.zalonhacnghiphep || ''}
-                  onChange={e => setFormData({ ...formData, zalonhacnghiphep: e.target.value })}
-                  placeholder="Nhập mẫu tin nhắn nhắc nhở nghỉ học..."
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
-                />
-                <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
-                  Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[lop]</strong> (Lớp), <strong>[ngay]</strong> (Ngày nghỉ), <strong>[trangthai]</strong> (Trạng thái), <strong>[ghichu]</strong> (Ghi chú), <strong>[songayvang]</strong> (Số buổi vắng), <strong>[ngaybatdau]</strong> / <strong>[ngayketthuc]</strong> (Khoảng nghỉ)
-                </p>
-              </div>
-
-              <div className="form-group" style={{ width: '100%' }}>
-                <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
-                  4. Mẫu tin nhắn gửi kèm Thông báo học phí
-                </label>
-                <textarea
-                  rows="2"
-                  value={formData.zalothongbaohp || ''}
-                  onChange={e => setFormData({ ...formData, zalothongbaohp: e.target.value })}
-                  placeholder="Nhập mẫu tin nhắn gửi kèm ảnh thông báo học phí..."
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
-                />
-                <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
-                  Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[mahd]</strong> (Số phiếu). Để trống sẽ dùng câu mặc định.
-                </p>
-              </div>
-
-              <div className="form-group" style={{ width: '100%' }}>
-                <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
-                  5. Mẫu tin nhắn gửi kèm Biên lai thu học phí
-                </label>
-                <textarea
-                  rows="2"
-                  value={formData.zalobienlai || ''}
-                  onChange={e => setFormData({ ...formData, zalobienlai: e.target.value })}
-                  placeholder="Nhập mẫu tin nhắn gửi kèm ảnh biên lai..."
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
-                />
-                <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
-                  Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[mahd]</strong> (Số phiếu). Để trống sẽ dùng câu mặc định.
-                </p>
-              </div>
+            <div className="form-group" style={{ width: '100%' }}>
+              <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
+                2. Mẫu tin nhắn tự động nhắc nợ
+              </label>
+              <textarea
+                rows="3"
+                value={formData.zalonhacno || ''}
+                onChange={e => setFormData({ ...formData, zalonhacno: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn nhắc nợ..."
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
+              />
+              <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
+                Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[lop]</strong> (Lớp), <strong>[ngaydonggannhat]</strong> (Ngày đóng gần nhất), <strong>[sotiencanno]</strong> (Số tiền còn nợ)
+              </p>
             </div>
-          </section>
-        )}
+
+            <div className="form-group" style={{ width: '100%' }}>
+              <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
+                3. Mẫu tin nhắn nhắc nhở khi bé nghỉ học / nghỉ không phép
+              </label>
+              <textarea
+                rows="3"
+                value={formData.zalonhacnghiphep || ''}
+                onChange={e => setFormData({ ...formData, zalonhacnghiphep: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn nhắc nhở nghỉ học..."
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
+              />
+              <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
+                Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[lop]</strong> (Lớp), <strong>[ngay]</strong> (Ngày nghỉ), <strong>[trangthai]</strong> (Trạng thái), <strong>[ghichu]</strong> (Ghi chú), <strong>[songayvang]</strong> (Số buổi vắng), <strong>[ngaybatdau]</strong> / <strong>[ngayketthuc]</strong> (Khoảng nghỉ)
+              </p>
+            </div>
+
+            <div className="form-group" style={{ width: '100%' }}>
+              <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
+                4. Mẫu tin nhắn gửi kèm Thông báo học phí
+              </label>
+              <textarea
+                rows="2"
+                value={formData.zalothongbaohp || ''}
+                onChange={e => setFormData({ ...formData, zalothongbaohp: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn gửi kèm ảnh thông báo học phí..."
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
+              />
+              <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
+                Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[mahd]</strong> (Số phiếu). Để trống sẽ dùng câu mặc định.
+              </p>
+            </div>
+
+            <div className="form-group" style={{ width: '100%' }}>
+              <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.4rem', color: '#1e293b' }}>
+                5. Mẫu tin nhắn gửi kèm Biên lai thu học phí
+              </label>
+              <textarea
+                rows="2"
+                value={formData.zalobienlai || ''}
+                onChange={e => setFormData({ ...formData, zalobienlai: e.target.value })}
+                placeholder="Nhập mẫu tin nhắn gửi kèm ảnh biên lai..."
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontFamily: 'inherit' }}
+              />
+              <p className="hint" style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#64748b' }}>
+                Từ khóa hỗ trợ: <strong>[mahv]</strong> (Mã HV), <strong>[tenhv]</strong> (Tên HV), <strong>[mahd]</strong> (Số phiếu). Để trống sẽ dùng câu mặc định.
+              </p>
+            </div>
+          </div>
+        </section>
 
         <section className="config-section">
           <div className="section-title">

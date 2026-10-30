@@ -7,8 +7,7 @@ import {
    Activity, GraduationCap, DownloadCloud, Trash2, CheckCircle2, X,
    Printer, History, Clock, Edit2, Calendar, MessageSquare, Loader2
 } from 'lucide-react';
-import axios from 'axios';
-import { findZaloRecipient } from '../services/zaloHelper';
+import { sendZaloImage, updateZaloStatus } from '../services/zaloHelper';
 import '../services/zaloSocketClient';
 
 import { toPng } from 'html-to-image';
@@ -257,30 +256,27 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                      if (downloadingNotice.sendZalo) {
                         try {
-                           const recipient = await findZaloRecipient({
+                           const sendResult = await sendZaloImage({
                               sdtme: downloadingNotice.sdtme,
                               sdtba: downloadingNotice.sdtba,
                               mahv: downloadingNotice.mahv,
-                              zaloBackendUrl: ZALO_BACKEND_URL
-                           });
-                           if (recipient.found && recipient.targetId) {
-                              const formData = new FormData();
-                              formData.append('file', file);
-                              formData.append('threadId', recipient.targetId);
-                              formData.append('threadType', 'user');
-                              formData.append('caption', buildZaloCaption(
+                              zaloBackendUrl: ZALO_BACKEND_URL,
+                              file,
+                              caption: buildZaloCaption(
                                  configRef.current?.zalothongbaohp,
                                  { tenhv: downloadingNotice.tenhv, mahv: downloadingNotice.mahv, mahd: downloadingNotice.mahd },
                                  `Thông báo thu học phí ${downloadingNotice.tenhv} - Số phiếu ${downloadingNotice.mahd}`
-                              ));
-                              await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
-                                 headers: { 'Content-Type': 'multipart/form-data' },
-                                 timeout: 30000
-                              });
+                              )
+                           });
+                           if (sendResult.success) {
+                              await updateZaloStatus(downloadingNotice.mahd, 'sent');
                               insertLog(`[THÔNG BÁO] Đã gửi thông báo ${downloadingNotice.mahd} qua Zalo cho học viên ${downloadingNotice.tenhv} (${downloadingNotice.mahv})`);
                               alert(`Đã gửi hình ảnh thông báo qua Zalo cho học viên ${downloadingNotice.tenhv} thành công!`);
                            } else {
-                              alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${downloadingNotice.tenhv} (${downloadingNotice.mahv})`);
+                              await updateZaloStatus(downloadingNotice.mahd, 'failed');
+                              alert(sendResult.triedTargetIds.length === 0
+                                 ? (sendResult.error || `Không tìm thấy tài khoản Zalo cho học viên ${downloadingNotice.tenhv} (${downloadingNotice.mahv})`)
+                                 : 'Gửi hình ảnh qua Zalo không thành công.');
                            }
                         } catch (zaloErr) {
                            console.error('[Zalo] Lỗi gửi ảnh thông báo qua Zalo:', zaloErr);
@@ -375,30 +371,27 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
 
                      if (downloadingInvoice.sendZalo) {
                         try {
-                           const recipient = await findZaloRecipient({
+                           const sendResult = await sendZaloImage({
                               sdtme: downloadingInvoice.sdtme,
                               sdtba: downloadingInvoice.sdtba,
                               mahv: downloadingInvoice.mahv,
-                              zaloBackendUrl: ZALO_BACKEND_URL
-                           });
-                           if (recipient.found && recipient.targetId) {
-                              const formData = new FormData();
-                              formData.append('file', file);
-                              formData.append('threadId', recipient.targetId);
-                              formData.append('threadType', 'user');
-                              formData.append('caption', buildZaloCaption(
+                              zaloBackendUrl: ZALO_BACKEND_URL,
+                              file,
+                              caption: buildZaloCaption(
                                  configRef.current?.zalobienlai,
                                  { tenhv: downloadingInvoice.tenhv, mahv: downloadingInvoice.mahv, mahd: downloadingInvoice.mahd },
                                  `Biên lai thu học phí ${downloadingInvoice.tenhv} - Số phiếu ${downloadingInvoice.mahd}`
-                              ));
-                              await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
-                                 headers: { 'Content-Type': 'multipart/form-data' },
-                                 timeout: 30000
-                              });
+                              )
+                           });
+                           if (sendResult.success) {
+                              await updateZaloStatus(downloadingInvoice.mahd, 'sent');
                               insertLog(`[HÓA ĐƠN] Đã gửi biên lai ${downloadingInvoice.mahd} qua Zalo cho học viên ${downloadingInvoice.tenhv} (${downloadingInvoice.mahv})`);
                               alert(`Đã gửi hình ảnh biên lai qua Zalo cho học viên ${downloadingInvoice.tenhv} thành công!`);
                            } else {
-                              alert(recipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${downloadingInvoice.tenhv} (${downloadingInvoice.mahv})`);
+                              await updateZaloStatus(downloadingInvoice.mahd, 'failed');
+                              alert(sendResult.triedTargetIds.length === 0
+                                 ? (sendResult.error || `Không tìm thấy tài khoản Zalo cho học viên ${downloadingInvoice.tenhv} (${downloadingInvoice.mahv})`)
+                                 : 'Gửi hình ảnh qua Zalo không thành công.');
                            }
                         } catch (zaloErr) {
                            console.error('[Zalo] Lỗi gửi ảnh biên lai qua Zalo:', zaloErr);

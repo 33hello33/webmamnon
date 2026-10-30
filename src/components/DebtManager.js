@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import axios from 'axios';
 import { supabase, insertLog } from '../supabase';
 import { useConfig } from '../ConfigContext';
 import { BadgeDollarSign, Clock, CheckCircle, X, MessageSquare, Loader2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { generateVietQRUrl } from '../utils/qrHelper';
-import { findZaloRecipient } from '../services/zaloHelper';
+import { sendZaloMessage } from '../services/zaloHelper';
 import '../services/zaloSocketClient';
 import './DebtManager.css';
 
@@ -127,25 +126,20 @@ export default function DebtManager() {
         .replace(/\[ngaydonggannhat\]/g, ngaydonggannhat)
         .replace(/\[sotiencanno\]/g, pCur(debtItem.conno).toLocaleString('vi-VN'));
 
-      // 3. Tìm Zalo user ID từ SĐT, nếu không được thì tìm alias theo mã học viên
-      const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: debtItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
-      if (!zaloRecipient.found || !zaloRecipient.targetId) {
-        alert(zaloRecipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${debtItem.tenhv} (${debtItem.mahv})!`);
-        return;
-      }
+      // 3+4. Gửi tin nhắn: ưu tiên zalo_user_id đã lưu, thất bại mới tra cứu theo alias / SĐT
+      const sendResult = await sendZaloMessage({
+        sdtme,
+        sdtba,
+        mahv: debtItem.mahv,
+        zaloBackendUrl: ZALO_BACKEND_URL,
+        message: msgText
+      });
 
-      const targetId = zaloRecipient.targetId;
-
-      // 4. Gửi tin nhắn
-      const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-        threadId: targetId,
-        message: msgText,
-        threadType: 'user'
-      }, { timeout: 30000 });
-
-      if (sendRes.data?.success || sendRes.status === 200) {
+      if (sendResult.success) {
         alert(`Đã gửi tin nhắn nhắc nợ Zalo tới học viên ${debtItem.tenhv} thành công!`);
         insertLog(`[QUẢN LÝ NỢ] Đã gửi tin nhắn nhắc nợ Zalo cho học viên ${debtItem.tenhv} (${debtItem.mahv})`);
+      } else if (sendResult.triedTargetIds.length === 0) {
+        alert(sendResult.error || `Không tìm thấy tài khoản Zalo cho học viên ${debtItem.tenhv} (${debtItem.mahv})!`);
       } else {
         alert('Gửi tin nhắn Zalo không thành công.');
       }
@@ -181,25 +175,20 @@ export default function DebtManager() {
         .replace(/\[lop\]/g, overdueItem.tenlop || '')
         .replace(/\[ngayketthuc\]/g, ngayketthucFormatted);
 
-      // 3. Tìm Zalo user ID từ SĐT, nếu không được thì tìm alias theo mã học viên
-      const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: overdueItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
-      if (!zaloRecipient.found || !zaloRecipient.targetId) {
-        alert(zaloRecipient.error || `Không tìm thấy tài khoản Zalo cho học viên ${overdueItem.tenhv} (${overdueItem.mahv})!`);
-        return;
-      }
+      // 3+4. Gửi tin nhắn: ưu tiên zalo_user_id đã lưu, thất bại mới tra cứu theo alias / SĐT
+      const sendResult = await sendZaloMessage({
+        sdtme,
+        sdtba,
+        mahv: overdueItem.mahv,
+        zaloBackendUrl: ZALO_BACKEND_URL,
+        message: msgText
+      });
 
-      const targetId = zaloRecipient.targetId;
-
-      // 4. Gửi tin nhắn
-      const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-        threadId: targetId,
-        message: msgText,
-        threadType: 'user'
-      }, { timeout: 30000 });
-
-      if (sendRes.data?.success || sendRes.status === 200) {
+      if (sendResult.success) {
         alert(`Đã gửi tin nhắn nhắc đóng trễ Zalo tới học viên ${overdueItem.tenhv} thành công!`);
         insertLog(`[QUẢN LÝ NỢ] Đã gửi tin nhắn nhắc đóng trễ Zalo cho học viên ${overdueItem.tenhv} (${overdueItem.mahv})`);
+      } else if (sendResult.triedTargetIds.length === 0) {
+        alert(sendResult.error || `Không tìm thấy tài khoản Zalo cho học viên ${overdueItem.tenhv} (${overdueItem.mahv})!`);
       } else {
         alert('Gửi tin nhắn Zalo không thành công.');
       }
@@ -213,12 +202,6 @@ export default function DebtManager() {
 
   // ── Gửi tin nhắn Zalo Nhắc nợ HÀNG LOẠT ────────────────────
   const handleBulkSendZaloRemindNo = async () => {
-    const chatzaloEnabled = config?.chatzalo === true || config?.chatzalo === 'true';
-    if (!chatzaloEnabled) {
-      alert('Tính năng Chat Zalo đang bị tắt trong Cấu hình hệ thống.');
-      return;
-    }
-
     // Chỉ lấy các học viên thực sự còn nợ (conno > 0)
     const targets = debtList.filter(d => pCur(d.conno) > 0);
     if (targets.length === 0) {
@@ -270,21 +253,15 @@ export default function DebtManager() {
             .replace(/\[ngaydonggannhat\]/g, ngaydonggannhat)
             .replace(/\[sotiencanno\]/g, pCur(debtItem.conno).toLocaleString('vi-VN'));
 
-          const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: debtItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
-          if (!zaloRecipient.found || !zaloRecipient.targetId) {
-            failCount++;
-            continue;
-          }
-
-          const targetId = zaloRecipient.targetId;
-
-          const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-            threadId: targetId,
-            message: msgText,
-            threadType: 'user'
+          const sendResult = await sendZaloMessage({
+            sdtme,
+            sdtba,
+            mahv: debtItem.mahv,
+            zaloBackendUrl: ZALO_BACKEND_URL,
+            message: msgText
           });
 
-          if (sendRes.data?.success || sendRes.status === 200) {
+          if (sendResult.success) {
             successCount++;
           } else {
             failCount++;
@@ -310,12 +287,6 @@ export default function DebtManager() {
 
   // ── Gửi tin nhắn Zalo Nhắc đóng trễ HÀNG LOẠT ──────────────
   const handleBulkSendZaloRemindDongTre = async () => {
-    const chatzaloEnabled = config?.chatzalo === true || config?.chatzalo === 'true';
-    if (!chatzaloEnabled) {
-      alert('Tính năng Chat Zalo đang bị tắt trong Cấu hình hệ thống.');
-      return;
-    }
-
     const targets = [...overdueList];
     if (targets.length === 0) {
       alert('Không có học viên nào quá hạn / sắp đến hạn để gửi nhắc đóng trễ!');
@@ -355,21 +326,15 @@ export default function DebtManager() {
             .replace(/\[lop\]/g, overdueItem.tenlop || '')
             .replace(/\[ngayketthuc\]/g, ngayketthucFormatted);
 
-          const zaloRecipient = await findZaloRecipient({ sdtme, sdtba, mahv: overdueItem.mahv, zaloBackendUrl: ZALO_BACKEND_URL });
-          if (!zaloRecipient.found || !zaloRecipient.targetId) {
-            failCount++;
-            continue;
-          }
-
-          const targetId = zaloRecipient.targetId;
-
-          const sendRes = await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-message`, {
-            threadId: targetId,
-            message: msgText,
-            threadType: 'user'
+          const sendResult = await sendZaloMessage({
+            sdtme,
+            sdtba,
+            mahv: overdueItem.mahv,
+            zaloBackendUrl: ZALO_BACKEND_URL,
+            message: msgText
           });
 
-          if (sendRes.data?.success || sendRes.status === 200) {
+          if (sendResult.success) {
             successCount++;
           } else {
             failCount++;
@@ -721,30 +686,28 @@ export default function DebtManager() {
               <h3>Danh sách học sinh còn nợ</h3>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {(config?.chatzalo === true || config?.chatzalo === 'true') && (
-                <button
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    borderRadius: '8px',
-                    background: '#0068ff',
-                    color: '#fff',
-                    border: 'none',
-                    cursor: isBulkSendingDebt ? 'not-allowed' : 'pointer',
-                    fontWeight: 600,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 2px 4px rgba(0, 104, 255, 0.2)'
-                  }}
-                  disabled={isBulkSendingDebt}
-                  onClick={handleBulkSendZaloRemindNo}
-                  title="Gửi tin nhắn Zalo nhắc nợ cho tất cả học viên còn nợ trong danh sách"
-                >
-                  {isBulkSendingDebt ? <Loader2 size={14} className="spinner" /> : <MessageSquare size={14} />}
-                  <span>{isBulkSendingDebt ? `Đang nhắc (${bulkDebtProgress.current}/${bulkDebtProgress.total})...` : 'Nhắc nợ hàng loạt'}</span>
-                </button>
-              )}
+              <button
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  borderRadius: '8px',
+                  background: '#0068ff',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: isBulkSendingDebt ? 'not-allowed' : 'pointer',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 4px rgba(0, 104, 255, 0.2)'
+                }}
+                disabled={isBulkSendingDebt}
+                onClick={handleBulkSendZaloRemindNo}
+                title="Gửi tin nhắn Zalo nhắc nợ cho tất cả học viên còn nợ trong danh sách"
+              >
+                {isBulkSendingDebt ? <Loader2 size={14} className="spinner" /> : <MessageSquare size={14} />}
+                <span>{isBulkSendingDebt ? `Đang nhắc (${bulkDebtProgress.current}/${bulkDebtProgress.total})...` : 'Nhắc nợ hàng loạt'}</span>
+              </button>
               <span className="debt-badge warning">{debtList.length} Chứng từ</span>
             </div>
           </div>
@@ -787,29 +750,27 @@ export default function DebtManager() {
                             >
                               Trả nợ
                             </button>
-                            {(config?.chatzalo === true || config?.chatzalo === 'true') && pCur(d.conno) > 0 && (
-                              <button
-                                style={{
-                                  padding: '6px 10px',
-                                  fontSize: '12px',
-                                  borderRadius: '6px',
-                                  background: '#0068ff',
-                                  color: '#fff',
-                                  border: 'none',
-                                  cursor: sendingZaloMahv === d.mahv ? 'not-allowed' : 'pointer',
-                                  fontWeight: 500,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px'
-                                }}
-                                disabled={sendingZaloMahv === d.mahv}
-                                onClick={() => handleSendZaloRemindNo(d)}
-                                title="Điền thông tin và gửi tin nhắn Zalo nhắc nợ"
-                              >
-                                {sendingZaloMahv === d.mahv ? <Loader2 size={13} className="spinner" /> : <MessageSquare size={13} />}
-                                <span>Nhắc nợ</span>
-                              </button>
-                            )}
+                            <button
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '12px',
+                                borderRadius: '6px',
+                                background: '#0068ff',
+                                color: '#fff',
+                                border: 'none',
+                                cursor: sendingZaloMahv === d.mahv ? 'not-allowed' : 'pointer',
+                                fontWeight: 500,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              disabled={sendingZaloMahv === d.mahv}
+                              onClick={() => handleSendZaloRemindNo(d)}
+                              title="Điền thông tin và gửi tin nhắn Zalo nhắc nợ"
+                            >
+                              {sendingZaloMahv === d.mahv ? <Loader2 size={13} className="spinner" /> : <MessageSquare size={13} />}
+                              <span>Nhắc nợ</span>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -846,18 +807,16 @@ export default function DebtManager() {
                         <span className="debt-amount">{d.conno.toLocaleString()} ₫</span>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button className="btn-pay" onClick={() => openPaymentModal(d)}>Trả nợ</button>
-                          {(config?.chatzalo === true || config?.chatzalo === 'true') && pCur(d.conno) > 0 && (
-                            <button
-                              className="btn-pay"
-                              style={{ background: '#0068ff', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              disabled={sendingZaloMahv === d.mahv}
-                              onClick={() => handleSendZaloRemindNo(d)}
-                              title="Điền thông tin và gửi tin nhắn Zalo nhắc nợ"
-                            >
-                              {sendingZaloMahv === d.mahv ? <Loader2 size={13} className="spinner" /> : <MessageSquare size={13} />}
-                              <span>Nhắc nợ</span>
-                            </button>
-                          )}
+                          <button
+                            className="btn-pay"
+                            style={{ background: '#0068ff', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            disabled={sendingZaloMahv === d.mahv}
+                            onClick={() => handleSendZaloRemindNo(d)}
+                            title="Điền thông tin và gửi tin nhắn Zalo nhắc nợ"
+                          >
+                            {sendingZaloMahv === d.mahv ? <Loader2 size={13} className="spinner" /> : <MessageSquare size={13} />}
+                            <span>Nhắc nợ</span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -878,30 +837,28 @@ export default function DebtManager() {
               <h3>Báo động trễ hạn đóng học phí (Quá hạn đóng)</h3>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {(config?.chatzalo === true || config?.chatzalo === 'true') && (
-                <button
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    borderRadius: '8px',
-                    background: '#0068ff',
-                    color: '#fff',
-                    border: 'none',
-                    cursor: isBulkSendingOverdue ? 'not-allowed' : 'pointer',
-                    fontWeight: 600,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 2px 4px rgba(0, 104, 255, 0.2)'
-                  }}
-                  disabled={isBulkSendingOverdue}
-                  onClick={handleBulkSendZaloRemindDongTre}
-                  title="Gửi tin nhắn Zalo nhắc đóng trễ cho tất cả học sinh quá hạn trong danh sách"
-                >
-                  {isBulkSendingOverdue ? <Loader2 size={14} className="spinner" /> : <MessageSquare size={14} />}
-                  <span>{isBulkSendingOverdue ? `Đang nhắc (${bulkOverdueProgress.current}/${bulkOverdueProgress.total})...` : 'Nhắc trễ hàng loạt'}</span>
-                </button>
-              )}
+              <button
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  borderRadius: '8px',
+                  background: '#0068ff',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: isBulkSendingOverdue ? 'not-allowed' : 'pointer',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 4px rgba(0, 104, 255, 0.2)'
+                }}
+                disabled={isBulkSendingOverdue}
+                onClick={handleBulkSendZaloRemindDongTre}
+                title="Gửi tin nhắn Zalo nhắc đóng trễ cho tất cả học sinh quá hạn trong danh sách"
+              >
+                {isBulkSendingOverdue ? <Loader2 size={14} className="spinner" /> : <MessageSquare size={14} />}
+                <span>{isBulkSendingOverdue ? `Đang nhắc (${bulkOverdueProgress.current}/${bulkOverdueProgress.total})...` : 'Nhắc trễ hàng loạt'}</span>
+              </button>
               <span className="debt-badge danger">{overdueList.length} Học sinh</span>
             </div>
           </div>
@@ -931,29 +888,27 @@ export default function DebtManager() {
                           <td className="text-muted">{formattedLap}</td>
                           <td className="font-bold text-danger text-lg">{formattedKetThuc}</td>
                           <td className="text-center">
-                            {(config?.chatzalo === true || config?.chatzalo === 'true') && (
-                              <button
-                                style={{
-                                  padding: '5px 9px',
-                                  fontSize: '11px',
-                                  borderRadius: '6px',
-                                  background: '#0068ff',
-                                  color: '#fff',
-                                  border: 'none',
-                                  cursor: sendingZaloMahv === d.mahv ? 'not-allowed' : 'pointer',
-                                  fontWeight: 600,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px'
-                                }}
-                                disabled={sendingZaloMahv === d.mahv}
-                                onClick={() => handleSendZaloRemindDongTre(d)}
-                                title="Điền thông tin và gửi tin nhắn Zalo nhắc đóng trễ"
-                              >
-                                {sendingZaloMahv === d.mahv ? <Loader2 size={12} className="spinner" /> : <MessageSquare size={12} />}
-                                <span>Nhắc trễ</span>
-                              </button>
-                            )}
+                            <button
+                              style={{
+                                padding: '5px 9px',
+                                fontSize: '11px',
+                                borderRadius: '6px',
+                                background: '#0068ff',
+                                color: '#fff',
+                                border: 'none',
+                                cursor: sendingZaloMahv === d.mahv ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              disabled={sendingZaloMahv === d.mahv}
+                              onClick={() => handleSendZaloRemindDongTre(d)}
+                              title="Điền thông tin và gửi tin nhắn Zalo nhắc đóng trễ"
+                            >
+                              {sendingZaloMahv === d.mahv ? <Loader2 size={12} className="spinner" /> : <MessageSquare size={12} />}
+                              <span>Nhắc trễ</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -989,20 +944,18 @@ export default function DebtManager() {
                         <span className="deadline-label">Hạn kết thúc:</span>
                         <span className="deadline-date">{new Date(d.ngayketthuc).toLocaleDateString('vi-VN')}</span>
                       </div>
-                      {(config?.chatzalo === true || config?.chatzalo === 'true') && (
-                        <div style={{ marginTop: '5px', textAlign: 'right' }}>
-                          <button
-                            className="btn-pay"
-                            style={{ background: '#0068ff', fontSize: '11px', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            disabled={sendingZaloMahv === d.mahv}
-                            onClick={() => handleSendZaloRemindDongTre(d)}
-                            title="Điền thông tin và gửi tin nhắn Zalo nhắc đóng trễ"
-                          >
-                            {sendingZaloMahv === d.mahv ? <Loader2 size={12} className="spinner" /> : <MessageSquare size={12} />}
-                            <span>Nhắc trễ</span>
-                          </button>
-                        </div>
-                      )}
+                      <div style={{ marginTop: '5px', textAlign: 'right' }}>
+                        <button
+                          className="btn-pay"
+                          style={{ background: '#0068ff', fontSize: '11px', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          disabled={sendingZaloMahv === d.mahv}
+                          onClick={() => handleSendZaloRemindDongTre(d)}
+                          title="Điền thông tin và gửi tin nhắn Zalo nhắc đóng trễ"
+                        >
+                          {sendingZaloMahv === d.mahv ? <Loader2 size={12} className="spinner" /> : <MessageSquare size={12} />}
+                          <span>Nhắc trễ</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))

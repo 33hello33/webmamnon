@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, generateId, insertLog, SUPABASE_SCHEMA } from '../supabase';
 import * as XLSX from 'xlsx';
-import axios from 'axios';
 import {
   Edit, Trash2, Download, Search, PlusCircle, MessageSquare, ArrowRightLeft, CalendarDays, Clock, Users, User, DollarSign, X, Eye, GraduationCap, FileText
 } from 'lucide-react';
@@ -18,7 +17,7 @@ import { generateVietQRUrl } from '../utils/qrHelper';
 import { fetchImageAsBase64 } from '../utils/qrImage';
 import { calculateFeedingDays } from '../utils/mealFeeUtils';
 import { fetchHolidayDatesForYears } from '../utils/holidays';
-import { findZaloRecipient } from '../services/zaloHelper';
+import { sendZaloImage, updateZaloStatus } from '../services/zaloHelper';
 import { buildZaloCaption } from '../utils/zaloMessage';
 import {
   DISCOUNT_TYPES,
@@ -1405,30 +1404,25 @@ export default function ClassManager({ students, showMessage, fetchStudents }) {
 
           if (notice.sendZalo) {
             try {
-              const recipient = await findZaloRecipient({
+              const sendResult = await sendZaloImage({
                 mahv: notice.mahv,
                 sdtme: notice.sdtme,
                 sdtba: notice.sdtba,
-                zaloBackendUrl: ZALO_BACKEND_URL
-              });
-              if (recipient.found && recipient.targetId) {
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('threadId', recipient.targetId);
-                formData.append('threadType', 'user');
-                formData.append('caption', buildZaloCaption(
+                zaloBackendUrl: ZALO_BACKEND_URL,
+                file,
+                caption: buildZaloCaption(
                   config?.zalothongbaohp,
                   { tenhv: notice.tenhv, mahv: notice.mahv, mahd: notice.mahd },
                   `Thông báo thu học phí ${notice.tenhv} - Số phiếu ${notice.mahd}`
-                ));
-                await axios.post(`${ZALO_BACKEND_URL}/api/zalo/send-image`, formData, {
-                  headers: { 'Content-Type': 'multipart/form-data' },
-                  timeout: 30000
-                });
+                )
+              });
+              if (sendResult.success) {
+                await updateZaloStatus(notice.mahd, 'sent');
                 insertLog(`[THÔNG BÁO] Đã gửi thông báo ${notice.mahd} qua Zalo cho học viên ${notice.tenhv} (${notice.mahv})`);
                 zaloStats.sent += 1;
               } else {
-                console.warn('[Zalo] Không tìm thấy tài khoản Zalo cho học sinh:', notice.mahv, recipient.error);
+                await updateZaloStatus(notice.mahd, 'failed');
+                console.warn('[Zalo] Không gửi được thông báo qua Zalo:', notice.mahv, sendResult.error);
                 zaloStats.failed += 1;
               }
             } catch (zaloErr) {
