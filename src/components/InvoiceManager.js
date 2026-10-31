@@ -973,26 +973,6 @@ export default function InvoiceManager() {
    const handleExportNotice = async (isPrintingParam = false) => {
       const isPrinting = isPrintingParam === true; // Strict check to avoid React event objects
       const currentTimePeriod = calculateThoiluong(invoiceData);
-      if (currentTimePeriod) {
-         const { data: allDocs } = await supabase.from('tbl_hd')
-            .select('mahd, daxoa, thoiluong')
-            .eq('mahv', selectedStudent.mahv)
-            .eq('malop', activeClass?.malop || '');
-
-         const validHDs = (allDocs || []).filter(d => (d.daxoa || '').toLowerCase() !== 'đã xóa');
-         const currentMonths = currentTimePeriod.split(',').map(m => m.trim());
-         const existingMonths = validHDs.flatMap(d => (d.thoiluong || '').split(',').map(m => m.trim()));
-
-         const overlappingMonth = currentMonths.find(m => existingMonths.includes(m));
-         if (overlappingMonth) {
-            setWarningModal({
-               isOpen: true,
-               title: 'Cảnh Báo Đóng Trùng Học Phí',
-               message: `Học sinh này đã nộp học phí cho tháng ${overlappingMonth} rồi. Vui lòng kiểm tra lại các Hóa Đơn cũ của học sinh!`
-            });
-            return;
-         }
-      }
 
       // Generate TB code
       const { data: recentTB } = await supabase.from('tbl_thongbao').select('mahd').order('mahd', { ascending: false }).limit(1);
