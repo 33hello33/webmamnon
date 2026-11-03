@@ -685,6 +685,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          refMonth = d.getMonth() + 1;
       }
 
+      // Tháng mm/yyyy của phiếu thu, dùng chung cho tên hàng hóa học phí và tiền ăn
+      const thangMmYyyy = `${String(refMonth).padStart(2, '0')}/${refYear}`;
+
       let statsMonth = refMonth - 1;
       let statsYear = refYear;
       if (statsMonth < 1) {
@@ -743,7 +746,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          {
             id: 'tienan',
             ma: 'TA',
-            ten: 'TIỀN ĂN',
+            ten: `TIỀN ĂN THÁNG ${thangMmYyyy}`,
             dvt: 'tháng',
             sl: 1,
             gia: donGiaTienAn
