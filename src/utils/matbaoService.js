@@ -408,18 +408,18 @@ export const createMatBaoInvoice = async ({ invoice, buyer, items = [], options 
       LoaiTraHang: 0,
       DVTTe: 704, // VND
       TGia: 1,
-      HTTToan: options.hinhThucTT || config.hinhThucTT || 'TM/CK',
+      HTTToan: 'Chuyển khoản',
       GChu: options.ghiChu || `Thu học phí - Mã phiếu ${invoice.mahd}`,
       
       // Thông tin người mua
-      NMua_Ten: buyer.ten || buyer.tenhv || 'Khách hàng',
+      NMua_Ten: '',
       NMua_MST: buyer.mst || '',
       NMua_CCCDan: buyer.cccd || buyer.NMua_CCCDan || '',
       NMua_DChi: buyer.diachi || '',
       NMua_MKHang: buyer.mahv || '',
       NMua_SDThoai: buyer.sdt || '',
       NMua_DCTDTu: buyer.email || '',
-      NMua_HVTNMHang: buyer.nguoiMua || buyer.tenba || buyer.tenme || buyer.tenhv || '',
+      NMua_HVTNMHang: buyer.ten || buyer.tenhv || 'Khách hàng',
       NMua_STKNHang: '',
       NMua_TNHang: '',
 
