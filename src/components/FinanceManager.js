@@ -1404,23 +1404,44 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
          return q;
       };
 
-      const [resChi, resKho, resHd, resBill, resTb] = await Promise.all([
+      // Lấy toàn bộ bản ghi (không lọc thời gian), tự phân trang vì Supabase giới hạn số dòng mỗi request
+      const fetchAllRows = async (table, columns) => {
+         const pageSize = 1000;
+         const rows = [];
+         for (let from = 0; ; from += pageSize) {
+            const { data, error } = await supabase
+               .from(table)
+               .select(columns)
+               .order('mahd', { ascending: true })
+               .range(from, from + pageSize - 1);
+            if (error || !data || data.length === 0) break;
+            rows.push(...data);
+            if (data.length < pageSize) break;
+         }
+         return rows;
+      };
+
+      const [resChi, resKho, resHd, resBill, tbAllRows, hdAllRows] = await Promise.all([
          buildQuery('tbl_phieuchi', 'ngaylap'),
          buildQuery('tbl_nhapkho', 'ngaynhap'),
          buildQuery('tbl_hd', 'ngaylap'),
          buildQuery('tbl_billhanghoa', 'ngaylap'),
-         buildQuery('tbl_thongbao', 'ngaylap')
+         // Doanh thu dự kiến: không lọc theo thời gian, luôn lấy toàn bộ thông báo
+         fetchAllRows('tbl_thongbao', '*'),
+         // Toàn bộ hóa đơn (không lọc thời gian) để đối chiếu thông báo đã tạo hóa đơn
+         fetchAllRows('tbl_hd', 'mahv, ngaylap, daxoa')
       ]);
 
       const chiList = resChi.data || [];
       const khoList = resKho.data || [];
       const hdList = resHd.data || [];
       const billList = resBill.data || [];
-      let tbList = resTb.data || [];
+      let tbList = tbAllRows;
+      const hdAllList = hdAllRows.length > 0 ? hdAllRows : hdList;
 
       // Lọc thông báo: chỉ lấy thông báo mới nhất của 1 học sinh, loại nếu có hóa đơn mới hơn hoặc bằng
       const latestHdMap = {};
-      hdList.forEach(item => {
+      hdAllList.forEach(item => {
          if (isDeleted(item)) return;
          const mahv = item.mahv;
          if (!mahv) return;
