@@ -523,6 +523,18 @@
   border-color: #93c5fd !important;
 }
 
+.fm-action-btn.btn-edit {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+  padding: 0.4rem 0.55rem !important;
+}
+.fm-action-btn.btn-edit:hover {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fcd34d !important;
+}
+
 .fm-action-btn.btn-approve {
   background: #ecfdf5 !important;
   color: #047857 !important;

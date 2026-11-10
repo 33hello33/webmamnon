@@ -25,6 +25,14 @@ const pCur = (val) => {
    const parsed = parseInt(sVal, 10);
    return isNaN(parsed) ? 0 : parsed;
 };
+// Đọc số tiền người dùng nhập tự do: bỏ mọi ký tự không phải chữ số (dấu chấm, phẩy, khoảng trắng...)
+const pCurInput = (val) => {
+   if (val === undefined || val === null) return 0;
+   const cleaned = String(val).replace(/[^\d-]/g, '');
+   if (cleaned === '' || cleaned === '-') return 0;
+   const parsed = parseInt(cleaned, 10);
+   return isNaN(parsed) ? 0 : parsed;
+};
 const fCur = (val) => {
    if (val === undefined || val === null || val === '') return '0';
    const sVal = String(val).replace(/,/g, '');
@@ -421,6 +429,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
    const [editBillModal, setEditBillModal] = useState({ isOpen: false, data: null, password: '' });
    const [editPhieuModal, setEditPhieuModal] = useState({ isOpen: false, data: null, password: '' });
    const [approveSalaryModal, setApproveSalaryModal] = useState({ isOpen: false, item: null, wallet: '' });
+   const [editSalaryModal, setEditSalaryModal] = useState({ isOpen: false, item: null, thang: '', thucnhan: '', hinhthuc: '' });
    const [viewSalarySlipModal, setViewSalarySlipModal] = useState({ isOpen: false, item: null });
 
    // MatBao E-Invoice State
@@ -602,6 +611,80 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
       setTimeout(() => {
          window.print();
       }, 300);
+   };
+
+   const openEditSalaryModal = (record) => {
+      setEditSalaryModal({
+         isOpen: true,
+         item: record,
+         thang: record.thang || '',
+         thucnhan: String(pCur(record.thucnhan)),
+         hinhthuc: record.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt')
+      });
+   };
+
+   const handleSaveSalaryEdit = async () => {
+      const slip = editSalaryModal.item;
+      if (!slip) return;
+
+      const monthMatch = String(editSalaryModal.thang || '').trim().match(/^(\d{1,2})\s*[/.-]\s*(\d{4})$/);
+      if (!monthMatch) {
+         alert('Kỳ lương không hợp lệ. Vui lòng nhập theo dạng MM/YYYY (ví dụ: 10/2026).');
+         return;
+      }
+      const month = parseInt(monthMatch[1], 10);
+      const year = parseInt(monthMatch[2], 10);
+      if (month < 1 || month > 12 || year < 2000) {
+         alert('Kỳ lương không hợp lệ. Vui lòng nhập theo dạng MM/YYYY (ví dụ: 10/2026).');
+         return;
+      }
+
+      if (!/\d/.test(String(editSalaryModal.thucnhan ?? ''))) {
+         alert('Vui lòng nhập số tiền thực nhận.');
+         return;
+      }
+      const newNet = pCurInput(editSalaryModal.thucnhan);
+      if (newNet < 0) {
+         alert('Số tiền thực nhận không hợp lệ.');
+         return;
+      }
+
+      const thang = `${String(month).padStart(2, '0')}/${year}`;
+      const targetWallet = editSalaryModal.hinhthuc || walletsConfig[0]?.name || 'Tiền mặt';
+      const oldNet = pCur(slip.thucnhan);
+      // Giữ cân đối trên phiếu: Tổng thu nhập - Tổng khấu trừ = Thực nhận
+      const newTongThuNhap = pCur(slip.tongthunhap) + (newNet - oldNet);
+
+      try {
+         setLoading(true);
+         const idField = slip.maphieuluong ? 'maphieuluong' : 'id';
+         const idVal = slip.maphieuluong || slip.id;
+         const payload = {
+            thang,
+            thucnhan: newNet,
+            bangchu: READ_NUMBER_VN(newNet),
+            hinhthuc: targetWallet,
+            tongthunhap: newTongThuNhap
+         };
+
+         let res = await supabase.from('tbl_luong').update(payload).eq(idField, idVal);
+         if (res.error && (res.error.message || '').toLowerCase().includes('schema cache')) {
+            res = await baseSupabase.from('tbl_luong').update(payload).eq(idField, idVal);
+         }
+         if (res.error) throw res.error;
+
+         await insertLog(`[SỬA PHIẾU LƯƠNG] Mã: ${idVal} | NV: ${slip.tennv} | Kỳ: ${thang} | Thực nhận: ${fCur(newNet)}đ | Hình thức: ${targetWallet}`);
+
+         alert('Đã cập nhật phiếu lương thành công!');
+         setEditSalaryModal({ isOpen: false, item: null, thang: '', thucnhan: '', hinhthuc: '' });
+         fetchData();
+         fetchBalances();
+      } catch (err) {
+         console.error('Lỗi cập nhật phiếu lương:', err);
+         alert('Lỗi cập nhật phiếu lương: ' + (err.message || 'Lỗi không xác định'));
+      } finally {
+         setLoading(false);
+      }
    };
 
    const handlePrintHoaDon = (record) => {
@@ -2350,6 +2433,9 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                              <button title="Xem chi tiết phiếu lương" className="fm-action-btn btn-view" onClick={() => setViewSalarySlipModal({ isOpen: true, item: r })}>
                                                 <Eye size={15} />
                                              </button>
+                                             <button title="Sửa phiếu lương (số tiền, hình thức, kỳ lương)" className="fm-action-btn btn-edit" onClick={() => openEditSalaryModal(r)}>
+                                                <Edit2 size={15} />
+                                             </button>
                                              <button title="In phiếu lương PDF" className="fm-action-btn btn-print" style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '0.4rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} onClick={() => handlePrintLuong(r)}>
                                                 <Printer size={15} />
                                              </button>
@@ -2405,6 +2491,7 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                                     {!deleted ? (
                                        <>
                                           <button className="fm-action-btn btn-view" onClick={() => setViewSalarySlipModal({ isOpen: true, item: r })}><Printer size={14} /> Xem & In</button>
+                                          <button className="fm-action-btn btn-edit" onClick={() => openEditSalaryModal(r)}><Edit2 size={14} /> Sửa</button>
                                           {r.trangthai !== 'Đã chi' && (
                                              <button className="btn-green-sm" style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={() => setApproveSalaryModal({ isOpen: true, item: r, wallet: r.hinhthuc || (walletsConfig[0]?.name || 'Tiền mặt') })}><CheckCircle2 size={14} /> Duyệt</button>
                                           )}
@@ -3960,6 +4047,81 @@ export default function FinanceManager({ activeSubTab, setActiveSubTab, currentU
                </div>
             </div>
          </div>
+
+         {/* EDIT SALARY MODAL */}
+         {editSalaryModal.isOpen && editSalaryModal.item && createPortal(
+            <div className="fm-modal-overlay">
+               <div className="fm-modal-content animate-slide-up" style={{ maxWidth: '520px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: '#fff' }}>
+                  <div className="fm-modal-header" style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', fontWeight: 800 }}>Sửa Phiếu Lương #{editSalaryModal.item.maphieuluong || editSalaryModal.item.id}</h3>
+                     <button onClick={() => setEditSalaryModal({ isOpen: false, item: null, thang: '', thucnhan: '', hinhthuc: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+                  </div>
+                  <div className="fm-modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1 }}>
+                     <div style={{ background: '#f8fafc', padding: '0.9rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                        <span style={{ color: '#64748b' }}>Nhân viên:</span>
+                        <span style={{ fontWeight: 800, color: '#0f172a', textAlign: 'right' }}>{editSalaryModal.item.tennv} ({editSalaryModal.item.manv})</span>
+                     </div>
+
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>🗓️ Kỳ lương (MM/YYYY):</label>
+                        <input
+                           type="text"
+                           value={editSalaryModal.thang}
+                           placeholder="VD: 10/2026"
+                           onChange={(e) => setEditSalaryModal(prev => ({ ...prev, thang: e.target.value }))}
+                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                        />
+                     </div>
+
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💵 Số tiền thực nhận (VNĐ):</label>
+                        <input
+                           type="text"
+                           inputMode="numeric"
+                           value={editSalaryModal.thucnhan}
+                           placeholder="VD: 6103000"
+                           onChange={(e) => setEditSalaryModal(prev => ({ ...prev, thucnhan: e.target.value }))}
+                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box', fontWeight: 700, color: '#2563eb' }}
+                        />
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
+                           = <b style={{ color: '#2563eb' }}>{fCur(pCurInput(editSalaryModal.thucnhan))} ₫</b>
+                           {String(editSalaryModal.thucnhan ?? '').trim() !== '' && pCur(editSalaryModal.item.tongkhautru) > 0 && (
+                              <> • Tổng thu nhập sẽ thành <b>{fCur(pCur(editSalaryModal.item.tongthunhap) + (pCurInput(editSalaryModal.thucnhan) - pCur(editSalaryModal.item.thucnhan)))} ₫</b></>
+                           )}
+                        </div>
+                     </div>
+
+                     <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>💳 Hình thức chuyển khoản / Ví chi:</label>
+                        <select
+                           value={editSalaryModal.hinhthuc}
+                           onChange={(e) => setEditSalaryModal(prev => ({ ...prev, hinhthuc: e.target.value }))}
+                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '1rem', boxSizing: 'border-box' }}
+                        >
+                           {walletsConfig.length === 0 && <option value="Tiền mặt">Tiền mặt</option>}
+                           {walletsConfig.map(w => (
+                              <option key={w.id} value={w.name}>{w.name}</option>
+                           ))}
+                           {editSalaryModal.hinhthuc && !walletsConfig.some(w => w.name === editSalaryModal.hinhthuc) && (
+                              <option value={editSalaryModal.hinhthuc}>{editSalaryModal.hinhthuc}</option>
+                           )}
+                        </select>
+                     </div>
+
+                     {editSalaryModal.item.trangthai === 'Đã chi' && (
+                        <div style={{ fontSize: '0.8rem', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '0.6rem 0.8rem', borderRadius: '8px', lineHeight: 1.4 }}>
+                           Phiếu này đã được duyệt chi. Thay đổi số tiền sẽ làm thay đổi số liệu chi lương đã ghi nhận.
+                        </div>
+                     )}
+                  </div>
+                  <div className="fm-modal-footer" style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px', justifyContent: 'flex-end', background: '#f8fafc', flexShrink: 0 }}>
+                     <button onClick={() => setEditSalaryModal({ isOpen: false, item: null, thang: '', thucnhan: '', hinhthuc: '' })} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Hủy</button>
+                     <button onClick={handleSaveSalaryEdit} style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#f59e0b', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Lưu thay đổi</button>
+                  </div>
+               </div>
+            </div>,
+            document.body
+         )}
 
          {/* APPROVE SALARY MODAL */}
          {approveSalaryModal.isOpen && approveSalaryModal.item && createPortal(

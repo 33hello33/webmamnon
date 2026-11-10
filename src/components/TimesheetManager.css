@@ -165,36 +165,82 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: #f8fafc;
+  background: #fff1f2;
   padding: 0.4rem 0.85rem;
-  border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  border-radius: 999px;
+  border: 1px solid #fca5a5;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.15);
 }
 
 .ts-btn-month {
-  border: none;
   background: white;
-  border-radius: 6px;
-  padding: 4px;
+  border: 1px solid #fecaca;
+  border-radius: 50%;
+  padding: 5px;
   cursor: pointer;
-  color: #475569;
+  color: #dc2626;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.2);
 }
 
 .ts-btn-month:hover {
-  background: #2563eb;
+  background: #dc2626;
   color: white;
+  border-color: #dc2626;
+  transform: scale(1.05);
 }
 
 .ts-month-display {
   font-weight: 800;
   font-size: 0.95rem;
   color: #0f172a;
+}
+
+/* Nút chuyển kỳ lương nổi bật (đỏ) + mở bộ chọn tháng */
+.ts-month-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #ffffff;
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.38), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.ts-month-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 9px 22px rgba(220, 38, 38, 0.48), inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.ts-month-pill:active {
+  transform: translateY(0);
+}
+
+.ts-month-pill:focus-within {
+  outline: 2px solid #fecaca;
+  outline-offset: 2px;
+}
+
+.ts-month-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .ts-actions {
@@ -249,6 +295,18 @@
   background: #f8fafc;
   color: #0f172a;
   border-color: #94a3b8;
+}
+
+.ts-btn-print-a5 {
+  border-color: #fca5a5;
+  color: #b91c1c;
+  background: #fff1f2;
+}
+
+.ts-btn-print-a5:hover {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #f87171;
 }
 
 /* Pay Sheet Wrapper - Natural Full Height */
@@ -657,8 +715,8 @@
 /* Formal A4 Print Styling Override */
 @media print {
   @page {
-    size: A4 portrait !important;
-    margin: 15mm !important;
+    size: A4 portrait;
+    margin: 15mm;
   }
 
   body > *:not(.print-pay-slip-a4):not(.print-a5-receipt):not(.print-salary-slip-modal) {
@@ -757,5 +815,52 @@
   }
   .fst-italic {
     font-style: italic;
+  }
+
+  /* ---- Khổ A5: thu gọn để phiếu lương vừa đúng 1 trang ---- */
+  .print-pay-slip-a4.print-mode-a5 {
+    padding: 2mm !important;
+    font-size: 9pt !important;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-header {
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom-width: 1px;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-header h3 {
+    font-size: 12pt;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-header p {
+    margin-top: 3px;
+    font-size: 10pt;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-table {
+    margin-bottom: 10px;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-table td {
+    padding: 3px 6px;
+    font-size: 8.5pt;
+    line-height: 1.25;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-section-header td {
+    font-size: 8.5pt;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-net-row td {
+    font-size: 10.5pt;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .fs-lg {
+    font-size: 10.5pt !important;
+  }
+
+  .print-pay-slip-a4.print-mode-a5 .p-footer {
+    margin-top: 14px;
   }
 }

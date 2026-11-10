@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal, flushSync } from 'react-dom';
 import { supabase, baseSupabase, generateId, insertLog } from '../supabase';
 import { Search, Save, Download, Users, ChevronLeft, ChevronRight, CheckCircle, AlertCircle, ArrowRight, Printer, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -116,6 +116,10 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
    // Month state (defaults to current month: MM/YYYY)
    const [currentDate, setCurrentDate] = useState(new Date());
+   const [monthDraft, setMonthDraft] = useState('');
+   const [printSize, setPrintSize] = useState('a4');
+   const monthPickerRef = useRef(null);
+   const loadSeqRef = useRef(0);
 
    // Form data for Pay Slip
    const [formData, setFormData] = useState({
@@ -155,6 +159,12 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
    const [warningModal, setWarningModal] = useState({ isOpen: false, title: '', message: '' });
 
    const monthStr = `${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentDate.getFullYear()}`;
+   const monthPickerValue = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+
+   // Giữ ô nhập tháng đồng bộ khi đổi kỳ lương bằng nút mũi tên / bộ chọn tháng
+   useEffect(() => {
+      setMonthDraft(monthStr);
+   }, [monthStr]);
 
    // 1. Fetch employees
    useEffect(() => {
@@ -186,14 +196,19 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
    const loadSalaryForEmployee = useCallback(async (emp, dateObj) => {
       if (!emp) return;
       const targetMonthStr = `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+      const requestSeq = ++loadSeqRef.current;
       setLoading(true);
       try {
-         let { data, error } = await supabase
+         // Dùng order + limit thay cho maybeSingle(): bảng có thể chứa nhiều
+         // phiếu trùng manv+thang và maybeSingle() sẽ báo lỗi khiến phiếu không tải được.
+         let { data: rows, error } = await supabase
             .from('tbl_luong')
             .select('*')
             .eq('manv', emp.manv)
             .eq('thang', targetMonthStr)
-            .maybeSingle();
+            .order('ngaylap', { ascending: false, nullsFirst: false })
+            .order('maphieuluong', { ascending: false })
+            .limit(1);
 
          if (error && (error.message || '').toLowerCase().includes('schema cache')) {
             const baseRes = await baseSupabase
@@ -201,10 +216,17 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                .select('*')
                .eq('manv', emp.manv)
                .eq('thang', targetMonthStr)
-               .maybeSingle();
-            data = baseRes.data;
+               .order('ngaylap', { ascending: false, nullsFirst: false })
+               .order('maphieuluong', { ascending: false })
+               .limit(1);
+            rows = baseRes.data;
             error = baseRes.error;
          }
+
+         const data = (!error && Array.isArray(rows) && rows.length > 0) ? rows[0] : null;
+
+         // Bỏ qua kết quả cũ nếu người dùng đã chuyển sang nhân viên/tháng khác
+         if (requestSeq !== loadSeqRef.current) return;
 
          if (!error && data) {
             setExistingRecord(data);
@@ -316,7 +338,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       } catch (err) {
          console.error('Lỗi tải phiếu lương:', err);
       } finally {
-         setLoading(false);
+         if (requestSeq === loadSeqRef.current) setLoading(false);
       }
    }, [currentUser, walletOptions]);
 
@@ -332,9 +354,53 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
    };
 
    const shiftMonth = (offset) => {
-      const newD = new Date(currentDate);
-      newD.setMonth(newD.getMonth() + offset);
+      // Luôn lấy ngày 1 để tránh nhảy tháng khi tháng đích có ít ngày hơn (vd. 31/01 + 1)
+      const newD = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
       setCurrentDate(newD);
+   };
+
+   const goToMonth = (month, year) => {
+      if (!Number.isFinite(month) || !Number.isFinite(year)) return;
+      if (month < 1 || month > 12 || year < 2000) return;
+      setCurrentDate(new Date(year, month - 1, 1));
+   };
+
+   // Ô "Tháng" chỉ áp dụng khi nhập đủ MM/YYYY rồi Enter hoặc rời ô,
+   // tránh việc controlled input tự reset về giá trị cũ sau mỗi ký tự.
+   const commitMonthDraft = () => {
+      const match = String(monthDraft).trim().match(/^(\d{1,2})\s*[/.-]\s*(\d{4})$/);
+      if (match) {
+         const month = parseInt(match[1], 10);
+         const year = parseInt(match[2], 10);
+         if (month >= 1 && month <= 12 && year >= 2000) {
+            goToMonth(month, year);
+            return;
+         }
+      }
+      setMonthDraft(monthStr);
+   };
+
+   const handleMonthPickerChange = (e) => {
+      const value = String(e.target.value || '').trim();
+      if (!value) return;
+      // Hỗ trợ cả định dạng chuẩn YYYY-MM và MM/YYYY (trình duyệt không hỗ trợ type=month)
+      const isoMatch = value.match(/^(\d{4})-(\d{1,2})$/);
+      const vnMatch = value.match(/^(\d{1,2})[/.-](\d{4})$/);
+      if (isoMatch) {
+         goToMonth(parseInt(isoMatch[2], 10), parseInt(isoMatch[1], 10));
+      } else if (vnMatch) {
+         goToMonth(parseInt(vnMatch[1], 10), parseInt(vnMatch[2], 10));
+      }
+   };
+
+   const handleOpenMonthPicker = () => {
+      const input = monthPickerRef.current;
+      if (!input) return;
+      if (typeof input.showPicker === 'function') {
+         try { input.showPicker(); } catch (err) { input.focus(); }
+      } else {
+         input.focus();
+      }
    };
 
    const handleInputChange = (field, value) => {
@@ -435,6 +501,32 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       setSaving(true);
       try {
          let maphieuluong = existingRecord?.maphieuluong;
+         let fallbackRecord = null;
+         if (!maphieuluong) {
+            // Kiểm tra lại ngay trước khi tạo mã mới để tránh sinh thêm phiếu trùng
+            // khi form chưa kịp tải phiếu đã có của tháng này.
+            let { data: existingRows, error: existingError } = await supabase
+               .from('tbl_luong')
+               .select('maphieuluong,trangthai,ngaylap')
+               .eq('manv', formData.manv)
+               .eq('thang', monthStr)
+               .order('ngaylap', { ascending: false, nullsFirst: false })
+               .order('maphieuluong', { ascending: false })
+               .limit(1);
+            if (existingError && (existingError.message || '').toLowerCase().includes('schema cache')) {
+               const baseRes = await baseSupabase
+                  .from('tbl_luong')
+                  .select('maphieuluong,trangthai,ngaylap')
+                  .eq('manv', formData.manv)
+                  .eq('thang', monthStr)
+                  .order('ngaylap', { ascending: false, nullsFirst: false })
+                  .order('maphieuluong', { ascending: false })
+                  .limit(1);
+               existingRows = baseRes.data;
+            }
+            fallbackRecord = (Array.isArray(existingRows) && existingRows.length > 0) ? existingRows[0] : null;
+            maphieuluong = fallbackRecord?.maphieuluong || null;
+         }
          if (!maphieuluong) {
             maphieuluong = await generateId('tbl_luong', 'maphieuluong', 'PL', 4);
          }
@@ -464,6 +556,9 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                sotien: pCur(item.sotien)
             }));
 
+         const recordTrangthai = existingRecord?.trangthai || fallbackRecord?.trangthai || 'Chờ duyệt';
+         const recordNgayLap = existingRecord?.ngaylap || fallbackRecord?.ngaylap || new Date().toISOString();
+
          const recordPayload = {
             maphieuluong,
             manv: formData.manv,
@@ -492,8 +587,8 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             nguoilap: formData.nguoilap || currentUser?.tennv || 'Hệ thống',
             nguoiduyet: formData.nguoiduyet || 'Người nhận lương',
             ghichu: formData.ghichu || '',
-            trangthai: existingRecord?.trangthai || 'Chờ duyệt',
-            ngaylap: existingRecord?.ngaylap || new Date().toISOString()
+            trangthai: recordTrangthai,
+            ngaylap: recordNgayLap
          };
 
          let res = await supabase.from('tbl_luong').upsert([recordPayload]);
@@ -512,7 +607,7 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
 
          setSuccessModal({
             isOpen: true,
-            message: `Đã lưu phiếu lương tháng ${monthStr} cho nhân viên ${formData.tennv} (${formData.manv}) thành công lên tài chính với trạng thái "Chờ duyệt"!`,
+            message: `Đã lưu phiếu lương tháng ${monthStr} cho nhân viên ${formData.tennv} (${formData.manv}) thành công lên tài chính với trạng thái "${recordTrangthai}"!`,
             recordId: maphieuluong
          });
 
@@ -609,13 +704,16 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
       XLSX.writeFile(wb, `${safeEmpName}_${safeMonthStr}.xlsx`);
    };
 
-   // Print A4 / Save as PDF with format: [tên nv] _ [tháng xuất] (không dấu)
-   const handlePrint = () => {
+   // Print A4 / A5 (Save as PDF) with format: [tên nv] _ [tháng xuất] (không dấu)
+   const handlePrint = (size = 'a4') => {
+      const targetSize = size === 'a5' ? 'a5' : 'a4';
+      // Cập nhật ngay (đồng bộ) để @page và layout in đúng khổ giấy đã chọn
+      flushSync(() => setPrintSize(targetSize));
       const originalTitle = document.title;
       const rawEmpName = (formData.tennv || formData.manv || 'NhanVien').trim();
       const safeEmpName = removeVietnameseTones(rawEmpName) || 'NhanVien';
       const safeMonthStr = removeVietnameseTones(monthStr).replace(/\//g, '_');
-      document.title = `${safeEmpName}_${safeMonthStr}`;
+      document.title = `${safeEmpName}_${safeMonthStr}${targetSize === 'a5' ? '_A5' : '_A4'}`;
       window.print();
       setTimeout(() => {
          document.title = originalTitle;
@@ -682,7 +780,23 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                      <button className="ts-btn-month" onClick={() => shiftMonth(-1)} title="Tháng trước">
                         <ChevronLeft size={18} />
                      </button>
-                     <span className="ts-month-display">Kỳ lương: Tháng {monthStr}</span>
+                     <label
+                        className="ts-month-display ts-month-pill"
+                        title="Bấm để chọn kỳ lương"
+                        onClick={handleOpenMonthPicker}
+                     >
+                        <span>Kỳ lương: Tháng {monthStr}</span>
+                        <input
+                           ref={monthPickerRef}
+                           type="month"
+                           className="ts-month-native"
+                           value={monthPickerValue}
+                           min="2000-01"
+                           max="2100-12"
+                           onChange={handleMonthPickerChange}
+                           aria-label="Chọn kỳ lương"
+                        />
+                     </label>
                      <button className="ts-btn-month" onClick={() => shiftMonth(1)} title="Tháng sau">
                         <ChevronRight size={18} />
                      </button>
@@ -692,8 +806,11 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                      <button className="ts-btn-secondary" onClick={handleExportExcel}>
                         <Download size={16} /> Xuất Excel
                      </button>
-                     <button className="ts-btn-secondary" onClick={handlePrint}>
+                     <button className="ts-btn-secondary" onClick={() => handlePrint('a4')}>
                         <Printer size={16} /> In Phiếu A4
+                     </button>
+                     <button className="ts-btn-secondary ts-btn-print-a5" onClick={() => handlePrint('a5')}>
+                        <Printer size={16} /> In Phiếu A5
                      </button>
                      <button
                         className="ts-btn-primary"
@@ -725,15 +842,15 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                                     <input
                                        type="text"
                                        className="ts-input-raw"
-                                       value={monthStr}
-                                       onChange={(e) => {
-                                          const parts = e.target.value.split('/');
-                                          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                                             const m = parseInt(parts[0], 10) - 1;
-                                             const y = parseInt(parts[1], 10);
-                                             if (m >= 0 && m <= 11 && y > 2000) {
-                                                setCurrentDate(new Date(y, m, 1));
-                                             }
+                                       value={monthDraft}
+                                       placeholder="MM/YYYY"
+                                       onChange={(e) => setMonthDraft(e.target.value)}
+                                       onBlur={commitMonthDraft}
+                                       onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                             e.preventDefault();
+                                             commitMonthDraft();
+                                             e.currentTarget.blur();
                                           }
                                        }}
                                     />
@@ -1153,9 +1270,13 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
             document.body
          )}
 
-         {/* Printable A4 Template Portaled to Document Body */}
+         {/* Printable Template (A4/A5) Portaled to Document Body */}
          {createPortal(
-            <div className="print-pay-slip-a4">
+            <>
+               <style>{printSize === 'a5'
+                  ? '@page { size: A5 portrait; margin: 8mm; }'
+                  : '@page { size: A4 portrait; margin: 15mm; }'}</style>
+               <div className={`print-pay-slip-a4 ${printSize === 'a5' ? 'print-mode-a5' : 'print-mode-a4'}`}>
                <div className="p-header">
                   <h3>{(schoolName || 'TRƯỜNG MẦM NON').toUpperCase()}</h3>
                   <p>BẢNG PHIẾU LƯƠNG NHÂN VIÊN - THÁNG {monthStr}</p>
@@ -1248,7 +1369,8 @@ export default function TimesheetManager({ currentUser, setActiveTab, setActiveS
                      <p><b>{formData.tennv}</b></p>
                   </div>
                </div>
-            </div>,
+               </div>
+            </>,
             document.body
          )}
 
