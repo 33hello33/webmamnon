@@ -2398,11 +2398,11 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                               <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
                                  +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
                               </span>
-                           ))}
+                           )}
                         </div>
                         <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc PH</div>
                      </div>
-                  )}
+                  ))}
                </div>
             </div>
          )}
