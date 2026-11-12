@@ -57,6 +57,8 @@ const formatMessageTimestamp = (dateValue) => {
 
 const tuitionTransferProofCategory = 'Ảnh chuyển khoản học phí';
 const TEACHER_CHAT_PAGE_SIZE = 10;
+// Tạm ẩn các mục khác; thêm mã tab tương ứng vào đây để bật lại.
+const ENABLED_TEACHER_TABS = new Set(['attendance', 'attendance-history', 'health']);
 
 function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onLogout }) {
    const { config } = useConfig();
@@ -272,6 +274,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
 
    // Auto-re-register push subscription silently when teacher logs in (only if already granted)
    useEffect(() => {
+      if (!ENABLED_TEACHER_TABS.has('notifications')) return;
       const staffId = attendanceUser?.manv || attendanceUser?.username;
       if (!staffId) return;
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
@@ -2305,12 +2308,16 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                   <p style={{ color: '#64748b', margin: 0, marginTop: '5px', lineHeight: 1.4, wordBreak: 'break-word' }}>Tài khoản: <strong>{attendanceUser.tennv || attendanceUser.username}</strong></p>
                </div>
                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                  <button onClick={subscribeTeacherPushNotifications} title="Bật thông báo PWA" style={{ width: '36px', height: '36px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
-                     <Bell size={18} />
-                  </button>
-                  <button onClick={() => setIsChangePassOpen(true)} title="Đổi mật khẩu" style={{ width: '36px', height: '36px', background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
-                     <Key size={18} />
-                  </button>
+                  {ENABLED_TEACHER_TABS.has('notifications') && (
+                     <button onClick={subscribeTeacherPushNotifications} title="Bật thông báo PWA" style={{ width: '36px', height: '36px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
+                        <Bell size={18} />
+                     </button>
+                  )}
+                  {ENABLED_TEACHER_TABS.has('change-password') && (
+                     <button onClick={() => setIsChangePassOpen(true)} title="Đổi mật khẩu" style={{ width: '36px', height: '36px', background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
+                        <Key size={18} />
+                     </button>
+                  )}
                   <button onClick={onLogout} title="Đăng xuất" style={{ width: '36px', height: '36px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fee2e2', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
                      <LogOut size={18} />
                   </button>
@@ -2322,7 +2329,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             <div style={{ marginBottom: '1.5rem' }}>
                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Nhóm dịch vụ</div>
                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
-                  {!isBoMonTeacher && (
+                  {!isBoMonTeacher && ENABLED_TEACHER_TABS.has('attendance') && (
                      <div onClick={() => setAttTab('attendance')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                         <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                            <CalendarCheck size={24} />
@@ -2331,7 +2338,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </div>
                   )}
 
-                  {!isBoMonTeacher && (
+                  {!isBoMonTeacher && ENABLED_TEACHER_TABS.has('attendance-history') && (
                      <div onClick={() => setAttTab('attendance-history')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                         <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#f0fdfa', border: '3px solid #99f6e4', color: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                            <History size={24} />
@@ -2340,28 +2347,34 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </div>
                   )}
 
+                  {ENABLED_TEACHER_TABS.has('notices') && (
                   <div onClick={() => setAttTab('notices')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Bell size={24} />
                      </div>
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Bảng tin<br />nhà trường</div>
                   </div>
+                  )}
 
+                  {ENABLED_TEACHER_TABS.has('curriculum') && (
                   <div onClick={() => setAttTab('curriculum')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#f0f9ff', border: '3px solid #bae6fd', color: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <FileText size={24} />
                      </div>
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Chương trình<br />học</div>
                   </div>
+                  )}
 
+                  {ENABLED_TEACHER_TABS.has('ngoaikhoa') && (
                   <div onClick={() => setAttTab('ngoaikhoa')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                      <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fef3c7', border: '3px solid #fde68a', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Image size={24} />
                      </div>
                      <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Ngoại khóa</div>
                   </div>
+                  )}
 
-                  {!isBoMonTeacher && (
+                  {!isBoMonTeacher && ENABLED_TEACHER_TABS.has('health') && (
                      <div onClick={() => setAttTab('health')} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                         <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#fdf2f8', border: '3px solid #fbcfe8', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                            <Heart size={24} />
@@ -2370,7 +2383,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                      </div>
                   )}
 
-                  {isBoMonTeacher ? (
+                  {ENABLED_TEACHER_TABS.has('class-broadcast') && (isBoMonTeacher ? (
                      <div onClick={openClassBroadcastModal} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '14px 10px', cursor: 'pointer', textAlign: 'center', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)', transition: '0.2s' }}>
                         <div style={{ width: '60px', height: '60px', margin: '0 auto 10px', borderRadius: '999px', background: '#eff6ff', border: '3px solid #bfdbfe', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                            <MessageSquare size={24} />
@@ -2385,7 +2398,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                               <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: 'white', fontSize: '0.68rem', padding: '3px 6px', borderRadius: '999px', fontWeight: 700, border: '2px solid white' }}>
                                  +{Object.values(attUnreadCounts).reduce((a, b) => a + b, 0)}
                               </span>
-                           )}
+                           ))}
                         </div>
                         <div style={{ fontSize: '0.95rem', lineHeight: 1.2, color: '#1f2937', fontWeight: 700 }}>Liên lạc PH</div>
                      </div>
@@ -2412,7 +2425,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
          )}
 
          {/* Change Password Modal */}
-         {isChangePassOpen && (
+         {ENABLED_TEACHER_TABS.has('change-password') && isChangePassOpen && (
             <div className="modal-overlay" style={{ zIndex: 1200, position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                <div className="modal-content" style={{ background: 'white', padding: '2rem', borderRadius: '12px', maxWidth: '400px', width: '90%', color: '#0f172a' }}>
                   <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
@@ -2450,7 +2463,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {attTab === 'attendance' && (
+         {ENABLED_TEACHER_TABS.has('attendance') && attTab === 'attendance' && (
             <div className="attendance-tab-content">
                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
                   {attendanceUser.role !== 'Giáo viên' && (
@@ -2649,7 +2662,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {attTab === 'attendance-history' && (
+         {ENABLED_TEACHER_TABS.has('attendance-history') && attTab === 'attendance-history' && (
             <div className="attendance-tab-content" style={{ animation: 'fadeIn 0.3s ease' }}>
                {/* Controls Bar */}
                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -2809,7 +2822,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
                )}
             </div>
          )}
-         {attTab === 'health' && (
+         {ENABLED_TEACHER_TABS.has('health') && attTab === 'health' && (
             <div className="health-tab-content" style={{ animation: 'fadeIn 0.3s ease' }}>
                <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#334155' }}>Chọn Lớp</label>
@@ -2868,7 +2881,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {attTab === 'ngoaikhoa' && (
+         {ENABLED_TEACHER_TABS.has('ngoaikhoa') && attTab === 'ngoaikhoa' && (
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
                {attClasses.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: '#64748b', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
@@ -3050,7 +3063,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {(attTab === 'notices' || attTab === 'curriculum') && (
+         {(ENABLED_TEACHER_TABS.has('notices') || ENABLED_TEACHER_TABS.has('curriculum')) && (attTab === 'notices' || attTab === 'curriculum') && (
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
                {attClasses.length > 0 && attTab === 'curriculum' && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
@@ -3120,7 +3133,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {attTab === 'chat' && (
+         {ENABLED_TEACHER_TABS.has('chat') && attTab === 'chat' && (
             <div className="teacher-chat-portal" style={{ animation: 'fadeIn 0.3s ease', minHeight: isMobileChatView ? mobileChatPanelHeight : '600px', height: isMobileChatView ? mobileChatPanelHeight : 'auto', display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '100%', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px', padding: isMobileChatView ? '0 0.1rem' : '0 0.2rem', flexShrink: 0 }}>
                   <button
@@ -3140,7 +3153,7 @@ function TeacherPortal({ attendanceUser, initialClasses, initialAllStudents, onL
             </div>
          )}
 
-         {isClassBroadcastOpen && createPortal(
+         {ENABLED_TEACHER_TABS.has('class-broadcast') && isClassBroadcastOpen && createPortal(
             <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
                <div style={{ width: '100%', maxWidth: '520px', background: 'white', borderRadius: '20px', boxShadow: '0 25px 50px rgba(15, 23, 42, 0.25)', overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
